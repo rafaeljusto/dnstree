@@ -20,13 +20,13 @@ import (
 type Hierarchy struct {
 	tb      testing.TB
 	servers []*Server
-	real    map[netip.Addr]netip.AddrPort
+	real    map[netip.Addr]*Server
 }
 
 // NewHierarchy returns an empty hierarchy.
 func NewHierarchy(tb testing.TB) *Hierarchy {
 	tb.Helper()
-	return &Hierarchy{tb: tb, real: make(map[netip.Addr]netip.AddrPort)}
+	return &Hierarchy{tb: tb, real: make(map[netip.Addr]*Server)}
 }
 
 // Add starts one more nameserver. Its declared address must be set, and must be
@@ -41,7 +41,7 @@ func (h *Hierarchy) Add(cfg Config) *Server {
 	if _, taken := h.real[server.Declared]; taken {
 		h.tb.Fatalf("fakens: %s is already declared by another server", server.Declared)
 	}
-	h.real[server.Declared] = server.Addr
+	h.real[server.Declared] = server
 	h.servers = append(h.servers, server)
 	h.publishDS(server)
 	return server
@@ -78,8 +78,9 @@ func (h *Hierarchy) parentOf(child *Server) *Server {
 }
 
 // Transport wraps inner so that queries sent to a declared address reach the
-// server that stands behind it. Addresses it knows nothing about are left
-// alone, and so fail the way an unreachable server would.
+// server that stands behind it, on the socket that speaks the right protocol.
+// Addresses it knows nothing about are left alone, and so fail the way an
+// unreachable server would.
 func (h *Hierarchy) Transport(inner transport.Transport) transport.Transport {
 	return &hierarchyTransport{hierarchy: h, inner: inner}
 }
@@ -91,9 +92,11 @@ type hierarchyTransport struct {
 
 func (t *hierarchyTransport) Proto() string { return t.inner.Proto() }
 
+func (t *hierarchyTransport) Port() uint16 { return t.inner.Port() }
+
 func (t *hierarchyTransport) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, name string) (*dns.Msg, time.Duration, error) {
 	if real, known := t.hierarchy.real[server.Addr()]; known {
-		server = real
+		server = real.listenerFor(t.inner.Proto())
 	}
 	return t.inner.Exchange(ctx, req, server, name)
 }

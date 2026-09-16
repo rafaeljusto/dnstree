@@ -4,16 +4,23 @@ package transport
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"time"
 
 	"codeberg.org/miekg/dns"
 )
 
 const (
+	// The ports each transport expects a nameserver to listen on.
+	PortDNS = 53
+	PortDoT = 853
+	PortDoH = 443
+
 	// DefaultTimeout bounds a single query.
 	DefaultTimeout = 2 * time.Second
 
@@ -29,6 +36,10 @@ type Transport interface {
 	// Proto names the transport as it appears in the trace: udp, tcp, dot or doh.
 	Proto() string
 
+	// Port is where this transport expects a nameserver to listen. Glue carries
+	// addresses and never ports, so this is what fills the gap.
+	Port() uint16
+
 	// Exchange sends req to server and returns the response and the measured
 	// round trip time. name is the server's DNS name when known, used for TLS
 	// verification by the encrypted transports.
@@ -39,6 +50,25 @@ type Transport interface {
 type Config struct {
 	// Timeout bounds one query, DefaultTimeout when zero.
 	Timeout time.Duration
+
+	// TLS configures the encrypted transports. A nil config verifies against
+	// the host's roots, under the name the delegation gave the server.
+	TLS *tls.Config
+}
+
+// tlsConfig is the config to dial with, named for the server being dialled.
+func (c Config) tlsConfig(name string, protocols []string) *tls.Config {
+	config := &tls.Config{}
+	if c.TLS != nil {
+		config = c.TLS.Clone()
+	}
+	if config.ServerName == "" {
+		config.ServerName = strings.TrimSuffix(name, ".")
+	}
+	if len(config.NextProtos) == 0 {
+		config.NextProtos = protocols
+	}
+	return config
 }
 
 // NewQuery builds an iterative query: recursion is never desired, since every
@@ -65,9 +95,9 @@ func IsTimeout(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded)
 }
 
-// exchange is the UDP and TCP round trip. Both differ only in the network they
-// dial, so they share everything else.
-func exchange(ctx context.Context, proto string, cfg Config, req *dns.Msg, server netip.AddrPort) (*dns.Msg, time.Duration, error) {
+// exchange is the round trip every transport built on a socket shares. They
+// differ only in the network they dial and whether TLS wraps it.
+func exchange(ctx context.Context, proto string, cfg Config, tlsConfig *tls.Config, req *dns.Msg, server netip.AddrPort) (*dns.Msg, time.Duration, error) {
 	server = netip.AddrPortFrom(server.Addr().Unmap(), server.Port())
 	if !server.IsValid() || server.Port() == 0 {
 		return nil, 0, fmt.Errorf("%s: not a server address", server)
@@ -81,6 +111,7 @@ func exchange(ctx context.Context, proto string, cfg Config, req *dns.Msg, serve
 		Dialer:       &net.Dialer{Timeout: timeout},
 		ReadTimeout:  timeout,
 		WriteTimeout: timeout,
+		TLSConfig:    tlsConfig,
 	}}
 
 	// Pack into a fresh buffer: the client hands the request's buffer over to

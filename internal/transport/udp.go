@@ -22,7 +22,10 @@ func NewUDP(cfg Config) *UDP { return &UDP{Config: cfg} }
 // Proto implements [Transport].
 func (u *UDP) Proto() string { return "udp" }
 
+// Port implements [Transport].
+func (u *UDP) Port() uint16 { return PortDNS }
+
 // Exchange implements [Transport].
 func (u *UDP) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, _ string) (*dns.Msg, time.Duration, error) {
-	return exchange(ctx, "udp", u.Config, req, server)
+	return exchange(ctx, "udp", u.Config, nil, req, server)
 }
