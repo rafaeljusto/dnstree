@@ -87,12 +87,14 @@ type Server struct {
 	ASN  *ASNInfo
 }
 
-// ASNInfo is the origin AS of a server address.
+// ASNInfo is the origin AS of a server address. A prefix announced by more
+// than one AS keeps the first of them.
 type ASNInfo struct {
 	Number      uint32
 	Prefix      string
 	CountryCode string
 	Registry    string
+	Allocated   string // the date the prefix was handed out
 }
 
 // Flags are the header bits worth showing on a hop.
