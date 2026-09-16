@@ -41,6 +41,9 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
+      - uses: hadolint/hadolint-action@v3.5.0
+        with:
+          dockerfile: Dockerfile
 
   # Apart from lint, because this one goes red when somebody else publishes a
   # CVE rather than when this code changes. On the schedule too, so that a
