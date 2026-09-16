@@ -136,6 +136,13 @@ h3{font-size:1rem; margin:0 0 .35rem; font-weight:600}
 .section-lede{color:var(--muted); margin-top:0}
 .term-note{margin:.8rem 0 0; font-size:.86rem; color:var(--faint)}
 
+/* A recorded run. vhs bakes the rings, the rounded corner and the backdrop
+   into the file, so this only has to size it. The .gif inside the <video> is
+   what a browser that will not play the mp4 falls back to. */
+.demo{margin:2rem 0 0}
+.demo video,.demo img{display:block; width:auto; max-width:100%; height:auto; margin-inline:auto; border-radius:10px}
+.demo figcaption{margin:.8rem 0 0; font-size:.86rem; color:var(--faint)}
+
 /* ── the exploded hop ─────────────────────────────────────────────────── */
 .dissect{background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px; padding:1.4rem 0 .4rem; margin-top:1.6rem; overflow-x:auto}
 .dissect-inner{min-width:60rem; padding-inline:1.4rem; position:relative}
@@ -245,29 +252,16 @@ footer a:hover{color:var(--ink)}
         <a class="btn btn-ghost" href="https://github.com/rafaeljusto/dnstree">Source on GitHub</a>
       </div>
 
-      <div class="term" id="hero-term">
-        <div class="term-bar">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-          <span class="term-title">~ · dnstree</span>
-        </div>
-        <div class="term-body">
-<pre aria-label="dnstree resolving www.example.com from the root servers"><span class="ln"><span class="prompt">$ <b>dnstree www.example.com A</b></span></span>
-<span class="ln"><span class="z">. (root)</span></span>
-<span class="ln">├── <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS19836</span>  <span class="rtt">24ms</span>  <span class="ok">NOERROR</span>  referral → com.</span>
-<span class="ln">│   ├── <span class="ns">l.gtld-servers.net.</span> <span class="ip">192.41.162.30</span>  <span class="asn">AS36617</span>  <span class="rtt">27ms</span>  <span class="ok">NOERROR</span>  referral → example.com.</span>
-<span class="ln">│   │   ├── <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">108.162.192.162</span>  <span class="asn">AS13335</span>  <span class="rtt">23ms</span>  <span class="ok">NOERROR</span>  AA</span>
-<span class="ln">│   │   │   ├── www.example.com. <span class="dim">300</span> <span class="a">A</span> 104.20.23.154</span>
-<span class="ln">│   │   │   └── www.example.com. <span class="dim">300</span> <span class="a">A</span> 172.66.147.243</span>
-<span class="ln">│   │   ├── <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">172.64.32.162</span>  <span class="dim">(not queried)</span></span>
-<span class="ln">│   │   └── <span class="dim">(and 10 more not queried)</span></span>
-<span class="ln">│   └── <span class="dim">(and 24 more not queried)</span></span>
-<span class="ln">└── <span class="dim">(and 24 more not queried)</span></span></pre>
-        </div>
-      </div>
+      <figure class="demo">
+        <video autoplay muted loop playsinline preload="metadata" aria-label="dnstree --live resolving www.example.com from the root servers, each referral joining the tree as it lands">
+          <source src="demo-hero.mp4" type="video/mp4">
+          <img src="demo-hero.gif" alt="dnstree --live resolving www.example.com from the root servers, each referral joining the tree as it lands">
+        </video>
+      </figure>
       <p class="term-note">
-        Not a stage trick: <code>--live</code> draws the tree in place as the walk makes
-        it, points at the hop that just landed and names the query it is waiting on,
-        and <code>--format emoji</code> tells the same walk in 🛰️ 🎯 💤.
+        Not a stage trick: that is <code>--live</code>, recorded off a real walk. It draws
+        the tree in place as the walk makes it, points at the hop that just landed and
+        names the query it is waiting on.
       </p>
     </div>
 
@@ -344,6 +338,14 @@ footer a:hover{color:var(--ink)}
           <p>Queries, zone cuts, aliases and nameserver lookups each have a budget, so a hostile delegation wastes time and nothing more.</p>
         </div>
       </div>
+
+      <figure class="demo">
+        <video autoplay muted loop playsinline preload="metadata" aria-label="dnstree --dnssec on bogus.nlnetlabs.nl: the chain reads secure down to the zone, whose signature does not verify, and the command exits 3">
+          <source src="demo-bogus.mp4" type="video/mp4">
+          <img src="demo-bogus.gif" alt="dnstree --dnssec on bogus.nlnetlabs.nl: the chain reads secure down to the zone, whose signature does not verify, and the command exits 3">
+        </video>
+        <figcaption><code>bogus.nlnetlabs.nl</code> is NLnet Labs' standing test name. The zone answers, the answer is drawn, and the signature over it does not verify — so it is marked rather than handed over, and the command exits <code>3</code>.</figcaption>
+      </figure>
     </section>
 
     <section id="dnssec">
@@ -360,23 +362,12 @@ footer a:hover{color:var(--ink)}
         <li class="state"><b>indeterminate</b> — an algorithm this build cannot check</li>
       </ul>
 
-      <div class="term">
-        <div class="term-bar">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-          <span class="term-title">~ · dnstree --dnssec</span>
-        </div>
-        <div class="term-body">
-<pre><span class="prompt">$ <b>dnstree --dnssec cloudflare.com A</b></span>
-<span class="z">. (root)</span>  <span class="ok">[secure RSASHA256/SHA256]</span>
-├── <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="rtt">24ms</span>  <span class="ok">NOERROR</span>  DO  referral → com.  <span class="ok">[secure ECDSAP256SHA256/SHA256]</span>
-│   ├── <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="rtt">25ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="dim">(DNSKEY of .)</span>
-│   └── <span class="ns">l.gtld-servers.net.</span> <span class="ip">192.41.162.30</span>  <span class="rtt">26ms</span>  <span class="ok">NOERROR</span>  DO  referral → cloudflare.com.  <span class="ok">[secure ECDSAP256SHA256/SHA256]</span>
-│       ├── <span class="ns">l.gtld-servers.net.</span> <span class="ip">192.41.162.30</span>  <span class="rtt">25ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="dim">(DNSKEY of com.)</span>
-│       └── <span class="ns">ns3.cloudflare.com.</span> <span class="ip">162.159.0.33</span>  <span class="rtt">24ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="ok">[secure ECDSAP256SHA256]</span>
-│           ├── cloudflare.com. <span class="dim">300</span> <span class="a">A</span> 104.16.132.229
-│           └── <span class="ns">ns3.cloudflare.com.</span> <span class="ip">162.159.0.33</span>  <span class="rtt">23ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="dim">(DNSKEY of cloudflare.com.)</span></pre>
-        </div>
-      </div>
+      <figure class="demo">
+        <video autoplay muted loop playsinline preload="metadata" aria-label="dnstree --dnssec on cloudflare.com: every zone cut from the root down tagged secure, with the DNSKEY query that proved it">
+          <source src="demo-dnssec.mp4" type="video/mp4">
+          <img src="demo-dnssec.gif" alt="dnstree --dnssec on cloudflare.com: every zone cut from the root down tagged secure, with the DNSKEY query that proved it">
+        </video>
+      </figure>
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
         An unsigned zone turns the chain grey from that point down; nothing below it can
         be secure again. Denial of existence is reported as unchecked rather than claimed:
@@ -478,6 +469,14 @@ footer a:hover{color:var(--ink)}
           </div>
         </div>
       </div>
+
+      <figure class="demo">
+        <video autoplay muted loop playsinline preload="metadata" aria-label="dnstree --format emoji --live resolving www.example.com, the same walk drawn with a satellite for each referral and a target for the answer">
+          <source src="demo-emoji.mp4" type="video/mp4">
+          <img src="demo-emoji.gif" alt="dnstree --format emoji --live resolving www.example.com, the same walk drawn with a satellite for each referral and a target for the answer">
+        </video>
+        <figcaption><code>--format emoji --live</code>: the same walk, arriving.</figcaption>
+      </figure>
     </section>
 
     <section id="install">
@@ -559,6 +558,46 @@ footer a:hover{color:var(--ink)}
   lines.forEach(function (line, i) {
     line.style.animationDelay = (60 + i * 90) + "ms";
   });
+})();
+
+// The recordings carry autoplay in the markup so they still run without this,
+// but a page that autoplays four walks at once has played three of them to
+// nobody. Where motion is unwelcome they hold their first frame and grow the
+// controls instead; otherwise each one waits until it is actually on screen,
+// and starts from the top every time it comes back.
+(function () {
+  var videos = Array.prototype.slice.call(document.querySelectorAll(".demo video"));
+  if (!videos.length) return;
+
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced) {
+    videos.forEach(function (video) {
+      video.autoplay = false;
+      video.loop = false;
+      video.controls = true;
+      video.pause();
+    });
+    return;
+  }
+
+  if (!("IntersectionObserver" in window)) return;
+
+  videos.forEach(function (video) { video.pause(); });
+
+  var watcher = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      var video = entry.target;
+      if (entry.isIntersecting) {
+        var playing = video.play();
+        if (playing && playing.catch) playing.catch(function () {});
+      } else {
+        video.pause();
+        video.currentTime = 0;
+      }
+    });
+  }, { threshold: 0.35 });
+
+  videos.forEach(function (video) { watcher.observe(video); });
 })();
 
 // Output formats.

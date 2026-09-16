@@ -5,10 +5,17 @@ GO ?= go
 GOLANGCI_LINT_VERSION ?= v2.13.2
 HADOLINT_VERSION ?= v2.15.1
 NFPM_VERSION ?= v2.47.0
+
+# vhs records the terminal demos. It is pinned and always run through `go run`
+# rather than taken from the PATH: 0.12.0 hands its own cancelled context to
+# the ffmpeg step, so it captures every frame, writes nothing, and exits 0.
+# vhs shells out to ttyd and ffmpeg, which do have to be installed.
+VHS_VERSION ?= v0.10.0
 GOLANGCI_LINT ?= $(shell command -v golangci-lint 2>/dev/null || \
 	echo "$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)")
 NFPM ?= $(shell command -v nfpm 2>/dev/null || \
 	echo "$(GO) run github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)")
+VHS ?= $(GO) run github.com/charmbracelet/vhs@$(VHS_VERSION)
 
 # VERSION is what a release build stamps into the binary.
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -178,7 +185,7 @@ demos:
 	@$(GO) build -ldflags '$(LDFLAGS)' -o $(BUILD)/dnstree ./cmd/dnstree
 	@for tape in tapes/hero tapes/emoji tapes/dnssec tapes/bogus; do \
 		echo "recording $$tape"; \
-		PATH="$(CURDIR)/$(BUILD):$$PATH" vhs $$tape.tape || exit 1; \
+		PATH="$(CURDIR)/$(BUILD):$$PATH" $(VHS) $$tape.tape || exit 1; \
 	done
 
 # Refreshes the embedded root hints and trust anchors.

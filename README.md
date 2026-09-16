@@ -9,6 +9,8 @@
 Resolve a name the way a resolver does — from the root servers down, following
 every referral — and draw the path it took.
 
+![dnstree --live resolving www.example.com from the root servers, each referral joining the tree as it lands](docs/demo-hero.gif)
+
 ```
 $ dnstree www.example.com A
 . (root)
@@ -254,6 +256,7 @@ make lint         # go vet and golangci-lint
 make lint-docker  # hadolint against the Dockerfile
 make vuln         # govulncheck against the vulnerability database
 make live         # the smoke test that goes out to the real root servers
+make demos        # re-record the terminal demos in docs/ from tapes/
 make dist         # cross compile a release into dist/
 make image        # build the container image for this machine
 ```
@@ -270,6 +273,12 @@ changes while the major version is still zero.
 The engine is tested offline against in-process authoritative servers
 (`internal/testutil/fakens`), signed hierarchies included, so every delegation
 failure this tool reports has a test that produces it on purpose.
+
+The recordings under `docs/` are written by [vhs](https://github.com/charmbracelet/vhs)
+from the tapes in [tapes/](tapes/), one per scene. `make demos` rebuilds the
+binary and records all four; it needs `ttyd` and `ffmpeg` on the PATH, and it
+walks the real root servers, so the timings in a recording are whatever the
+link gave that day. `make check` leaves them alone.
 
 ## Contributing
 
