@@ -1,0 +1,62 @@
+name: Bug Report
+description: File a bug report
+title: "Bug: "
+labels: ["bug", "triage"]
+assignees:
+  - rafaeljusto
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: contact
+    attributes:
+      label: Contact Details
+      description: How can we get in touch with you if we need more info?
+      placeholder: ex. email@example.com
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `dnstree --version`.
+      placeholder: ex. dnstree v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: What did you run?
+      description: The whole command, flags and all.
+      placeholder: ex. dnstree --dnssec www.example.com A
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us, what did you expect to happen?
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: The walk it drew
+      description: >
+        Paste the output. If the answer is wrong rather than missing, run it
+        again with `--debug` and paste that too: the hops it made are what
+        tells us where the walk went astray.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/rafaeljusto/dnstree/blob/main/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

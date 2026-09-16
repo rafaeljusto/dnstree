@@ -1,5 +1,9 @@
 # dnstree
 
+[![ci](https://github.com/rafaeljusto/dnstree/actions/workflows/ci.yml/badge.svg)](https://github.com/rafaeljusto/dnstree/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/rafaeljusto/dnstree)](https://goreportcard.com/report/github.com/rafaeljusto/dnstree)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Resolve a name the way a resolver does — from the root servers down, following
 every referral — and draw the path it took.
 
@@ -170,3 +174,16 @@ The engine is tested offline against in-process authoritative servers
 (`internal/testutil/fakens`), signed hierarchies included, so every delegation
 failure this tool reports has a test that produces it on purpose.
 
+## Contributing
+
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers
+how to get a change reviewed, how the tests work, and why your commit subject
+decides the next version number. Everyone taking part is expected to follow the
+[code of conduct](CODE_OF_CONDUCT.md).
+
+Found a security problem? Please do not open an issue: the
+[security policy](SECURITY.md) says where to send it.
+
+## Licence
+
+[MIT](LICENSE).
