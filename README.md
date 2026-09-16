@@ -99,6 +99,9 @@ dnstree [flags] NAME [TYPE]
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite |
 | `--port` | the port nameservers are asked on |
 | `--root-hints`, `--trust-anchors` | start somewhere other than the built-in root |
+| `--root` | one server to start from, instead of a hints file; repeat it for more |
+| `--asn-resolver` | where the origin AS lookups go, instead of the host's own resolver |
+| `--tls-ca`, `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
 | `--config`, `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
 
@@ -120,6 +123,32 @@ flag that stands on its own needs no value. The command line wins over the file,
 so `--format ascii` overrides the line above, `--udp` replaces a transport the
 file chose, and `--dnssec=false` turns a flag it set back off. `--config FILE`
 reads somewhere else, and `--no-config` reads nowhere.
+
+`root` is the one line worth repeating: a file may carry as many as the walk
+should start from, in the order they are written. One `--root` on the command
+line replaces every one of them, rather than adding to them, and so does
+`--root-hints`.
+
+### Pointing it somewhere else
+
+Nothing about the walk assumes the real root. `--root` names the servers it
+starts from, one flag each, and each may carry the port the server listens on:
+
+```
+$ dnstree --root a.root-servers.net@127.0.0.1:5353 --port 5354 \
+    --trust-anchors ./anchors.xml --dnssec www.test A
+```
+
+A root that carries no port is asked on `--port`, and so is everything reached
+by glue below it — glue carries addresses and never ports, so a hierarchy on one
+host wants its root on a port of its own and the rest on `--port`. `--root` and
+`--root-hints` say the same thing two ways, so only one of them may be given.
+
+The metadata has its own way out: `--asn-resolver ADDR` sends the origin AS
+lookups to one recursive server instead of the host's, and `--no-asn` skips them
+altogether. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of
+your own and `--tls-insecure` verifies nothing, which is what it takes to reach
+a server holding a test certificate.
 
 ### Exit codes
 

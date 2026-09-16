@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -44,17 +45,30 @@ path it took. TYPE defaults to A.
   --max-cname N           aliases to chase (default 8)
   --port N                the port nameservers are asked on (default 53)
   --root-hints FILE       where the walk starts, instead of the built-in hints
+  --root [NAME@]ADDR      one server to start from, instead of a hints file
   --trust-anchors FILE    the DS records to trust, instead of the built-in ones
+  --asn-resolver ADDR     where the origin AS lookups go, not the host's own
+  --tls-ca FILE           verify --dot and --doh against these roots
+  --tls-insecure          do not verify --dot and --doh at all
   --config FILE           take the defaults from FILE, instead of the usual one
   --no-config             take no defaults from a file at all
   --debug                 report every hop on stderr as it is made
   --version               print the version and stop
 
+Repeat --root for every server the walk may start from. Each takes an address,
+which may carry a :PORT, optionally introduced by NAME@ to say what the server
+answers under; without a port, --port says where it is asked. A walk that starts
+somewhere other than the real root usually wants --trust-anchors with it, and
+--tls-ca or --tls-insecure to reach a --dot or --doh server holding a test
+certificate. --asn-resolver points the origin AS lookups at one server too.
+
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
 where that is unset), then ~/.dnstreerc. Each line of it is a long flag name and
 the value it takes, such as "format = emoji", "dnssec" or "timeout = 3s". A line
-opening with # is a comment, and anything the command line asks for wins.
+opening with # is a comment, and anything the command line asks for wins. The
+file may carry a root line for every server a walk starts from; one --root on
+the command line replaces all of them rather than adding to them.
 
 Exit codes: 0 an answer, 1 a problem with the command, 2 nothing answered,
 3 the chain of trust is broken.
@@ -86,6 +100,19 @@ type Config struct {
 	TrustAnchors string
 	Debug        bool
 
+	// Roots is what --root asked for, in the order it was given. It replaces
+	// the hints entirely, so the two cannot both be set.
+	Roots []Root
+
+	// ASNResolver is the recursive server the origin AS lookups go to, empty
+	// for the host's own.
+	ASNResolver netip.AddrPort
+
+	// TLSCA and TLSInsecure loosen the verification the encrypted transports
+	// do, which is what it takes to reach a server holding a test certificate.
+	TLSCA       string
+	TLSInsecure bool
+
 	// ConfigFile is the file the defaults came from, empty when none was read.
 	ConfigFile string
 
@@ -115,6 +142,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		color, format string
 		timeout       time.Duration
 		port          uint
+		roots         rootList
+		asnResolver   string
 	)
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
 	flags.BoolVar(&six, "6", false, "ask only IPv6 servers")
@@ -137,7 +166,11 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.IntVar(&cfg.MaxCNAME, "max-cname", 0, "aliases to chase")
 	flags.UintVar(&port, "port", 0, "the port nameservers are asked on")
 	flags.StringVar(&cfg.RootHints, "root-hints", "", "where the walk starts")
+	flags.Var(&roots, "root", "one server to start from")
 	flags.StringVar(&cfg.TrustAnchors, "trust-anchors", "", "the DS records to trust")
+	flags.StringVar(&asnResolver, "asn-resolver", "", "where the origin AS lookups go")
+	flags.StringVar(&cfg.TLSCA, "tls-ca", "", "verify the encrypted transports against these roots")
+	flags.BoolVar(&cfg.TLSInsecure, "tls-insecure", false, "do not verify the encrypted transports")
 	flags.StringVar(&configPath, "config", "", "take the defaults from this file")
 	flags.BoolVar(&noConfig, "no-config", false, "take no defaults from a file")
 	flags.BoolVar(&cfg.Debug, "debug", false, "report every hop on stderr")
@@ -225,7 +258,94 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	cfg.Port = uint16(port)
 	cfg.ASN = !noASN
 
+	if cfg.Roots = roots.servers; len(cfg.Roots) > 0 && cfg.RootHints != "" {
+		return nil, fmt.Errorf("%w: --root and --root-hints both say where the walk starts", ErrUsage)
+	}
+	if asnResolver != "" {
+		if !cfg.ASN {
+			return nil, fmt.Errorf("%w: --no-asn asks for no lookup for --asn-resolver to carry", ErrUsage)
+		}
+		if cfg.ASNResolver, err = address(asnResolver, transport.PortDNS); err != nil {
+			return nil, fmt.Errorf("%w: --asn-resolver %w", ErrUsage, err)
+		}
+	}
+	if (cfg.TLSCA != "" || cfg.TLSInsecure) && cfg.Proto != "dot" && cfg.Proto != "doh" {
+		return nil, fmt.Errorf("%w: only --dot and --doh use TLS", ErrUsage)
+	}
+	if cfg.TLSCA != "" && cfg.TLSInsecure {
+		return nil, fmt.Errorf("%w: --tls-insecure verifies nothing, so --tls-ca has nothing to verify against", ErrUsage)
+	}
+
 	return &cfg, nil
+}
+
+// Root is a server a walk may start from, as --root spelled it. A zero port
+// leaves the choice to the transport, the way the built-in hints do.
+type Root struct {
+	Name string
+	Addr netip.AddrPort
+}
+
+// rootList collects the --root flags in the order they were given. The flag
+// package has no repeated value of its own, so this is the seam for one.
+type rootList struct{ servers []Root }
+
+func (l *rootList) String() string {
+	names := make([]string, 0, len(l.servers))
+	for _, root := range l.servers {
+		names = append(names, root.Addr.String())
+	}
+	return strings.Join(names, ",")
+}
+
+// Set reads one --root: an address, optionally carrying a port, and optionally
+// introduced by the name the server answers under. The name is worth giving
+// when the transport verifies a certificate against it, and shows in the tree
+// either way.
+func (l *rootList) Set(value string) error {
+	name, addr, named := strings.Cut(value, "@")
+	if !named {
+		name, addr = "", value
+	}
+	if addr == "" {
+		return fmt.Errorf("%q names no address", value)
+	}
+
+	// Zero leaves the port to the transport, so --port still reaches a root
+	// that did not ask for one of its own.
+	parsed, err := address(addr, 0)
+	if err != nil {
+		return err
+	}
+	l.servers = append(l.servers, Root{Name: fqdn(name), Addr: parsed})
+	return nil
+}
+
+// address reads an IP address that may carry a port, falling back to standard
+// when it does not. An IPv6 address only needs its brackets when a port
+// follows it.
+func address(value string, standard uint16) (netip.AddrPort, error) {
+	if addr, err := netip.ParseAddr(value); err == nil {
+		return netip.AddrPortFrom(addr, standard), nil
+	}
+	addrPort, err := netip.ParseAddrPort(value)
+	if err != nil {
+		return netip.AddrPort{}, fmt.Errorf("%q is not an address", value)
+	}
+	if addrPort.Port() == 0 {
+		// Zero is how an address says it carries no port, so writing it out
+		// would mean two things at once.
+		return netip.AddrPort{}, fmt.Errorf("%q asks for port 0", value)
+	}
+	return addrPort, nil
+}
+
+// fqdn is a server name as the trace spells one, empty staying empty.
+func fqdn(name string) string {
+	if name == "" || strings.HasSuffix(name, ".") {
+		return name
+	}
+	return name + "."
 }
 
 // proto settles which transport carries the queries, of which there can only be

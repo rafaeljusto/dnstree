@@ -3,6 +3,8 @@ package cli_test
 import (
 	"errors"
 	"io"
+	"net/netip"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +35,8 @@ func TestParse(t *testing.T) {
 				"-6", "--dot", "--fallback", "--all", "--dnssec", "--check-ns", "--no-asn",
 				"--format", "json", "--color", "never", "--timeout", "5s", "--retries", "3",
 				"--max-depth", "8", "--max-queries", "32", "--max-cname", "4", "--port", "5353",
-				"--root-hints", "hints", "--trust-anchors", "anchors", "--debug",
+				"--root-hints", "hints", "--trust-anchors", "anchors",
+				"--tls-ca", "ca.pem", "--debug",
 				"example.com", "ns",
 			},
 			want: cli.Config{
@@ -41,7 +44,35 @@ func TestParse(t *testing.T) {
 				Fallback: true, All: true, DNSSEC: true, CheckNS: true,
 				Format: "json", Color: tree.ColorNever, Timeout: 5 * time.Second,
 				Retries: 3, MaxDepth: 8, MaxQueries: 32, MaxCNAME: 4, Port: 5353,
-				RootHints: "hints", TrustAnchors: "anchors", Debug: true,
+				RootHints: "hints", TrustAnchors: "anchors", TLSCA: "ca.pem", Debug: true,
+			},
+		},
+		"a root named outright": {
+			args: []string{"--root", "127.0.0.1", "example.com"},
+			want: cli.Config{
+				Name: "example.com", Type: "A",
+				Roots: []cli.Root{{Addr: netip.MustParseAddrPort("127.0.0.1:0")}},
+			},
+		},
+		"roots with names and ports": {
+			args: []string{
+				"--root", "a.root-servers.net@198.41.0.4:5353",
+				"--root", "[::1]:5354",
+				"example.com",
+			},
+			want: cli.Config{
+				Name: "example.com", Type: "A",
+				Roots: []cli.Root{
+					{Name: "a.root-servers.net.", Addr: netip.MustParseAddrPort("198.41.0.4:5353")},
+					{Addr: netip.MustParseAddrPort("[::1]:5354")},
+				},
+			},
+		},
+		"the origin AS lookups sent elsewhere": {
+			args: []string{"--asn-resolver", "192.0.2.1", "example.com"},
+			want: cli.Config{
+				Name: "example.com", Type: "A",
+				ASNResolver: netip.MustParseAddrPort("192.0.2.1:53"),
 			},
 		},
 	}
@@ -64,7 +95,7 @@ func TestParse(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse: %v", err)
 			}
-			if *got != want {
+			if !reflect.DeepEqual(*got, want) {
 				t.Errorf("got  %+v\nwant %+v", *got, want)
 			}
 		})
@@ -86,6 +117,17 @@ func TestParseRejects(t *testing.T) {
 		"a port beyond the range": {"--port", "70000", "example.com"},
 		"a flag nobody has":       {"--recursive", "example.com"},
 		"help":                    {"--help"},
+
+		"two ways to start a walk":          {"--root", "127.0.0.1", "--root-hints", "hints", "example.com"},
+		"a root that is no address":         {"--root", "localhost", "example.com"},
+		"a root with no address":            {"--root", "ns.example.com@", "example.com"},
+		"a root with a bad port":            {"--root", "127.0.0.1:70000", "example.com"},
+		"an AS resolver that is no address": {"--asn-resolver", "cymru.com", "example.com"},
+		"an AS resolver with no lookup to carry": {
+			"--no-asn", "--asn-resolver", "192.0.2.1", "example.com",
+		},
+		"TLS settings with no TLS":  {"--tls-insecure", "example.com"},
+		"a CA with nothing to sign": {"--dot", "--tls-ca", "ca.pem", "--tls-insecure", "example.com"},
 	}
 
 	for name, args := range tests {

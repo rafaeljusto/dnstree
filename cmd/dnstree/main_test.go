@@ -197,3 +197,146 @@ func rootHintsFile(tb testing.TB) string {
 	}
 	return path
 }
+
+// The two zones of a walk that has to change port halfway down: the root is
+// reached where --root says, the delegation below it where --port does.
+const (
+	splitRootZone = `
+@                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                   IN NS   a.root-servers.net.
+a.root-servers.net. IN A    127.0.0.1
+test.               IN NS   ns.test.
+ns.test.            IN A    127.0.0.1
+`
+
+	splitChildZone = `
+@     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
+@     IN NS   ns
+ns    IN A    127.0.0.1
+www   IN A    192.0.2.10
+`
+)
+
+// TestRunRoot walks a hierarchy the command line put together itself. The two
+// servers share loopback and differ only by port, which is the shape a test
+// hierarchy has: --root carries the port of the one it names, and --port says
+// where everything reached by glue is asked, glue having no port to carry.
+func TestRunRoot(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+	child := fakens.New(t, fakens.Config{Name: "ns.test.", Origin: "test.", Zone: splitChildZone})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())),
+		"--no-asn", "--color", "never", "www.test", "A",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"a.root-servers.net.", "referral → test.", "www.test.", "192.0.2.10"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("got no %q in the walk:\n%s", want, out)
+		}
+	}
+}
+
+// TestRunRootWithoutName leaves the name off, which is all a walk needs when
+// nothing has to verify a certificate.
+func TestRunRootWithoutName(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", server.Addr.String(), "--no-asn", "--color", "never", ".", "NS",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, "a.root-servers.net.") {
+		t.Errorf("got no answer in the walk:\n%s", out)
+	}
+}
+
+// TestRunRootIgnoresThePort makes sure the port a root carries wins over
+// --port, which is what lets the rest of the hierarchy sit somewhere else.
+func TestRunRootIgnoresThePort(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", server.Addr.String(), "--port", "1", // nothing answers on port 1
+		"--no-asn", "--timeout", "500ms", "--retries", "0", "--color", "never", ".", "NS",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d: the root was asked on --port\n%s%s",
+			code, exitAnswer, stdout.String(), stderr.String())
+	}
+}
+
+// TestRunRootOverTLS reaches the same split hierarchy over DoT. The fake
+// servers hold the library's self-signed certificate, so the walk only gets
+// through when --tls-insecure says not to verify it.
+func TestRunRootOverTLS(t *testing.T) {
+	root := fakens.New(t, fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone, TLS: true,
+	})
+	child := fakens.New(t, fakens.Config{
+		Name: "ns.test.", Origin: "test.", Zone: splitChildZone, TLS: true,
+	})
+
+	args := []string{
+		"--root", "a.root-servers.net@" + root.TLSAddr.String(),
+		"--port", strconv.Itoa(int(child.TLSAddr.Port())),
+		"--dot", "--no-asn", "--timeout", "2s", "--color", "never", "www.test", "A",
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), append([]string{"--tls-insecure"}, args...), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, "192.0.2.10") {
+		t.Errorf("got no answer over dot:\n%s", out)
+	}
+
+	// The same walk verifying the certificate reaches nothing at all.
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(t.Context(), args, &stdout, &stderr); code != exitNoAnswer {
+		t.Errorf("got exit %d without --tls-insecure, want %d: the certificate refused\n%s%s",
+			code, exitNoAnswer, stdout.String(), stderr.String())
+	}
+}
+
+// cymruZone answers for loopback the way Team Cymru answers for a real address.
+const cymruZone = `
+@         IN SOA  ns hostmaster 1 7200 3600 1209600 3600
+@         IN NS   ns
+ns        IN A    127.0.0.1
+1.0.0.127 IN TXT  "64512 | 127.0.0.0/8 | ZZ | test | 1970-01-01"
+`
+
+// TestRunASNResolver sends the origin AS lookups somewhere the host knows
+// nothing about, which is the only way to see them annotated offline.
+func TestRunASNResolver(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+	cymru := fakens.New(t, fakens.Config{Origin: "origin.asn.cymru.com.", Zone: cymruZone})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", server.Addr.String(),
+		"--asn-resolver", cymru.Addr.String(),
+		"--color", "never", ".", "NS",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, "AS64512") {
+		t.Errorf("got no origin AS from the resolver that was named:\n%s", out)
+	}
+}

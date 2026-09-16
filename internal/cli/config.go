@@ -23,8 +23,15 @@ type configFile struct {
 
 // Some flags say the same thing in different ways. A command line that names
 // one of a group answers the whole group, so the file's choice is dropped
-// rather than left to collide with it.
-var groups = [][]string{{"4", "6"}, {"udp", "tcp", "dot", "doh"}}
+// rather than left to collide with it. --root is in one for a second reason:
+// it is the only flag that may be repeated, so a file's roots would otherwise
+// pile onto the command line's instead of giving way to them.
+var groups = [][]string{
+	{"4", "6"},
+	{"udp", "tcp", "dot", "doh"},
+	{"root", "root-hints"},
+	{"tls-ca", "tls-insecure"},
+}
 
 // defaultFile is where the defaults are read from when the command line does
 // not say: the file named by the environment, then the XDG location, then the

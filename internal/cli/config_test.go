@@ -3,8 +3,10 @@ package cli_test
 import (
 	"errors"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -98,6 +100,24 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"example.com", "mx"},
 			want: cli.Config{Format: "emoji", Type: "MX"},
 		},
+		"the file can name every root": {
+			file: "root = 192.0.2.1\nroot = ns.example.com@192.0.2.2:5353\n",
+			args: []string{"example.com"},
+			want: cli.Config{Roots: []cli.Root{
+				{Addr: netip.MustParseAddrPort("192.0.2.1:0")},
+				{Name: "ns.example.com.", Addr: netip.MustParseAddrPort("192.0.2.2:5353")},
+			}},
+		},
+		"a root asked for replaces every one in the file": {
+			file: "root = 192.0.2.1\nroot = 192.0.2.2\n",
+			args: []string{"--root", "192.0.2.9", "example.com"},
+			want: cli.Config{Roots: []cli.Root{{Addr: netip.MustParseAddrPort("192.0.2.9:0")}}},
+		},
+		"a root asked for replaces the file's hints": {
+			file: "root-hints = hints\n",
+			args: []string{"--root", "192.0.2.9", "example.com"},
+			want: cli.Config{Roots: []cli.Root{{Addr: netip.MustParseAddrPort("192.0.2.9:0")}}},
+		},
 	}
 
 	for name, test := range tests {
@@ -111,7 +131,7 @@ func TestParseDefaults(t *testing.T) {
 
 			want := complete(test.want)
 			want.ASN, want.ConfigFile = !test.noASN, path
-			if *got != want {
+			if !reflect.DeepEqual(*got, want) {
 				t.Errorf("got  %+v\nwant %+v", *got, want)
 			}
 		})

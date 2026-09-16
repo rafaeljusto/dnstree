@@ -4,11 +4,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/netip"
 	"os"
 	"os/signal"
@@ -76,7 +79,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	var lookups *asn.Resolver
 	if cfg.ASN {
-		lookups = asn.New(nil, log)
+		lookups = asn.New(asnLookup(cfg), log)
 	}
 
 	// The live drawing owns the screen until it is cleared, and the finished
@@ -112,15 +115,19 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 // resolve builds the resolution the flags asked for and runs it.
 func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *asn.Resolver, live *tree.Live) (*trace.Trace, error) {
-	hints, err := rootHints(cfg)
+	roots, err := rootServers(cfg)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig, err := clientTLS(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	carrier := transport.Config{Timeout: cfg.Timeout, Port: cfg.Port}
+	carrier := transport.Config{Timeout: cfg.Timeout, Port: cfg.Port, TLS: tlsConfig}
 	config := resolver.Config{
 		Transport: carry(cfg.Proto, carrier),
-		Roots:     resolver.RootServers(hints),
+		Roots:     roots,
 		DNSSEC:    cfg.DNSSEC,
 		All:       cfg.All,
 		Family:    cfg.Family,
@@ -162,11 +169,70 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	return engine.Resolve(ctx, cfg.Name, cfg.Type)
 }
 
-func rootHints(cfg *cli.Config) (*roothints.Hints, error) {
-	if cfg.RootHints != "" {
-		return roothints.LoadFile(cfg.RootHints)
+// rootServers is where the walk starts: the servers --root named, the hints
+// file --root-hints pointed at, or the hints built into the binary.
+func rootServers(cfg *cli.Config) ([]trace.Server, error) {
+	if len(cfg.Roots) > 0 {
+		servers := make([]trace.Server, 0, len(cfg.Roots))
+		for _, root := range cfg.Roots {
+			servers = append(servers, trace.Server{
+				Name: root.Name,
+				IP:   root.Addr.Addr(),
+				Port: root.Addr.Port(),
+			})
+		}
+		return servers, nil
 	}
-	return roothints.Default()
+
+	hints, err := roothints.Default()
+	if cfg.RootHints != "" {
+		hints, err = roothints.LoadFile(cfg.RootHints)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return resolver.RootServers(hints), nil
+}
+
+// clientTLS is how the encrypted transports verify a server, nil when that is
+// the host's own roots under the name the delegation gave it.
+func clientTLS(cfg *cli.Config) (*tls.Config, error) {
+	switch {
+	case cfg.TLSInsecure:
+		return &tls.Config{InsecureSkipVerify: true}, nil
+	case cfg.TLSCA == "":
+		return nil, nil
+	}
+
+	pem, err := os.ReadFile(cfg.TLSCA)
+	if err != nil {
+		return nil, err
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("%s: no certificate to verify against", cfg.TLSCA)
+	}
+	return &tls.Config{RootCAs: roots}, nil
+}
+
+// asnLookup is where the origin AS lookups go. A nil lookup leaves asn.New to
+// use the host's own resolver, which is what the Cymru zones normally need.
+func asnLookup(cfg *cli.Config) asn.Lookup {
+	if !cfg.ASNResolver.IsValid() {
+		return nil
+	}
+
+	// A resolver of its own, dialling the one server, so that the lookups can
+	// be pointed somewhere the host knows nothing about.
+	server := cfg.ASNResolver.String()
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, network, server)
+		},
+	}
+	return resolver.LookupTXT
 }
 
 func carry(proto string, cfg transport.Config) transport.Transport {
