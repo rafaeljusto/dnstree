@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"strings"
 	"sync"
@@ -32,6 +33,10 @@ const (
 	// maxSideResolution is how deep nameserver names may be chased before the
 	// walk gives up on them.
 	maxSideResolution = 2
+
+	// maxSkipped is how many of a zone's remaining nameservers are drawn once
+	// one of them has answered. The root alone offers twenty-six.
+	maxSkipped = 3
 )
 
 // Config is how a resolution is run.
@@ -70,6 +75,13 @@ type Config struct {
 	// whatever a delegation offers.
 	Family int
 
+	// Retries is how many more times a server that stayed silent is asked
+	// before the walk moves on to the next one.
+	Retries int
+
+	// Log records every hop as it is made. Nil keeps quiet.
+	Log *slog.Logger
+
 	// CheckNS asks the zone it ends in for its own NS RRset and warns when that
 	// does not match what the parent delegated. It costs one more query.
 	CheckNS bool
@@ -97,12 +109,12 @@ func New(cfg Config) (*Resolver, error) {
 		return nil, fmt.Errorf("resolver: address family %d is neither 4 nor 6", cfg.Family)
 	}
 
+	// Without EDNS0 an answer has 512 bytes to fit in, which a root referral
+	// already does not. A server that cannot parse it is asked again without.
+	if cfg.UDPSize == 0 {
+		cfg.UDPSize = transport.DefaultUDPSize
+	}
 	if cfg.DNSSEC {
-		// Signatures do not fit in a bare 512 byte answer, so asking for them
-		// without EDNS0 would only ever bring back truncation.
-		if cfg.UDPSize == 0 {
-			cfg.UDPSize = transport.DefaultUDPSize
-		}
 		if len(cfg.Anchors) == 0 {
 			anchors, err := roothints.DefaultAnchors()
 			if err != nil {
@@ -110,6 +122,9 @@ func New(cfg Config) (*Resolver, error) {
 			}
 			cfg.Anchors = anchors
 		}
+	}
+	if cfg.Log == nil {
+		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 	return &Resolver{cfg: cfg}, nil
 }
@@ -303,8 +318,14 @@ func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Serve
 			continue
 		}
 
-		for _, rest := range servers[i+1:] {
-			parent.Children = append(parent.Children, skipped(zone, rest))
+		rest := servers[i+1:]
+		for _, server := range rest[:min(len(rest), maxSkipped)] {
+			parent.Children = append(parent.Children, skipped(zone, server))
+		}
+		if more := len(rest) - maxSkipped; more > 0 {
+			summary := &trace.Step{Zone: zone, Kind: trace.KindSkipped,
+				Notes: []string{fmt.Sprintf("and %d more not queried", more)}}
+			parent.Children = append(parent.Children, summary)
 		}
 		return hop
 	}
@@ -417,16 +438,34 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	return &hop{step: step, resp: resp}
 }
 
-// exchange sends one message and adds what it cost to the step.
+// exchange sends one message and adds what it cost to the step. A server that
+// stays silent is asked again, since a lost datagram is not an answer.
 func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.Transport, qname string, qtype uint16, udpSize uint16) (*dns.Msg, error) {
-	req, err := transport.NewQuery(qname, qtype, udpSize, r.cfg.DNSSEC)
-	if err != nil {
-		return nil, err
-	}
+	server := netip.AddrPortFrom(step.Server.IP, carrier.Port())
 
-	resp, rtt, err := carrier.Exchange(ctx, req, netip.AddrPortFrom(step.Server.IP, carrier.Port()), step.Server.Name)
-	step.RTT += rtt
-	return resp, err
+	var err error
+	for attempt := 0; ; attempt++ {
+		var req *dns.Msg
+		if req, err = transport.NewQuery(qname, qtype, udpSize, r.cfg.DNSSEC); err != nil {
+			return nil, err
+		}
+
+		var (
+			resp *dns.Msg
+			rtt  time.Duration
+		)
+		resp, rtt, err = carrier.Exchange(ctx, req, server, step.Server.Name)
+		step.RTT += rtt
+
+		r.cfg.Log.Debug("asked a nameserver",
+			"zone", step.Zone, "server", server, "proto", carrier.Proto(),
+			"name", qname, "type", qtype, "rtt", rtt, "error", err)
+
+		if err == nil || attempt >= r.cfg.Retries || !transport.IsTimeout(err) {
+			return resp, err
+		}
+		step.Notes = append(step.Notes, "asked again after a silence")
+	}
 }
 
 // nextServers is where the walk goes after a referral: the glue when there is

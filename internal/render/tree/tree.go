@@ -221,6 +221,9 @@ func (r *renderer) note(step *trace.Step) string {
 	case trace.KindLame:
 		return r.paint.paint("lame", yellow)
 	case trace.KindSkipped:
+		if step.Server.Name == "" && !step.Server.IP.IsValid() {
+			return "" // a summary of the rest; its note says what it stands for
+		}
 		return r.paint.dim("(not queried)")
 	case trace.KindTimeout:
 		return r.paint.paint("timeout", red)
