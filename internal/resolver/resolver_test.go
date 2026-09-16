@@ -541,8 +541,10 @@ func TestRootServers(t *testing.T) {
 	if len(servers) != 26 {
 		t.Fatalf("got %d servers, want an IPv4 and an IPv6 one for each of the 13 roots", len(servers))
 	}
-	if first := servers[0]; first.Name != "a.root-servers.net." || first.Port != 53 || first.IP.String() != "198.41.0.4" {
-		t.Errorf("got %+v first, want a.root-servers.net. at 198.41.0.4:53", first)
+	// The hints carry no port: the transport says where to knock, so that
+	// --port and the encrypted transports reach the roots as well.
+	if first := servers[0]; first.Name != "a.root-servers.net." || first.Port != 0 || first.IP.String() != "198.41.0.4" {
+		t.Errorf("got %+v first, want a.root-servers.net. at 198.41.0.4 with no port of its own", first)
 	}
 }
 

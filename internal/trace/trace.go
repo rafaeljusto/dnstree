@@ -84,6 +84,10 @@ type Step struct {
 type Server struct {
 	Name string // empty when only the address is known
 	IP   netip.Addr
+
+	// Port is where the server is asked. Zero leaves the choice to the
+	// transport, which is the ordinary case: glue carries addresses and never
+	// ports. A step of a finished trace always names the port it used.
 	Port uint16
 	ASN  *ASNInfo
 }

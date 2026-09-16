@@ -4,6 +4,7 @@
 package resolver
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -23,7 +24,8 @@ import (
 )
 
 const (
-	// DefaultPort is where nameservers listen.
+	// DefaultPort is where nameservers listen, when neither the transport nor
+	// the server itself says otherwise.
 	DefaultPort = 53
 
 	// maxParallel bounds the fanout of All: quick enough to be worth it, few
@@ -152,7 +154,7 @@ func RootServers(hints *roothints.Hints) []trace.Server {
 	var servers []trace.Server
 	for _, hint := range hints.Servers {
 		for _, addr := range hint.Addrs {
-			servers = append(servers, trace.Server{Name: hint.Name, IP: addr, Port: DefaultPort})
+			servers = append(servers, trace.Server{Name: hint.Name, IP: addr})
 		}
 	}
 	return servers
@@ -394,8 +396,9 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 // took to get a whole answer out of it.
 func (r *run) query(ctx context.Context, zone string, server trace.Server, qname string, qtype uint16) *hop {
 	// Glue carries addresses and never ports, so the transport says where to
-	// knock.
-	server.Port = r.cfg.Transport.Port()
+	// knock, unless the server was named with a port of its own.
+	port := server.Port
+	server.Port = cmp.Or(port, r.cfg.Transport.Port())
 	if r.cfg.Discovered != nil {
 		r.cfg.Discovered(server.IP)
 	}
@@ -407,15 +410,15 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	step := &trace.Step{Zone: zone, Server: server, Proto: r.cfg.Transport.Proto()}
 
 	udpSize := r.cfg.UDPSize
-	resp, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize)
+	resp, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize, port)
 
 	// A server that does not speak the transport asked for is the ordinary case
 	// for DoT and DoH, so plain DNS can be allowed to pick the hop up.
 	if err != nil && r.cfg.Fallback != nil {
-		if retry, fallbackErr := r.exchange(ctx, step, r.cfg.Fallback, qname, qtype, udpSize); fallbackErr == nil {
+		if retry, fallbackErr := r.exchange(ctx, step, r.cfg.Fallback, qname, qtype, udpSize, port); fallbackErr == nil {
 			step.Notes = append(step.Notes, step.Proto+" did not get through, asked over "+r.cfg.Fallback.Proto())
 			step.Proto = r.cfg.Fallback.Proto()
-			step.Server.Port = r.cfg.Fallback.Port()
+			step.Server.Port = cmp.Or(port, r.cfg.Fallback.Port())
 			resp, err = retry, nil
 		}
 	}
@@ -430,7 +433,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	// A server that cannot parse EDNS0 gets the question again without it.
 	if udpSize > 0 && (resp.Rcode == dns.RcodeFormatError || resp.Rcode == dns.RcodeNotImplemented) {
 		udpSize = 0
-		if retry, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize); err == nil {
+		if retry, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize, port); err == nil {
 			resp = retry
 			step.Notes = append(step.Notes, "retried without EDNS0")
 		}
@@ -438,7 +441,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 
 	// An answer that did not fit has to be fetched again over TCP.
 	if resp.Truncated && r.cfg.TCP != nil && step.Proto != r.cfg.TCP.Proto() {
-		if retry, err := r.exchange(ctx, step, r.cfg.TCP, qname, qtype, udpSize); err == nil {
+		if retry, err := r.exchange(ctx, step, r.cfg.TCP, qname, qtype, udpSize, port); err == nil {
 			step.Notes = append(step.Notes, "truncated over "+step.Proto)
 			step.Proto = r.cfg.TCP.Proto()
 			resp = retry
@@ -464,8 +467,8 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 
 // exchange sends one message and adds what it cost to the step. A server that
 // stays silent is asked again, since a lost datagram is not an answer.
-func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.Transport, qname string, qtype uint16, udpSize uint16) (*dns.Msg, error) {
-	server := netip.AddrPortFrom(step.Server.IP, carrier.Port())
+func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.Transport, qname string, qtype uint16, udpSize, port uint16) (*dns.Msg, error) {
+	server := netip.AddrPortFrom(step.Server.IP, cmp.Or(port, carrier.Port()))
 
 	var err error
 	for attempt := 0; ; attempt++ {
@@ -534,7 +537,7 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) []tra
 			}
 			// The model keeps rdata as text, and an address is its own text.
 			if addr, err := netip.ParseAddr(record.Data); err == nil {
-				servers = append(servers, trace.Server{Name: name, IP: addr, Port: DefaultPort})
+				servers = append(servers, trace.Server{Name: name, IP: addr})
 			}
 		}
 		if len(servers) > 0 {
@@ -674,7 +677,7 @@ func glueServers(delegation *trace.Delegation) []trace.Server {
 	var servers []trace.Server
 	for _, name := range delegation.NS {
 		for _, addr := range delegation.Glue[name] {
-			servers = append(servers, trace.Server{Name: name, IP: addr, Port: DefaultPort})
+			servers = append(servers, trace.Server{Name: name, IP: addr})
 		}
 	}
 	return servers

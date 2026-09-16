@@ -25,10 +25,6 @@ import (
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
 
-// DefaultPort is the port a declared address is assumed to listen on, matching
-// what the resolver dials.
-const DefaultPort = 53
-
 // Behaviour makes a server misbehave. Every knob mirrors something that happens
 // in the wild and that the resolver has to survive.
 type Behaviour struct {
@@ -196,13 +192,14 @@ func New(tb testing.TB, cfg Config) *Server {
 }
 
 // Nameserver is the server as the resolver should be told about it: the
-// declared address when there is one, the real socket otherwise.
+// declared address when there is one, the real socket otherwise. A declared
+// address carries no port, the way real glue does not, so the transport says
+// where to knock and the hierarchy maps it onto the right socket.
 func (s *Server) Nameserver() trace.Server {
-	server := trace.Server{Name: s.name, IP: s.Addr.Addr(), Port: s.Addr.Port()}
 	if s.Declared.IsValid() {
-		server.IP, server.Port = s.Declared, DefaultPort
+		return trace.Server{Name: s.name, IP: s.Declared}
 	}
-	return server
+	return trace.Server{Name: s.name, IP: s.Addr.Addr(), Port: s.Addr.Port()}
 }
 
 // records is the zone as it stands.
