@@ -82,6 +82,12 @@ type Config struct {
 	// Log records every hop as it is made. Nil keeps quiet.
 	Log *slog.Logger
 
+	// Discovered is handed the address of each server the walk is about to ask,
+	// as it asks it. Metadata that takes a while to look up can start here and
+	// run behind the walk, instead of after it where the wait is the reader's.
+	// It is called from several goroutines at once.
+	Discovered func(netip.Addr)
+
 	// CheckNS asks the zone it ends in for its own NS RRset and warns when that
 	// does not match what the parent delegated. It costs one more query.
 	CheckNS bool
@@ -378,6 +384,9 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	// Glue carries addresses and never ports, so the transport says where to
 	// knock.
 	server.Port = r.cfg.Transport.Port()
+	if r.cfg.Discovered != nil {
+		r.cfg.Discovered(server.IP)
+	}
 	step := &trace.Step{Zone: zone, Server: server, Proto: r.cfg.Transport.Proto()}
 
 	udpSize := r.cfg.UDPSize

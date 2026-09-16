@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/asn"
 	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
@@ -29,7 +30,7 @@ ns      IN A   127.0.0.1
 // pointed at a fake nameserver, so the name this package builds has to be right
 // for anything to come back.
 func TestLookupThroughResolver(t *testing.T) {
-	resolver := asn.New(lookupAgainst(t, cymru))
+	resolver := asn.New(lookupAgainst(t, cymru), nil)
 
 	info, err := resolver.Lookup(t.Context(), netip.MustParseAddr("1.2.3.4"))
 	if err != nil {
@@ -48,7 +49,7 @@ func TestLookupThroughResolver(t *testing.T) {
 }
 
 func TestLookupUnknownAddress(t *testing.T) {
-	resolver := asn.New(lookupAgainst(t, cymru))
+	resolver := asn.New(lookupAgainst(t, cymru), nil)
 
 	// The zone answers, but has nothing to say about this one.
 	info, err := resolver.Lookup(t.Context(), netip.MustParseAddr("9.9.9.9"))
@@ -79,7 +80,7 @@ func TestAnnotate(t *testing.T) {
 		{Zone: ".", Kind: trace.KindError},
 	}}}
 
-	asn.New(counted).Annotate(t.Context(), tr)
+	asn.New(counted, nil).Annotate(t.Context(), tr)
 
 	if len(tr.Warnings) != 0 {
 		t.Errorf("got warnings %q, want none", tr.Warnings)
@@ -113,7 +114,7 @@ func TestAnnotateWithoutLookups(t *testing.T) {
 	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
 		step("1.2.3.4"),
 	}}}
-	asn.New(broken).Annotate(t.Context(), tr)
+	asn.New(broken, nil).Annotate(t.Context(), tr)
 
 	if tr.Root.Children[0].Server.ASN != nil {
 		t.Error("got an AS out of a broken resolver, want none")
@@ -124,12 +125,12 @@ func TestAnnotateWithoutLookups(t *testing.T) {
 
 	// A trace with nothing to look up is not worth a warning.
 	empty := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone}}
-	asn.New(broken).Annotate(t.Context(), empty)
+	asn.New(broken, nil).Annotate(t.Context(), empty)
 	if len(empty.Warnings) != 0 {
 		t.Errorf("got warnings %q, want none", empty.Warnings)
 	}
 
-	asn.New(broken).Annotate(t.Context(), nil) // and nothing at all is fine too
+	asn.New(broken, nil).Annotate(t.Context(), nil) // and nothing at all is fine too
 }
 
 // lookupAgainst answers TXT queries from a fake nameserver, through the same
@@ -173,7 +174,7 @@ func TestAnnotateWarnsOnce(t *testing.T) {
 	}
 	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: children}}
 
-	asn.New(blocked).Annotate(t.Context(), tr)
+	asn.New(blocked, nil).Annotate(t.Context(), tr)
 
 	if len(tr.Warnings) != 1 {
 		t.Fatalf("got warnings %q, want one for thirty failures", tr.Warnings)
@@ -209,12 +210,98 @@ func TestAnnotateKeepsWhatItFound(t *testing.T) {
 		step("5.0.0.1"), // the one that fails
 		step("1.2.3.4"),
 	}}}
-	asn.New(patchy).Annotate(t.Context(), tr)
+	asn.New(patchy, nil).Annotate(t.Context(), tr)
 
 	if got := tr.Root.Children[1].Server.ASN; got == nil || got.Number != 15169 {
 		t.Errorf("got %+v for the address that answered, want AS15169", got)
 	}
 	if len(tr.Warnings) != 0 {
 		t.Errorf("got warnings %q, want none while something was found", tr.Warnings)
+	}
+}
+
+// TestStartRunsBehindTheWalk covers the point of starting early: by the time a
+// trace is handed over, the lookups it needs are already done, and the only
+// ones left are for servers the walk found late.
+func TestStartRunsBehindTheWalk(t *testing.T) {
+	var asked atomic.Int64
+	slow := lookupAgainst(t, cymru)
+	counted := func(ctx context.Context, name string) ([]string, error) {
+		asked.Add(1)
+		return slow(ctx, name)
+	}
+
+	resolver := asn.New(counted, nil)
+
+	// What a walk does: announce each server as it reaches it, twice over for
+	// a nameserver it comes back to.
+	for _, addr := range []string{"1.2.3.4", "5.0.0.1", "1.2.3.4"} {
+		resolver.Start(t.Context(), netip.MustParseAddr(addr))
+	}
+
+	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
+		step("1.2.3.4"),
+		step("5.0.0.1"),
+	}}}
+	resolver.Annotate(t.Context(), tr)
+
+	if got := asked.Load(); got != 2 {
+		t.Errorf("asked %d times, want one per distinct address whatever the walk announced", got)
+	}
+	for i, want := range []uint32{15169, 64500} {
+		if got := tr.Root.Children[i].Server.ASN; got == nil || got.Number != want {
+			t.Errorf("step %d: got %+v, want AS%d", i, got, want)
+		}
+	}
+}
+
+// TestAnnotateLeavesUnqueriedServersAlone covers the other half of the saving:
+// a trace lists far more servers than it speaks to, and the ones it passed over
+// are not worth a lookup of their own.
+func TestAnnotateLeavesUnqueriedServersAlone(t *testing.T) {
+	var asked atomic.Int64
+	answers := lookupAgainst(t, cymru)
+	counted := func(ctx context.Context, name string) ([]string, error) {
+		asked.Add(1)
+		return answers(ctx, name)
+	}
+
+	queried := step("1.2.3.4")
+	skipped := step("5.0.0.1")
+	skipped.Kind = trace.KindSkipped
+	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone,
+		Children: []*trace.Step{queried, skipped}}}
+
+	asn.New(counted, nil).Annotate(t.Context(), tr)
+
+	if got := asked.Load(); got != 1 {
+		t.Errorf("asked %d times, want only the server the walk spoke to", got)
+	}
+	if queried.Server.ASN == nil {
+		t.Error("got no AS for the server that was queried, want one")
+	}
+	if skipped.Server.ASN != nil {
+		t.Errorf("got %+v for a server nobody asked, want none", skipped.Server.ASN)
+	}
+}
+
+// TestAnnotateSaysWhenItGaveUp covers the quiet failure: lookups that are still
+// running when the grace runs out leave no AS numbers, and a reader is owed a
+// reason for that just as much as for a refusal.
+func TestAnnotateSaysWhenItGaveUp(t *testing.T) {
+	never := func(ctx context.Context, _ string) ([]string, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone,
+		Children: []*trace.Step{step("1.2.3.4")}}}
+
+	grace, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	asn.New(never, nil).Annotate(grace, tr)
+
+	if len(tr.Warnings) != 1 || !strings.Contains(tr.Warnings[0], "in time") {
+		t.Fatalf("got warnings %q, want one saying they did not answer in time", tr.Warnings)
 	}
 }

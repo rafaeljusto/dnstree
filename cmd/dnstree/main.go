@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,10 +34,10 @@ const (
 	exitBogus    = 3 // the chain of trust is broken
 )
 
-// asnTimeout bounds the metadata lookups. A working lookup answers in
-// milliseconds, so this is the patience of somebody who wants the trace, not of
-// somebody who wants the AS numbers.
-const asnTimeout = 2 * time.Second
+// asnGrace is how long the origin AS lookups may carry on once the walk is
+// over. They start as the walk discovers each server, so by here they have had
+// the whole resolution as a head start and this is only for the stragglers.
+const asnGrace = 2 * time.Second
 
 // version is stamped into a release build; see the dist target of the Makefile.
 var version = "dev"
@@ -62,16 +63,28 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitAnswer
 	}
 
-	tr, err := resolve(ctx, cfg, stderr)
+	// The lookups run behind the walk: each server is asked about the moment
+	// the walk reaches it, so the tree is not held up by metadata at the end.
+	var log *slog.Logger
+	if cfg.Debug {
+		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	}
+
+	var lookups *asn.Resolver
+	if cfg.ASN {
+		lookups = asn.New(nil, log)
+	}
+
+	tr, err := resolve(ctx, cfg, log, lookups)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
 
-	if cfg.ASN {
-		lookups, cancel := context.WithTimeout(ctx, asnTimeout)
+	if lookups != nil {
+		grace, cancel := context.WithTimeout(ctx, asnGrace)
 		defer cancel()
-		asn.New(nil).Annotate(lookups, tr)
+		lookups.Annotate(grace, tr)
 	}
 
 	if err := render(stdout, cfg, tr); err != nil {
@@ -82,7 +95,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 }
 
 // resolve builds the resolution the flags asked for and runs it.
-func resolve(ctx context.Context, cfg *cli.Config, stderr io.Writer) (*trace.Trace, error) {
+func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *asn.Resolver) (*trace.Trace, error) {
 	hints, err := rootHints(cfg)
 	if err != nil {
 		return nil, err
@@ -103,8 +116,9 @@ func resolve(ctx context.Context, cfg *cli.Config, stderr io.Writer) (*trace.Tra
 			MaxCNAME:   cfg.MaxCNAME,
 		},
 	}
-	if cfg.Debug {
-		config.Log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	config.Log = log
+	if lookups != nil {
+		config.Discovered = func(addr netip.Addr) { lookups.Start(ctx, addr) }
 	}
 
 	// Only a datagram can be truncated, and only plain DNS is worth falling

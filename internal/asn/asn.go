@@ -7,11 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
@@ -34,75 +36,145 @@ type Lookup func(ctx context.Context, name string) ([]string, error)
 // that a nameserver appearing at several hops is asked about once.
 type Resolver struct {
 	lookup Lookup
+	log    *slog.Logger
+	limit  chan struct{}
+	wait   sync.WaitGroup
 
-	mu     sync.Mutex
-	cached map[netip.Addr]*trace.ASNInfo
+	mu      sync.Mutex
+	started map[netip.Addr]bool
+	cached  map[netip.Addr]*trace.ASNInfo
+	failure error
 }
 
-// New returns a resolver. A nil lookup uses the host's own resolver.
-func New(lookup Lookup) *Resolver {
+// New returns a resolver. A nil lookup uses the host's own resolver, and a nil
+// log keeps quiet.
+func New(lookup Lookup, log *slog.Logger) *Resolver {
 	if lookup == nil {
 		lookup = net.DefaultResolver.LookupTXT
 	}
-	return &Resolver{lookup: lookup, cached: make(map[netip.Addr]*trace.ASNInfo)}
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	return &Resolver{
+		lookup:  lookup,
+		log:     log,
+		limit:   make(chan struct{}, maxParallel),
+		started: make(map[netip.Addr]bool),
+		cached:  make(map[netip.Addr]*trace.ASNInfo),
+	}
 }
 
-// Annotate fills in the origin AS of every server in a trace, a few addresses
-// at a time. An address nothing can be found for is simply left without one; it
-// is only when none of them can be found that the trace is told, since that
-// means the lookups themselves are not working.
+// Start begins looking an address up, unless it has been asked about already.
+// Calling it while a walk is still going is the whole point: the lookups then
+// happen behind the walk instead of after it, where every one of them is time
+// somebody waits for.
+func (r *Resolver) Start(ctx context.Context, addr netip.Addr) {
+	addr = addr.Unmap()
+	if !addr.IsValid() {
+		return
+	}
+
+	r.mu.Lock()
+	if r.started[addr] {
+		r.mu.Unlock()
+		return
+	}
+	r.started[addr] = true
+	r.mu.Unlock()
+
+	r.wait.Go(func() {
+		r.limit <- struct{}{}
+		defer func() { <-r.limit }()
+
+		// Logged on the way in as well as out: a lookup that never comes back
+		// is exactly the one worth seeing.
+		r.log.Debug("asking for an origin AS", "address", addr)
+
+		started := time.Now()
+		info, err := r.Lookup(ctx, addr)
+		r.log.Debug("looked up an origin AS",
+			"address", addr, "took", time.Since(started), "found", info != nil, "error", err)
+
+		if err != nil {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			// One address nobody can answer for says nothing about the next.
+			if r.failure == nil {
+				r.failure = err
+			}
+		}
+	})
+}
+
+// Annotate fills in the origin AS of every server a trace actually asked, and
+// waits for the lookups still in flight — but only as long as ctx allows. The
+// trace is already complete: this is metadata, and nobody should wait long for
+// it. An address nothing can be found for is simply left without one; it is
+// only when none of them can be found that the trace is told, since that means
+// the lookups themselves are not working.
 func (r *Resolver) Annotate(ctx context.Context, tr *trace.Trace) {
 	if tr == nil {
 		return
 	}
 
-	steps := map[netip.Addr][]*trace.Step{}
+	asked := 0
 	for step := range tr.Steps() {
-		if addr := step.Server.IP; addr.IsValid() {
-			steps[addr] = append(steps[addr], step)
+		if queried(step) {
+			r.Start(ctx, step.Server.IP)
+			asked++
 		}
 	}
-	if len(steps) == 0 {
+	if asked == 0 {
 		return
 	}
 
-	var (
-		wait    sync.WaitGroup
-		limit   = make(chan struct{}, maxParallel)
-		mu      sync.Mutex
-		found   int
-		failure error
-	)
-	for addr := range steps {
-		wait.Go(func() {
-			limit <- struct{}{}
-			defer func() { <-limit }()
+	done := make(chan struct{})
+	go func() {
+		r.wait.Wait()
+		close(done)
+	}()
 
-			info, err := r.Lookup(ctx, addr)
-
-			mu.Lock()
-			defer mu.Unlock()
-			switch {
-			case err != nil:
-				// One address nobody can answer for says nothing about the
-				// next: the others are still worth asking about.
-				if failure == nil {
-					failure = err
-				}
-			case info != nil:
-				found++
-				for _, step := range steps[addr] {
-					step.Server.ASN = info
-				}
-			}
-		})
+	waited := time.Now()
+	var abandoned bool
+	select {
+	case <-done:
+	case <-ctx.Done():
+		abandoned = true // the stragglers are not worth the wait
 	}
-	wait.Wait()
+	r.log.Debug("waited for the origin AS lookups",
+		"took", time.Since(waited), "abandoned", abandoned)
 
-	if found == 0 && failure != nil {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	found := 0
+	for step := range tr.Steps() {
+		if info := r.cached[step.Server.IP.Unmap()]; info != nil {
+			step.Server.ASN = info
+			found++
+		}
+	}
+	// Saying nothing would leave a reader wondering where the AS numbers went.
+	switch {
+	case found > 0:
+	case r.failure != nil:
 		tr.Warnings = append(tr.Warnings,
-			"the origin AS lookups did not get through ("+reason(failure)+"); --no-asn skips them")
+			"the origin AS lookups did not get through ("+reason(r.failure)+"); --no-asn skips them")
+	case abandoned:
+		tr.Warnings = append(tr.Warnings,
+			"the origin AS lookups did not answer in time; --no-asn skips them")
 	}
+}
+
+// queried reports whether a step is a hop the walk really made. A server it
+// only listed as an alternative was never spoken to, and is not worth asking a
+// second service about.
+func queried(step *trace.Step) bool {
+	switch step.Kind {
+	case trace.KindZone, trace.KindSkipped:
+		return false
+	}
+	return step.Server.IP.IsValid()
 }
 
 // reason is the short form of a lookup failure. The whole chain carries the
