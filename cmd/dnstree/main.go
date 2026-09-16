@@ -42,9 +42,10 @@ var version = "dev"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop() // os.Exit runs no deferred function
 
-	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(code)
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
