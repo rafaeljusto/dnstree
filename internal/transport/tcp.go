@@ -23,7 +23,7 @@ func NewTCP(cfg Config) *TCP { return &TCP{Config: cfg} }
 func (t *TCP) Proto() string { return "tcp" }
 
 // Port implements [Transport].
-func (t *TCP) Port() uint16 { return PortDNS }
+func (t *TCP) Port() uint16 { return t.port(PortDNS) }
 
 // Exchange implements [Transport].
 func (t *TCP) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, _ string) (*dns.Msg, time.Duration, error) {

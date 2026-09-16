@@ -54,6 +54,19 @@ type Config struct {
 	// TLS configures the encrypted transports. A nil config verifies against
 	// the host's roots, under the name the delegation gave the server.
 	TLS *tls.Config
+
+	// Port overrides where nameservers are expected to listen. Zero uses the
+	// port the protocol is registered on.
+	Port uint16
+}
+
+// port is where servers are asked, which is the protocol's own unless the
+// caller knows better.
+func (c Config) port(standard uint16) uint16 {
+	if c.Port != 0 {
+		return c.Port
+	}
+	return standard
 }
 
 // tlsConfig is the config to dial with, named for the server being dialled.

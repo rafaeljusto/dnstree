@@ -23,7 +23,7 @@ func NewUDP(cfg Config) *UDP { return &UDP{Config: cfg} }
 func (u *UDP) Proto() string { return "udp" }
 
 // Port implements [Transport].
-func (u *UDP) Port() uint16 { return PortDNS }
+func (u *UDP) Port() uint16 { return u.port(PortDNS) }
 
 // Exchange implements [Transport].
 func (u *UDP) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, _ string) (*dns.Msg, time.Duration, error) {

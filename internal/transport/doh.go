@@ -28,7 +28,7 @@ func NewDoH(cfg Config) *DoH { return &DoH{Config: cfg} }
 func (d *DoH) Proto() string { return "doh" }
 
 // Port implements [Transport].
-func (d *DoH) Port() uint16 { return PortDoH }
+func (d *DoH) Port() uint16 { return d.port(PortDoH) }
 
 // Exchange implements [Transport]. The connection goes to the address the
 // delegation gave, while the URL and the certificate are about the name: a

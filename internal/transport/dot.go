@@ -24,7 +24,7 @@ func NewDoT(cfg Config) *DoT { return &DoT{Config: cfg} }
 func (d *DoT) Proto() string { return "dot" }
 
 // Port implements [Transport].
-func (d *DoT) Port() uint16 { return PortDoT }
+func (d *DoT) Port() uint16 { return d.port(PortDoT) }
 
 // Exchange implements [Transport]. The name is what the certificate is checked
 // against, so a server known only by address cannot be verified.
