@@ -14,7 +14,14 @@ import (
 	"github.com/rafaeljusto/dnstree/internal/transport"
 )
 
-const usage = `usage: dnstree [flags] NAME [TYPE]
+// Summary is the one line that says what the tool is, for the places outside
+// this package that have to introduce it: the man page, and the packages.
+const Summary = "resolve a name from the root servers down, and draw the path it took"
+
+// Usage is the whole help text, and the only description of the flag surface
+// this repository keeps. cmd/mkman renders the man page from it, so a flag
+// added here reaches the packages without being written out a second time.
+const Usage = `usage: dnstree [flags] NAME [TYPE]
 
 Resolve NAME from the root servers down, following every referral, and draw the
 path it took. TYPE defaults to A.
@@ -84,7 +91,7 @@ var ErrUsage = errors.New("cli: the command line cannot be read")
 func Parse(args []string, output io.Writer) (*Config, error) {
 	flags := flag.NewFlagSet("dnstree", flag.ContinueOnError)
 	flags.SetOutput(output)
-	flags.Usage = func() { fmt.Fprint(output, usage) }
+	flags.Usage = func() { fmt.Fprint(output, Usage) }
 
 	var (
 		cfg           Config
