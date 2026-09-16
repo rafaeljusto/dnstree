@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"codeberg.org/miekg/dns"
+	"codeberg.org/miekg/dns/dnshttp"
 	"codeberg.org/miekg/dns/dnstest"
 	"codeberg.org/miekg/dns/dnsutil"
 
@@ -77,6 +79,11 @@ type Config struct {
 	// for.
 	DNSSEC bool
 
+	// TLS and DoH serve the same zone over the encrypted transports, each on a
+	// port of its own.
+	TLS bool
+	DoH bool
+
 	Behaviour Behaviour
 }
 
@@ -99,6 +106,11 @@ type Server struct {
 	// Declared is the address its parent hands out as glue, unset outside a
 	// [Hierarchy].
 	Declared netip.Addr
+
+	// TLSAddr and DoHAddr are where the encrypted transports listen, when they
+	// were asked for.
+	TLSAddr netip.AddrPort
+	DoHAddr netip.AddrPort
 
 	name      string
 	origin    string
@@ -164,11 +176,21 @@ func New(tb testing.TB, cfg Config) *Server {
 		cancel, _, err := dnstest.Server("", func(s *dns.Server) {
 			start(s)
 			s.Handler = server
+			// Whatever cannot be parsed is the client's problem, not something
+			// to dump over the test output.
+			s.MsgInvalidFunc = func(*dns.Msg, error) {}
 		})
 		if err != nil {
 			tb.Fatalf("fakens: starting the %s server: %v", server.origin, err)
 		}
 		tb.Cleanup(cancel)
+	}
+
+	if cfg.TLS {
+		server.listenTLS(tb, host)
+	}
+	if cfg.DoH {
+		server.listenDoH(tb, host)
 	}
 	return server
 }
@@ -233,7 +255,23 @@ func (s *Server) ServeDNS(ctx context.Context, w dns.ResponseWriter, req *dns.Ms
 	if err := req.Unpack(); err != nil {
 		return
 	}
+	s.serve(ctx, w, req)
+}
 
+// ServeHTTP answers DNS over HTTPS, where the message arrives whole and needs
+// no further unpacking.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	req, err := dnshttp.Request(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	s.serve(r.Context(), dnshttp.NewResponseWriter(w, r, local), req)
+}
+
+// serve answers one query, however it arrived.
+func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) {
 	name, qtype := dnsutil.Question(req)
 	s.mu.Lock()
 	s.queries = append(s.queries, Query{
