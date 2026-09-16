@@ -177,7 +177,8 @@ jobs:
       - run: go test ./...
 
       # The same target that builds a release locally, so what ships can be
-      # reproduced without a runner.
+      # reproduced without a runner: the archives, the Debian, RPM and Alpine
+      # packages, the Homebrew formula and the checksums over all of them.
       - run: make dist VERSION=${{ needs.version.outputs.version }}
 
       # Both entry points land here, so the notes are written from the commits
@@ -194,6 +195,14 @@ jobs:
           # already exists by now, and left to look for the previous one the
           # tool would find that tag and report nothing to release.
           go run ./cmd/next-version -from="$PREVIOUS" -changelog=notes.md -output= -summary=
+
+          # A release carries packages for four ecosystems now, and an .apk
+          # sitting in an asset list says nothing about how to install it.
+          base="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$VERSION"
+          printf '\n' >> notes.md
+          sed -e "s|@BASE@|$base|g" \
+              -e "s|@VERSION@|$VERSION|g" \
+              -e "s|@BARE@|${VERSION#v}|g" packaging/install.md >> notes.md
 
           if [ -n "$PREVIOUS" ]; then
             printf '\n**Full changelog**: %s/%s/compare/%s...%s\n' \

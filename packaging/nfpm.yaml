@@ -1,0 +1,57 @@
+# The one description of a native package. PKG_ARCH and PKG_VERSION come from
+# the packages target of the Makefile, which runs this file once per
+# architecture and format. nfpm expands them, but not the paths below: the
+# Makefile stages the architecture being packaged under build/pkg instead.
+name: dnstree
+arch: ${PKG_ARCH}
+platform: linux
+version: ${PKG_VERSION}
+maintainer: Rafael Dantas Justo <rafael.justo@teamwork.com>
+vendor: Rafael Dantas Justo
+homepage: https://github.com/rafaeljusto/dnstree
+license: MIT
+section: net
+priority: optional
+
+# The first line is the synopsis every format shows in a listing, which is why
+# it carries no full stop.
+description: |
+  resolve a name from the root servers down, and draw the path it took
+  dnstree walks the delegation the way a resolver does, one referral at a
+  time, and draws the tree it followed: how long each hop took, which AS
+  announces each address, which servers were lame, and whether the chain of
+  trust holds. It reads the root by itself and needs no resolver to ask.
+
+contents:
+  - src: ./build/pkg/dnstree
+    dst: /usr/bin/dnstree
+
+  - src: ./build/dnstree.1.gz
+    dst: /usr/share/man/man1/dnstree.1.gz
+
+  - src: ./README.md
+    dst: /usr/share/doc/dnstree/README.md
+
+  # Where each format's users look for it.
+  - src: ./LICENSE
+    dst: /usr/share/doc/dnstree/copyright
+    packager: deb
+  - src: ./LICENSE
+    dst: /usr/share/licenses/dnstree/LICENSE
+    packager: rpm
+  - src: ./LICENSE
+    dst: /usr/share/licenses/dnstree/LICENSE
+    packager: apk
+
+# The binary is static and talks to nameservers directly, so a package pulls
+# in nothing. ca-certificates is only read by --dot and --doh, which is why it
+# is suggested rather than required.
+suggests:
+  - ca-certificates
+
+rpm:
+  summary: Resolve a name from the root servers down, and draw the path it took
+  group: Applications/Internet
+  compression: gzip
+deb:
+  compression: gzip

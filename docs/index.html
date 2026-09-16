@@ -496,10 +496,29 @@ footer a:hover{color:var(--ink)}
           <button class="copy" type="button" data-copy="docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A">copy</button>
         </div>
         <div class="cmd">
+          <span class="what">brew</span>
+          <code>curl -LO .../dnstree.rb &amp;&amp; brew install --formula ./dnstree.rb</code>
+          <button class="copy" type="button" data-copy="brew install --formula ./dnstree.rb">copy</button>
+        </div>
+        <div class="cmd">
+          <span class="what">deb</span>
+          <code>sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb</code>
+          <button class="copy" type="button" data-copy="sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb">copy</button>
+        </div>
+        <div class="cmd">
+          <span class="what">rpm</span>
+          <code>sudo rpm -i dnstree-&lt;version&gt;-1.x86_64.rpm</code>
+          <button class="copy" type="button" data-copy="sudo rpm -i dnstree-&lt;version&gt;-1.x86_64.rpm">copy</button>
+        </div>
+        <div class="cmd">
           <span class="what">binary</span>
           <code><a href="https://github.com/rafaeljusto/dnstree/releases">github.com/rafaeljusto/dnstree/releases</a> — macOS, Linux, FreeBSD, Windows</code>
         </div>
       </div>
+
+      <p class="section-lede" style="margin-top:1.2rem">Every release carries the
+      packages and an Alpine <code>.apk</code> too, for amd64, arm64 and armhf,
+      each with a man page. The release notes give the whole command.</p>
 
       <h3 style="margin-top:2.2rem">What it tells a script</h3>
       <table class="exits">

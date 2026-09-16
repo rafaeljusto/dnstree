@@ -24,6 +24,15 @@ That is what CI runs. Two things it does not:
 Renderer goldens are rewritten with `go test ./internal/render/... -update`.
 Read the diff before keeping it: those files are the user-visible output.
 
+## Releasing
+
+`make dist` builds the whole release: the archives, a Debian, RPM and Alpine
+package per Linux architecture, the Homebrew formula and the checksums over all
+of them. It is the same target the release workflow runs, so what ships can be
+reproduced without a runner. [`packaging/README.md`](packaging/README.md) says
+how the pieces fit; `nfpm` is fetched at a pinned version, like golangci-lint,
+and is not a dependency of the module.
+
 ## Do not commit
 
 The maintainer reviews and signs every commit. Write the message, print it, and
@@ -127,6 +136,10 @@ review comment: the usage string in `internal/cli/cli.go`, the flag table in
 `README.md`, the landing page in `docs/` (published by the pages workflow), and
 the tests. Every example in the README and on the page is real output, pasted
 from an actual run — regenerate it rather than editing it by hand.
+
+The man page is not a fifth place. `cmd/mkman` renders it from `cli.Usage` at
+release time, and refuses to render a usage text whose shape it cannot read, so
+a flag added to the usage string reaches the packages on its own.
 
 ## Style
 

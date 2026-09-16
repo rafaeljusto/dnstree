@@ -59,6 +59,49 @@ jobs:
           go-version-file: go.mod
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  # A release is the first time the packages are built, so a broken nfpm config
+  # or an unparseable usage text would surface while cutting one. This builds
+  # the whole release against a version nothing ever publishes.
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - run: make dist VERSION=v0.0.0
+
+      - name: Check the release is complete
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for artefact in checksums.txt dnstree.rb \
+            dnstree_0.0.0_amd64.deb dnstree_0.0.0_arm64.deb dnstree_0.0.0_armhf.deb \
+            dnstree-0.0.0-1.x86_64.rpm dnstree-0.0.0-1.aarch64.rpm dnstree-0.0.0-1.armv7hl.rpm \
+            dnstree_0.0.0_x86_64.apk dnstree_0.0.0_aarch64.apk dnstree_0.0.0_armv7.apk \
+            dnstree_v0.0.0_darwin_arm64.tar.gz dnstree_v0.0.0_linux_amd64.tar.gz \
+            dnstree_v0.0.0_freebsd_amd64.tar.gz dnstree_v0.0.0_windows_amd64.zip; do
+            if [ ! -f "dist/$artefact" ]; then
+              echo "::error::dist/$artefact is missing"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      # The package is only worth building if it installs and carries the page.
+      # zcat rather than man, which is not on every runner image.
+      - name: Install what was built
+        run: |
+          set -euo pipefail
+
+          sudo dpkg -i dist/dnstree_0.0.0_amd64.deb
+          dnstree --version
+          zcat /usr/share/man/man1/dnstree.1.gz | head -n 3
+
   live:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest

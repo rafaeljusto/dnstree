@@ -44,12 +44,33 @@ and each address carries the AS that announces it.)
 go install github.com/rafaeljusto/dnstree/cmd/dnstree@latest
 ```
 
-Or take a binary from the [releases](https://github.com/rafaeljusto/dnstree/releases),
-or run it straight from a container:
+Or run it straight from a container:
 
 ```
 docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A
 ```
+
+Every [release](https://github.com/rafaeljusto/dnstree/releases) also carries a
+binary for macOS, Linux, FreeBSD and Windows, a Debian, RPM and Alpine package
+for amd64, arm64 and armhf, and a Homebrew formula. The release notes give the
+command for each; taking the packages of v0.1.2 as the example:
+
+```
+# Debian, Ubuntu
+sudo dpkg -i dnstree_0.1.2_amd64.deb
+
+# Fedora, RHEL
+sudo rpm -i dnstree-0.1.2-1.x86_64.rpm
+
+# Alpine
+sudo apk add --allow-untrusted dnstree_0.1.2_x86_64.apk
+
+# Homebrew
+brew install --formula ./dnstree.rb
+```
+
+The packages install a man page: `man dnstree`. `checksums.txt` covers every
+file in the release. [`packaging/`](packaging/) says how they are built.
 
 ## Using it
 

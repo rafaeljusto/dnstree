@@ -1,4 +1,5 @@
 .git
 .github
 dist
+build
 *.md
