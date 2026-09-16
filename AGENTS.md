@@ -75,6 +75,12 @@ Each of these has been a bug, or would be a silent regression.
   server, are waited on briefly after it, and never fail a resolution. When they
   come back empty they say in one line which of the two things went wrong: the
   lookups could not get through, or they ran out of time.
+- **The file of defaults is parsed as arguments, ahead of the command line.**
+  A flag added to the flag set works in the file without being written out a
+  second time, and the command line wins by being read last. Flags that answer
+  the same question in different ways — the family, the transport — are listed
+  in `groups` in `internal/cli/config.go`, so naming one on the command line
+  replaces what the file chose instead of colliding with it.
 - **Exit codes are a contract**: 0 an answer, 1 the command line, 2 no answer,
   3 a broken chain of trust. Scripts read them; do not repurpose one.
 - **`--format ascii` emits nothing above codepoint 127** — a test asserts it,

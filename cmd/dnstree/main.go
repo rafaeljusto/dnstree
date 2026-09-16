@@ -70,6 +70,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
+	if log != nil && cfg.ConfigFile != "" {
+		log.Debug("defaults read from a file", "file", cfg.ConfigFile)
+	}
+
 	var lookups *asn.Resolver
 	if cfg.ASN {
 		lookups = asn.New(nil, log)

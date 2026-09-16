@@ -99,7 +99,27 @@ dnstree [flags] NAME [TYPE]
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite |
 | `--port` | the port nameservers are asked on |
 | `--root-hints`, `--trust-anchors` | start somewhere other than the built-in root |
+| `--config`, `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
+
+### Defaults
+
+Flags you always type belong in a file instead. `dnstree` reads the first of
+`$DNSTREE_CONFIG`, `$XDG_CONFIG_HOME/dnstree/config` (`~/.config/dnstree/config`
+where that is unset) and `~/.dnstreerc`:
+
+```
+# ~/.dnstreerc
+format = emoji
+dnssec
+timeout = 3s
+```
+
+One long flag name per line, with the value it takes; `#` opens a comment, and a
+flag that stands on its own needs no value. The command line wins over the file,
+so `--format ascii` overrides the line above, `--udp` replaces a transport the
+file chose, and `--dnssec=false` turns a flag it set back off. `--config FILE`
+reads somewhere else, and `--no-config` reads nowhere.
 
 ### Exit codes
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rafaeljusto/dnstree/internal/cli"
 	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
 )
 
@@ -20,6 +21,23 @@ const rootZone = `
 @                   IN NS   a.root-servers.net.
 a.root-servers.net. IN A    127.0.0.1
 `
+
+// TestMain puts the tests in a home of their own, so that a file of defaults on
+// the machine running them cannot change what the command does.
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "dnstree-home")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", home)
+	os.Setenv("USERPROFILE", home)
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	os.Unsetenv(cli.ConfigEnv)
+
+	code := m.Run()
+	os.RemoveAll(home)
+	os.Exit(code)
+}
 
 func TestRun(t *testing.T) {
 	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})

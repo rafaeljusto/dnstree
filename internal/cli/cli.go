@@ -45,8 +45,16 @@ path it took. TYPE defaults to A.
   --port N                the port nameservers are asked on (default 53)
   --root-hints FILE       where the walk starts, instead of the built-in hints
   --trust-anchors FILE    the DS records to trust, instead of the built-in ones
+  --config FILE           take the defaults from FILE, instead of the usual one
+  --no-config             take no defaults from a file at all
   --debug                 report every hop on stderr as it is made
   --version               print the version and stop
+
+What the command line leaves out is taken from a file of defaults: the one named
+by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
+where that is unset), then ~/.dnstreerc. Each line of it is a long flag name and
+the value it takes, such as "format = emoji", "dnssec" or "timeout = 3s". A line
+opening with # is a comment, and anything the command line asks for wins.
 
 Exit codes: 0 an answer, 1 a problem with the command, 2 nothing answered,
 3 the chain of trust is broken.
@@ -78,6 +86,9 @@ type Config struct {
 	TrustAnchors string
 	Debug        bool
 
+	// ConfigFile is the file the defaults came from, empty when none was read.
+	ConfigFile string
+
 	// Version asks for the version and nothing else.
 	Version bool
 }
@@ -99,6 +110,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		udp, tcp, dot bool
 		doh           bool
 		noASN         bool
+		noConfig      bool
+		configPath    string
 		color, format string
 		timeout       time.Duration
 		port          uint
@@ -125,9 +138,31 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.UintVar(&port, "port", 0, "the port nameservers are asked on")
 	flags.StringVar(&cfg.RootHints, "root-hints", "", "where the walk starts")
 	flags.StringVar(&cfg.TrustAnchors, "trust-anchors", "", "the DS records to trust")
+	flags.StringVar(&configPath, "config", "", "take the defaults from this file")
+	flags.BoolVar(&noConfig, "no-config", false, "take no defaults from a file")
 	flags.BoolVar(&cfg.Debug, "debug", false, "report every hop on stderr")
 	flags.BoolVar(&cfg.Version, "version", false, "print the version and stop")
 
+	// The file is parsed first and the command line over it, so a flag typed
+	// out wins by being read last, and only the command line leaves positional
+	// arguments behind.
+	file, err := chosen(flags, args)
+	if err != nil {
+		return nil, err
+	}
+	fileArgs, read, err := defaults(flags, file)
+	if err != nil {
+		return nil, err
+	}
+	if read {
+		cfg.ConfigFile = file.path
+		flags.SetOutput(io.Discard) // the file names its own lines; the usage is about the command line
+		err := flags.Parse(override(flags, fileArgs, args))
+		flags.SetOutput(output)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s: %w", ErrUsage, file.path, err)
+		}
+	}
 	if err := flags.Parse(args); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
 	}
@@ -157,7 +192,6 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		cfg.Family = 6
 	}
 
-	var err error
 	if cfg.Proto, err = proto(udp, tcp, dot, doh); err != nil {
 		return nil, err
 	}

@@ -519,6 +519,26 @@ footer a:hover{color:var(--ink)}
       packages and an Alpine <code>.apk</code> too, for amd64, arm64 and armhf,
       each with a man page. The release notes give the whole command.</p>
 
+      <h3 style="margin-top:2.2rem">Set it once</h3>
+      <p class="section-lede">The flags you always type belong in
+      <code>~/.dnstreerc</code> — or <code>~/.config/dnstree/config</code>, or
+      whichever file <code>$DNSTREE_CONFIG</code> names. One long flag name per
+      line, with the value it takes. The command line still wins over it, and
+      <code>--no-config</code> ignores it altogether.</p>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">~/.dnstreerc</span>
+        </div>
+        <div class="term-body">
+<pre><span class="dim"># the walk, the way I like to read it</span>
+format = emoji
+dnssec
+timeout = 3s</pre>
+        </div>
+      </div>
+
       <h3 style="margin-top:2.2rem">What it tells a script</h3>
       <table class="exits">
         <tbody>
