@@ -86,7 +86,7 @@ func kinds() *trace.Trace {
 		{
 			Zone: "com.", Server: server("ns4.com.", "192.0.2.5", 0), Rcode: "NOERROR",
 			Flags: trace.Flags{AA: true, TC: true, AD: true, DO: true}, Kind: trace.KindCNAME, RTT: 340 * time.Microsecond,
-			DNSSEC:  &trace.DNSSECStatus{State: trace.Bogus, Reason: "signature does not verify"},
+			DNSSEC:  &trace.DNSSECStatus{State: trace.Bogus, Reason: "signature does not verify", Algorithm: "ED25519"},
 			Records: []trace.RR{{Name: "alias.example.com.", TTL: 300, Type: "CNAME", Data: "target.example.net."}},
 			// A walk of its own, drawn where it was needed.
 			Children: []*trace.Step{{
@@ -106,7 +106,7 @@ func kinds() *trace.Trace {
 		RTT:        6 * time.Millisecond,
 		Kind:       trace.KindReferral,
 		Delegation: &trace.Delegation{Zone: "com."},
-		DNSSEC:     &trace.DNSSECStatus{State: trace.Insecure},
+		DNSSEC:     &trace.DNSSECStatus{State: trace.Insecure, Algorithm: "ECDSAP256SHA256", Digest: "SHA256"},
 		Children:   children,
 	}
 	lame := &trace.Step{
@@ -115,7 +115,7 @@ func kinds() *trace.Trace {
 		Rcode:  "REFUSED",
 		RTT:    5 * time.Millisecond,
 		Kind:   trace.KindLame,
-		DNSSEC: &trace.DNSSECStatus{State: trace.Indeterminate},
+		DNSSEC: &trace.DNSSECStatus{State: trace.Indeterminate, Reason: "digest type 5 is not supported here", Digest: "digest 5"},
 	}
 
 	return &trace.Trace{

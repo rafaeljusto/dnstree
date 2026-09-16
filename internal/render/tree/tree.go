@@ -120,7 +120,7 @@ func (r *renderer) label(step *trace.Step) string {
 		if zone == "." {
 			zone = ". (root)"
 		}
-		return join(r.paint.dim(zone), r.notes(step))
+		return join(r.paint.dim(zone), r.dnssec(step.DNSSEC), r.notes(step))
 	}
 	return r.stepLabel(step)
 }
@@ -234,15 +234,26 @@ func (r *renderer) note(step *trace.Step) string {
 	return ""
 }
 
-// dnssec is the state of the chain at this zone cut.
+// dnssec is the state of the chain at this zone cut. The algorithm and the
+// digest always come with it: an algorithm this build cannot check has to read
+// differently from a signature that genuinely does not verify.
 func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 	if status == nil {
 		return ""
 	}
 
 	label := string(status.State)
-	if status.State == trace.Bogus && status.Reason != "" {
-		label += ": " + status.Reason
+	switch {
+	case status.Algorithm != "" && status.Digest != "":
+		label += " " + status.Algorithm + "/" + status.Digest
+	case status.Algorithm != "":
+		label += " " + status.Algorithm
+	}
+	switch status.State {
+	case trace.Bogus, trace.Indeterminate:
+		if status.Reason != "" {
+			label += ": " + status.Reason
+		}
 	}
 	label = "[" + label + "]"
 
