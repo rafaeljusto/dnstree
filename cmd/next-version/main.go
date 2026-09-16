@@ -7,6 +7,7 @@
 //	go run ./cmd/next-version                # report the next version
 //	go run ./cmd/next-version -bump=minor    # force a bump level
 //	go run ./cmd/next-version -from=v0.1.0   # diff from an explicit tag
+//	go run ./cmd/next-version -changelog=f   # write the release notes to a file
 //	go run ./cmd/next-version -check-title=… # validate one subject and exit
 //
 // The pull request lint workflow runs -check-title, so a subject is validated
@@ -30,6 +31,11 @@
 //
 // Under GitHub Actions it appends version, previous_tag, bump and unclassified
 // to $GITHUB_OUTPUT, and a table of the changes to $GITHUB_STEP_SUMMARY.
+//
+// With -changelog it also writes those changes as release notes, grouped under
+// the heading each prefix belongs to. The release workflow puts that text on
+// the annotated tag and in the release body, so what shipped is readable from
+// either without opening the log.
 package main
 
 import (
@@ -66,15 +72,20 @@ func run(args []string, stdout io.Writer, git runner) error {
 	to := flags.String("to", "HEAD", "revision to release")
 	outputPath := flags.String("output", os.Getenv("GITHUB_OUTPUT"), "file to append key=value outputs to")
 	summaryPath := flags.String("summary", os.Getenv("GITHUB_STEP_SUMMARY"), "file to append a summary to")
+	changelogPath := flags.String("changelog", "", "file to write the release notes to")
 	title := flags.String("check-title", "", "validate this subject and exit")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 
-	// An empty title is itself a failure, so ask the flag package whether it was
-	// passed rather than testing the value.
-	var checking bool
-	flags.Visit(func(f *flag.Flag) { checking = checking || f.Name == "check-title" })
+	// An empty title is itself a failure, and an empty -from is an answer
+	// rather than a missing one, so ask the flag package what was passed rather
+	// than testing the values.
+	var checking, pinned bool
+	flags.Visit(func(f *flag.Flag) {
+		checking = checking || f.Name == "check-title"
+		pinned = pinned || f.Name == "from"
+	})
 	if checking {
 		return checkTitle(stdout, *title)
 	}
@@ -85,14 +96,19 @@ func run(args []string, stdout io.Writer, git runner) error {
 	}
 
 	previous, current := *from, version{}
-	if previous == "" {
+	switch parsed, ok := parseVersion(previous); {
+	case previous != "" && ok:
+		current = parsed
+	case previous != "":
+		return fmt.Errorf("%q is not a version tag", previous)
+	case !pinned:
+		// -from was not passed at all, so look for the tag to count from. An
+		// explicit -from= says there is none, which is how the release job asks
+		// for the changelog: the tag it is releasing already exists by then,
+		// and a search would find that one and report no changes.
 		if previous, current, err = previousTag(git, *to); err != nil {
 			return err
 		}
-	} else if parsed, ok := parseVersion(previous); ok {
-		current = parsed
-	} else {
-		return fmt.Errorf("%q is not a version tag", previous)
 	}
 
 	changes, err := changesSince(git, previous, *to)
@@ -115,7 +131,10 @@ func run(args []string, stdout io.Writer, git runner) error {
 	if err := appendOutputs(*outputPath, previous, next, bump, unclassified); err != nil {
 		return err
 	}
-	return appendSummary(*summaryPath, previous, next, bump, changes, unclassified)
+	if err := appendSummary(*summaryPath, previous, next, bump, changes, unclassified); err != nil {
+		return err
+	}
+	return writeChangelog(*changelogPath, changes)
 }
 
 // runner runs a git command, so that the tests can answer without a repository.
@@ -156,10 +175,13 @@ func previousTag(git runner, to string) (string, version, error) {
 	return tag, highest, nil
 }
 
-// change is one commit and the bump its subject earns.
+// change is one commit, the bump its subject earns and where the changelog
+// files it.
 type change struct {
 	sha     string
 	subject string
+	summary string // the subject without its prefix, for the changelog
+	heading string // the changelog section it belongs under
 	level   bumpLevel
 	known   bool
 }
@@ -189,8 +211,9 @@ func changesSince(git runner, from, to string) ([]change, error) {
 		if len(fields) > 2 {
 			body = fields[2]
 		}
-		level, known := classify(fields[1], body)
-		changes = append(changes, change{sha: fields[0], subject: fields[1], level: level, known: known})
+		entry := classify(fields[1], body)
+		entry.sha = fields[0]
+		changes = append(changes, entry)
 	}
 	return changes, nil
 }
@@ -199,59 +222,127 @@ func changesSince(git runner, from, to string) ([]change, error) {
 // (scope), an optional ! and a colon.
 var prefixPattern = regexp.MustCompile(`^\s*([A-Za-z][A-Za-z-]*)\s*(?:\([^)]*\))?\s*(!?)\s*:`)
 
-// levels is the whole vocabulary. Everything that is not a feature is a patch,
-// because a release of nothing but fixes and chores is a patch release.
-var levels = map[string]bumpLevel{
-	"feat":     bumpMinor,
-	"feature":  bumpMinor,
-	"fix":      bumpPatch,
-	"docs":     bumpPatch,
-	"refactor": bumpPatch,
-	"perf":     bumpPatch,
-	"test":     bumpPatch,
-	"build":    bumpPatch,
-	"ci":       bumpPatch,
-	"chore":    bumpPatch,
-	"style":    bumpPatch,
-	"revert":   bumpPatch,
+// section is one heading of the changelog, the prefixes filed under it, and
+// the bump those prefixes earn.
+type section struct {
+	heading  string
+	level    bumpLevel
+	prefixes []string
+}
+
+// sections is the whole vocabulary, in the order the notes are meant to be
+// read. The pull request lint, the version arithmetic and the changelog all
+// come here, so a prefix is written down once. Everything that is not a feature
+// is a patch, because a release of nothing but fixes and chores is a patch
+// release.
+var sections = []section{
+	{"Features", bumpMinor, []string{"feat", "feature"}},
+	{"Fixes", bumpPatch, []string{"fix"}},
+	{"Performance", bumpPatch, []string{"perf"}},
+	{"Documentation", bumpPatch, []string{"docs"}},
+	{"Maintenance", bumpPatch, []string{"refactor", "test", "build", "ci", "chore", "style", "revert"}},
+}
+
+// The two headings no prefix names: a break is filed by what it costs whoever
+// upgrades rather than by the word in front of it, and a subject nobody could
+// read still has to appear in the notes.
+const (
+	breakingHeading = "Breaking changes"
+	otherHeading    = "Other changes"
+)
+
+// sectionFor is where a prefix is filed. The lists are short enough that a scan
+// beats a map built beside them.
+func sectionFor(prefix string) (section, bool) {
+	for _, candidate := range sections {
+		if slices.Contains(candidate.prefixes, prefix) {
+			return candidate, true
+		}
+	}
+	return section{}, false
 }
 
 // classify reads what a commit asks for. An unknown prefix counts as a patch
 // and says it was not understood, which is the only way an unversioned feature
 // can be caught before the tag.
-func classify(subject, body string) (bumpLevel, bool) {
+func classify(subject, body string) change {
+	// Unread, a subject goes out whole and under the heading for the ones
+	// nobody could place.
+	read := change{subject: subject, summary: strings.TrimSpace(subject), level: bumpPatch, heading: otherHeading}
+
+	breaking := false
 	for line := range strings.Lines(body) {
 		if strings.HasPrefix(strings.TrimSpace(line), "BREAKING CHANGE:") {
-			return bumpMajor, true
+			breaking = true
+			break
 		}
 	}
 
-	match := prefixPattern.FindStringSubmatch(subject)
-	if match == nil {
-		return bumpPatch, false
+	if match := prefixPattern.FindStringSubmatch(subject); match != nil {
+		breaking = breaking || match[2] == "!"
+		if found, known := sectionFor(strings.ToLower(match[1])); known {
+			read.level, read.heading, read.known = found.level, found.heading, true
+			read.summary = strings.TrimSpace(subject[len(match[0]):])
+		}
 	}
-	if match[2] == "!" {
-		return bumpMajor, true
+
+	if breaking {
+		// A break outranks whatever its prefix asked for, even one nobody knows.
+		read.level, read.heading, read.known = bumpMajor, breakingHeading, true
 	}
-	level, known := levels[strings.ToLower(match[1])]
-	if !known {
-		return bumpPatch, false
+	return read
+}
+
+// changelog groups the changes under the headings sections names, in that
+// order, with each subject stripped of the prefix the heading already says. It
+// carries no title of its own: the tag and the release each put the version
+// above it.
+func changelog(changes []change) string {
+	headings := []string{breakingHeading}
+	for _, s := range sections {
+		headings = append(headings, s.heading)
 	}
-	return level, true
+	headings = append(headings, otherHeading)
+
+	var notes strings.Builder
+	for _, heading := range headings {
+		written := false
+		for _, change := range changes {
+			if change.heading != heading {
+				continue
+			}
+			if !written {
+				if notes.Len() > 0 {
+					notes.WriteString("\n")
+				}
+				fmt.Fprintf(&notes, "## %s\n\n", heading)
+				written = true
+			}
+			fmt.Fprintf(&notes, "* %s (%s)\n", change.summary, short(change.sha))
+		}
+	}
+	return notes.String()
+}
+
+func writeChangelog(path string, changes []change) error {
+	if path == "" {
+		return nil
+	}
+	return os.WriteFile(path, []byte(changelog(changes)), 0o644)
 }
 
 // checkTitle reports what a subject earns, or why it earns nothing. It reads
 // the subject exactly as the release does, so the two cannot disagree.
 func checkTitle(w io.Writer, title string) error {
-	level, known := classify(title, "")
-	if !known {
+	read := classify(title, "")
+	if !read.known {
 		// An annotation puts the reason on the pull request itself, where
 		// whoever wrote the title is looking.
 		fmt.Fprintf(w, "::error title=Subject prefix::%q carries no known prefix\n", title)
 		return fmt.Errorf("%q carries no known prefix\n\n%s", title, acceptedPrefixes())
 	}
 
-	fmt.Fprintf(w, "Accepted; this earns a %s bump.\n", level)
+	fmt.Fprintf(w, "Accepted; this earns a %s bump.\n", read.level)
 	return nil
 }
 
@@ -259,8 +350,8 @@ func checkTitle(w io.Writer, title string) error {
 // it cannot drift from what is accepted.
 func acceptedPrefixes() string {
 	byLevel := map[bumpLevel][]string{}
-	for prefix, level := range levels {
-		byLevel[level] = append(byLevel[level], prefix)
+	for _, s := range sections {
+		byLevel[s.level] = append(byLevel[s.level], s.prefixes...)
 	}
 
 	var help strings.Builder
@@ -404,7 +495,7 @@ func report(w io.Writer, previous string, next version, bump string, changes []c
 		if !change.known {
 			mark = "?"
 		}
-		fmt.Fprintf(w, "  %s %-5s %s %s\n", mark, change.level, change.sha[:min(len(change.sha), 8)], change.subject)
+		fmt.Fprintf(w, "  %s %-5s %s %s\n", mark, change.level, short(change.sha), change.subject)
 	}
 	if len(changes) > 0 {
 		fmt.Fprintln(w)
@@ -470,7 +561,7 @@ func appendSummary(path, previous string, next version, bump string, changes []c
 			if !change.known {
 				bump += " (unclassified)"
 			}
-			fmt.Fprintf(&summary, "| %s | `%s` | %s |\n", bump, change.sha[:min(len(change.sha), 8)], change.subject)
+			fmt.Fprintf(&summary, "| %s | `%s` | %s |\n", bump, short(change.sha), change.subject)
 		}
 		summary.WriteString("\n")
 	}
@@ -489,6 +580,8 @@ func appendTo(path, text string) error {
 	}
 	return file.Close()
 }
+
+func short(sha string) string { return sha[:min(len(sha), 8)] }
 
 func plural(n int, thing string) string {
 	if n == 1 {

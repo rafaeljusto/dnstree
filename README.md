@@ -240,7 +240,8 @@ make image        # build the container image for this machine
 A release is cut by running the `release` workflow from `main`: it reads the
 commits since the last tag, works out the version their prefixes ask for,
 creates the tag, and publishes the archives alongside a multi-architecture
-image on `ghcr.io`. `dry_run` reports the version it
+image on `ghcr.io`. The same commits become the changelog, carried by both the
+annotated tag and the release notes. `dry_run` reports the version it
 would pick without tagging anything, and `bump` overrides it. See
 [cmd/next-version](cmd/next-version/) for how a subject earns a bump, and what
 changes while the major version is still zero.

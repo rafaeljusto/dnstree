@@ -24,34 +24,71 @@ func TestClassify(t *testing.T) {
 		body    string
 		level   bumpLevel
 		known   bool
+		heading string
+		summary string
 	}{
-		"a feature":                {subject: "feat: Draw a trace as a tree", level: bumpMinor, known: true},
-		"a fix":                    {subject: "fix: Take glue from the right server", level: bumpPatch, known: true},
-		"a chore with a scope":     {subject: "chore(deps): bump miekg/dns", level: bumpPatch, known: true},
-		"the case does not matter": {subject: "Feat: Draw a trace", level: bumpMinor, known: true},
-		"a break":                  {subject: "feat!: Rename every flag", level: bumpMajor, known: true},
-		"a break with a scope":     {subject: "fix(cli)!: Drop --retries", level: bumpMajor, known: true},
+		"a feature": {
+			subject: "feat: Draw a trace as a tree", level: bumpMinor, known: true,
+			heading: "Features", summary: "Draw a trace as a tree",
+		},
+		"a fix": {
+			subject: "fix: Take glue from the right server", level: bumpPatch, known: true,
+			heading: "Fixes", summary: "Take glue from the right server",
+		},
+		"a chore with a scope": {
+			subject: "chore(deps): bump miekg/dns", level: bumpPatch, known: true,
+			heading: "Maintenance", summary: "bump miekg/dns",
+		},
+		"the case does not matter": {
+			subject: "Feat: Draw a trace", level: bumpMinor, known: true,
+			heading: "Features", summary: "Draw a trace",
+		},
+		"a break": {
+			subject: "feat!: Rename every flag", level: bumpMajor, known: true,
+			heading: "Breaking changes", summary: "Rename every flag",
+		},
+		"a break with a scope": {
+			subject: "fix(cli)!: Drop --retries", level: bumpMajor, known: true,
+			heading: "Breaking changes", summary: "Drop --retries",
+		},
 		"a break in the body": {
 			subject: "refactor: Rework the trace model",
 			body:    "The steps carry their own question now.\n\nBREAKING CHANGE: Step.Zone is gone.\n",
 			level:   bumpMajor, known: true,
+			heading: "Breaking changes", summary: "Rework the trace model",
 		},
-		"a prefix nobody knows":        {subject: "wip: something", level: bumpPatch},
-		"no prefix at all":             {subject: "Draw a trace as a tree", level: bumpPatch},
-		"a colon that is not a prefix": {subject: "Update README: the samples were stale", level: bumpPatch},
-		"nothing":                      {subject: "", level: bumpPatch},
+		"a prefix nobody knows": {
+			subject: "wip: something", level: bumpPatch,
+			heading: "Other changes", summary: "wip: something",
+		},
+		"no prefix at all": {
+			subject: "Draw a trace as a tree", level: bumpPatch,
+			heading: "Other changes", summary: "Draw a trace as a tree",
+		},
+		"a colon that is not a prefix": {
+			subject: "Update README: the samples were stale", level: bumpPatch,
+			heading: "Other changes", summary: "Update README: the samples were stale",
+		},
+		"nothing": {subject: "", level: bumpPatch, heading: "Other changes"},
 		// A mention of a break that is not the footer says nothing.
 		"a break only talked about": {
 			subject: "docs: Explain what BREAKING CHANGE: means",
 			level:   bumpPatch, known: true,
+			heading: "Documentation", summary: "Explain what BREAKING CHANGE: means",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			level, known := classify(test.subject, test.body)
-			if level != test.level || known != test.known {
-				t.Errorf("got %s known=%v, want %s known=%v", level, known, test.level, test.known)
+			got := classify(test.subject, test.body)
+			if got.level != test.level || got.known != test.known {
+				t.Errorf("got %s known=%v, want %s known=%v", got.level, got.known, test.level, test.known)
+			}
+			if got.heading != test.heading {
+				t.Errorf("got heading %q, want %q", got.heading, test.heading)
+			}
+			if got.summary != test.summary {
+				t.Errorf("got summary %q, want %q", got.summary, test.summary)
 			}
 		})
 	}
@@ -268,6 +305,87 @@ func TestRunExplainsTheShift(t *testing.T) {
 	}
 	if written, _ := os.ReadFile(summary); strings.Contains(string(written), "applied as") {
 		t.Errorf("got summary %q, want no shift mentioned", written)
+	}
+}
+
+// TestRunWritesTheChangelog covers what the annotated tag and the release body
+// carry: every change under its heading, in the order the sections declare,
+// with the prefix dropped because the heading already says it.
+func TestRunWritesTheChangelog(t *testing.T) {
+	notes := filepath.Join(t.TempDir(), "notes.md")
+	commits := []string{
+		"feat: Export a trace as JSON",
+		"docs: Write a README",
+		"Add a whole new transport",
+		"fix(cli)!: Drop --retries",
+		"fix: Take the right glue",
+	}
+
+	if err := run([]string{"-changelog", notes}, &bytes.Buffer{}, fakeGit("v0.1.0\n", commits)); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	written, err := os.ReadFile(notes)
+	if err != nil {
+		t.Fatalf("reading the changelog: %v", err)
+	}
+	got := string(written)
+
+	for _, want := range []string{
+		"## Breaking changes\n\n* Drop --retries (",
+		"## Features\n\n* Export a trace as JSON (",
+		"## Fixes\n\n* Take the right glue (",
+		"## Documentation\n\n* Write a README (",
+		"## Other changes\n\n* Add a whole new transport (",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("got %q, want %q in it", got, want)
+		}
+	}
+
+	// The sections come in the order they are declared, not the order the
+	// commits happened to land in.
+	at := -1
+	for _, heading := range []string{"Breaking changes", "Features", "Fixes", "Documentation", "Other changes"} {
+		switch index := strings.Index(got, "## "+heading); {
+		case index < 0:
+			t.Fatalf("got %q, want a %q section", got, heading)
+		case index < at:
+			t.Errorf("got %q, want %q after the section before it", got, heading)
+		default:
+			at = index
+		}
+	}
+
+	// A title here would be wrong twice over: the tag puts the version on its
+	// first line, and the release puts it in its own.
+	if strings.Contains(got, "v0.1.1") {
+		t.Errorf("got %q, want no version in the notes themselves", got)
+	}
+}
+
+// TestRunPinnedToNoTag covers the release job's call: by then the tag being
+// released exists, so it passes an empty -from rather than letting the tool
+// look for a previous tag and find that one.
+func TestRunPinnedToNoTag(t *testing.T) {
+	notes := filepath.Join(t.TempDir(), "notes.md")
+	git := func(args ...string) (string, error) {
+		if args[0] == "tag" {
+			t.Errorf("looked for a tag: git %v", args)
+		}
+		return fakeGit("v0.1.1\n", []string{"fix: Take the right glue"})(args...)
+	}
+
+	if err := run([]string{"-from=", "-changelog", notes}, &bytes.Buffer{}, git); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	written, err := os.ReadFile(notes)
+	if err != nil {
+		t.Fatalf("reading the changelog: %v", err)
+	}
+	if !strings.Contains(string(written), "Take the right glue") {
+		t.Errorf("got %q, want the change in it", written)
 	}
 }
 

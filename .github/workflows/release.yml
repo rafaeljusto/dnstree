@@ -95,7 +95,8 @@ jobs:
           # $GITHUB_OUTPUT, and a table of the changes to the run summary. A
           # commit whose subject carries no known prefix counts as a patch and
           # is flagged there, so an under-versioned release is visible.
-          go run ./cmd/next-version -bump="$BUMP"
+          # changelog.md holds the same changes grouped by kind, for the tag.
+          go run ./cmd/next-version -bump="$BUMP" -changelog=changelog.md
 
           if [ "$DRY_RUN" = "true" ]; then
             echo "release=false" >> "$GITHUB_OUTPUT"
@@ -111,10 +112,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Annotated, so the tag records who cut the release and when.
+          # Annotated, so the tag records who cut the release and when, and
+          # carries the changelog: `git show ${VERSION}` then says what shipped
+          # without a network. The subject is the version, as git expects.
+          message="$(printf '%s\n\n%s' "${VERSION}" "$(cat changelog.md)")"
+
           tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" \
             -f tag="${VERSION}" \
-            -f message="${VERSION}" \
+            -f message="${message}" \
             -f object="${GITHUB_SHA}" \
             -f type=commit \
             --jq '.sha')"
@@ -161,6 +166,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+          fetch-tags: true
           ref: ${{ needs.version.outputs.sha }}
 
       - name: Set up Go
@@ -174,17 +180,36 @@ jobs:
       # reproduced without a runner.
       - run: make dist VERSION=${{ needs.version.outputs.version }}
 
-      - name: Publish
+      # Both entry points land here, so the notes are written from the commits
+      # rather than from GitHub's generated list, which only sees what came
+      # through a pull request.
+      - name: Write the release notes
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}
           PREVIOUS: ${{ needs.version.outputs.previous_tag }}
         run: |
           set -euo pipefail
 
+          # -from is passed even when it is empty: the tag being released
+          # already exists by now, and left to look for the previous one the
+          # tool would find that tag and report nothing to release.
+          go run ./cmd/next-version -from="$PREVIOUS" -changelog=notes.md -output= -summary=
+
+          if [ -n "$PREVIOUS" ]; then
+            printf '\n**Full changelog**: %s/%s/compare/%s...%s\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$PREVIOUS" "$VERSION" >> notes.md
+          fi
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
           gh release create "$VERSION" \
             --fail-on-no-commits \
-            --generate-notes \
-            ${PREVIOUS:+--notes-start-tag "$PREVIOUS"} \
+            --title "$VERSION" \
+            --notes-file notes.md \
             --verify-tag \
             dist/*
