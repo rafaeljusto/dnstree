@@ -9,6 +9,15 @@ import (
 	"testing"
 )
 
+// The tool writes to $GITHUB_OUTPUT and $GITHUB_STEP_SUMMARY by default, and
+// `go test ./...` runs inside the release workflow: left set, a test that does
+// not pass its own paths appends a fake release to the real job summary.
+func TestMain(m *testing.M) {
+	os.Unsetenv("GITHUB_OUTPUT")
+	os.Unsetenv("GITHUB_STEP_SUMMARY")
+	os.Exit(m.Run())
+}
+
 func TestClassify(t *testing.T) {
 	tests := map[string]struct {
 		subject string
