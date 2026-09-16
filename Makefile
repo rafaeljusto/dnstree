@@ -3,12 +3,19 @@ GO ?= go
 # golangci-lint comes from the PATH when it is there, and is fetched at the
 # pinned version when it is not.
 GOLANGCI_LINT_VERSION ?= v2.13.2
+HADOLINT_VERSION ?= v2.15.1
 GOLANGCI_LINT ?= $(shell command -v golangci-lint 2>/dev/null || \
 	echo "$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)")
 
 # VERSION is what a release build stamps into the binary.
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
+
+# Where the image is published, and what a release is built for.
+IMAGE ?= ghcr.io/rafaeljusto/dnstree
+IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+VCS_REF ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
 # The platforms a release is built for.
 PLATFORMS := \
@@ -17,7 +24,7 @@ PLATFORMS := \
 	freebsd/amd64 \
 	windows/amd64 windows/arm64
 
-.PHONY: all build install test race lint vuln check live dist clean roothints
+.PHONY: all build install test race lint lint-docker vuln check live dist image image-push clean roothints
 
 all: check
 
@@ -38,6 +45,10 @@ race:
 lint:
 	$(GO) vet ./...
 	$(GOLANGCI_LINT) run ./...
+
+# hadolint runs from its own image, so there is nothing to install.
+lint-docker:
+	docker run --rm -i hadolint/hadolint:$(HADOLINT_VERSION) < Dockerfile
 
 # Separate from lint: this one goes red when somebody else publishes a CVE,
 # not when this code changes.
@@ -67,6 +78,28 @@ dist: clean
 	done
 	@(cd dist && shasum -a 256 * > checksums.txt 2>/dev/null || sha256sum * > checksums.txt)
 	@ls dist
+
+# image builds for this machine; image-push builds for every platform and
+# publishes, which is what a release does.
+image:
+	docker buildx build \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_VCS_REF=$(VCS_REF) \
+		--build-arg BUILD_VERSION=$(VERSION) \
+		--tag $(IMAGE):$(VERSION) \
+		--load \
+		.
+
+image-push:
+	docker buildx build \
+		--platform $(IMAGE_PLATFORMS) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_VCS_REF=$(VCS_REF) \
+		--build-arg BUILD_VERSION=$(VERSION) \
+		--tag $(IMAGE):$(VERSION) \
+		--tag $(IMAGE):latest \
+		--push \
+		.
 
 # Refreshes the embedded root hints and trust anchors.
 roothints:

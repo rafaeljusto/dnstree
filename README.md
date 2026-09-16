@@ -42,7 +42,12 @@ and each address carries the AS that announces it.)
 go install github.com/rafaeljusto/dnstree/cmd/dnstree@latest
 ```
 
-Or take a binary from the [releases](https://github.com/rafaeljusto/dnstree/releases).
+Or take a binary from the [releases](https://github.com/rafaeljusto/dnstree/releases),
+or run it straight from a container:
+
+```
+docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A
+```
 
 ## Using it
 
@@ -156,16 +161,19 @@ the anchors before believing a byte.
 ## Developing
 
 ```
-make check   # build, lint, test -race, vuln
-make lint    # go vet and golangci-lint
-make vuln    # govulncheck against the vulnerability database
-make live    # the smoke test that goes out to the real root servers
-make dist    # cross compile a release into dist/
+make check        # build, lint, test -race, vuln
+make lint         # go vet and golangci-lint
+make lint-docker  # hadolint against the Dockerfile
+make vuln         # govulncheck against the vulnerability database
+make live         # the smoke test that goes out to the real root servers
+make dist         # cross compile a release into dist/
+make image        # build the container image for this machine
 ```
 
 A release is cut by running the `release` workflow from `main`: it reads the
 commits since the last tag, works out the version their prefixes ask for,
-creates the tag and publishes the archives. `dry_run` reports the version it
+creates the tag, and publishes the archives alongside a multi-architecture
+image on `ghcr.io`. `dry_run` reports the version it
 would pick without tagging anything, and `bump` overrides it. See
 [cmd/next-version](cmd/next-version/) for how a subject earns a bump, and what
 changes while the major version is still zero.
