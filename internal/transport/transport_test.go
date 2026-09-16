@@ -216,7 +216,7 @@ func TestExchangeIPv6(t *testing.T) {
 	}
 	listener.Close()
 
-	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: zone, IPv6: true})
+	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: zone, Host: "::1"})
 	if server.Addr.Addr().Is4() {
 		t.Fatalf("got an IPv4 server at %s, want IPv6", server.Addr)
 	}

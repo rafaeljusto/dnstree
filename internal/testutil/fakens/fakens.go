@@ -18,7 +18,13 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnstest"
 	"codeberg.org/miekg/dns/dnsutil"
+
+	"github.com/rafaeljusto/dnstree/internal/trace"
 )
+
+// DefaultPort is the port a declared address is assumed to listen on, matching
+// what the resolver dials.
+const DefaultPort = 53
 
 // Behaviour makes a server misbehave. Every knob mirrors something that happens
 // in the wild and that the resolver has to survive.
@@ -29,10 +35,18 @@ type Behaviour struct {
 	TruncateUDP bool          // set TC over UDP, answer in full over TCP
 	FormErrEDNS bool          // answer FORMERR to any query carrying EDNS0
 	Delay       time.Duration // answer this late
+
+	// OutOfBailiwickGlue hands out addresses for nameservers outside the zone
+	// delegated, the way the root servers do for the gTLD servers. A resolver
+	// that trusts them can be walked off a cliff.
+	OutOfBailiwickGlue bool
 }
 
 // Config describes one fake nameserver.
 type Config struct {
+	// Name is the server's own DNS name, as its parent's NS record spells it.
+	Name string
+
 	// Origin is the apex of the zone served, and the origin relative names in
 	// Zone are read against.
 	Origin string
@@ -40,8 +54,13 @@ type Config struct {
 	// Zone is the zone in presentation format, one record per line.
 	Zone string
 
-	// IPv6 listens on ::1 instead of 127.0.0.1.
-	IPv6 bool
+	// Declared is the address the zones of a [Hierarchy] hand out as glue for
+	// this server. The real socket is on loopback; the hierarchy's transport
+	// maps one to the other.
+	Declared string
+
+	// Host is the loopback address to listen on, 127.0.0.1 by default.
+	Host string
 
 	Behaviour Behaviour
 }
@@ -59,9 +78,14 @@ type Query struct {
 // Server is a fake authoritative nameserver on loopback, listening on the same
 // port for UDP and TCP.
 type Server struct {
-	// Addr is the address the server listens on.
+	// Addr is the address the server really listens on.
 	Addr netip.AddrPort
 
+	// Declared is the address its parent hands out as glue, unset outside a
+	// [Hierarchy].
+	Declared netip.Addr
+
+	name      string
 	origin    string
 	records   []dns.RR
 	behaviour Behaviour
@@ -75,8 +99,16 @@ func New(tb testing.TB, cfg Config) *Server {
 	tb.Helper()
 
 	server := &Server{
+		name:      dnsutil.Fqdn(cfg.Name),
 		origin:    dnsutil.Fqdn(cfg.Origin),
 		behaviour: cfg.Behaviour,
+	}
+	if cfg.Declared != "" {
+		declared, err := netip.ParseAddr(cfg.Declared)
+		if err != nil {
+			tb.Fatalf("fakens: declared address %q: %v", cfg.Declared, err)
+		}
+		server.Declared = declared
 	}
 
 	parser := dns.NewZoneParser(strings.NewReader(cfg.Zone), server.origin, "")
@@ -91,9 +123,9 @@ func New(tb testing.TB, cfg Config) *Server {
 		server.records = append(server.records, rr)
 	}
 
-	host := "127.0.0.1"
-	if cfg.IPv6 {
-		host = "[::1]"
+	host := cfg.Host
+	if host == "" {
+		host = "127.0.0.1"
 	}
 	packetConn, listener, err := listen(host)
 	if err != nil {
@@ -117,6 +149,16 @@ func New(tb testing.TB, cfg Config) *Server {
 	return server
 }
 
+// Nameserver is the server as the resolver should be told about it: the
+// declared address when there is one, the real socket otherwise.
+func (s *Server) Nameserver() trace.Server {
+	server := trace.Server{Name: s.name, IP: s.Addr.Addr(), Port: s.Addr.Port()}
+	if s.Declared.IsValid() {
+		server.IP, server.Port = s.Declared, DefaultPort
+	}
+	return server
+}
+
 // Queries returns what the server was asked, oldest first.
 func (s *Server) Queries() []Query {
 	s.mu.Lock()
@@ -131,7 +173,7 @@ func listen(host string) (net.PacketConn, net.Listener, error) {
 	var err error
 	for attempt := 0; attempt < 5; attempt++ {
 		var packetConn net.PacketConn
-		if packetConn, err = net.ListenPacket("udp", host+":0"); err != nil {
+		if packetConn, err = net.ListenPacket("udp", net.JoinHostPort(host, "0")); err != nil {
 			continue
 		}
 
@@ -243,7 +285,7 @@ func (s *Server) delegation(name string) []dns.RR {
 		case dns.RRToType(rr) != dns.TypeNS:
 		case dns.EqualName(owner, s.origin): // the apex NS set is not a cut
 		case !dnsutil.IsBelow(owner, name):
-		case dnsutil.Labels(owner) > dnsutil.Labels(cut):
+		case cut == "" || dnsutil.Labels(owner) > dnsutil.Labels(cut):
 			cut = owner
 		}
 	}
@@ -266,7 +308,7 @@ func (s *Server) glue(delegation []dns.RR) []dns.RR {
 	var glue []dns.RR
 	for _, ns := range delegation {
 		target := ns.(*dns.NS).Ns
-		if !dnsutil.IsBelow(ns.Header().Name, target) {
+		if !dnsutil.IsBelow(ns.Header().Name, target) && !s.behaviour.OutOfBailiwickGlue {
 			continue
 		}
 		for _, rr := range s.records {

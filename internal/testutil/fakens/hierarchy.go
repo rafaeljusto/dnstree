@@ -1,0 +1,65 @@
+package fakens
+
+import (
+	"context"
+	"net/netip"
+	"testing"
+	"time"
+
+	"codeberg.org/miekg/dns"
+
+	"github.com/rafaeljusto/dnstree/internal/transport"
+)
+
+// Hierarchy is a set of fake nameservers standing in for a delegation chain.
+// Every server has a declared address, the one its parent hands out as glue,
+// and a real loopback socket behind it. The transport maps one to the other, so
+// the engine has to pick glue exactly as it would in the wild: a test that
+// follows the wrong address reaches nothing.
+type Hierarchy struct {
+	tb      testing.TB
+	servers map[netip.Addr]netip.AddrPort
+}
+
+// NewHierarchy returns an empty hierarchy.
+func NewHierarchy(tb testing.TB) *Hierarchy {
+	tb.Helper()
+	return &Hierarchy{tb: tb, servers: make(map[netip.Addr]netip.AddrPort)}
+}
+
+// Add starts one more nameserver. Its declared address must be set, and must be
+// the one the zones above it use as glue.
+func (h *Hierarchy) Add(cfg Config) *Server {
+	h.tb.Helper()
+
+	if cfg.Declared == "" {
+		h.tb.Fatalf("fakens: the %s server has no declared address", cfg.Origin)
+	}
+	server := New(h.tb, cfg)
+	if _, taken := h.servers[server.Declared]; taken {
+		h.tb.Fatalf("fakens: %s is already declared by another server", server.Declared)
+	}
+	h.servers[server.Declared] = server.Addr
+	return server
+}
+
+// Transport wraps inner so that queries sent to a declared address reach the
+// server that stands behind it. Addresses it knows nothing about are left
+// alone, and so fail the way an unreachable server would.
+func (h *Hierarchy) Transport(inner transport.Transport) transport.Transport {
+	return &hierarchyTransport{hierarchy: h, inner: inner}
+}
+
+type hierarchyTransport struct {
+	hierarchy *Hierarchy
+	inner     transport.Transport
+}
+
+func (t *hierarchyTransport) Proto() string { return t.inner.Proto() }
+
+func (t *hierarchyTransport) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, name string) (*dns.Msg, time.Duration, error) {
+	if real, known := t.hierarchy.servers[server.Addr()]; known {
+		server = real
+	}
+	return t.inner.Exchange(ctx, req, server, name)
+}
