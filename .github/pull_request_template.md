@@ -31,9 +31,10 @@ them, don't hesitate to ask. We're here to help! This is simply a reminder of wh
 -->
 
 - [ ] I have read the [contributing guidelines](../blob/main/CONTRIBUTING.md).
-- [ ] My commit subjects carry a [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
-      prefix. The release version is worked out from them, so a feature under a
-      plain subject ships as a patch.
+- [ ] My pull request title carries a [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+      prefix. The pull request is squashed under that title, so the release
+      version is worked out from it: a feature under a plain title ships as a
+      patch.
 - [ ] `make check` passes: it builds, lints, runs the tests under `-race` and
       checks the dependencies for known vulnerabilities.
 - [ ] I have added tests that prove my fix is effective or that my feature

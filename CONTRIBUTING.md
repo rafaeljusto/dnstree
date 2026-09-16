@@ -107,8 +107,9 @@ request, go through this checklist:
    changes against the `main` branch.
 3. Run `make check`. It builds, lints, runs the whole suite under `-race` and
    checks the dependencies for known vulnerabilities — the same things CI runs.
-4. Give every commit subject a descriptive prefix. See below: the release
-   version is worked out from them.
+4. Give the pull request title a descriptive prefix. See below: the pull
+   request lands as one squashed commit under that title, and the release
+   version is worked out from it.
 
 If a pull request is not ready to be reviewed yet
 [it should be marked as a "Draft"](https://docs.github.com/en/github/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/changing-the-stage-of-a-pull-request).
@@ -123,8 +124,9 @@ Pull requests eligible for review
    regressions;
 3. document the changes in the code and/or the project's documentation;
 4. pass the CI pipeline;
-5. include a proper git commit message following the
-   [Conventional Commit Specification](https://www.conventionalcommits.org/en/v1.0.0/).
+5. carry a title following the
+   [Conventional Commit Specification](https://www.conventionalcommits.org/en/v1.0.0/),
+   since it becomes the commit subject on `main`.
 
 Some other important notes when contributing:
 
@@ -153,8 +155,10 @@ plain subject ships under a patch tag.
 | `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `style:`, `revert:` | patch |
 | any prefix with `!` (`feat!:`), or a `BREAKING CHANGE:` footer | major |
 
-A pull request title is checked against the same table, since a squash merge
-is what puts it on `main` as a commit subject. You can check one yourself:
+Pull requests are always squash merged, so their title is the subject that
+lands on `main`. It is checked against the same table whenever the pull request
+is opened or edited, and the commits on the branch are free to say whatever
+helped while the work was in progress. You can check a title yourself:
 
 ```bash
 go run ./cmd/next-version -check-title="feat: Draw a trace as a tree"
