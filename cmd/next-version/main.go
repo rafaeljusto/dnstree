@@ -409,7 +409,26 @@ func report(w io.Writer, previous string, next version, bump string, changes []c
 	if len(changes) > 0 {
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "%s -> %s (%s)\n", cmpOr(previous, "nothing"), next, bump)
+	detail := bump
+	if applied := shiftedTo(next, bump); applied != "" {
+		detail = fmt.Sprintf("%s, applied as a %s below 1.0", bump, applied)
+	}
+	fmt.Fprintf(w, "%s -> %s (%s)\n", cmpOr(previous, "nothing"), next, detail)
+}
+
+// shiftedTo names the level a bump was really applied at, when the pre-1.0 rule
+// moved it down, and is empty when the bump landed as asked.
+func shiftedTo(next version, bump string) string {
+	if next.major != 0 {
+		return ""
+	}
+	switch bump {
+	case "major":
+		return "minor"
+	case "minor":
+		return "patch"
+	}
+	return ""
 }
 
 func appendOutputs(path, previous string, next version, bump string, unclassified int) error {
@@ -426,8 +445,12 @@ func appendSummary(path, previous string, next version, bump string, changes []c
 	}
 
 	release := "a " + bump + " release"
-	if previous == "" {
+	switch applied := shiftedTo(next, bump); {
+	case previous == "":
 		release = "the first release"
+	case applied != "":
+		release = fmt.Sprintf("a %s release, applied as a %s: while the major is zero, every level shifts down",
+			bump, applied)
 	}
 
 	var summary strings.Builder

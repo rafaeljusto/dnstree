@@ -234,6 +234,43 @@ func TestRunReportsUnclassified(t *testing.T) {
 	}
 }
 
+// TestRunExplainsTheShift covers the line that made a minor release tagged
+// v0.1.1 look like a mistake: the summary has to say why it landed a patch.
+func TestRunExplainsTheShift(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "output")
+	summary := filepath.Join(t.TempDir(), "summary")
+
+	var stdout bytes.Buffer
+	err := run([]string{"-output", output, "-summary", summary}, &stdout,
+		fakeGit("v0.1.0\n", []string{"feat: Export a trace as JSON"}))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	written, err := os.ReadFile(summary)
+	if err != nil {
+		t.Fatalf("reading the summary: %v", err)
+	}
+	if !strings.Contains(string(written), "applied as a patch") {
+		t.Errorf("got summary %q, want the shift explained", written)
+	}
+	if !strings.Contains(stdout.String(), "applied as a patch below 1.0") {
+		t.Errorf("got %q, want the shift explained", stdout.String())
+	}
+
+	// Past 1.0 there is no shift to explain, and saying so would be wrong.
+	stdout.Reset()
+	summary = filepath.Join(t.TempDir(), "summary")
+	err = run([]string{"-output", output, "-summary", summary}, &stdout,
+		fakeGit("v1.1.0\n", []string{"feat: Export a trace as JSON"}))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if written, _ := os.ReadFile(summary); strings.Contains(string(written), "applied as") {
+		t.Errorf("got summary %q, want no shift mentioned", written)
+	}
+}
+
 func TestRunRejects(t *testing.T) {
 	tests := map[string][]string{
 		"a bump nobody has":           {"-bump=huge"},
