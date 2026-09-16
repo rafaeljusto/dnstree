@@ -157,6 +157,13 @@ make live    # the smoke test that goes out to the real root servers
 make dist    # cross compile a release into dist/
 ```
 
+A release is cut by running the `release` workflow from `main`: it reads the
+commits since the last tag, works out the version their prefixes ask for,
+creates the tag and publishes the archives. `dry_run` reports the version it
+would pick without tagging anything, and `bump` overrides it. See
+[cmd/next-version](cmd/next-version/) for how a subject earns a bump, and what
+changes while the major version is still zero.
+
 The engine is tested offline against in-process authoritative servers
 (`internal/testutil/fakens`), signed hierarchies included, so every delegation
 failure this tool reports has a test that produces it on purpose.
