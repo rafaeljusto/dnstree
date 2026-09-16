@@ -549,3 +549,100 @@ b.test.             IN NS   ns.a.test.
 		t.Errorf("got result %+v, want none: neither zone can be reached", tr.Result())
 	}
 }
+
+// TestEncryptedWalk covers a walk over DoT: it works where the nameservers
+// offer it, and every hop is an error where they do not, unless plain DNS is
+// allowed to pick them up.
+func TestEncryptedWalk(t *testing.T) {
+	newHierarchy := func(tb testing.TB, encrypted bool) harness {
+		hierarchy := fakens.NewHierarchy(tb)
+		root := hierarchy.Add(fakens.Config{
+			Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", TLS: encrypted,
+		})
+		hierarchy.Add(fakens.Config{
+			Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2", TLS: encrypted,
+		})
+		hierarchy.Add(fakens.Config{
+			Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3", TLS: encrypted,
+		})
+		return harness{hierarchy, root}
+	}
+
+	dot := func(h harness) transport.Transport {
+		return h.carry(transport.NewDoT(transport.Config{
+			Timeout: fast.Timeout,
+			TLS:     h.root.ClientTLS(),
+		}))
+	}
+
+	t.Run("where every server offers it", func(t *testing.T) {
+		h := newHierarchy(t, true)
+		tr, err := newResolver(t, h, resolver.Config{Transport: dot(h)}).
+			Resolve(t.Context(), "www.example.com", "A")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+
+		answer := tr.Result()
+		if answer == nil || answer.Kind != trace.KindAnswer {
+			t.Fatalf("got %+v, want an answer over TLS: %s", answer, format(steps(tr)))
+		}
+		for _, step := range steps(tr) {
+			if step.Proto != "dot" {
+				t.Errorf("got a %s hop at %s, want every hop encrypted", step.Proto, step.Zone)
+			}
+			if step.Server.Port != transport.PortDoT {
+				t.Errorf("got port %d at %s, want the DoT port", step.Server.Port, step.Zone)
+			}
+		}
+	})
+
+	t.Run("where nobody does", func(t *testing.T) {
+		h := newHierarchy(t, false)
+		tr, err := newResolver(t, h, resolver.Config{Transport: dot(h)}).
+			Resolve(t.Context(), "www.example.com", "A")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+
+		if tr.Result() != nil {
+			t.Errorf("got %+v, want nothing: no server here speaks it", tr.Result())
+		}
+		// A real server would refuse the connection; this one leaves the
+		// handshake unanswered. Either way the hop has to say so.
+		first := steps(tr)[0]
+		switch first.Kind {
+		case trace.KindError, trace.KindTimeout:
+		default:
+			t.Errorf("got %s, want the hop to say plainly that it did not get through", first.Kind)
+		}
+		if first.Err == "" {
+			t.Error("got no reason on the failed hop, want one")
+		}
+	})
+
+	t.Run("with plain DNS allowed to pick it up", func(t *testing.T) {
+		h := newHierarchy(t, false)
+		tr, err := newResolver(t, h, resolver.Config{
+			Transport: dot(h),
+			Fallback:  h.carry(transport.NewUDP(fast)),
+		}).Resolve(t.Context(), "www.example.com", "A")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+
+		answer := tr.Result()
+		if answer == nil || answer.Kind != trace.KindAnswer {
+			t.Fatalf("got %+v, want the answer plain DNS brought: %s", answer, format(steps(tr)))
+		}
+		if answer.Proto != "udp" {
+			t.Errorf("got proto %s, want the hop to end up on udp", answer.Proto)
+		}
+		if answer.Server.Port != transport.PortDNS {
+			t.Errorf("got port %d, want the one it really used", answer.Server.Port)
+		}
+		if len(answer.Notes) != 1 || answer.Notes[0] != "dot did not get through, asked over udp" {
+			t.Errorf("got notes %q, want the hop to say what it fell back from", answer.Notes)
+		}
+	})
+}

@@ -43,6 +43,11 @@ type Config struct {
 	// alone, and the hop keeps whatever fitted in the datagram.
 	TCP transport.Transport
 
+	// Fallback carries a hop the main transport could not. Authoritative
+	// servers rarely speak DoT or DoH, so without one every such hop is an
+	// error rather than an answer.
+	Fallback transport.Transport
+
 	// Roots is where a walk starts, usually RootServers(roothints.Default()).
 	// Required.
 	Roots []trace.Server
@@ -351,10 +356,24 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 // query is one hop: a single question to a single server, including whatever it
 // took to get a whole answer out of it.
 func (r *run) query(ctx context.Context, zone string, server trace.Server, qname string, qtype uint16) *hop {
+	// Glue carries addresses and never ports, so the transport says where to
+	// knock.
+	server.Port = r.cfg.Transport.Port()
 	step := &trace.Step{Zone: zone, Server: server, Proto: r.cfg.Transport.Proto()}
 
 	udpSize := r.cfg.UDPSize
 	resp, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize)
+
+	// A server that does not speak the transport asked for is the ordinary case
+	// for DoT and DoH, so plain DNS can be allowed to pick the hop up.
+	if err != nil && r.cfg.Fallback != nil {
+		if retry, fallbackErr := r.exchange(ctx, step, r.cfg.Fallback, qname, qtype, udpSize); fallbackErr == nil {
+			step.Notes = append(step.Notes, step.Proto+" did not get through, asked over "+r.cfg.Fallback.Proto())
+			step.Proto = r.cfg.Fallback.Proto()
+			step.Server.Port = r.cfg.Fallback.Port()
+			resp, err = retry, nil
+		}
+	}
 	if err != nil {
 		step.Kind, step.Err = trace.KindError, err.Error()
 		if transport.IsTimeout(err) {
@@ -405,7 +424,7 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 		return nil, err
 	}
 
-	resp, rtt, err := carrier.Exchange(ctx, req, netip.AddrPortFrom(step.Server.IP, step.Server.Port), step.Server.Name)
+	resp, rtt, err := carrier.Exchange(ctx, req, netip.AddrPortFrom(step.Server.IP, carrier.Port()), step.Server.Name)
 	step.RTT += rtt
 	return resp, err
 }
