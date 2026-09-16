@@ -59,6 +59,16 @@ type Step struct {
 	// Records is what the server returned, when that is the point of the step.
 	Records []RR
 
+	// Notes are what it took to get the answer: a retry over TCP, a query sent
+	// again without EDNS0. They belong to this hop, not to a new one.
+	Notes []string
+
+	// Aside marks work that answers a different question: the address of a
+	// nameserver, or the NS set of a zone. The resolution's own answer is never
+	// inside one. Following an alias is not an aside: the target is what the
+	// question meant all along.
+	Aside bool
+
 	// Delegation is set on a referral.
 	Delegation *Delegation
 
@@ -113,9 +123,14 @@ type Delegation struct {
 	// allowed to hand out, meaning the in-bailiwick ones.
 	Glue map[string][]netip.Addr
 
-	// GlueLess are the nameservers no address was found for. In-bailiwick names
-	// make the delegation broken; the others need a side resolution.
+	// GlueLess are nameservers inside the delegated zone that came with no
+	// glue. Nothing can resolve them, so the delegation is broken.
 	GlueLess []string
+
+	// OutOfBailiwick are nameservers named outside the delegated zone. The
+	// parent's addresses for them are unsolicited, so they are resolved
+	// separately instead.
+	OutOfBailiwick []string
 
 	// DSPresent reports whether the parent signed the delegation.
 	DSPresent bool
@@ -160,12 +175,29 @@ func walk(step *Step, yield func(*Step) bool) bool {
 }
 
 // Result is the step that ended the resolution, or nil when nothing answered.
+// It is the deepest one that is not an aside: an alias is an answer, but the
+// walk it starts carries the answer that was actually asked for.
 func (t *Trace) Result() *Step {
-	for step := range t.Steps() {
-		switch step.Kind {
-		case KindAnswer, KindCNAME, KindNoData, KindNXDomain:
-			return step
+	if t.Root == nil {
+		return nil
+	}
+	return result(t.Root)
+}
+
+func result(step *Step) *Step {
+	if step.Aside {
+		return nil
+	}
+
+	var found *Step
+	switch step.Kind {
+	case KindAnswer, KindCNAME, KindNoData, KindNXDomain:
+		found = step
+	}
+	for _, child := range step.Children {
+		if deeper := result(child); deeper != nil {
+			found = deeper
 		}
 	}
-	return nil
+	return found
 }
