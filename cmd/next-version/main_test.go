@@ -256,3 +256,66 @@ func readOutputs(tb testing.TB, path string) map[string]string {
 	}
 	return values
 }
+
+func TestCheckTitle(t *testing.T) {
+	accepted := map[string]string{
+		"a feature": "feat: Draw a trace as a tree",
+		"a fix":     "fix: Take glue from the right server",
+		"a scope":   "chore(deps): Bump miekg/dns",
+		"a break":   "feat!: Rename every flag",
+		"any case":  "Feat: Draw a trace",
+	}
+	for name, title := range accepted {
+		t.Run(name, func(t *testing.T) {
+			var out bytes.Buffer
+			if err := checkTitle(&out, title); err != nil {
+				t.Fatalf("checkTitle(%q): %v", title, err)
+			}
+			if !strings.Contains(out.String(), "bump") {
+				t.Errorf("got %q, want the bump it earns", out.String())
+			}
+		})
+	}
+
+	rejected := map[string]string{
+		"no prefix":             "Draw a trace as a tree",
+		"a prefix nobody knows": "wip: something",
+		"nothing at all":        "",
+	}
+	for name, title := range rejected {
+		t.Run(name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := checkTitle(&out, title)
+			if err == nil {
+				t.Fatalf("checkTitle(%q): got no error, want one", title)
+			}
+			// The prefixes it would have accepted come from the same map the
+			// release reads, so the help cannot drift from the rule.
+			for _, want := range []string{"feat", "fix", "chore"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("got %q, want it to list %q", err, want)
+				}
+			}
+			if !strings.Contains(out.String(), "::error") {
+				t.Errorf("got %q, want an annotation on the pull request", out.String())
+			}
+		})
+	}
+}
+
+// TestCheckTitleIsAskedFor covers the flag itself: an empty title has to fail,
+// which means the tool must tell an empty -check-title from no -check-title.
+func TestCheckTitleIsAskedFor(t *testing.T) {
+	var out bytes.Buffer
+	if err := run([]string{"-check-title="}, &out, fakeGit("v1.0.0\n", nil)); err == nil {
+		t.Error("got no error for an empty title, want one")
+	}
+
+	out.Reset()
+	if err := run(nil, &out, fakeGit("v1.0.0\n", []string{"fix: Something"})); err != nil {
+		t.Errorf("got %v without -check-title, want the version instead", err)
+	}
+	if !strings.Contains(out.String(), "v1.0.1") {
+		t.Errorf("got %q, want the next version", out.String())
+	}
+}

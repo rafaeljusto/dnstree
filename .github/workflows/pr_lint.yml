@@ -1,0 +1,39 @@
+name: pr lint
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # A squash merge puts this title on main as the commit subject, and the
+      # release works the version out from those subjects. So the check runs the
+      # release's own vocabulary — the levels map in cmd/next-version — rather
+      # than a second copy of it here. An unprefixed title is not a style
+      # problem: it costs the release the bump it earned.
+      #
+      # The title goes through the environment, never interpolated into the
+      # script: it is attacker-controlled text on a fork's pull request, and
+      # ${{ }} would splice it straight into the shell.
+      - name: Check the title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: go run ./cmd/next-version -check-title="$PR_TITLE"

@@ -8,6 +8,8 @@ the release.
 go run ./cmd/next-version                # report the next version
 go run ./cmd/next-version -bump=minor    # force a bump level
 go run ./cmd/next-version -from=v0.1.0   # diff from an explicit tag
+
+go run ./cmd/next-version -check-title="feat: Draw a trace as a tree"
 ```
 
 ## How a change is classified
@@ -47,6 +49,20 @@ unclassified — in the terminal with a `?`, and as a warning in the workflow
 summary. **Read that list before releasing.** If one of them turns out to be a
 feature, run the workflow again with `bump: minor`.
 
+## Checking a subject
+
+`-check-title` validates one subject against the table above and prints the
+bump it earns, exiting non-zero with the accepted prefixes if it has none. The
+`pr lint` workflow runs exactly that, so the check and the release read a
+subject the same way — there is no second list of prefixes anywhere.
+
+```console
+$ go run ./cmd/next-version -check-title="feat: Draw a trace as a tree"
+Accepted; this earns a minor bump.
+```
+
+Use it before opening a pull request, or to see why the check failed on one.
+
 ## Where it runs
 
 `.github/workflows/release.yml` calls it on the `workflow_dispatch` path, where
@@ -56,3 +72,7 @@ then creates that tag and releases it.
 
 Use the workflow's `dry_run` input to see the version and the table without
 tagging anything.
+
+`.github/workflows/pr_lint.yml` calls it with `-check-title` on every pull
+request. A squash merge puts the pull request title on `main` as the commit
+subject, which is what the release then reads.

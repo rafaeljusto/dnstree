@@ -153,6 +153,13 @@ plain subject ships under a patch tag.
 | `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `style:`, `revert:` | patch |
 | any prefix with `!` (`feat!:`), or a `BREAKING CHANGE:` footer | major |
 
+A pull request title is checked against the same table, since a squash merge
+is what puts it on `main` as a commit subject. You can check one yourself:
+
+```bash
+go run ./cmd/next-version -check-title="feat: Draw a trace as a tree"
+```
+
 See [cmd/next-version](cmd/next-version/) for the details, including what
 changes while the major version is still zero.
 

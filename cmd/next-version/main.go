@@ -7,6 +7,11 @@
 //	go run ./cmd/next-version                # report the next version
 //	go run ./cmd/next-version -bump=minor    # force a bump level
 //	go run ./cmd/next-version -from=v0.1.0   # diff from an explicit tag
+//	go run ./cmd/next-version -check-title=… # validate one subject and exit
+//
+// The pull request lint workflow runs -check-title, so a subject is validated
+// against the same vocabulary the release reads it with, and a prefix is only
+// ever written down once.
 //
 // Every commit since the tag is classified by its Conventional Commits prefix,
 // which is what this repository writes its subjects with:
@@ -35,6 +40,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -60,8 +66,17 @@ func run(args []string, stdout io.Writer, git runner) error {
 	to := flags.String("to", "HEAD", "revision to release")
 	outputPath := flags.String("output", os.Getenv("GITHUB_OUTPUT"), "file to append key=value outputs to")
 	summaryPath := flags.String("summary", os.Getenv("GITHUB_STEP_SUMMARY"), "file to append a summary to")
+	title := flags.String("check-title", "", "validate this subject and exit")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+
+	// An empty title is itself a failure, so ask the flag package whether it was
+	// passed rather than testing the value.
+	var checking bool
+	flags.Visit(func(f *flag.Flag) { checking = checking || f.Name == "check-title" })
+	if checking {
+		return checkTitle(stdout, *title)
 	}
 
 	forcedLevel, err := parseLevel(*forced)
@@ -223,6 +238,42 @@ func classify(subject, body string) (bumpLevel, bool) {
 		return bumpPatch, false
 	}
 	return level, true
+}
+
+// checkTitle reports what a subject earns, or why it earns nothing. It reads
+// the subject exactly as the release does, so the two cannot disagree.
+func checkTitle(w io.Writer, title string) error {
+	level, known := classify(title, "")
+	if !known {
+		// An annotation puts the reason on the pull request itself, where
+		// whoever wrote the title is looking.
+		fmt.Fprintf(w, "::error title=Subject prefix::%q carries no known prefix\n", title)
+		return fmt.Errorf("%q carries no known prefix\n\n%s", title, acceptedPrefixes())
+	}
+
+	fmt.Fprintf(w, "Accepted; this earns a %s bump.\n", level)
+	return nil
+}
+
+// acceptedPrefixes is the help shown on a rejection, built from levels so that
+// it cannot drift from what is accepted.
+func acceptedPrefixes() string {
+	byLevel := map[bumpLevel][]string{}
+	for prefix, level := range levels {
+		byLevel[level] = append(byLevel[level], prefix)
+	}
+
+	var help strings.Builder
+	help.WriteString("A subject needs one of these prefixes:\n")
+	for _, level := range []bumpLevel{bumpMinor, bumpPatch} {
+		prefixes := byLevel[level]
+		slices.Sort(prefixes)
+		fmt.Fprintf(&help, "  %-5s  %s\n", level, strings.Join(prefixes, ", "))
+	}
+	help.WriteString("\nPrefixes are case-insensitive and may carry a scope: \"chore(deps): …\".\n")
+	help.WriteString("Mark a breaking change with \"!\" (\"feat!: …\") to earn a major bump.\n")
+	help.WriteString("\nFor example: \"feat: Draw a trace as a tree\"\n")
+	return help.String()
 }
 
 // weigh is the highest bump any single change asks for, and how many of them
