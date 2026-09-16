@@ -4,6 +4,8 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/rafaeljusto/dnstree)](https://goreportcard.com/report/github.com/rafaeljusto/dnstree)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+**[rafaeljusto.github.io/dnstree](https://rafaeljusto.github.io/dnstree/)**
+
 Resolve a name the way a resolver does — from the root servers down, following
 every referral — and draw the path it took.
 

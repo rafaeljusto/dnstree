@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>dnstree</title>
+<meta name="description" content="Resolve a name from the root servers down, and draw the path it took. A DNS diagnostic CLI with latency, origin AS and DNSSEC state on every hop.">
+<meta property="og:title" content="dnstree">
+<meta property="og:description" content="Iterative DNS resolution drawn as a tree: every referral from the root down, with latency, origin AS and DNSSEC state on each hop.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+
+  --bg:#F5F7F5; --surface:#FFFFFF; --sunken:#EDF1EF;
+  --ink:#1B2228; --muted:#5D6973; --faint:#6F7A81;
+  --line:#D8DEDC; --line-strong:#B9C2BF;
+  --accent:#2C6C8C; --accent-ink:#FFFFFF; --accent-soft:#E3EEF3;
+  --ok:#2E7D4F; --warn:#B7791F; --bad:#B23A3A;
+
+  /* The terminal is an object, not a surface: it keeps its own colours in
+     either theme, the way a terminal does on any desk. */
+  --term-bg:#0F1519; --term-line:#233039; --term-ink:#DCE4E7; --term-dim:#6B767E;
+  --term-ok:#63C08A; --term-warn:#E0B04A; --term-bad:#E06B6B; --term-accent:#72B4D3;
+  --rr-a:#63C08A; --rr-aaaa:#72B4D3; --rr-cname:#E39A5C; --rr-txt:#A996E0;
+
+  --max:74rem; --text:38rem;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#12181C; --surface:#182026; --sunken:#0E1418;
+  --ink:#E4E9EB; --muted:#98A5AD; --faint:#6B767E;
+  --line:#26333A; --line-strong:#3A4A53;
+  --accent:#72B4D3; --accent-ink:#0E1418; --accent-soft:#1B3240;
+  --ok:#63C08A; --warn:#E0B04A; --bad:#E06B6B;
+}}
+:root[data-theme="dark"]{
+  --bg:#12181C; --surface:#182026; --sunken:#0E1418;
+  --ink:#E4E9EB; --muted:#98A5AD; --faint:#6B767E;
+  --line:#26333A; --line-strong:#3A4A53;
+  --accent:#72B4D3; --accent-ink:#0E1418; --accent-soft:#1B3240;
+  --ok:#63C08A; --warn:#E0B04A; --bad:#E06B6B;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:400 16px/1.65 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding-inline:20px; padding-block:0 0;
+  overflow-x:hidden;
+}
+.wrap{max-width:var(--max); margin-inline:auto}
+a{color:var(--accent); text-underline-offset:.2em}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:3px}
+code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+p{max-width:var(--text)}
+
+/* ── masthead ─────────────────────────────────────────────────────────── */
+.masthead{
+  display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding-block:1.4rem; border-bottom:1px solid var(--line);
+}
+.brand{display:flex; align-items:baseline; gap:.55rem; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:1.05rem; letter-spacing:-.02em}
+.brand .caret{color:var(--accent)}
+.masthead nav{display:flex; gap:1.4rem; font-size:.9rem}
+.masthead nav a{color:var(--muted); text-decoration:none}
+.masthead nav a:hover{color:var(--ink)}
+@media (max-width:640px){ .masthead nav a[data-optional]{display:none} }
+
+/* ── hero ─────────────────────────────────────────────────────────────── */
+.hero{padding-block:3.2rem 2.4rem}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--muted);
+}
+h1{
+  font-family:"IBM Plex Mono",monospace; font-weight:600;
+  font-size:clamp(2.1rem,6.2vw,3.5rem); line-height:1.06; letter-spacing:-.035em;
+  margin:.5rem 0 0; text-wrap:balance;
+}
+h1 .arrow{color:var(--accent)}
+.lede{font-size:clamp(1.05rem,2.3vw,1.2rem); color:var(--muted); margin:1rem 0 0; max-width:34rem}
+.hero-actions{display:flex; flex-wrap:wrap; gap:.7rem; margin-top:1.6rem; align-items:center}
+.btn{
+  display:inline-flex; align-items:center; gap:.5rem; padding:.62rem 1.05rem;
+  border-radius:7px; font-size:.92rem; font-weight:500; text-decoration:none; border:1px solid transparent;
+}
+.btn-primary{background:var(--accent); color:var(--accent-ink)}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-ghost{border-color:var(--line-strong); color:var(--ink)}
+.btn-ghost:hover{background:var(--surface)}
+
+/* ── terminal ─────────────────────────────────────────────────────────── */
+.term{
+  background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px;
+  margin-top:2rem; overflow:hidden; box-shadow:0 18px 40px -28px rgba(0,0,0,.65);
+}
+.term-bar{
+  display:flex; align-items:center; gap:.5rem; padding:.6rem .9rem;
+  border-bottom:1px solid var(--term-line); background:rgba(255,255,255,.02);
+}
+.dot{width:10px; height:10px; border-radius:50%; background:var(--term-line)}
+.term-title{
+  margin-left:.4rem; font-family:"IBM Plex Mono",monospace; font-size:.74rem;
+  color:var(--term-dim); letter-spacing:.02em;
+}
+.term-body{padding:1rem 1.1rem 1.2rem; overflow-x:auto}
+pre{
+  margin:0; font-family:"IBM Plex Mono",monospace; font-size:clamp(11px,1.45vw,13.5px);
+  line-height:1.62; color:var(--term-ink); white-space:pre;
+}
+.prompt{color:var(--term-dim)}
+.prompt b{color:var(--term-accent); font-weight:500}
+.z{color:var(--term-dim)} .ns{color:var(--term-ink); font-weight:500}
+.ip{color:var(--term-dim)} .asn{color:var(--term-dim)} .rtt{color:var(--term-dim)}
+.ok{color:var(--term-ok)} .warn{color:var(--term-warn)} .bad{color:var(--term-bad)}
+.dim{color:var(--term-dim)} .note{color:var(--term-ink)}
+.a{color:var(--rr-a)} .aaaa{color:var(--rr-aaaa)} .cname{color:var(--rr-cname)} .txt{color:var(--rr-txt)}
+.k{color:var(--term-accent)} .s{color:var(--rr-a)} .n{color:var(--rr-cname)}
+
+/* the load sequence: lines are visible by default and only animate when JS
+   turns it on, so nothing is ever parked invisible. */
+.playing .ln{opacity:0; animation:drawin .34s ease-out forwards}
+@keyframes drawin{from{opacity:0} to{opacity:1}}
+@media (prefers-reduced-motion:reduce){ .playing .ln{opacity:1; animation:none} }
+
+/* ── sections ─────────────────────────────────────────────────────────── */
+section{padding-block:3.4rem; border-top:1px solid var(--line)}
+h2{
+  font-family:"IBM Plex Mono",monospace; font-weight:600; letter-spacing:-.02em;
+  font-size:clamp(1.35rem,3vw,1.75rem); margin:0 0 .6rem; text-wrap:balance;
+}
+h3{font-size:1rem; margin:0 0 .35rem; font-weight:600}
+.section-lede{color:var(--muted); margin-top:0}
+
+/* ── the exploded hop ─────────────────────────────────────────────────── */
+.dissect{background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px; padding:1.4rem 0 .4rem; margin-top:1.6rem; overflow-x:auto}
+.dissect-inner{min-width:60rem; padding-inline:1.4rem; position:relative}
+.dissect pre{font-size:14px}
+.callouts{position:relative; height:7.5rem; margin-top:.2rem; font-family:"IBM Plex Mono",monospace; font-size:14px}
+.callout{position:absolute; top:0}
+.callout .tick{display:block; width:1px; height:var(--h,1.1rem); background:var(--term-line); margin-left:.4ch}
+.callout .label{display:block; margin-top:.3rem; font-size:12px; color:var(--term-dim); white-space:nowrap}
+.callout .label b{display:block; color:var(--term-ink); font-weight:500}
+.legend{display:none; list-style:none; margin:1.2rem 0 0; padding:0; gap:.7rem 1.4rem; flex-wrap:wrap}
+.legend li{font-size:.86rem; color:var(--muted)}
+.legend b{color:var(--ink); font-weight:600; font-family:"IBM Plex Mono",monospace}
+@media (max-width:760px){
+  .dissect{padding-bottom:1.2rem}
+  .callouts{display:none}
+  .legend{display:flex}
+}
+
+/* ── finding grid ─────────────────────────────────────────────────────── */
+.findings{display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:1px; margin-top:1.8rem; background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+.finding{background:var(--surface); padding:1.2rem 1.25rem}
+.finding .tag{
+  font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.1em; text-transform:uppercase;
+  display:inline-block; padding:.15rem .45rem; border-radius:4px; margin-bottom:.6rem;
+}
+.tag-warn{background:color-mix(in srgb,var(--warn) 16%,transparent); color:var(--warn)}
+.tag-bad{background:color-mix(in srgb,var(--bad) 16%,transparent); color:var(--bad)}
+.tag-ok{background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok)}
+.tag-accent{background:var(--accent-soft); color:var(--accent)}
+.finding p{margin:0; font-size:.92rem; color:var(--muted); max-width:none}
+
+/* ── chain ────────────────────────────────────────────────────────────── */
+.states{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.4rem; padding:0; list-style:none}
+.state{
+  font-family:"IBM Plex Mono",monospace; font-size:.82rem; padding:.3rem .6rem; border-radius:5px;
+  border:1px solid var(--line-strong); color:var(--muted); background:var(--surface);
+}
+.state b{font-weight:500}
+.state.is-ok{border-color:color-mix(in srgb,var(--ok) 45%,transparent); color:var(--ok)}
+.state.is-warn{border-color:color-mix(in srgb,var(--warn) 45%,transparent); color:var(--warn)}
+.state.is-bad{border-color:color-mix(in srgb,var(--bad) 45%,transparent); color:var(--bad)}
+
+/* ── tabs ─────────────────────────────────────────────────────────────── */
+.tabs{display:flex; gap:.3rem; margin-top:1.5rem; flex-wrap:wrap}
+.tab{
+  font-family:"IBM Plex Mono",monospace; font-size:.84rem; padding:.4rem .8rem; cursor:pointer;
+  background:transparent; border:1px solid var(--line-strong); border-radius:6px; color:var(--muted);
+}
+.tab[aria-selected="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.panel[hidden]{display:none!important}
+
+/* ── install ──────────────────────────────────────────────────────────── */
+.installs{display:grid; gap:.7rem; margin-top:1.5rem; max-width:52rem}
+.cmd{
+  display:flex; align-items:center; gap:.8rem; background:var(--sunken); border:1px solid var(--line);
+  border-radius:8px; padding:.7rem .9rem; font-family:"IBM Plex Mono",monospace; font-size:.85rem;
+}
+.cmd .what{color:var(--faint); flex:0 0 auto; min-width:4.5rem}
+.cmd code{flex:1 1 auto; overflow-x:auto; white-space:nowrap; color:var(--ink)}
+.copy{
+  flex:0 0 auto; border:1px solid var(--line-strong); background:transparent; color:var(--muted);
+  border-radius:5px; padding:.2rem .5rem; font-size:.74rem; cursor:pointer; font-family:inherit;
+}
+.copy:hover{color:var(--ink); border-color:var(--ink)}
+@media (max-width:560px){ .cmd{flex-wrap:wrap} .cmd .what{min-width:0} }
+
+/* ── exit codes ───────────────────────────────────────────────────────── */
+.exits{width:100%; border-collapse:collapse; margin-top:1.3rem; max-width:34rem; font-size:.92rem}
+.exits td{padding:.45rem .8rem .45rem 0; border-bottom:1px solid var(--line); vertical-align:top}
+.exits td:first-child{font-family:"IBM Plex Mono",monospace; color:var(--accent); width:2.5rem; font-weight:500}
+.exits tr:last-child td{border-bottom:0}
+
+/* ── footer ───────────────────────────────────────────────────────────── */
+footer{border-top:1px solid var(--line); padding-block:2.2rem 3rem; color:var(--muted); font-size:.88rem}
+.foot-row{display:flex; flex-wrap:wrap; gap:.6rem 1.6rem; align-items:baseline; justify-content:space-between}
+.foot-links{display:flex; flex-wrap:wrap; gap:1.2rem}
+footer a{color:var(--muted)}
+footer a:hover{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand"><span class="caret">›</span> dnstree</div>
+    <nav>
+      <a href="#hop">Read a hop</a>
+      <a href="#dnssec" data-optional>DNSSEC</a>
+      <a href="#formats" data-optional>Formats</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/rafaeljusto/dnstree">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <p class="eyebrow">DNS diagnostics · Go · MIT</p>
+      <h1>Every referral<br>from the root <span class="arrow">↓</span></h1>
+      <p class="lede">
+        dnstree resolves a name the way a resolver does — one hop at a time, from the
+        root servers down — and draws the path it took, with what each hop cost and
+        whether it can be trusted.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#install">Install it</a>
+        <a class="btn btn-ghost" href="https://github.com/rafaeljusto/dnstree">Source on GitHub</a>
+      </div>
+
+      <div class="term" id="hero-term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">~ · dnstree</span>
+        </div>
+        <div class="term-body">
+<pre aria-label="dnstree resolving www.example.com from the root servers"><span class="ln"><span class="prompt">$ <b>dnstree www.example.com A</b></span></span>
+<span class="ln"><span class="z">. (root)</span></span>
+<span class="ln">├── <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS19836</span>  <span class="rtt">24ms</span>  <span class="ok">NOERROR</span>  referral → com.</span>
+<span class="ln">│   ├── <span class="ns">l.gtld-servers.net.</span> <span class="ip">192.41.162.30</span>  <span class="asn">AS36617</span>  <span class="rtt">27ms</span>  <span class="ok">NOERROR</span>  referral → example.com.</span>
+<span class="ln">│   │   ├── <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">108.162.192.162</span>  <span class="asn">AS13335</span>  <span class="rtt">23ms</span>  <span class="ok">NOERROR</span>  AA</span>
+<span class="ln">│   │   │   ├── www.example.com. <span class="dim">300</span> <span class="a">A</span> 104.20.23.154</span>
+<span class="ln">│   │   │   └── www.example.com. <span class="dim">300</span> <span class="a">A</span> 172.66.147.243</span>
+<span class="ln">│   │   ├── <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">172.64.32.162</span>  <span class="dim">(not queried)</span></span>
+<span class="ln">│   │   └── <span class="dim">(and 10 more not queried)</span></span>
+<span class="ln">│   └── <span class="dim">(and 24 more not queried)</span></span>
+<span class="ln">└── <span class="dim">(and 24 more not queried)</span></span></pre>
+        </div>
+      </div>
+    </div>
+
+    <section id="hop">
+      <h2>One line, six facts</h2>
+      <p class="section-lede">
+        Every hop is a question put to one nameserver. The answer is drawn where it
+        happened, so a slow server, a foreign network or a broken zone shows up next
+        to the delegation that led there.
+      </p>
+
+      <div class="dissect">
+        <div class="dissect-inner">
+<pre><span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS397197</span>  <span class="rtt">12ms</span>  <span class="ok">NOERROR</span>  <span class="note">referral → com.</span></pre>
+          <div class="callouts" aria-hidden="true">
+            <div class="callout" style="left:0ch">
+              <span class="tick" style="--h:1.1rem"></span>
+              <span class="label"><b>who was asked</b>the name from the delegation</span>
+            </div>
+            <div class="callout" style="left:20ch">
+              <span class="tick" style="--h:2.4rem"></span>
+              <span class="label"><b>at which address</b>glue, taken only from a<br>server entitled to give it</span>
+            </div>
+            <div class="callout" style="left:32ch">
+              <span class="tick" style="--h:3.7rem"></span>
+              <span class="label"><b>whose network</b>origin AS, looked up after<br>the walk and never fatal</span>
+            </div>
+            <div class="callout" style="left:42ch">
+              <span class="tick" style="--h:5rem"></span>
+              <span class="label"><b>what it cost</b>the whole hop, retries<br>included</span>
+            </div>
+            <div class="callout" style="left:56ch">
+              <span class="tick" style="--h:1.1rem"></span>
+              <span class="label"><b>what it said</b>and what that meant:<br>a referral one zone down</span>
+            </div>
+          </div>
+          <ul class="legend">
+            <li><b>a.root-servers.net.</b> — who was asked, named by the delegation</li>
+            <li><b>198.41.0.4</b> — glue, taken only from a server entitled to give it</li>
+            <li><b>AS397197</b> — whose network, looked up after the walk</li>
+            <li><b>12ms</b> — what the hop cost, retries included</li>
+            <li><b>NOERROR · referral → com.</b> — what it said, and what that meant</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="broken">
+      <h2>It is loudest when something is wrong</h2>
+      <p class="section-lede">
+        A resolver hides all of this and hands you an answer or a SERVFAIL. dnstree
+        keeps going and shows the parts a working answer papers over.
+      </p>
+
+      <div class="findings">
+        <div class="finding">
+          <span class="tag tag-warn">lame</span>
+          <h3>Servers that do not serve the zone</h3>
+          <p>Delegated, reachable, and refusing the question. The walk moves to the next one and marks the hop rather than failing.</p>
+        </div>
+        <div class="finding">
+          <span class="tag tag-bad">broken</span>
+          <h3>Delegations nothing can reach</h3>
+          <p>A nameserver inside the zone it serves, with no glue, can only be found by asking itself. That is reported, not looped on.</p>
+        </div>
+        <div class="finding">
+          <span class="tag tag-accent">bailiwick</span>
+          <h3>Glue a server had no right to give</h3>
+          <p>A server may vouch for names at or below its own zone and no further. Anything else is dropped and resolved separately, drawn as a branch of its own.</p>
+        </div>
+        <div class="finding">
+          <span class="tag tag-ok">bounded</span>
+          <h3>A walk that always ends</h3>
+          <p>Queries, zone cuts, aliases and nameserver lookups each have a budget, so a hostile delegation wastes time and nothing more.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="dnssec">
+      <h2>The chain, link by link</h2>
+      <p class="section-lede">
+        With <code>--dnssec</code>, each zone is asked for its keys and checked against the DS
+        its parent published — starting at the trust anchors compiled into the binary.
+      </p>
+
+      <ul class="states">
+        <li class="state is-ok"><b>secure</b> — every link from the anchor down verified</li>
+        <li class="state is-warn"><b>insecure</b> — the parent published no DS</li>
+        <li class="state is-bad"><b>bogus</b> — a DS with no matching key, or a signature that fails</li>
+        <li class="state"><b>indeterminate</b> — an algorithm this build cannot check</li>
+      </ul>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">~ · dnstree --dnssec</span>
+        </div>
+        <div class="term-body">
+<pre><span class="prompt">$ <b>dnstree --dnssec cloudflare.com A</b></span>
+<span class="z">. (root)</span>  <span class="ok">[secure RSASHA256/SHA256]</span>
+├── <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="rtt">24ms</span>  <span class="ok">NOERROR</span>  DO  referral → com.  <span class="ok">[secure ECDSAP256SHA256/SHA256]</span>
+│   ├── <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="rtt">25ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="dim">(DNSKEY of .)</span>
+│   └── <span class="ns">l.gtld-servers.net.</span> <span class="ip">192.41.162.30</span>  <span class="rtt">26ms</span>  <span class="ok">NOERROR</span>  DO  referral → cloudflare.com.  <span class="ok">[secure ECDSAP256SHA256/SHA256]</span>
+│       ├── <span class="ns">l.gtld-servers.net.</span> <span class="ip">192.41.162.30</span>  <span class="rtt">25ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="dim">(DNSKEY of com.)</span>
+│       └── <span class="ns">ns3.cloudflare.com.</span> <span class="ip">162.159.0.33</span>  <span class="rtt">24ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="ok">[secure ECDSAP256SHA256]</span>
+│           ├── cloudflare.com. <span class="dim">300</span> <span class="a">A</span> 104.16.132.229
+│           └── <span class="ns">ns3.cloudflare.com.</span> <span class="ip">162.159.0.33</span>  <span class="rtt">23ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="dim">(DNSKEY of cloudflare.com.)</span></pre>
+        </div>
+      </div>
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        An unsigned zone turns the chain grey from that point down; nothing below it can
+        be secure again. Denial of existence is reported as unchecked rather than claimed:
+        NSEC proofs are not read.
+      </p>
+    </section>
+
+    <section id="formats">
+      <h2>Four ways out</h2>
+      <p class="section-lede">
+        The tree is for reading. The other three are for pasting into a document, a
+        pipeline, or a picture.
+      </p>
+
+      <div class="tabs" role="tablist" aria-label="Output formats">
+        <button class="tab" role="tab" id="tab-tree" aria-controls="panel-tree" aria-selected="true">--format tree</button>
+        <button class="tab" role="tab" id="tab-ascii" aria-controls="panel-ascii" aria-selected="false">--format ascii</button>
+        <button class="tab" role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">--format json</button>
+        <button class="tab" role="tab" id="tab-dot" aria-controls="panel-dot" aria-selected="false">--format dot</button>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title" id="format-title">~ · unicode branches, colour when the terminal wants it</span>
+        </div>
+        <div class="term-body">
+          <div class="panel" role="tabpanel" id="panel-tree" aria-labelledby="tab-tree">
+<pre><span class="z">. (root)</span>
+└── <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS397197</span>  <span class="rtt">12ms</span>  <span class="ok">NOERROR</span>  referral → com.  <span class="ok">[secure]</span>
+    ├── <span class="ns">b.gtld-servers.net.</span> <span class="ip">192.33.14.30</span>  <span class="rtt">2s</span>  <span class="bad">timeout</span>
+    └── <span class="ns">a.gtld-servers.net.</span> <span class="ip">192.5.6.30</span>  <span class="asn">AS26415</span>  <span class="rtt">18ms</span>  <span class="ok">NOERROR</span>  referral → example.com.  <span class="ok">[secure]</span>
+        ├── <span class="ns">a.iana-servers.net.</span> <span class="ip">199.43.135.53</span>  <span class="asn">AS10745</span>  <span class="rtt">9ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="ok">[secure]</span>
+        │   └── www.example.com. <span class="dim">3600</span> <span class="a">A</span> 93.184.216.34
+        └── <span class="ns">b.iana-servers.net.</span> <span class="ip">199.43.133.53</span>  <span class="dim">(not queried)</span></pre>
+          </div>
+
+          <div class="panel" role="tabpanel" id="panel-ascii" aria-labelledby="tab-ascii" hidden>
+<pre>. (root)
+`-- a.root-servers.net. 198.41.0.4  AS397197  12ms  NOERROR  referral -&gt; com.  [secure]
+    |-- b.gtld-servers.net. 192.33.14.30  2s  timeout
+    `-- a.gtld-servers.net. 192.5.6.30  AS26415  18ms  NOERROR  referral -&gt; example.com.  [secure]
+        |-- a.iana-servers.net. 199.43.135.53  AS10745  9ms  NOERROR  AA DO  [secure]
+        |   `-- www.example.com. 3600 A 93.184.216.34
+        `-- b.iana-servers.net. 199.43.133.53  (not queried)</pre>
+          </div>
+
+          <div class="panel" role="tabpanel" id="panel-json" aria-labelledby="tab-json" hidden>
+<pre>{
+  <span class="k">"schema_version"</span>: <span class="n">1</span>,
+  <span class="k">"question"</span>: { <span class="k">"name"</span>: <span class="s">"www.example.com."</span>, <span class="k">"type"</span>: <span class="s">"A"</span>, <span class="k">"class"</span>: <span class="s">"IN"</span> },
+  <span class="k">"elapsed_ms"</span>: <span class="n">41.5</span>,
+  <span class="k">"root"</span>: {
+    <span class="k">"zone"</span>: <span class="s">"."</span>,
+    <span class="k">"kind"</span>: <span class="s">"zone"</span>,
+    <span class="k">"children"</span>: [
+      {
+        <span class="k">"zone"</span>: <span class="s">"."</span>,
+        <span class="k">"kind"</span>: <span class="s">"referral"</span>,
+        <span class="k">"server"</span>: { <span class="k">"name"</span>: <span class="s">"a.root-servers.net."</span>, <span class="k">"ip"</span>: <span class="s">"198.41.0.4"</span>, <span class="k">"port"</span>: <span class="n">53</span> },
+        <span class="k">"proto"</span>: <span class="s">"udp"</span>,
+        <span class="k">"rtt_ms"</span>: <span class="n">12</span>,
+        <span class="k">"rcode"</span>: <span class="s">"NOERROR"</span>,
+        <span class="k">"delegation"</span>: { <span class="k">"zone"</span>: <span class="s">"com."</span>, <span class="k">"ds_present"</span>: <span class="n">true</span> }
+      }
+    ]
+  }
+}</pre>
+          </div>
+
+          <div class="panel" role="tabpanel" id="panel-dot" aria-labelledby="tab-dot" hidden>
+<pre>digraph dnstree {
+	rankdir=LR;
+	label=<span class="s">"dnstree www.example.com. A"</span>;
+
+	subgraph cluster_0 {
+		label=<span class="s">"."</span>;
+		n1 [label=<span class="s">"a.root-servers.net.\n198.41.0.4\nNOERROR referral"</span>];
+	}
+
+	subgraph cluster_1 {
+		label=<span class="s">"com."</span>;
+		n3 [label=<span class="s">"a.gtld-servers.net.\n192.5.6.30\nNOERROR referral"</span>];
+	}
+
+	n1 -&gt; n3 [label=<span class="s">"18ms"</span>];
+}</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="install">
+      <h2>Get it</h2>
+      <p class="section-lede">One static binary, one dependency, no runtime to install.</p>
+
+      <div class="installs">
+        <div class="cmd">
+          <span class="what">go</span>
+          <code>go install github.com/rafaeljusto/dnstree/cmd/dnstree@latest</code>
+          <button class="copy" type="button" data-copy="go install github.com/rafaeljusto/dnstree/cmd/dnstree@latest">copy</button>
+        </div>
+        <div class="cmd">
+          <span class="what">docker</span>
+          <code>docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A</code>
+          <button class="copy" type="button" data-copy="docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A">copy</button>
+        </div>
+        <div class="cmd">
+          <span class="what">binary</span>
+          <code><a href="https://github.com/rafaeljusto/dnstree/releases">github.com/rafaeljusto/dnstree/releases</a> — macOS, Linux, FreeBSD, Windows</code>
+        </div>
+      </div>
+
+      <h3 style="margin-top:2.2rem">What it tells a script</h3>
+      <table class="exits">
+        <tbody>
+          <tr><td>0</td><td>something answered</td></tr>
+          <tr><td>1</td><td>the command line, or the question, could not be read</td></tr>
+          <tr><td>2</td><td>the walk ended without an answer</td></tr>
+          <tr><td>3</td><td>the chain of trust is broken</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    <div class="foot-row">
+      <div>MIT licensed · built with one dependency</div>
+      <div class="foot-links">
+        <a href="https://github.com/rafaeljusto/dnstree">Repository</a>
+        <a href="https://github.com/rafaeljusto/dnstree/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/rafaeljusto/dnstree/blob/main/SECURITY.md">Security</a>
+        <a href="https://github.com/rafaeljusto/dnstree/releases">Releases</a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+// The hero draws itself the way a walk does: one hop after another. It runs
+// only when motion is welcome, and the lines are visible without it.
+(function () {
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var term = document.getElementById("hero-term");
+  if (reduced || !term) return;
+
+  var lines = term.querySelectorAll(".ln");
+  term.classList.add("playing");
+  lines.forEach(function (line, i) {
+    line.style.animationDelay = (60 + i * 90) + "ms";
+  });
+})();
+
+// Output formats.
+(function () {
+  var titles = {
+    "tab-tree": "~ · unicode branches, colour when the terminal wants it",
+    "tab-ascii": "~ · plain enough to paste into a document",
+    "tab-json": "~ · versioned, with durations in milliseconds",
+    "tab-dot": "~ · one node per query, clustered by zone"
+  };
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
+  var title = document.getElementById("format-title");
+
+  function select(tab) {
+    tabs.forEach(function (other) {
+      var chosen = other === tab;
+      other.setAttribute("aria-selected", chosen ? "true" : "false");
+      document.getElementById(other.getAttribute("aria-controls")).hidden = !chosen;
+    });
+    if (titles[tab.id]) title.textContent = titles[tab.id];
+  }
+
+  tabs.forEach(function (tab, i) {
+    tab.addEventListener("click", function () { select(tab); });
+    tab.addEventListener("keydown", function (event) {
+      var step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      var next = tabs[(i + step + tabs.length) % tabs.length];
+      next.focus();
+      select(next);
+    });
+  });
+})();
+
+// Copy buttons.
+(function () {
+  document.querySelectorAll(".copy").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var text = button.getAttribute("data-copy");
+      var done = function () {
+        var was = button.textContent;
+        button.textContent = "copied";
+        setTimeout(function () { button.textContent = was; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+        return;
+      }
+      var field = document.createElement("textarea");
+      field.value = text;
+      document.body.appendChild(field);
+      field.select();
+      try { document.execCommand("copy"); done(); } catch (error) { /* nothing to do */ }
+      document.body.removeChild(field);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
