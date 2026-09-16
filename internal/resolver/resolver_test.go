@@ -222,36 +222,36 @@ ns.example IN A    192.0.2.2
 	}
 }
 
-// TestResolveOutOfBailiwickGlue covers the poisoning guard: addresses for a
-// nameserver outside the delegated zone are unsolicited, so the walk drops them
-// and goes to find the name itself.
+// TestResolveOutOfBailiwickGlue covers the poisoning guard: a server may vouch
+// for names at or below the zone it serves and no further, so an address it
+// volunteers for somebody else's zone is dropped and the name found elsewhere.
 func TestResolveOutOfBailiwickGlue(t *testing.T) {
-	const rootZone = `
-@                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
-@                   IN NS   a.root-servers.net.
-a.root-servers.net. IN A    192.0.2.1
-com.                IN NS   ns.outside.net.
-ns.outside.net.     IN A    192.0.2.2
+	const comZone = `
+@               IN SOA  ns hostmaster 1 7200 3600 1209600 3600
+@               IN NS   ns
+ns              IN A    192.0.2.2
+example         IN NS   ns.outside.net.
+ns.outside.net. IN A    192.0.2.3
 `
 
 	hierarchy := fakens.NewHierarchy(t)
-	root := hierarchy.Add(fakens.Config{
-		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1",
+	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2",
 		Behaviour: fakens.Behaviour{OutOfBailiwickGlue: true},
 	})
-	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2"})
 
 	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{}).Resolve(t.Context(), "www.example.com", "A")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 
-	referral := steps(tr)[0]
-	if referral.Kind != trace.KindReferral {
-		t.Fatalf("got %s first, want the referral: %s", referral.Kind, format(steps(tr)))
+	referral := steps(tr)[1]
+	if referral.Kind != trace.KindReferral || referral.Zone != "com." {
+		t.Fatalf("got %s at %s, want the referral from com.: %s", referral.Kind, referral.Zone, format(steps(tr)))
 	}
 	if len(referral.Delegation.Glue) != 0 {
-		t.Errorf("got glue %v, want the out-of-bailiwick address dropped", referral.Delegation.Glue)
+		t.Errorf("got glue %v, want the address com. had no business giving dropped", referral.Delegation.Glue)
 	}
 	if got := referral.Delegation.OutOfBailiwick; len(got) != 1 || got[0] != "ns.outside.net." {
 		t.Errorf("got out-of-bailiwick %v, want ns.outside.net.", got)
@@ -269,6 +269,44 @@ ns.outside.net.     IN A    192.0.2.2
 	}
 	if len(side.Notes) != 1 || side.Notes[0] != "resolving ns.outside.net." {
 		t.Errorf("got notes %q, want the branch to say what it is resolving", side.Notes)
+	}
+}
+
+// TestResolveSiblingGlue covers the other side of the same rule: the root is
+// entitled to hand out the addresses of the gTLD servers, and a walk that threw
+// them away would ask the root about every one of them.
+func TestResolveSiblingGlue(t *testing.T) {
+	const rootZone = `
+@                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                   IN NS   a.root-servers.net.
+a.root-servers.net. IN A    192.0.2.1
+com.                IN NS   a.gtld-servers.net.
+a.gtld-servers.net. IN A    192.0.2.2
+`
+
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1",
+		Behaviour: fakens.Behaviour{OutOfBailiwickGlue: true},
+	})
+	hierarchy.Add(fakens.Config{Name: "a.gtld-servers.net.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2"})
+	hierarchy.Add(fakens.Config{Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3"})
+
+	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{}).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if glue := steps(tr)[0].Delegation.Glue["a.gtld-servers.net."]; len(glue) != 1 {
+		t.Fatalf("got glue %v for a.gtld-servers.net., want the root's own", glue)
+	}
+	if answer := tr.Result(); answer == nil || answer.Kind != trace.KindAnswer {
+		t.Fatalf("got %+v, want the walk to go straight down: %s", answer, format(steps(tr)))
+	}
+	for _, step := range steps(tr) {
+		if step.Kind == trace.KindZone {
+			t.Errorf("got a walk of its own for %q, want the root's glue taken at its word", step.Notes)
+		}
 	}
 }
 

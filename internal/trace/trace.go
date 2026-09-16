@@ -129,9 +129,9 @@ type Delegation struct {
 	// glue. Nothing can resolve them, so the delegation is broken.
 	GlueLess []string
 
-	// OutOfBailiwick are nameservers named outside the delegated zone. The
-	// parent's addresses for them are unsolicited, so they are resolved
-	// separately instead.
+	// OutOfBailiwick are nameservers named outside the delegated zone that came
+	// with no address the parent was entitled to give. They are found with a
+	// walk of their own instead.
 	OutOfBailiwick []string
 
 	// DSPresent reports whether the parent signed the delegation.

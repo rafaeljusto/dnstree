@@ -85,11 +85,11 @@ func referral(resp *dns.Msg, zone, qname string) *trace.Delegation {
 	}
 
 	for _, name := range delegation.NS {
-		// Addresses for a name outside the delegated zone are unsolicited, and
-		// following them is how a resolver gets poisoned. Those names are
-		// resolved on their own instead.
-		if !dnsutil.IsBelow(child, name) {
-			delegation.OutOfBailiwick = append(delegation.OutOfBailiwick, name)
+		// A server may vouch for anything at or below the zone it serves, which
+		// is how the root hands out the addresses of the gTLD servers. Anything
+		// further afield is unsolicited, and following it is how a resolver
+		// gets poisoned.
+		if !dnsutil.IsBelow(zone, name) {
 			continue
 		}
 		for _, rr := range resp.Extra {
@@ -105,10 +105,16 @@ func referral(resp *dns.Msg, zone, qname string) *trace.Delegation {
 		}
 	}
 	for _, name := range delegation.NS {
+		if len(delegation.Glue[name]) > 0 {
+			continue
+		}
 		// A nameserver inside the zone it serves can only be reached through the
-		// glue its parent hands out. Without it the delegation is broken.
-		if dnsutil.IsBelow(child, name) && len(delegation.Glue[name]) == 0 {
+		// glue its parent hands out; without it the delegation is broken. One
+		// named anywhere else can still be found, with a walk of its own.
+		if dnsutil.IsBelow(child, name) {
 			delegation.GlueLess = append(delegation.GlueLess, name)
+		} else {
+			delegation.OutOfBailiwick = append(delegation.OutOfBailiwick, name)
 		}
 	}
 	return delegation
