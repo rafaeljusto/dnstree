@@ -1,0 +1,10 @@
+. (root)
+├── a.root-servers.net. 198.41.0.4  5ms  REFUSED  lame  [indeterminate]
+└── b.root-servers.net. 170.247.170.2  6ms  NOERROR  referral → com.  [insecure]
+    ├── ns1.com. 192.0.2.2  4ms  SERVFAIL  error
+    ├── ns2.com. 192.0.2.3  4ms  NXDOMAIN  AA
+    ├── ns3.com. 192.0.2.4  1.3ms  NOERROR  AA  no data
+    ├── ns4.com. 192.0.2.5  340µs  NOERROR  AA TC AD DO  [bogus: signature does not verify]
+    │   └── alias.example.com. 300 CNAME target.example.net.
+    └── error: gave up after 4 queries
+warning: no server answered for com.
