@@ -146,11 +146,15 @@ const (
 	Indeterminate DNSSECState = "indeterminate"
 )
 
-// DNSSECStatus is the chain of trust at one zone cut.
+// DNSSECStatus is the chain of trust at one zone cut. The algorithm and the
+// digest are always carried, so that an algorithm nothing here supports reads
+// differently from a signature that genuinely does not verify.
 type DNSSECStatus struct {
-	State   DNSSECState
-	Reason  string
-	KeyTags []uint16
+	State     DNSSECState
+	Reason    string
+	KeyTags   []uint16
+	Algorithm string // the signing algorithm, e.g. ECDSAP256SHA256
+	Digest    string // the DS digest type, e.g. SHA256
 }
 
 // Steps walks the tree depth first, parents before children.
