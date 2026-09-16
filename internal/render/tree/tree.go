@@ -67,7 +67,7 @@ type renderer struct {
 
 func (r *renderer) render(tr *trace.Trace) {
 	if tr.Root != nil {
-		r.out.WriteString(r.zoneLabel(tr.Root) + "\n")
+		r.out.WriteString(r.label(tr.Root) + "\n")
 		r.children(tr.Root, "")
 	}
 	for _, warning := range tr.Warnings {
@@ -77,7 +77,7 @@ func (r *renderer) render(tr *trace.Trace) {
 
 // step draws one hop and everything it led to.
 func (r *renderer) step(step *trace.Step, prefix string, last bool) {
-	r.out.WriteString(prefix + r.branch(last) + r.stepLabel(step) + "\n")
+	r.out.WriteString(prefix + r.branch(last) + r.label(step) + "\n")
 	r.children(step, prefix+r.continuation(last))
 }
 
@@ -111,12 +111,18 @@ func (r *renderer) continuation(last bool) string {
 	return r.glyphs.vertical
 }
 
-// zoneLabel is the line a trace starts from.
-func (r *renderer) zoneLabel(step *trace.Step) string {
-	if step.Zone == "." {
-		return r.paint.dim(". (root)")
+// label draws a node, which is either a hop or the zone a walk starts from.
+// Chasing an alias or a nameserver's name starts a walk of its own, so a zone
+// node can turn up anywhere in the tree.
+func (r *renderer) label(step *trace.Step) string {
+	if step.Kind == trace.KindZone {
+		zone := step.Zone
+		if zone == "." {
+			zone = ". (root)"
+		}
+		return join(r.paint.dim(zone), r.notes(step))
 	}
-	return r.paint.dim(step.Zone)
+	return r.stepLabel(step)
 }
 
 // stepLabel is one hop: who was asked, how it went, and what it said.
@@ -145,7 +151,29 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if dnssec := r.dnssec(step.DNSSEC); dnssec != "" {
 		fields = append(fields, dnssec)
 	}
+	if notes := r.notes(step); notes != "" {
+		fields = append(fields, notes)
+	}
 	return strings.Join(fields, "  ")
+}
+
+// notes are what the hop took, in the margin where they belong.
+func (r *renderer) notes(step *trace.Step) string {
+	if len(step.Notes) == 0 {
+		return ""
+	}
+	return r.paint.dim("(" + strings.Join(step.Notes, "; ") + ")")
+}
+
+// join puts two fields together, dropping an empty one.
+func join(fields ...string) string {
+	var set []string
+	for _, field := range fields {
+		if field != "" {
+			set = append(set, field)
+		}
+	}
+	return strings.Join(set, "  ")
 }
 
 func (r *renderer) who(server trace.Server) string {

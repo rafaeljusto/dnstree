@@ -79,7 +79,8 @@ func resolution() *trace.Trace {
 // that the golden file covers every label the renderer can draw.
 func kinds() *trace.Trace {
 	children := []*trace.Step{
-		{Zone: "com.", Server: server("ns1.com.", "192.0.2.2", 0), Rcode: "SERVFAIL", Kind: trace.KindError, RTT: 4 * time.Millisecond},
+		{Zone: "com.", Server: server("ns1.com.", "192.0.2.2", 0), Rcode: "SERVFAIL", Kind: trace.KindError, RTT: 4 * time.Millisecond,
+			Notes: []string{"retried without EDNS0", "truncated over udp"}},
 		{Zone: "com.", Server: server("ns2.com.", "192.0.2.3", 0), Rcode: "NXDOMAIN", Flags: trace.Flags{AA: true}, Kind: trace.KindNXDomain, RTT: 4 * time.Millisecond},
 		{Zone: "com.", Server: server("ns3.com.", "192.0.2.4", 0), Rcode: "NOERROR", Flags: trace.Flags{AA: true}, Kind: trace.KindNoData, RTT: 1250 * time.Microsecond},
 		{
@@ -87,6 +88,14 @@ func kinds() *trace.Trace {
 			Flags: trace.Flags{AA: true, TC: true, AD: true, DO: true}, Kind: trace.KindCNAME, RTT: 340 * time.Microsecond,
 			DNSSEC:  &trace.DNSSECStatus{State: trace.Bogus, Reason: "signature does not verify"},
 			Records: []trace.RR{{Name: "alias.example.com.", TTL: 300, Type: "CNAME", Data: "target.example.net."}},
+			// A walk of its own, drawn where it was needed.
+			Children: []*trace.Step{{
+				Zone: ".", Kind: trace.KindZone, Aside: true, Notes: []string{"resolving ns.outside.net."},
+				Children: []*trace.Step{
+					{Zone: ".", Server: server("c.root-servers.net.", "192.33.4.12", 0), Rcode: "NOERROR", RTT: 7 * time.Millisecond,
+						Kind: trace.KindTimeout},
+				},
+			}},
 		},
 		{Zone: "com.", Kind: trace.KindError, Err: "gave up after 4 queries"},
 	}
