@@ -102,6 +102,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
+	live.Summary(stdout, tr)
 	return verdict(tr)
 }
 
@@ -133,6 +134,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	}
 	if live != nil {
 		config.Stepped = live.Draw
+		config.Asking = live.Asking
 	}
 
 	// Only a datagram can be truncated, and only plain DNS is worth falling

@@ -80,6 +80,19 @@ Each of these has been a bug, or would be a silent regression.
   smear the drawing down the terminal. The frames are scratch — they are wiped
   and the finished tree is written where they stood, byte for byte what a run
   without `--live` prints.
+- **A live frame is a tree and a tail, and only the tree may read the trace.**
+  The tail — the queries in flight and the footer — is redrawn on a timer, from
+  a goroutine that never touches the trace the walk is still building; it works
+  off the counters `Config.Asking` feeds it and the lines the last `Stepped`
+  rendered. A tick goes back over the tail rows alone and leaves the tree where
+  it is; a screen that has been resized falls back to a whole frame, since the
+  cut and the width every line was drawn to have both just changed.
+- **`Config.Asking` is the only thing that says a walk is waiting.** Nothing
+  joins the trace until an answer is in, so between one hop and the next
+  `Stepped` has nothing to report and a slow server is indistinguishable from a
+  hang. The hook returns the function that ends the query; `--all` has several
+  out at once, so it is called from several goroutines and may not read the
+  trace.
 
 ## The DNS library
 

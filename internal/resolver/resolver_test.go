@@ -165,6 +165,47 @@ func TestResolveStepped(t *testing.T) {
 	}
 }
 
+// TestResolveAsking covers the hook a live drawing waits on: a query is
+// announced before it goes out and finished when it comes back, so that
+// nothing is left in flight by the end of a walk.
+func TestResolveAsking(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		asked  int
+		flight int
+	)
+	cfg := resolver.Config{
+		All: true, // so that several are in flight at once
+		Asking: func(zone string, _ trace.Server) func() {
+			mu.Lock()
+			defer mu.Unlock()
+			if zone == "" {
+				t.Error("got a query about no zone, want the one being asked about")
+			}
+			asked, flight = asked+1, flight+1
+			return func() {
+				mu.Lock()
+				defer mu.Unlock()
+				flight--
+			}
+		},
+	}
+
+	res := newResolver(t, internet(t), cfg)
+	if _, err := res.Resolve(t.Context(), "www.example.com", "A"); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if asked == 0 {
+		t.Fatal("got no queries announced, want one per query sent")
+	}
+	if flight != 0 {
+		t.Errorf("got %d queries still in flight, want every one of them finished", flight)
+	}
+}
+
 // TestResolveSkippedZoneCut covers a zone cut that label counting would miss:
 // the root refers straight to co.uk., two labels down.
 func TestResolveSkippedZoneCut(t *testing.T) {

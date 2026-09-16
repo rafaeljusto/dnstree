@@ -126,11 +126,40 @@ answer in a signed zone is reported as indeterminate rather than claimed.
 ### Watching it happen
 
 `--live` redraws the tree in place as the walk makes it, so the referrals
-arrive one at a time instead of all at once at the end. The frames are scratch:
-when the walk is over they are wiped and the finished tree is written where
-they stood, which is exactly what a run without `--live` prints. Off a terminal
-the flag does nothing, and it cannot be combined with `--format json` or
-`--format dot`, both of which are written once, at the end.
+arrive one at a time instead of all at once at the end. The hop that just
+landed is pointed at, `└─▸`, so the eye finds it without reading the tree
+again.
+
+Under the tree sits the part that moves on its own, on a timer rather than on a
+hop — here, half a second into a walk:
+
+```
+. (root)
+├── a.root-servers.net. 198.41.0.4  250ms  NOERROR  referral → com.
+│   └─▸ l.gtld-servers.net. 192.41.162.30  260ms  NOERROR  referral → example.com.
+├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── b.root-servers.net. 170.247.170.2  (not queried)
+└── (and 24 more not queried)
+    ⠧ asking hera.ns.cloudflare.com. 108.162.192.162  example.com.  51ms
+
+⠧  562ms · 3 queries · 3 servers · . → com. → example.com.
+```
+
+A query is named there from the moment it goes out until the moment it comes
+back, which is what tells a walk waiting on a silent server apart from a walk
+that has hung — nothing joins the tree until an answer does. The footer carries
+the clock, what the walk has spent, and the zones it has come down through.
+
+The frames are scratch: when the walk is over they are wiped and the finished
+tree is written where they stood, which is exactly what a run without `--live`
+prints, followed by one line saying how it went:
+
+```
+✔ answered in 747ms · 3 queries · 3 servers
+```
+
+Off a terminal the flag does nothing, and it cannot be combined with
+`--format json` or `--format dot`, both of which are written once, at the end.
 
 ### Other formats
 

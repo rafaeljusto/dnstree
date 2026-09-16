@@ -26,20 +26,30 @@ const (
 type Options struct {
 	Charset Charset
 	Color   ColorMode
+
+	// Highlight is the hop to point at, which a live drawing sets to the one
+	// that just joined the walk. Its branch grows an arrowhead, so the eye
+	// catches what landed without waiting for colour. Nil points at nothing.
+	Highlight *trace.Step
 }
 
-// glyphs are the pieces a tree is drawn with.
+// glyphs are the pieces a tree is drawn with. Every branch is four cells wide,
+// marked or not, so that pointing at a hop does not shift the lines under it.
 type glyphs struct {
 	branch, lastBranch string // in front of a node
+	mark, lastMark     string // in front of the node being pointed at
 	vertical, blank    string // carried down to its children
 	arrow              string
 	icons              bool // whether a hop is introduced by an emoji
 }
 
 var charsets = map[Charset]glyphs{
-	Unicode: {branch: "├── ", lastBranch: "└── ", vertical: "│   ", blank: "    ", arrow: "→"},
-	ASCII:   {branch: "|-- ", lastBranch: "`-- ", vertical: "|   ", blank: "    ", arrow: "->"},
-	Emoji:   {branch: "├── ", lastBranch: "└── ", vertical: "│   ", blank: "    ", arrow: "→", icons: true},
+	Unicode: {branch: "├── ", lastBranch: "└── ", mark: "├─▸ ", lastMark: "└─▸ ",
+		vertical: "│   ", blank: "    ", arrow: "→"},
+	ASCII: {branch: "|-- ", lastBranch: "`-- ", mark: "|-> ", lastMark: "`-> ",
+		vertical: "|   ", blank: "    ", arrow: "->"},
+	Emoji: {branch: "├── ", lastBranch: "└── ", mark: "├─▸ ", lastMark: "└─▸ ",
+		vertical: "│   ", blank: "    ", arrow: "→", icons: true},
 }
 
 // The emoji a walk is told in. They sit in the label rather than in the
@@ -77,9 +87,10 @@ func Render(w io.Writer, tr *trace.Trace, opts Options) error {
 	}
 
 	renderer := &renderer{
-		glyphs: set,
-		paint:  painter(colorEnabled(w, opts.Color)),
-		out:    bufio.NewWriter(w),
+		glyphs:    set,
+		paint:     painter(colorEnabled(w, opts.Color)),
+		highlight: opts.Highlight,
+		out:       bufio.NewWriter(w),
 	}
 	if tr != nil {
 		renderer.render(tr)
@@ -88,9 +99,10 @@ func Render(w io.Writer, tr *trace.Trace, opts Options) error {
 }
 
 type renderer struct {
-	glyphs glyphs
-	paint  painter
-	out    *bufio.Writer
+	glyphs    glyphs
+	paint     painter
+	highlight *trace.Step
+	out       *bufio.Writer
 }
 
 func (r *renderer) render(tr *trace.Trace) {
@@ -109,7 +121,7 @@ func (r *renderer) render(tr *trace.Trace) {
 
 // step draws one hop and everything it led to.
 func (r *renderer) step(step *trace.Step, prefix string, last bool) {
-	r.write(prefix + r.branch(last) + r.label(step) + "\n")
+	r.write(prefix + r.branch(last, step == r.highlight) + r.label(step) + "\n")
 	r.children(step, prefix+r.continuation(last))
 }
 
@@ -121,7 +133,7 @@ func (r *renderer) children(step *trace.Step, prefix string) {
 
 	for _, record := range step.Records {
 		drawn++
-		r.write(prefix + r.branch(drawn == total) + r.recordLabel(record) + "\n")
+		r.write(prefix + r.branch(drawn == total, false) + r.recordLabel(record) + "\n")
 	}
 	for _, child := range step.Children {
 		drawn++
@@ -136,9 +148,14 @@ func (r *renderer) write(text string) {
 	_, _ = r.out.WriteString(text)
 }
 
-func (r *renderer) branch(last bool) string {
-	if last {
+func (r *renderer) branch(last, marked bool) string {
+	switch {
+	case last && marked:
+		return r.glyphs.lastMark
+	case last:
 		return r.glyphs.lastBranch
+	case marked:
+		return r.glyphs.mark
 	}
 	return r.glyphs.branch
 }

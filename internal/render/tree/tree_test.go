@@ -155,7 +155,8 @@ func TestRender(t *testing.T) {
 func TestRenderASCII(t *testing.T) {
 	for _, tr := range []*trace.Trace{resolution(), kinds()} {
 		var got bytes.Buffer
-		if err := tree.Render(&got, tr, tree.Options{Charset: tree.ASCII}); err != nil {
+		opts := tree.Options{Charset: tree.ASCII, Highlight: tr.Root.Children[0]}
+		if err := tree.Render(&got, tr, opts); err != nil {
 			t.Fatalf("Render: %v", err)
 		}
 		for i, r := range got.String() {
@@ -163,6 +164,46 @@ func TestRenderASCII(t *testing.T) {
 				t.Fatalf("got %q at byte %d, want ASCII only", r, i)
 			}
 		}
+	}
+}
+
+// TestRenderHighlight is what a live frame points at, and the alignment it may
+// not cost: a marked branch is the same four cells wide as an unmarked one.
+func TestRenderHighlight(t *testing.T) {
+	tr := resolution()
+	marked := tr.Root.Children[0]
+
+	var plain, pointed bytes.Buffer
+	if err := tree.Render(&plain, tr, tree.Options{}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if err := tree.Render(&pointed, tr, tree.Options{Highlight: marked}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	if got := pointed.String(); !strings.Contains(got, "▸") {
+		t.Errorf("got %q, want the hop that just landed pointed at", got)
+	}
+	if got, want := strings.Count(pointed.String(), "▸"), 1; got != want {
+		t.Errorf("got %d hops pointed at, want %d", got, want)
+	}
+
+	// Every line keeps its width, and only the one branch differs.
+	lines, marks := strings.Split(plain.String(), "\n"), strings.Split(pointed.String(), "\n")
+	if len(lines) != len(marks) {
+		t.Fatalf("got %d lines, want the %d of a tree drawn without a mark", len(marks), len(lines))
+	}
+	var differ int
+	for i := range lines {
+		if len([]rune(lines[i])) != len([]rune(marks[i])) {
+			t.Errorf("got %q, want it the width of %q", marks[i], lines[i])
+		}
+		if lines[i] != marks[i] {
+			differ++
+		}
+	}
+	if differ != 1 {
+		t.Errorf("got %d lines changed, want only the hop pointed at", differ)
 	}
 }
 

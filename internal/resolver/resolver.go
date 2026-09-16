@@ -93,6 +93,13 @@ type Config struct {
 	// It is called from several goroutines at once.
 	Discovered func(netip.Addr)
 
+	// Asking is handed each query as it goes out and returns the function to
+	// call when it comes back; a nil return is fine. It is what tells a live
+	// drawing that a walk is waiting rather than stuck, which Stepped cannot:
+	// nothing joins the trace until the answer is in. --all has several queries
+	// out at once, so it is called from several goroutines.
+	Asking func(zone string, server trace.Server) (done func())
+
 	// CheckNS asks the zone it ends in for its own NS RRset and warns when that
 	// does not match what the parent delegated. It costs one more query.
 	CheckNS bool
@@ -391,6 +398,11 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	server.Port = r.cfg.Transport.Port()
 	if r.cfg.Discovered != nil {
 		r.cfg.Discovered(server.IP)
+	}
+	if r.cfg.Asking != nil {
+		if done := r.cfg.Asking(zone, server); done != nil {
+			defer done()
+		}
 	}
 	step := &trace.Step{Zone: zone, Server: server, Proto: r.cfg.Transport.Proto()}
 

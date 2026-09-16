@@ -31,9 +31,13 @@ func walk(hops int) *trace.Trace {
 	return &trace.Trace{Root: root}
 }
 
+// tailRows is what every frame carries under the tree: a blank line and the
+// footer, and nothing waiting for an answer.
+const tailRows = 2
+
 func TestLiveDraw(t *testing.T) {
 	var buf bytes.Buffer
-	live := &Live{w: &buf, opts: Options{Color: ColorNever}}
+	live := newLive(&buf, Options{Color: ColorNever})
 
 	live.draw(walk(1))
 	first := buf.String()
@@ -43,7 +47,7 @@ func TestLiveDraw(t *testing.T) {
 	if strings.Contains(first, cursorUp) {
 		t.Errorf("got %q, want no going up over a frame that is not there", first)
 	}
-	if got, want := live.rows, 2; got != want {
+	if got, want := live.rows, 2+tailRows; got != want {
 		t.Errorf("got %d rows, want %d", got, want)
 	}
 
@@ -52,10 +56,10 @@ func TestLiveDraw(t *testing.T) {
 	buf.Reset()
 	live.draw(walk(2))
 	second := buf.String()
-	if want := strings.Repeat(cursorUp, 2) + "\r"; !strings.HasPrefix(second, want) {
+	if want := strings.Repeat(cursorUp, 2+tailRows) + "\r"; !strings.HasPrefix(second, want) {
 		t.Errorf("got %q, want it to start %q", second, want)
 	}
-	if got, want := strings.Count(second, eraseLine), 3; got != want {
+	if got, want := strings.Count(second, eraseLine), 3+tailRows; got != want {
 		t.Errorf("got %d lines wiped, want %d", got, want)
 	}
 	if !strings.HasSuffix(second, eraseBelow) {
@@ -64,7 +68,7 @@ func TestLiveDraw(t *testing.T) {
 
 	buf.Reset()
 	live.Clear()
-	want := strings.Repeat(cursorUp, 3) + "\r" + eraseBelow + showCursor
+	want := strings.Repeat(cursorUp, 3+tailRows) + "\r" + eraseBelow + showCursor
 	if got := buf.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -78,7 +82,7 @@ func TestLiveDraw(t *testing.T) {
 // took its place.
 func TestLiveDrawTall(t *testing.T) {
 	var buf bytes.Buffer
-	live := &Live{w: &buf, opts: Options{Color: ColorNever}}
+	live := newLive(&buf, Options{Color: ColorNever})
 	live.draw(walk(fallbackHeight * 2))
 
 	if got, want := live.rows, fallbackHeight-1; got != want {
@@ -91,7 +95,7 @@ func TestLiveDrawTall(t *testing.T) {
 
 func TestLiveDrawThrottle(t *testing.T) {
 	var buf bytes.Buffer
-	live := &Live{w: &buf, opts: Options{Color: ColorNever}}
+	live := newLive(&buf, Options{Color: ColorNever})
 
 	live.Draw(walk(1))
 	if buf.Len() == 0 {
@@ -120,7 +124,12 @@ func TestLiveNowhere(t *testing.T) {
 		t.Fatalf("got %v, want no drawing on something that is not a terminal", live)
 	}
 
-	live.Draw(walk(1)) // a nil drawing draws nothing, rather than panicking
+	// A nil drawing does nothing, rather than panicking.
+	live.Draw(walk(1))
+	if done := live.Asking(".", trace.Server{}); done != nil {
+		t.Error("got something to call back, want nothing from a drawing that is not there")
+	}
+	live.Summary(&buf, walk(1))
 	live.Clear()
 	if buf.Len() != 0 {
 		t.Errorf("got %q, want nothing", buf.String())
@@ -188,4 +197,203 @@ func width(s string) int {
 		previous = r
 	}
 	return width
+}
+
+// TestLiveAsking covers what Stepped cannot say: between one hop and the next
+// the trace does not change at all, and the only sign that a walk is waiting
+// rather than wedged is the query it is waiting on.
+func TestLiveAsking(t *testing.T) {
+	var buf bytes.Buffer
+	live := newLive(&buf, Options{Color: ColorNever})
+
+	done := live.Asking("com.", trace.Server{
+		Name: "b.gtld-servers.net.", IP: netip.MustParseAddr("192.33.14.30"), Port: 53,
+	})
+	live.draw(walk(1))
+
+	frame := buf.String()
+	if want := "asking b.gtld-servers.net. 192.33.14.30"; !strings.Contains(frame, want) {
+		t.Errorf("got %q, want it to carry %q", frame, want)
+	}
+	if want := "1 query"; !strings.Contains(frame, want) {
+		t.Errorf("got %q, want it to carry %q", frame, want)
+	}
+	if got, want := live.tail, tailRows+1; got != want {
+		t.Errorf("got %d rows that move on their own, want %d", got, want)
+	}
+
+	// An answer takes the query off the screen, but not off the tally.
+	done()
+	buf.Reset()
+	live.draw(walk(1))
+	frame = buf.String()
+	if strings.Contains(frame, "asking") {
+		t.Errorf("got %q, want nothing in flight once it has come back", frame)
+	}
+	if want := "1 query"; !strings.Contains(frame, want) {
+		t.Errorf("got %q, want it to carry %q", frame, want)
+	}
+	if want := "1 server"; !strings.Contains(frame, want) {
+		t.Errorf("got %q, want it to carry %q", frame, want)
+	}
+}
+
+// TestLiveAskingMany is --all: more queries in flight than there is room to
+// name, which are counted instead so that the tail stays a tail.
+func TestLiveAskingMany(t *testing.T) {
+	var buf bytes.Buffer
+	live := newLive(&buf, Options{Color: ColorNever})
+
+	for i := range maxPending + 2 {
+		live.Asking("com.", trace.Server{IP: netip.AddrFrom4([4]byte{192, 0, 2, byte(i)})})
+	}
+	live.draw(walk(1))
+
+	frame := buf.String()
+	if got, want := strings.Count(frame, "asking"), maxPending; got != want {
+		t.Errorf("got %d queries named in %q, want %d", got, frame, want)
+	}
+	if want := "and 2 more in flight"; !strings.Contains(frame, want) {
+		t.Errorf("got %q, want it to carry %q", frame, want)
+	}
+}
+
+// TestLiveTick is the cheap redraw: the tree has not moved, so the cursor goes
+// back over the tail alone and leaves everything above it where it is.
+func TestLiveTick(t *testing.T) {
+	var buf bytes.Buffer
+	live := newLive(&buf, Options{Color: ColorNever})
+
+	live.tick() // nothing has been drawn, so there is nothing to go back over
+	if buf.Len() != 0 {
+		t.Errorf("got %q, want nothing before the first frame", buf.String())
+	}
+
+	live.draw(walk(2))
+	rows := live.rows
+	buf.Reset()
+
+	live.tick()
+	ticked := buf.String()
+	if want := strings.Repeat(cursorUp, tailRows) + "\r"; !strings.HasPrefix(ticked, want) {
+		t.Errorf("got %q, want it to start %q", ticked, want)
+	}
+	if got, want := strings.Count(ticked, eraseLine), tailRows; got != want {
+		t.Errorf("got %d lines wiped, want %d", got, want)
+	}
+	if got, want := live.rows, rows; got != want {
+		t.Errorf("got %d rows, want the %d that were there", got, want)
+	}
+}
+
+func TestLiveSummary(t *testing.T) {
+	answer := func() *trace.Trace {
+		tr := walk(1)
+		tr.Root.Children[0].Kind = trace.KindAnswer
+		tr.Elapsed = 412 * time.Millisecond
+		return tr
+	}
+
+	tests := map[string]struct {
+		trace *trace.Trace
+		want  string
+	}{
+		"answered": {trace: answer(), want: "answered in 412ms"},
+		"nothing answered": {
+			trace: &trace.Trace{Root: walk(1).Root, Elapsed: 3 * time.Second},
+			want:  "no answer in 3s",
+		},
+		"a broken chain outranks the answer": {
+			trace: func() *trace.Trace {
+				tr := answer()
+				tr.Root.Children[0].DNSSEC = &trace.DNSSECStatus{State: trace.Bogus}
+				return tr
+			}(),
+			want: "bogus in 412ms",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			live := newLive(&buf, Options{Color: ColorNever})
+			live.Asking(".", trace.Server{IP: netip.MustParseAddr("192.0.2.1")})
+			live.Summary(&buf, test.trace)
+
+			got := buf.String()
+			if !strings.Contains(got, test.want) {
+				t.Errorf("got %q, want it to carry %q", got, test.want)
+			}
+			if want := "1 query · 1 server"; !strings.Contains(got, want) {
+				t.Errorf("got %q, want it to carry %q", got, want)
+			}
+			if !strings.HasSuffix(got, "\n") {
+				t.Errorf("got %q, want a line of its own", got)
+			}
+		})
+	}
+}
+
+// TestLiveCrumbs is the walk so far, read off the branch it is working on.
+func TestLiveCrumbs(t *testing.T) {
+	live := newLive(&bytes.Buffer{}, Options{Color: ColorNever})
+
+	if got := live.crumbs(walk(2)); got != ". → a. → aa." {
+		t.Errorf("got %q, want the zones it went through", got)
+	}
+	if got, want := live.crumbs(walk(maxCrumbs+2)), elision+" → "; !strings.HasPrefix(got, want) {
+		t.Errorf("got %q, want it to start %q, since only the end of a long walk fits", got, want)
+	}
+	if got := live.crumbs(nil); got != "" {
+		t.Errorf("got %q, want nothing from a walk that has not started", got)
+	}
+}
+
+// TestNewest is what a frame points at. Children are appended as they are made
+// and a parent is always older than its children, so the hop that joined last
+// is at the end of the chain of last children — counting only the ones the walk
+// went through.
+func TestNewest(t *testing.T) {
+	tr := walk(3)
+	deepest := tr.Root.Children[0].Children[0].Children[0]
+	if got := newest(tr); got != deepest {
+		t.Errorf("got %v, want the hop at the bottom of the walk", got)
+	}
+
+	// The servers a hop did not need are attached after the one that answered.
+	// Pointing at those would walk the mark back up the tree every time.
+	tr.Root.Children = append(tr.Root.Children, &trace.Step{Zone: ".", Kind: trace.KindSkipped})
+	if got := newest(tr); got != deepest {
+		t.Errorf("got %v, want the hop the walk went through", got)
+	}
+
+	// A sibling that was queried is newer than the one before it.
+	sibling := &trace.Step{Zone: ".", Kind: trace.KindTimeout}
+	tr.Root.Children = append(tr.Root.Children, sibling)
+	if got := newest(tr); got != sibling {
+		t.Errorf("got %v, want the hop that joined last", got)
+	}
+
+	if got := newest(&trace.Trace{Root: &trace.Step{Zone: "."}}); got != nil {
+		t.Errorf("got %v, want nothing pointed at before the first hop", got)
+	}
+	if got := newest(nil); got != nil {
+		t.Errorf("got %v, want nothing", got)
+	}
+}
+
+// TestLiveCrumbsAside covers the detours: chasing a nameserver's address is a
+// walk of its own, and the zone it is about is not how far this one has come.
+func TestLiveCrumbsAside(t *testing.T) {
+	live := newLive(&bytes.Buffer{}, Options{Color: ColorNever})
+
+	tr := walk(1)
+	hop := tr.Root.Children[0]
+	hop.Children = append(hop.Children,
+		&trace.Step{Zone: "net.", Kind: trace.KindZone, Aside: true},
+		&trace.Step{Zone: "a.", Kind: trace.KindSkipped},
+	)
+	if got, want := live.crumbs(tr), ". → a."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
 }
