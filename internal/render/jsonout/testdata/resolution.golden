@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "question": {
+    "name": "www.example.com.",
+    "type": "A",
+    "class": "IN"
+  },
+  "elapsed_ms": 41.5,
+  "root": {
+    "zone": ".",
+    "kind": "zone",
+    "children": [
+      {
+        "zone": ".",
+        "kind": "referral",
+        "server": {
+          "name": "a.root-servers.net.",
+          "ip": "198.41.0.4",
+          "port": 53
+        },
+        "proto": "udp",
+        "rtt_ms": 12,
+        "rcode": "NOERROR",
+        "delegation": {
+          "zone": "com.",
+          "ns": [
+            "a.gtld-servers.net."
+          ],
+          "ds_present": true
+        },
+        "dnssec": {
+          "state": "insecure",
+          "reason": "the parent published no DS"
+        },
+        "children": [
+          {
+            "zone": "com.",
+            "kind": "timeout",
+            "server": {
+              "name": "b.gtld-servers.net.",
+              "ip": "192.33.14.30",
+              "port": 53
+            },
+            "proto": "udp",
+            "rtt_ms": 2000,
+            "error": "udp 192.33.14.30:53: i/o timeout"
+          },
+          {
+            "zone": "com.",
+            "kind": "referral",
+            "server": {
+              "name": "a.gtld-servers.net.",
+              "ip": "192.5.6.30",
+              "port": 53
+            },
+            "proto": "tcp",
+            "rtt_ms": 18,
+            "rcode": "NOERROR",
+            "notes": [
+              "truncated over udp"
+            ],
+            "delegation": {
+              "zone": "example.com.",
+              "ns": [
+                "a.iana-servers.net.",
+                "ns.outside.example."
+              ],
+              "glue": {
+                "a.iana-servers.net.": [
+                  "199.43.135.53"
+                ]
+              },
+              "out_of_bailiwick": [
+                "ns.outside.example."
+              ],
+              "ds_present": true
+            },
+            "dnssec": {
+              "state": "secure",
+              "algorithm": "ECDSAP256SHA256",
+              "digest": "SHA256"
+            },
+            "children": [
+              {
+                "zone": "example.com.",
+                "kind": "answer",
+                "server": {
+                  "name": "a.iana-servers.net.",
+                  "ip": "199.43.135.53",
+                  "port": 53,
+                  "asn": {
+                    "number": 10745,
+                    "prefix": "199.43.132.0/22",
+                    "country_code": "US",
+                    "registry": "arin",
+                    "allocated": "2010-03-30"
+                  }
+                },
+                "proto": "udp",
+                "rtt_ms": 9.4,
+                "rcode": "NOERROR",
+                "flags": {
+                  "aa": true,
+                  "do": true,
+                  "edns": true
+                },
+                "records": [
+                  {
+                    "name": "www.example.com.",
+                    "ttl": 3600,
+                    "type": "A",
+                    "data": "93.184.216.34"
+                  }
+                ],
+                "dnssec": {
+                  "state": "secure",
+                  "key_tags": [
+                    31589
+                  ],
+                  "algorithm": "ECDSAP256SHA256"
+                },
+                "children": [
+                  {
+                    "zone": "example.com.",
+                    "kind": "answer",
+                    "server": {
+                      "name": "a.iana-servers.net.",
+                      "ip": "199.43.135.53",
+                      "port": 53
+                    },
+                    "proto": "udp",
+                    "rtt_ms": 8,
+                    "rcode": "NOERROR",
+                    "flags": {
+                      "aa": true
+                    },
+                    "notes": [
+                      "DNSKEY of example.com."
+                    ],
+                    "aside": true
+                  }
+                ]
+              },
+              {
+                "zone": "example.com.",
+                "kind": "skipped",
+                "server": {
+                  "name": "b.iana-servers.net.",
+                  "ip": "199.43.133.53",
+                  "port": 53
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": [
+    "the delegation to example.com. lists a nameserver the zone does not"
+  ]
+}
