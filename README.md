@@ -1,7 +1,7 @@
 # dnstree
 
+[![release](https://img.shields.io/github/v/release/rafaeljusto/dnstree)](https://github.com/rafaeljusto/dnstree/releases)
 [![ci](https://github.com/rafaeljusto/dnstree/actions/workflows/ci.yml/badge.svg)](https://github.com/rafaeljusto/dnstree/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/rafaeljusto/dnstree)](https://goreportcard.com/report/github.com/rafaeljusto/dnstree)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **[rafaeljusto.github.io/dnstree](https://rafaeljusto.github.io/dnstree/)**
