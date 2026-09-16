@@ -53,7 +53,7 @@ www.example IN A   192.0.2.20
 )
 
 func TestResolve(t *testing.T) {
-	res := newResolver(t, internet(t), resolver.Budget{})
+	res := newResolver(t, internet(t), resolver.Config{})
 
 	tr, err := res.Resolve(t.Context(), "www.example.com", "A")
 	if err != nil {
@@ -123,7 +123,7 @@ func TestResolve(t *testing.T) {
 // TestResolveSkippedZoneCut covers a zone cut that label counting would miss:
 // the root refers straight to co.uk., two labels down.
 func TestResolveSkippedZoneCut(t *testing.T) {
-	res := newResolver(t, internet(t), resolver.Budget{})
+	res := newResolver(t, internet(t), resolver.Config{})
 
 	tr, err := res.Resolve(t.Context(), "www.example.co.uk", "A")
 	if err != nil {
@@ -164,7 +164,7 @@ ns.com.             IN A    192.0.2.2
 	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2"})
 	hierarchy.Add(fakens.Config{Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3"})
 
-	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Budget{}).Resolve(t.Context(), "www.example.com", "A")
+	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{}).Resolve(t.Context(), "www.example.com", "A")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -202,7 +202,7 @@ ns.example IN A    192.0.2.2
 	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
 	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2"})
 
-	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Budget{}).Resolve(t.Context(), "www.example.com", "A")
+	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{}).Resolve(t.Context(), "www.example.com", "A")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -223,7 +223,8 @@ ns.example IN A    192.0.2.2
 }
 
 // TestResolveOutOfBailiwickGlue covers the poisoning guard: addresses for a
-// nameserver outside the delegated zone are unsolicited and must be dropped.
+// nameserver outside the delegated zone are unsolicited, so the walk drops them
+// and goes to find the name itself.
 func TestResolveOutOfBailiwickGlue(t *testing.T) {
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
@@ -240,24 +241,34 @@ ns.outside.net.     IN A    192.0.2.2
 	})
 	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2"})
 
-	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Budget{}).Resolve(t.Context(), "www.example.com", "A")
+	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{}).Resolve(t.Context(), "www.example.com", "A")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 
-	steps := steps(tr)
-	if len(steps) != 1 {
-		t.Fatalf("got %d steps, want the walk to stop at the referral: %s", len(steps), format(steps))
+	referral := steps(tr)[0]
+	if referral.Kind != trace.KindReferral {
+		t.Fatalf("got %s first, want the referral: %s", referral.Kind, format(steps(tr)))
 	}
-	delegation := steps[0].Delegation
-	if len(delegation.Glue) != 0 {
-		t.Errorf("got glue %v, want the out-of-bailiwick address dropped", delegation.Glue)
+	if len(referral.Delegation.Glue) != 0 {
+		t.Errorf("got glue %v, want the out-of-bailiwick address dropped", referral.Delegation.Glue)
 	}
-	if len(delegation.GlueLess) != 1 || delegation.GlueLess[0] != "ns.outside.net." {
-		t.Errorf("got glue-less %v, want ns.outside.net.", delegation.GlueLess)
+	if got := referral.Delegation.OutOfBailiwick; len(got) != 1 || got[0] != "ns.outside.net." {
+		t.Errorf("got out-of-bailiwick %v, want ns.outside.net.", got)
 	}
-	if len(tr.Warnings) != 1 {
-		t.Errorf("got warnings %q, want one about the unusable delegation", tr.Warnings)
+
+	// The name is chased on its own instead, as a branch of the referral.
+	var side *trace.Step
+	for _, child := range referral.Children {
+		if child.Kind == trace.KindZone {
+			side = child
+		}
+	}
+	if side == nil {
+		t.Fatalf("got no side resolution under the referral, want one for ns.outside.net.")
+	}
+	if len(side.Notes) != 1 || side.Notes[0] != "resolving ns.outside.net." {
+		t.Errorf("got notes %q, want the branch to say what it is resolving", side.Notes)
 	}
 }
 
@@ -277,7 +288,7 @@ func TestResolveKinds(t *testing.T) {
 		"nxdomain": {name: "nope.example.com", qtype: "A", kind: trace.KindNXDomain},
 	}
 
-	res := newResolver(t, internet(t), resolver.Budget{})
+	res := newResolver(t, internet(t), resolver.Config{})
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			tr, err := res.Resolve(t.Context(), test.name, test.qtype)
@@ -316,7 +327,7 @@ func TestResolveBudget(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			res := newResolver(t, internet(t), test.budget)
+			res := newResolver(t, internet(t), resolver.Config{Budget: test.budget})
 
 			tr, err := res.Resolve(t.Context(), "www.example.com", "A")
 			if err != nil {
@@ -385,7 +396,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestResolveBadQuestion(t *testing.T) {
-	res := newResolver(t, internet(t), resolver.Budget{})
+	res := newResolver(t, internet(t), resolver.Config{})
 
 	if _, err := res.Resolve(t.Context(), "www.example.com", "NOPE"); err == nil {
 		t.Error("got no error for an unknown type, want one")
@@ -430,19 +441,31 @@ func internet(tb testing.TB) harness {
 	return harness{hierarchy, root}
 }
 
-func newResolver(tb testing.TB, h harness, budget resolver.Budget) *resolver.Resolver {
+// newResolver fills in whatever the test did not care to set.
+func newResolver(tb testing.TB, h harness, cfg resolver.Config) *resolver.Resolver {
 	tb.Helper()
 
-	res, err := resolver.New(resolver.Config{
-		Transport: h.hierarchy.Transport(transport.NewUDP(transport.Config{Timeout: 500 * time.Millisecond})),
-		Roots:     []trace.Server{h.root.Nameserver()},
-		Budget:    budget,
-	})
+	if cfg.Transport == nil {
+		cfg.Transport = h.carry(transport.NewUDP(fast))
+	}
+	if len(cfg.Roots) == 0 {
+		cfg.Roots = []trace.Server{h.root.Nameserver()}
+	}
+
+	res, err := resolver.New(cfg)
 	if err != nil {
 		tb.Fatalf("resolver.New: %v", err)
 	}
 	return res
 }
+
+// carry wraps a transport so that it reaches the servers of the hierarchy.
+func (h harness) carry(inner transport.Transport) transport.Transport {
+	return h.hierarchy.Transport(inner)
+}
+
+// fast keeps the failure cases from sitting on the default timeout.
+var fast = transport.Config{Timeout: 500 * time.Millisecond}
 
 // steps is every query of a trace, in the order it was made.
 func steps(tr *trace.Trace) []*trace.Step {
