@@ -15,12 +15,14 @@ import (
 	"codeberg.org/miekg/dns"
 )
 
+// The ports each transport expects a nameserver to listen on.
 const (
-	// The ports each transport expects a nameserver to listen on.
 	PortDNS = 53
 	PortDoT = 853
 	PortDoH = 443
+)
 
+const (
 	// DefaultTimeout bounds a single query.
 	DefaultTimeout = 2 * time.Second
 

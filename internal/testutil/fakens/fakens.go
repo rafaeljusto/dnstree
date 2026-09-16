@@ -218,9 +218,6 @@ func (s *Server) publish(rr dns.RR) {
 	s.zone.Store(new(append(updated, rr)))
 }
 
-//go:fix inline
-func ptr(records []dns.RR) *[]dns.RR { return new(records) }
-
 // Queries returns what the server was asked, oldest first.
 func (s *Server) Queries() []Query {
 	s.mu.Lock()
@@ -316,7 +313,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	if s.behaviour.TruncateUDP && dnsutil.Network(w) == "udp" {
 		dnsutil.Truncate(reply)
 	}
-	reply.WriteTo(w)
+	_, _ = reply.WriteTo(w)
 }
 
 // respond fills in the reply the way an authoritative server would: an answer,
@@ -330,7 +327,8 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 	if delegation := s.delegation(name); len(delegation) > 0 {
 		// The delegated NS RRset is never signed by the parent; the DS is what
 		// the parent puts its name to.
-		reply.Ns = append(delegation, s.ds(delegation[0].Header().Name)...)
+		reply.Ns = delegation
+		reply.Ns = append(reply.Ns, s.ds(delegation[0].Header().Name)...)
 		reply.Extra = s.glue(delegation)
 		return // a referral carries no AA
 	}

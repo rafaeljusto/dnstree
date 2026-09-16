@@ -80,6 +80,6 @@ func (s *Server) listenDoH(tb testing.TB, host string) {
 	mux.Handle(dnshttp.Path, s)
 	server := &http.Server{Handler: mux, ReadTimeout: 5 * time.Second, TLSConfig: config}
 
-	go server.Serve(tls.NewListener(listener, config))
-	tb.Cleanup(func() { server.Shutdown(context.Background()) })
+	go func() { _ = server.Serve(tls.NewListener(listener, config)) }()
+	tb.Cleanup(func() { _ = server.Shutdown(context.Background()) })
 }

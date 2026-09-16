@@ -15,6 +15,7 @@ import (
 // Charset picks the branch glyphs.
 type Charset string
 
+// The charsets a tree can be drawn with.
 const (
 	Unicode Charset = "unicode" // the default
 	ASCII   Charset = "ascii"   // for documentation and markdown
@@ -67,17 +68,17 @@ type renderer struct {
 
 func (r *renderer) render(tr *trace.Trace) {
 	if tr.Root != nil {
-		r.out.WriteString(r.label(tr.Root) + "\n")
+		r.write(r.label(tr.Root) + "\n")
 		r.children(tr.Root, "")
 	}
 	for _, warning := range tr.Warnings {
-		r.out.WriteString(r.paint.paint("warning: "+warning, yellow) + "\n")
+		r.write(r.paint.paint("warning: "+warning, yellow) + "\n")
 	}
 }
 
 // step draws one hop and everything it led to.
 func (r *renderer) step(step *trace.Step, prefix string, last bool) {
-	r.out.WriteString(prefix + r.branch(last) + r.label(step) + "\n")
+	r.write(prefix + r.branch(last) + r.label(step) + "\n")
 	r.children(step, prefix+r.continuation(last))
 }
 
@@ -89,12 +90,19 @@ func (r *renderer) children(step *trace.Step, prefix string) {
 
 	for _, record := range step.Records {
 		drawn++
-		r.out.WriteString(prefix + r.branch(drawn == total) + r.recordLabel(record) + "\n")
+		r.write(prefix + r.branch(drawn == total) + r.recordLabel(record) + "\n")
 	}
 	for _, child := range step.Children {
 		drawn++
 		r.step(child, prefix, drawn == total)
 	}
+}
+
+// write adds a line to the output. A bufio writer holds the first error it
+// meets until Flush, which is what Render returns, so the way there needs no
+// checking of its own.
+func (r *renderer) write(text string) {
+	_, _ = r.out.WriteString(text)
 }
 
 func (r *renderer) branch(last bool) string {

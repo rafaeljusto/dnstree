@@ -8,6 +8,7 @@ import (
 // ColorMode is when to emit ANSI escapes.
 type ColorMode string
 
+// When a rendering emits ANSI escapes.
 const (
 	ColorAuto   ColorMode = "auto" // only for a terminal that wants colour
 	ColorAlways ColorMode = "always"

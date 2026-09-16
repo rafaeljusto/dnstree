@@ -32,6 +32,7 @@ type Question struct {
 // StepKind is what happened at a hop.
 type StepKind string
 
+// What a hop turned out to be.
 const (
 	KindZone     StepKind = "zone"     // the synthetic node a trace starts from
 	KindReferral StepKind = "referral" // sent us one zone further down
@@ -141,6 +142,7 @@ type Delegation struct {
 // DNSSECState is how far the chain of trust got.
 type DNSSECState string
 
+// How far the chain of trust got.
 const (
 	Secure        DNSSECState = "secure"
 	Insecure      DNSSECState = "insecure"

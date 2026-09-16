@@ -4,6 +4,7 @@ package dnssec
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -188,8 +189,8 @@ type unsupportedError struct{ reason string }
 func (e unsupportedError) Error() string { return e.reason }
 
 func unsupported(err error) bool {
-	_, ok := err.(unsupportedError)
-	return ok
+	var unsupported unsupportedError
+	return errors.As(err, &unsupported)
 }
 
 // dsRecords are the DS records of zone in an authority section.

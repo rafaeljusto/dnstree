@@ -95,8 +95,8 @@ func (t *hierarchyTransport) Proto() string { return t.inner.Proto() }
 func (t *hierarchyTransport) Port() uint16 { return t.inner.Port() }
 
 func (t *hierarchyTransport) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, name string) (*dns.Msg, time.Duration, error) {
-	if real, known := t.hierarchy.real[server.Addr()]; known {
-		server = real.listenerFor(t.inner.Proto())
+	if behind, known := t.hierarchy.real[server.Addr()]; known {
+		server = behind.listenerFor(t.inner.Proto())
 	}
 	return t.inner.Exchange(ctx, req, server, name)
 }

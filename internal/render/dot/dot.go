@@ -48,33 +48,44 @@ func (g *graph) render(tr *trace.Trace) {
 		g.collect(tr.Root, "")
 	}
 
-	g.out.WriteString("digraph dnstree {\n")
-	g.out.WriteString("\trankdir=LR;\n")
-	g.out.WriteString("\tnode [shape=box, style=rounded, fontname=\"monospace\", fontsize=10];\n")
-	g.out.WriteString("\tedge [fontname=\"monospace\", fontsize=9];\n")
+	g.write("digraph dnstree {\n")
+	g.write("\trankdir=LR;\n")
+	g.write("\tnode [shape=box, style=rounded, fontname=\"monospace\", fontsize=10];\n")
+	g.write("\tedge [fontname=\"monospace\", fontsize=9];\n")
 	if tr != nil {
-		g.out.WriteString("\tlabel=" + quote(caption(tr)) + ";\n")
-		g.out.WriteString("\tlabelloc=t;\n")
+		g.write("\tlabel=" + quote(caption(tr)) + ";\n")
+		g.write("\tlabelloc=t;\n")
 	}
 
 	for i, zone := range g.zones {
-		fmt.Fprintf(g.out, "\n\tsubgraph cluster_%d {\n", i)
-		g.out.WriteString("\t\tlabel=" + quote(zone) + ";\n")
-		g.out.WriteString("\t\tstyle=dashed;\n")
-		g.out.WriteString("\t\tcolor=gray60;\n")
+		g.writef("\n\tsubgraph cluster_%d {\n", i)
+		g.write("\t\tlabel=" + quote(zone) + ";\n")
+		g.write("\t\tstyle=dashed;\n")
+		g.write("\t\tcolor=gray60;\n")
 		for _, node := range g.nodes[zone] {
-			fmt.Fprintf(g.out, "\t\t%s [label=%s%s];\n", node.id, quote(label(node.step)), attributes(node.step))
+			g.writef("\t\t%s [label=%s%s];\n", node.id, quote(label(node.step)), attributes(node.step))
 		}
-		g.out.WriteString("\t}\n")
+		g.write("\t}\n")
 	}
 
 	if len(g.edges) > 0 {
-		g.out.WriteString("\n")
+		g.write("\n")
 	}
 	for _, edge := range g.edges {
-		fmt.Fprintf(g.out, "\t%s -> %s%s;\n", edge.from, edge.to, edgeAttributes(edge.step))
+		g.writef("\t%s -> %s%s;\n", edge.from, edge.to, edgeAttributes(edge.step))
 	}
-	g.out.WriteString("}\n")
+	g.write("}\n")
+}
+
+// write and writef add to the output. A bufio writer holds the first error it
+// meets until Flush, which is what Render returns, so the way there needs no
+// checking of its own.
+func (g *graph) write(text string) {
+	_, _ = g.out.WriteString(text)
+}
+
+func (g *graph) writef(format string, args ...any) {
+	_, _ = fmt.Fprintf(g.out, format, args...)
 }
 
 // collect walks the trace, giving every step a node and every parent an edge to
