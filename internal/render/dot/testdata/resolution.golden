@@ -1,0 +1,39 @@
+digraph dnstree {
+	rankdir=LR;
+	node [shape=box, style=rounded, fontname="monospace", fontsize=10];
+	edge [fontname="monospace", fontsize=9];
+	label="dnstree www.example.com. A\nwarning: the delegation to example.com. lists a nameserver the zone does not";
+	labelloc=t;
+
+	subgraph cluster_0 {
+		label=".";
+		style=dashed;
+		color=gray60;
+		n0 [label=".", shape=oval, color=gray40];
+		n1 [label="a.root-servers.net.\n198.41.0.4\nNOERROR referral\n[insecure]"];
+	}
+
+	subgraph cluster_1 {
+		label="com.";
+		style=dashed;
+		color=gray60;
+		n2 [label="b.gtld-servers.net.\n192.33.14.30\ntimeout\nudp 192.33.14.30:53: i/o timeout", color=firebrick];
+		n3 [label="a.gtld-servers.net.\n192.5.6.30\nNOERROR referral\n[secure]\n(truncated over udp)"];
+	}
+
+	subgraph cluster_2 {
+		label="example.com.";
+		style=dashed;
+		color=gray60;
+		n4 [label="a.iana-servers.net.\n199.43.135.53\nAS10745\nNOERROR answer\n[secure]\nwww.example.com. A 93.184.216.34", color=darkgreen];
+		n5 [label="a.iana-servers.net.\n199.43.135.53\nNOERROR answer\n(DNSKEY of example.com.)", color=darkgreen];
+		n6 [label="b.iana-servers.net.\n199.43.133.53\nskipped", color=gray60, fontcolor=gray40, style="rounded,dashed"];
+	}
+
+	n0 -> n1 [label="12ms"];
+	n1 -> n2 [label="2s"];
+	n1 -> n3 [label="18ms"];
+	n3 -> n4 [label="9.4ms"];
+	n4 -> n5 [label="8ms", style=dashed, color=gray60];
+	n3 -> n6 [style=dashed, color=gray60];
+}
