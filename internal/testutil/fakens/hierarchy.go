@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"codeberg.org/miekg/dns"
+	"codeberg.org/miekg/dns/dnsutil"
 
 	"github.com/rafaeljusto/dnstree/internal/transport"
 )
@@ -18,13 +19,14 @@ import (
 // follows the wrong address reaches nothing.
 type Hierarchy struct {
 	tb      testing.TB
-	servers map[netip.Addr]netip.AddrPort
+	servers []*Server
+	real    map[netip.Addr]netip.AddrPort
 }
 
 // NewHierarchy returns an empty hierarchy.
 func NewHierarchy(tb testing.TB) *Hierarchy {
 	tb.Helper()
-	return &Hierarchy{tb: tb, servers: make(map[netip.Addr]netip.AddrPort)}
+	return &Hierarchy{tb: tb, real: make(map[netip.Addr]netip.AddrPort)}
 }
 
 // Add starts one more nameserver. Its declared address must be set, and must be
@@ -36,11 +38,43 @@ func (h *Hierarchy) Add(cfg Config) *Server {
 		h.tb.Fatalf("fakens: the %s server has no declared address", cfg.Origin)
 	}
 	server := New(h.tb, cfg)
-	if _, taken := h.servers[server.Declared]; taken {
+	if _, taken := h.real[server.Declared]; taken {
 		h.tb.Fatalf("fakens: %s is already declared by another server", server.Declared)
 	}
-	h.servers[server.Declared] = server.Addr
+	h.real[server.Declared] = server.Addr
+	h.servers = append(h.servers, server)
+	h.publishDS(server)
 	return server
+}
+
+// publishDS hands the DS of every signed zone to the server of its parent, the
+// way a registry would, whichever order the zones were added in. A zone set up
+// with NoDS is left unvouched for, which is how a delegation goes insecure.
+func (h *Hierarchy) publishDS(added *Server) {
+	for _, child := range h.servers {
+		if child.signer == nil || child.behaviour.NoDS {
+			continue
+		}
+		parent := h.parentOf(child)
+		if parent == nil || (parent != added && child != added) {
+			continue
+		}
+		parent.publish(child.signer.ds())
+	}
+}
+
+// parentOf is the server of the closest zone above this one.
+func (h *Hierarchy) parentOf(child *Server) *Server {
+	var parent *Server
+	for _, candidate := range h.servers {
+		switch {
+		case candidate == child || dns.EqualName(candidate.origin, child.origin):
+		case !dnsutil.IsBelow(candidate.origin, child.origin):
+		case parent == nil || dnsutil.Labels(candidate.origin) > dnsutil.Labels(parent.origin):
+			parent = candidate
+		}
+	}
+	return parent
 }
 
 // Transport wraps inner so that queries sent to a declared address reach the
@@ -58,7 +92,7 @@ type hierarchyTransport struct {
 func (t *hierarchyTransport) Proto() string { return t.inner.Proto() }
 
 func (t *hierarchyTransport) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, name string) (*dns.Msg, time.Duration, error) {
-	if real, known := t.hierarchy.servers[server.Addr()]; known {
+	if real, known := t.hierarchy.real[server.Addr()]; known {
 		server = real
 	}
 	return t.inner.Exchange(ctx, req, server, name)

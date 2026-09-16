@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,6 +41,16 @@ type Behaviour struct {
 	// delegated, the way the root servers do for the gTLD servers. A resolver
 	// that trusts them can be walked off a cliff.
 	OutOfBailiwickGlue bool
+
+	// The ways a signed zone can break its own chain of trust.
+	NoDS         bool // the parent vouches for nobody, leaving the zone unsigned
+	NoDNSKEY     bool // the keys cannot be fetched at all
+	StrayDNSKEY  bool // the keys served are not the ones the DS points at
+	BadSignature bool // the signatures over the records do not verify
+
+	// BadKeySignature breaks the other link: the key set the DS points at is
+	// there, but it did not sign itself.
+	BadKeySignature bool
 }
 
 // Config describes one fake nameserver.
@@ -61,6 +72,10 @@ type Config struct {
 
 	// Host is the loopback address to listen on, 127.0.0.1 by default.
 	Host string
+
+	// DNSSEC signs the zone and answers with the signatures when they are asked
+	// for.
+	DNSSEC bool
 
 	Behaviour Behaviour
 }
@@ -87,8 +102,12 @@ type Server struct {
 
 	name      string
 	origin    string
-	records   []dns.RR
+	signer    *signer
 	behaviour Behaviour
+
+	// zone is read by the handlers and written when a child publishes its DS,
+	// so it is replaced whole rather than appended to.
+	zone atomic.Pointer[[]dns.RR]
 
 	mu      sync.Mutex
 	queries []Query
@@ -103,6 +122,9 @@ func New(tb testing.TB, cfg Config) *Server {
 		origin:    dnsutil.Fqdn(cfg.Origin),
 		behaviour: cfg.Behaviour,
 	}
+	if cfg.DNSSEC {
+		server.signer = newSigner(tb, server.origin, cfg.Behaviour)
+	}
 	if cfg.Declared != "" {
 		declared, err := netip.ParseAddr(cfg.Declared)
 		if err != nil {
@@ -111,6 +133,7 @@ func New(tb testing.TB, cfg Config) *Server {
 		server.Declared = declared
 	}
 
+	var zone []dns.RR
 	parser := dns.NewZoneParser(strings.NewReader(cfg.Zone), server.origin, "")
 	parser.SetDefaultTTL(3600)
 	for rr, err := range parser.RRs() {
@@ -120,8 +143,9 @@ func New(tb testing.TB, cfg Config) *Server {
 		if rr == nil {
 			break
 		}
-		server.records = append(server.records, rr)
+		zone = append(zone, rr)
 	}
+	server.zone.Store(&zone)
 
 	host := cfg.Host
 	if host == "" {
@@ -158,6 +182,21 @@ func (s *Server) Nameserver() trace.Server {
 	}
 	return server
 }
+
+// records is the zone as it stands.
+func (s *Server) records() []dns.RR { return *s.zone.Load() }
+
+// publish adds a record to the zone, which only happens when a signed child
+// hands over its DS. The slice is copied so that a handler reading it never
+// sees it change underneath.
+func (s *Server) publish(rr dns.RR) {
+	current := s.records()
+	updated := make([]dns.RR, len(current), len(current)+1)
+	copy(updated, current)
+	s.zone.Store(ptr(append(updated, rr)))
+}
+
+func ptr(records []dns.RR) *[]dns.RR { return &records }
 
 // Queries returns what the server was asked, oldest first.
 func (s *Server) Queries() []Query {
@@ -230,6 +269,9 @@ func (s *Server) ServeDNS(ctx context.Context, w dns.ResponseWriter, req *dns.Ms
 		// NOERROR, no AA, nothing to follow: the server is not serving this zone.
 	default:
 		s.respond(reply, name, qtype)
+		if req.Security {
+			s.signReply(reply)
+		}
 	}
 
 	if s.behaviour.TruncateUDP && dnsutil.Network(w) == "udp" {
@@ -247,14 +289,24 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 	}
 
 	if delegation := s.delegation(name); len(delegation) > 0 {
-		reply.Ns = delegation
+		// The delegated NS RRset is never signed by the parent; the DS is what
+		// the parent puts its name to.
+		reply.Ns = append(delegation, s.ds(delegation[0].Header().Name)...)
 		reply.Extra = s.glue(delegation)
 		return // a referral carries no AA
 	}
 
+	if s.signer != nil && qtype == dns.TypeDNSKEY && dns.EqualName(name, s.origin) {
+		reply.Authoritative = true
+		if !s.behaviour.NoDNSKEY {
+			reply.Answer = s.signer.dnskeys()
+		}
+		return
+	}
+
 	reply.Authoritative = true
 	var answer, owned []dns.RR
-	for _, rr := range s.records {
+	for _, rr := range s.records() {
 		if !dns.EqualName(rr.Header().Name, name) {
 			continue
 		}
@@ -289,7 +341,7 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 // name, which is what makes this server refer the client further down.
 func (s *Server) delegation(name string) []dns.RR {
 	cut := ""
-	for _, rr := range s.records {
+	for _, rr := range s.records() {
 		owner := rr.Header().Name
 		switch {
 		case dns.RRToType(rr) != dns.TypeNS:
@@ -304,7 +356,7 @@ func (s *Server) delegation(name string) []dns.RR {
 	}
 
 	var delegation []dns.RR
-	for _, rr := range s.records {
+	for _, rr := range s.records() {
 		if dns.RRToType(rr) == dns.TypeNS && dns.EqualName(rr.Header().Name, cut) {
 			delegation = append(delegation, rr)
 		}
@@ -321,7 +373,7 @@ func (s *Server) glue(delegation []dns.RR) []dns.RR {
 		if !dnsutil.IsBelow(ns.Header().Name, target) && !s.behaviour.OutOfBailiwickGlue {
 			continue
 		}
-		for _, rr := range s.records {
+		for _, rr := range s.records() {
 			switch dns.RRToType(rr) {
 			case dns.TypeA, dns.TypeAAAA:
 				if dns.EqualName(rr.Header().Name, target) {
@@ -333,8 +385,48 @@ func (s *Server) glue(delegation []dns.RR) []dns.RR {
 	return glue
 }
 
+// ds are the records this zone publishes to vouch for a child of its own.
+func (s *Server) ds(zone string) []dns.RR {
+	var published []dns.RR
+	for _, rr := range s.records() {
+		if dns.RRToType(rr) == dns.TypeDS && dns.EqualName(rr.Header().Name, zone) {
+			published = append(published, rr)
+		}
+	}
+	return published
+}
+
+// signReply adds a signature for every RRset a signed zone is handing out. The
+// NS RRset of a delegation is left alone: it belongs to the child.
+func (s *Server) signReply(reply *dns.Msg) {
+	if s.signer == nil {
+		return
+	}
+
+	reply.Answer = s.signed(reply.Answer)
+	reply.Ns = s.signed(reply.Ns)
+}
+
+func (s *Server) signed(section []dns.RR) []dns.RR {
+	signed := section
+	for _, rrset := range rrsets(section) {
+		switch dns.RRToType(rrset[0]) {
+		case dns.TypeNS:
+			if !dns.EqualName(rrset[0].Header().Name, s.origin) {
+				continue // a delegation, signed by nobody
+			}
+		case dns.TypeRRSIG:
+			continue // already carries its own signature
+		}
+		if signature := s.signer.signRRset(rrset); signature != nil {
+			signed = append(signed, signature)
+		}
+	}
+	return signed
+}
+
 func (s *Server) soa() []dns.RR {
-	for _, rr := range s.records {
+	for _, rr := range s.records() {
 		if dns.RRToType(rr) == dns.TypeSOA && dns.EqualName(rr.Header().Name, s.origin) {
 			return []dns.RR{rr}
 		}
@@ -345,7 +437,7 @@ func (s *Server) soa() []dns.RR {
 // hasChildren reports whether name is an empty non-terminal: it owns no record
 // of its own, but names below it do.
 func (s *Server) hasChildren(name string) bool {
-	for _, rr := range s.records {
+	for _, rr := range s.records() {
 		if owner := rr.Header().Name; !dns.EqualName(owner, name) && dnsutil.IsBelow(name, owner) {
 			return true
 		}
