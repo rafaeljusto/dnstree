@@ -3,6 +3,7 @@ package asn_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"strings"
@@ -151,5 +152,69 @@ func step(addr string) *trace.Step {
 		Zone:   ".",
 		Server: trace.Server{Name: "ns.example.", IP: netip.MustParseAddr(addr), Port: 53},
 		Kind:   trace.KindReferral,
+	}
+}
+
+// TestAnnotateWarnsOnce covers the shape of the warning a blocked resolver
+// leaves behind: one line a reader can act on, however many addresses failed.
+func TestAnnotateWarnsOnce(t *testing.T) {
+	blocked := func(context.Context, string) ([]string, error) {
+		return nil, &net.DNSError{
+			Err:       "dial udp 8.8.8.8:53: i/o timeout",
+			Name:      "4.3.2.1.origin.asn.cymru.com.",
+			Server:    "8.8.8.8:53",
+			IsTimeout: true,
+		}
+	}
+
+	var children []*trace.Step
+	for i := range 30 {
+		children = append(children, step(fmt.Sprintf("192.0.2.%d", i+1)))
+	}
+	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: children}}
+
+	asn.New(blocked).Annotate(t.Context(), tr)
+
+	if len(tr.Warnings) != 1 {
+		t.Fatalf("got warnings %q, want one for thirty failures", tr.Warnings)
+	}
+	// The query name is in the error twice over and helps nobody; what is left
+	// has to say which resolver failed, and what a reader can do about it.
+	warning := tr.Warnings[0]
+	if strings.Contains(warning, "cymru.com") {
+		t.Errorf("got %q, want the query name left out", warning)
+	}
+	for _, want := range []string{"8.8.8.8:53", "i/o timeout", "--no-asn"} {
+		if !strings.Contains(warning, want) {
+			t.Errorf("got %q, want it to carry %q", warning, want)
+		}
+	}
+	if len(warning) > 120 {
+		t.Errorf("got a %d character warning, want one line: %q", len(warning), warning)
+	}
+}
+
+// TestAnnotateKeepsWhatItFound covers the other half: one address nobody can
+// answer for must not cost the trace the addresses that did answer.
+func TestAnnotateKeepsWhatItFound(t *testing.T) {
+	answers := lookupAgainst(t, cymru)
+	patchy := func(ctx context.Context, name string) ([]string, error) {
+		if strings.HasPrefix(name, "1.0.0.5.") {
+			return nil, &net.DNSError{Err: "i/o timeout", Name: name, IsTimeout: true}
+		}
+		return answers(ctx, name)
+	}
+
+	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
+		step("5.0.0.1"), // the one that fails
+		step("1.2.3.4"),
+	}}}
+	asn.New(patchy).Annotate(t.Context(), tr)
+
+	if got := tr.Root.Children[1].Server.ASN; got == nil || got.Number != 15169 {
+		t.Errorf("got %+v for the address that answered, want AS15169", got)
+	}
+	if len(tr.Warnings) != 0 {
+		t.Errorf("got warnings %q, want none while something was found", tr.Warnings)
 	}
 }

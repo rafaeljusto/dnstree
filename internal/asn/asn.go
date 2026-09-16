@@ -83,8 +83,12 @@ func (r *Resolver) Annotate(ctx context.Context, tr *trace.Trace) {
 			mu.Lock()
 			defer mu.Unlock()
 			switch {
-			case err != nil && failure == nil:
-				failure = err
+			case err != nil:
+				// One address nobody can answer for says nothing about the
+				// next: the others are still worth asking about.
+				if failure == nil {
+					failure = err
+				}
 			case info != nil:
 				found++
 				for _, step := range steps[addr] {
@@ -96,8 +100,20 @@ func (r *Resolver) Annotate(ctx context.Context, tr *trace.Trace) {
 	wait.Wait()
 
 	if found == 0 && failure != nil {
-		tr.Warnings = append(tr.Warnings, "could not look up the origin AS of any address: "+failure.Error())
+		tr.Warnings = append(tr.Warnings,
+			"the origin AS lookups did not get through ("+reason(failure)+"); --no-asn skips them")
 	}
+}
+
+// reason is the short form of a lookup failure. The whole chain carries the
+// query name twice over, and a reader can act on none of it: what they need is
+// which resolver failed them, and how.
+func reason(err error) string {
+	var failure *net.DNSError
+	if errors.As(err, &failure) && failure.Err != "" {
+		return failure.Err
+	}
+	return err.Error()
 }
 
 // Lookup returns the origin AS of one address, from the cache when it can.
