@@ -152,7 +152,9 @@ the anchors before believing a byte.
 ## Developing
 
 ```
-make check   # build, vet, test -race, govulncheck
+make check   # build, lint, test -race, vuln
+make lint    # go vet and golangci-lint
+make vuln    # govulncheck against the vulnerability database
 make live    # the smoke test that goes out to the real root servers
 make dist    # cross compile a release into dist/
 ```

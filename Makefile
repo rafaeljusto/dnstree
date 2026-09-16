@@ -1,5 +1,11 @@
 GO ?= go
 
+# golangci-lint comes from the PATH when it is there, and is fetched at the
+# pinned version when it is not.
+GOLANGCI_LINT_VERSION ?= v2.13.2
+GOLANGCI_LINT ?= $(shell command -v golangci-lint 2>/dev/null || \
+	echo "$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)")
+
 # VERSION is what a release build stamps into the binary.
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -11,7 +17,7 @@ PLATFORMS := \
 	freebsd/amd64 \
 	windows/amd64 windows/arm64
 
-.PHONY: all build install test race vet vuln check live dist clean roothints
+.PHONY: all build install test race lint vuln check live dist clean roothints
 
 all: check
 
@@ -27,13 +33,18 @@ test:
 race:
 	$(GO) test -race ./...
 
-vet:
+# go vet is not covered by golangci-lint: its bundled govet ships a different
+# set of analysers, and misses appends and slog among others.
+lint:
 	$(GO) vet ./...
+	$(GOLANGCI_LINT) run ./...
 
+# Separate from lint: this one goes red when somebody else publishes a CVE,
+# not when this code changes.
 vuln:
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-check: build vet race vuln
+check: build lint race vuln
 
 # Goes out to the real root servers, so it is never part of check.
 live:

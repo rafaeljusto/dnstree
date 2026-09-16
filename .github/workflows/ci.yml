@@ -23,11 +23,38 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go build ./...
-      - run: go vet ./...
       - run: go test -race ./...
+
+  # Its own job, so that the linter's cache is not shared with the build's.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # golangci-lint does not replace this: its bundled govet ships a
+      # different set of analysers, and misses appends and slog among others.
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2
+
+  # Apart from lint, because this one goes red when somebody else publishes a
+  # CVE rather than when this code changes. On the schedule too, so that a
+  # quiet week is not a blind one.
+  vulnerabilities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-      - name: gofmt
-        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
 
   live:
     if: github.event_name == 'schedule'
