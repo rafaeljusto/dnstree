@@ -82,6 +82,11 @@ type Config struct {
 	// Log records every hop as it is made. Nil keeps quiet.
 	Log *slog.Logger
 
+	// Stepped is called each time a hop joins the trace, from the goroutine
+	// doing the walking, so a caller may read the whole trace inside it. It is
+	// how a live drawing keeps up with a walk.
+	Stepped func(*trace.Trace)
+
 	// Discovered is handed the address of each server the walk is about to ask,
 	// as it asks it. Metadata that takes a while to look up can start here and
 	// run behind the walk, instead of after it where the wait is the reader's.
@@ -269,7 +274,7 @@ func (r *run) enterZone(ctx context.Context, chain *dnssec.Chain, zone string, r
 		hop.step.Aside = true
 		hop.step.Records = nil // a key set is not something to read in a tree
 		hop.step.Notes = append(hop.step.Notes, "DNSKEY of "+zone)
-		reached.Children = append(reached.Children, hop.step)
+		r.attach(reached, hop.step)
 
 		if hop.resp != nil {
 			keys = hop.resp.Answer
@@ -298,7 +303,7 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 		if r.cfg.Family != 0 && family(server.IP) != r.cfg.Family {
 			skipped := skipped(zone, server)
 			skipped.Notes = []string{fmt.Sprintf("no IPv%d address", r.cfg.Family)}
-			parent.Children = append(parent.Children, skipped)
+			r.attach(parent, skipped)
 			continue
 		}
 		usable = append(usable, server)
@@ -318,7 +323,7 @@ func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Serve
 		}
 
 		hop := r.query(ctx, zone, server, qname, qtype)
-		parent.Children = append(parent.Children, hop.step)
+		r.attach(parent, hop.step)
 		switch hop.step.Kind {
 		case trace.KindLame, trace.KindTimeout, trace.KindError:
 			continue
@@ -326,12 +331,12 @@ func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Serve
 
 		rest := servers[i+1:]
 		for _, server := range rest[:min(len(rest), maxSkipped)] {
-			parent.Children = append(parent.Children, skipped(zone, server))
+			r.attach(parent, skipped(zone, server))
 		}
 		if more := len(rest) - maxSkipped; more > 0 {
 			summary := &trace.Step{Zone: zone, Kind: trace.KindSkipped,
 				Notes: []string{fmt.Sprintf("and %d more not queried", more)}}
-			parent.Children = append(parent.Children, summary)
+			r.attach(parent, summary)
 		}
 		return hop
 	}
@@ -362,7 +367,7 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 	wait.Wait()
 
 	for _, hop := range hops {
-		parent.Children = append(parent.Children, hop.step)
+		r.attach(parent, hop.step)
 	}
 	if budget != nil {
 		r.fail(parent, zone, budget.Error())
@@ -505,7 +510,7 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) []tra
 	for _, name := range delegation.OutOfBailiwick {
 		root := &trace.Step{Zone: ".", Kind: trace.KindZone, Aside: true,
 			Notes: []string{"resolving " + name}}
-		step.Children = append(step.Children, root)
+		r.attach(step, root)
 
 		result := r.walk(ctx, name, rrtype, root, side+1)
 		if result == nil {
@@ -545,7 +550,7 @@ func (r *run) chaseCNAME(ctx context.Context, step *trace.Step, qname string, qt
 	r.chased[target] = true
 
 	root := &trace.Step{Zone: ".", Kind: trace.KindZone, Notes: []string{"resolving " + target}}
-	step.Children = append(step.Children, root)
+	r.attach(step, root)
 	return r.walk(ctx, target, qtype, root, side)
 }
 
@@ -564,7 +569,7 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 	step := r.query(ctx, delegated.Zone, answer.Server, delegated.Zone, dns.TypeNS).step
 	step.Aside = true
 	step.Notes = append(step.Notes, "parent/child NS check")
-	answer.Children = append(answer.Children, step)
+	r.attach(answer, step)
 
 	child := make([]string, 0, len(step.Records))
 	for _, record := range step.Records {
@@ -588,10 +593,20 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 	}
 }
 
+// attach hangs a step under its parent and tells whoever is watching. Every
+// hop joins the trace through here, and always from the walking goroutine, so
+// a watcher reading the trace never races the walk that is building it.
+func (r *run) attach(parent, step *trace.Step) {
+	parent.Children = append(parent.Children, step)
+	if r.cfg.Stepped != nil {
+		r.cfg.Stepped(r.trace)
+	}
+}
+
 // fail records why the walk stopped and returns the step that says so.
 func (r *run) fail(parent *trace.Step, zone, reason string) *trace.Step {
 	step := &trace.Step{Zone: zone, Kind: trace.KindError, Err: reason}
-	parent.Children = append(parent.Children, step)
+	r.attach(parent, step)
 	return step
 }
 

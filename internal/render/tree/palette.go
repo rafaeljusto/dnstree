@@ -91,6 +91,12 @@ func colorEnabled(w io.Writer, mode ColorMode) bool {
 		return false
 	}
 
+	return IsTerminal(w)
+}
+
+// IsTerminal reports whether w is something a person is watching, which is the
+// only place cursor movement and colour belong.
+func IsTerminal(w io.Writer) bool {
 	file, ok := w.(*os.File)
 	if !ok {
 		return false

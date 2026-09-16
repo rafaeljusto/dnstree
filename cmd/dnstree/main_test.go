@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,6 +45,11 @@ func TestRun(t *testing.T) {
 				}
 			}
 		}},
+		"emoji": {format: "emoji", check: func(tb testing.TB, out string) {
+			if !strings.Contains(out, "🎯") || !strings.Contains(out, "🌍") {
+				tb.Errorf("got %q, want the walk told in emoji", out)
+			}
+		}},
 		"json": {format: "json", check: func(tb testing.TB, out string) {
 			var document map[string]any
 			if err := json.Unmarshal([]byte(out), &document); err != nil {
@@ -76,6 +82,36 @@ func TestRun(t *testing.T) {
 			}
 			test.check(t, stdout.String())
 		})
+	}
+}
+
+// TestRunLiveNowhere covers --live where there is no one to watch: a pipe, a
+// file, a test. Nothing is drawn twice and no escape is written.
+func TestRunLiveNowhere(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+	hints := rootHintsFile(t)
+	port := strconv.Itoa(int(server.Addr.Port()))
+
+	resolve := func(tb testing.TB, args ...string) string {
+		tb.Helper()
+
+		var stdout, stderr bytes.Buffer
+		code := run(t.Context(), append(args,
+			"--root-hints", hints, "--port", port, "--no-asn", ".", "NS"), &stdout, &stderr)
+		if code != exitAnswer {
+			tb.Fatalf("got exit %d, want %d: %s%s", code, exitAnswer, stdout.String(), stderr.String())
+		}
+		return stdout.String()
+	}
+
+	live := resolve(t, "--live")
+	if strings.Contains(live, "\x1b") {
+		t.Errorf("got %q, want nothing drawn at something that is not a terminal", live)
+	}
+	// Only the round trip times, which no two runs share, are allowed to differ.
+	timing := regexp.MustCompile(`[0-9.]+(µs|ms|s)`)
+	if want := resolve(t); timing.ReplaceAllString(live, "") != timing.ReplaceAllString(want, "") {
+		t.Errorf("got\n%s\nwant the same as without --live\n%s", live, want)
 	}
 }
 

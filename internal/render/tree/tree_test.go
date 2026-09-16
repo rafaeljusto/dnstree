@@ -133,8 +133,10 @@ func TestRender(t *testing.T) {
 		"resolution":       {trace: resolution()},
 		"resolution_ascii": {trace: resolution(), options: tree.Options{Charset: tree.ASCII}},
 		"resolution_color": {trace: resolution(), options: tree.Options{Color: tree.ColorAlways}},
+		"resolution_emoji": {trace: resolution(), options: tree.Options{Charset: tree.Emoji}},
 		"kinds":            {trace: kinds()},
 		"kinds_ascii":      {trace: kinds(), options: tree.Options{Charset: tree.ASCII}},
+		"kinds_emoji":      {trace: kinds(), options: tree.Options{Charset: tree.Emoji}},
 	}
 
 	for name, test := range tests {

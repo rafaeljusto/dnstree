@@ -3,6 +3,7 @@ package resolver_test
 import (
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -117,6 +118,50 @@ func TestResolve(t *testing.T) {
 	}
 	if got := result.Records[0]; got.Name != "www.example.com." || got.Type != "A" || got.TTL != 3600 {
 		t.Errorf("got record %+v, want www.example.com. 3600 A", got)
+	}
+}
+
+// TestResolveStepped watches a walk the way a live drawing does: one call per
+// hop, from the goroutine building the trace, with the whole tree readable
+// inside the call. Nothing here is guarded, which is the point: under -race, a
+// hop announced from anywhere else would be caught.
+func TestResolveStepped(t *testing.T) {
+	var (
+		counted []int
+		mu      sync.Mutex
+		seen    []netip.Addr
+	)
+	cfg := resolver.Config{
+		All: true, // so that the hops asked in parallel are covered too
+		Stepped: func(tr *trace.Trace) {
+			counted = append(counted, len(steps(tr)))
+		},
+		Discovered: func(addr netip.Addr) {
+			mu.Lock()
+			defer mu.Unlock()
+			seen = append(seen, addr)
+		},
+	}
+
+	res := newResolver(t, internet(t), cfg)
+	tr, err := res.Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if len(counted) == 0 {
+		t.Fatal("got no hops announced, want one per step")
+	}
+	for i, count := range counted {
+		if count != i+1 {
+			t.Fatalf("announcement %d: got %d steps, want %d", i, count, i+1)
+		}
+	}
+	if got, want := counted[len(counted)-1], len(steps(tr)); got != want {
+		t.Errorf("got %d steps announced in all, want the %d the trace ended with", got, want)
+	}
+	if len(seen) == 0 {
+		t.Error("got no servers announced, want the ones the walk asked")
 	}
 }
 

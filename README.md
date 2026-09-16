@@ -69,7 +69,8 @@ dnstree [flags] NAME [TYPE]
 | `--dnssec` | ask for signatures and follow the chain of trust |
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
 | `--no-asn` | skip the origin AS lookups |
-| `--format` | `tree`, `ascii`, `json` or `dot` |
+| `--format` | `tree`, `ascii`, `emoji`, `json` or `dot` |
+| `--live` | draw the tree as the walk makes it, hop by hop |
 | `--color` | `auto`, `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take, and how often to ask again |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite |
@@ -122,7 +123,42 @@ does not know — reads `[indeterminate]`, which is not the same as `[bogus]`.
 Denial of existence is not proved: NSEC and NSEC3 are not read, so an empty
 answer in a signed zone is reported as indeterminate rather than claimed.
 
+### Watching it happen
+
+`--live` redraws the tree in place as the walk makes it, so the referrals
+arrive one at a time instead of all at once at the end. The frames are scratch:
+when the walk is over they are wiped and the finished tree is written where
+they stood, which is exactly what a run without `--live` prints. Off a terminal
+the flag does nothing, and it cannot be combined with `--format json` or
+`--format dot`, both of which are written once, at the end.
+
 ### Other formats
+
+`--format emoji` tells the same walk in emoji — a 🛰️ for a referral, a 🎯 for
+the answer, a 💤 for a server nobody asked, ⚡ and 🐢 for the fast and the slow.
+It pairs well with `--live`:
+
+```
+$ dnstree --format emoji --live www.example.com
+🌍  . (root)
+├── 🛰️  a.root-servers.net. 198.41.0.4  248ms  NOERROR  referral → com.
+│   ├── 🛰️  l.gtld-servers.net. 192.41.162.30  251ms  NOERROR  referral → example.com.
+│   │   ├── 🎯  hera.ns.cloudflare.com. 108.162.192.162  236ms  NOERROR  AA
+│   │   │   ├── 📍 www.example.com. 300 A 172.66.147.243
+│   │   │   └── 📍 www.example.com. 300 A 104.20.23.154
+│   │   ├── 💤  hera.ns.cloudflare.com. 172.64.32.162  (not queried)
+│   │   ├── 💤  hera.ns.cloudflare.com. 173.245.58.162  (not queried)
+│   │   ├── 💤  hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
+│   │   └── 💤  (and 8 more not queried)
+│   ├── 💤  l.gtld-servers.net. 2001:500:d937::30  (not queried)
+│   ├── 💤  j.gtld-servers.net. 192.48.79.30  (not queried)
+│   ├── 💤  j.gtld-servers.net. 2001:502:7094::30  (not queried)
+│   └── 💤  (and 22 more not queried)
+├── 💤  a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── 💤  b.root-servers.net. 170.247.170.2  (not queried)
+├── 💤  b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── 💤  (and 22 more not queried)
+```
 
 `--format ascii` swaps the branches for `` |-- `` and drops the colour, for
 pasting into documents. `--format json` writes a versioned document with

@@ -24,6 +24,10 @@ func TestParse(t *testing.T) {
 			args: []string{"example.com", "mx"},
 			want: cli.Config{Name: "example.com", Type: "MX"},
 		},
+		"a walk to watch": {
+			args: []string{"--format", "emoji", "--live", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "emoji", Live: true},
+		},
 		"the whole surface": {
 			args: []string{
 				"-6", "--dot", "--fallback", "--all", "--dnssec", "--check-ns", "--no-asn",
@@ -74,6 +78,8 @@ func TestParseRejects(t *testing.T) {
 		"two address families":    {"-4", "-6", "example.com"},
 		"two transports":          {"--udp", "--doh", "example.com"},
 		"an unknown format":       {"--format", "runes", "example.com"},
+		"live json":               {"--format", "json", "--live", "example.com"},
+		"live dot":                {"--format", "dot", "--live", "example.com"},
 		"an unknown colour":       {"--color", "sometimes", "example.com"},
 		"a timeout of nothing":    {"--timeout", "0", "example.com"},
 		"a negative retry count":  {"--retries", "-1", "example.com"},

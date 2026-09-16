@@ -19,6 +19,7 @@ type Charset string
 const (
 	Unicode Charset = "unicode" // the default
 	ASCII   Charset = "ascii"   // for documentation and markdown
+	Emoji   Charset = "emoji"   // for the fun of it
 )
 
 // Options configure a rendering.
@@ -32,12 +33,38 @@ type glyphs struct {
 	branch, lastBranch string // in front of a node
 	vertical, blank    string // carried down to its children
 	arrow              string
+	icons              bool // whether a hop is introduced by an emoji
 }
 
 var charsets = map[Charset]glyphs{
 	Unicode: {branch: "├── ", lastBranch: "└── ", vertical: "│   ", blank: "    ", arrow: "→"},
 	ASCII:   {branch: "|-- ", lastBranch: "`-- ", vertical: "|   ", blank: "    ", arrow: "->"},
+	Emoji:   {branch: "├── ", lastBranch: "└── ", vertical: "│   ", blank: "    ", arrow: "→", icons: true},
 }
+
+// The emoji a walk is told in. They sit in the label rather than in the
+// branches, where a two cell wide glyph would pull the tree out of line.
+var (
+	kindIcons = map[trace.StepKind]string{
+		trace.KindZone:     "🌍",
+		trace.KindReferral: "🛰️",
+		trace.KindAnswer:   "🎯",
+		trace.KindCNAME:    "🔗",
+		trace.KindNoData:   "🕳️",
+		trace.KindNXDomain: "👻",
+		trace.KindLame:     "🦥",
+		trace.KindTimeout:  "⏳",
+		trace.KindError:    "💥",
+		trace.KindSkipped:  "💤",
+	}
+	recordIcons = map[string]string{
+		"A": "📍", "AAAA": "🌐", "CNAME": "🔗", "MX": "📬",
+		"TXT": "📝", "NS": "🗂️", "SOA": "📜", "DS": "🔑", "DNSKEY": "🔑",
+	}
+	dnssecIcons = map[trace.DNSSECState]string{
+		trace.Secure: "🔒", trace.Insecure: "🔓", trace.Bogus: "☠️", trace.Indeterminate: "❓",
+	}
+)
 
 // Render writes the trace to w as a tree.
 func Render(w io.Writer, tr *trace.Trace, opts Options) error {
@@ -72,7 +99,11 @@ func (r *renderer) render(tr *trace.Trace) {
 		r.children(tr.Root, "")
 	}
 	for _, warning := range tr.Warnings {
-		r.write(r.paint.paint("warning: "+warning, yellow) + "\n")
+		mark := "warning: "
+		if r.glyphs.icons {
+			mark = "⚠️  "
+		}
+		r.write(r.paint.paint(mark+warning, yellow) + "\n")
 	}
 }
 
@@ -128,7 +159,7 @@ func (r *renderer) label(step *trace.Step) string {
 		if zone == "." {
 			zone = ". (root)"
 		}
-		return join(r.paint.dim(zone), r.dnssec(step.DNSSEC), r.notes(step))
+		return join(r.icon(step.Kind), r.paint.dim(zone), r.dnssec(step.DNSSEC), r.notes(step))
 	}
 	return r.stepLabel(step)
 }
@@ -136,6 +167,10 @@ func (r *renderer) label(step *trace.Step) string {
 // stepLabel is one hop: who was asked, how it went, and what it said.
 func (r *renderer) stepLabel(step *trace.Step) string {
 	var fields []string
+
+	if icon := r.icon(step.Kind); icon != "" {
+		fields = append(fields, icon)
+	}
 
 	// The name and the address are one identity, so they stay together.
 	if who := r.who(step.Server); who != "" {
@@ -145,7 +180,7 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 		fields = append(fields, r.paint.dim(fmt.Sprintf("AS%d", step.Server.ASN.Number)))
 	}
 	if step.RTT > 0 {
-		fields = append(fields, r.paint.dim(r.duration(step.RTT)))
+		fields = append(fields, r.paint.dim(r.pace(step.RTT)+r.duration(step.RTT)))
 	}
 	if rcode := r.paint.rcode(step.Rcode); rcode != "" {
 		fields = append(fields, rcode)
@@ -163,6 +198,28 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 		fields = append(fields, notes)
 	}
 	return strings.Join(fields, "  ")
+}
+
+// icon is the emoji a kind is told by, when the charset asks for them.
+func (r *renderer) icon(kind trace.StepKind) string {
+	if !r.glyphs.icons {
+		return ""
+	}
+	return kindIcons[kind]
+}
+
+// pace marks the hops worth noticing: the ones that flew, and the ones that
+// somebody waited through.
+func (r *renderer) pace(rtt time.Duration) string {
+	switch {
+	case !r.glyphs.icons:
+		return ""
+	case rtt < 50*time.Millisecond:
+		return "⚡"
+	case rtt > 500*time.Millisecond:
+		return "🐢"
+	}
+	return ""
 }
 
 // notes are what the hop took, in the margin where they belong.
@@ -267,6 +324,11 @@ func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 		}
 	}
 	label = "[" + label + "]"
+	if r.glyphs.icons {
+		if icon := dnssecIcons[status.State]; icon != "" {
+			label = icon + " " + label
+		}
+	}
 
 	switch status.State {
 	case trace.Secure:
@@ -281,8 +343,17 @@ func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 }
 
 func (r *renderer) recordLabel(record trace.RR) string {
-	return fmt.Sprintf("%s %s %s %s",
+	label := fmt.Sprintf("%s %s %s %s",
 		record.Name, r.paint.dim(fmt.Sprint(record.TTL)), r.paint.rrtype(record.Type), record.Data)
+	if !r.glyphs.icons {
+		return label
+	}
+
+	icon := recordIcons[record.Type]
+	if icon == "" {
+		icon = "📄"
+	}
+	return icon + " " + label
 }
 
 // duration keeps a round trip readable: milliseconds for anything a network

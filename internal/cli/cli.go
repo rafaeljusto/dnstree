@@ -27,7 +27,8 @@ path it took. TYPE defaults to A.
   --dnssec                ask for signatures and follow the chain of trust
   --check-ns              ask each zone for its own NS set and compare
   --no-asn                skip the origin AS lookups
-  --format FORMAT         tree, ascii, json or dot (default tree)
+  --format FORMAT         tree, ascii, emoji, json or dot (default tree)
+  --live                  draw the tree as the walk makes it
   --color WHEN            auto, always or never (default auto)
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
@@ -57,6 +58,7 @@ type Config struct {
 	CheckNS    bool
 	ASN        bool
 	Format     string
+	Live       bool
 	Color      tree.ColorMode
 	Timeout    time.Duration
 	Retries    int
@@ -105,7 +107,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, json or dot")
+	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json or dot")
+	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
 	flags.DurationVar(&timeout, "timeout", transport.DefaultTimeout, "how long one query may take")
 	flags.IntVar(&cfg.Retries, "retries", 1, "how often to ask again after a silence")
@@ -152,10 +155,14 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, err
 	}
 	switch format {
-	case "tree", "ascii", "json", "dot":
+	case "tree", "ascii", "emoji", "json", "dot":
 		cfg.Format = format
 	default:
 		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
+	}
+	if cfg.Live && (cfg.Format == "json" || cfg.Format == "dot") {
+		return nil, fmt.Errorf("%w: %s is written once, at the end, so it cannot be drawn live",
+			ErrUsage, cfg.Format)
 	}
 	switch mode := tree.ColorMode(color); mode {
 	case tree.ColorAuto, tree.ColorAlways, tree.ColorNever:

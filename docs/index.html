@@ -134,6 +134,7 @@ h2{
 }
 h3{font-size:1rem; margin:0 0 .35rem; font-weight:600}
 .section-lede{color:var(--muted); margin-top:0}
+.term-note{margin:.8rem 0 0; font-size:.86rem; color:var(--faint)}
 
 /* ── the exploded hop ─────────────────────────────────────────────────── */
 .dissect{background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px; padding:1.4rem 0 .4rem; margin-top:1.6rem; overflow-x:auto}
@@ -263,6 +264,10 @@ footer a:hover{color:var(--ink)}
 <span class="ln">└── <span class="dim">(and 24 more not queried)</span></span></pre>
         </div>
       </div>
+      <p class="term-note">
+        Not a stage trick: <code>--live</code> draws the tree in place as the walk makes
+        it, and <code>--format emoji</code> tells the same walk in 🛰️ 🎯 💤.
+      </p>
     </div>
 
     <section id="hop">
@@ -379,14 +384,15 @@ footer a:hover{color:var(--ink)}
     </section>
 
     <section id="formats">
-      <h2>Four ways out</h2>
+      <h2>Five ways out</h2>
       <p class="section-lede">
-        The tree is for reading. The other three are for pasting into a document, a
-        pipeline, or a picture.
+        The tree is for reading, and the emoji for enjoying it. The other three are for
+        pasting into a document, a pipeline, or a picture.
       </p>
 
       <div class="tabs" role="tablist" aria-label="Output formats">
         <button class="tab" role="tab" id="tab-tree" aria-controls="panel-tree" aria-selected="true">--format tree</button>
+        <button class="tab" role="tab" id="tab-emoji" aria-controls="panel-emoji" aria-selected="false">--format emoji</button>
         <button class="tab" role="tab" id="tab-ascii" aria-controls="panel-ascii" aria-selected="false">--format ascii</button>
         <button class="tab" role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">--format json</button>
         <button class="tab" role="tab" id="tab-dot" aria-controls="panel-dot" aria-selected="false">--format dot</button>
@@ -406,6 +412,16 @@ footer a:hover{color:var(--ink)}
         ├── <span class="ns">a.iana-servers.net.</span> <span class="ip">199.43.135.53</span>  <span class="asn">AS10745</span>  <span class="rtt">9ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="ok">[secure]</span>
         │   └── www.example.com. <span class="dim">3600</span> <span class="a">A</span> 93.184.216.34
         └── <span class="ns">b.iana-servers.net.</span> <span class="ip">199.43.133.53</span>  <span class="dim">(not queried)</span></pre>
+          </div>
+
+          <div class="panel" role="tabpanel" id="panel-emoji" aria-labelledby="tab-emoji" hidden>
+<pre>🌍  <span class="z">. (root)</span>
+└── 🛰️  <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS397197</span>  <span class="rtt">⚡12ms</span>  <span class="ok">NOERROR</span>  referral → com.  <span class="ok">🔒 [secure]</span>
+    ├── ⏳  <span class="ns">b.gtld-servers.net.</span> <span class="ip">192.33.14.30</span>  <span class="rtt">🐢2s</span>  <span class="bad">timeout</span>
+    └── 🛰️  <span class="ns">a.gtld-servers.net.</span> <span class="ip">192.5.6.30</span>  <span class="asn">AS26415</span>  <span class="rtt">⚡18ms</span>  <span class="ok">NOERROR</span>  referral → example.com.  <span class="ok">🔒 [secure]</span>
+        ├── 🎯  <span class="ns">a.iana-servers.net.</span> <span class="ip">199.43.135.53</span>  <span class="asn">AS10745</span>  <span class="rtt">⚡9ms</span>  <span class="ok">NOERROR</span>  AA DO  <span class="ok">🔒 [secure]</span>
+        │   └── 📍 www.example.com. <span class="dim">3600</span> <span class="a">A</span> 93.184.216.34
+        └── 💤  <span class="ns">b.iana-servers.net.</span> <span class="ip">199.43.133.53</span>  <span class="dim">(not queried)</span></pre>
           </div>
 
           <div class="panel" role="tabpanel" id="panel-ascii" aria-labelledby="tab-ascii" hidden>
@@ -529,6 +545,7 @@ footer a:hover{color:var(--ink)}
 (function () {
   var titles = {
     "tab-tree": "~ · unicode branches, colour when the terminal wants it",
+    "tab-emoji": "~ · the same walk, told in emoji",
     "tab-ascii": "~ · plain enough to paste into a document",
     "tab-json": "~ · versioned, with durations in milliseconds",
     "tab-dot": "~ · one node per query, clustered by zone"

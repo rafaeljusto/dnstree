@@ -75,8 +75,17 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		lookups = asn.New(nil, log)
 	}
 
-	tr, err := resolve(ctx, cfg, log, lookups)
+	// The live drawing owns the screen until it is cleared, and the finished
+	// tree is then written exactly where it stood.
+	var live *tree.Live
+	if cfg.Live {
+		live = tree.NewLive(stdout, treeOptions(cfg))
+		defer live.Clear()
+	}
+
+	tr, err := resolve(ctx, cfg, log, lookups, live)
 	if err != nil {
+		live.Clear()
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
@@ -87,6 +96,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		lookups.Annotate(grace, tr)
 	}
 
+	// The last frame stays up until there is something to put in its place.
+	live.Clear()
 	if err := render(stdout, cfg, tr); err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
@@ -95,7 +106,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 }
 
 // resolve builds the resolution the flags asked for and runs it.
-func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *asn.Resolver) (*trace.Trace, error) {
+func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *asn.Resolver, live *tree.Live) (*trace.Trace, error) {
 	hints, err := rootHints(cfg)
 	if err != nil {
 		return nil, err
@@ -119,6 +130,9 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	config.Log = log
 	if lookups != nil {
 		config.Discovered = func(addr netip.Addr) { lookups.Start(ctx, addr) }
+	}
+	if live != nil {
+		config.Stepped = live.Draw
 	}
 
 	// Only a datagram can be truncated, and only plain DNS is worth falling
@@ -164,15 +178,25 @@ func carry(proto string, cfg transport.Config) transport.Transport {
 
 func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 	switch cfg.Format {
-	case "ascii":
-		// Plain enough to paste into a document, which means no escapes at all.
-		return tree.Render(w, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorNever})
 	case "json":
 		return jsonout.Render(w, tr)
 	case "dot":
 		return dot.Render(w, tr)
 	default:
-		return tree.Render(w, tr, tree.Options{Charset: tree.Unicode, Color: cfg.Color})
+		return tree.Render(w, tr, treeOptions(cfg))
+	}
+}
+
+// treeOptions is how the tree is drawn, live and at the end alike.
+func treeOptions(cfg *cli.Config) tree.Options {
+	switch cfg.Format {
+	case "ascii":
+		// Plain enough to paste into a document, which means no escapes at all.
+		return tree.Options{Charset: tree.ASCII, Color: tree.ColorNever}
+	case "emoji":
+		return tree.Options{Charset: tree.Emoji, Color: cfg.Color}
+	default:
+		return tree.Options{Charset: tree.Unicode, Color: cfg.Color}
 	}
 }
 
