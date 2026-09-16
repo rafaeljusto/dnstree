@@ -215,10 +215,11 @@ func (s *Server) publish(rr dns.RR) {
 	current := s.records()
 	updated := make([]dns.RR, len(current), len(current)+1)
 	copy(updated, current)
-	s.zone.Store(ptr(append(updated, rr)))
+	s.zone.Store(new(append(updated, rr)))
 }
 
-func ptr(records []dns.RR) *[]dns.RR { return &records }
+//go:fix inline
+func ptr(records []dns.RR) *[]dns.RR { return new(records) }
 
 // Queries returns what the server was asked, oldest first.
 func (s *Server) Queries() []Query {
@@ -232,7 +233,7 @@ func (s *Server) Queries() []Query {
 // few attempts make that vanishingly unlikely.
 func listen(host string) (net.PacketConn, net.Listener, error) {
 	var err error
-	for attempt := 0; attempt < 5; attempt++ {
+	for range 5 {
 		var packetConn net.PacketConn
 		if packetConn, err = net.ListenPacket("udp", net.JoinHostPort(host, "0")); err != nil {
 			continue

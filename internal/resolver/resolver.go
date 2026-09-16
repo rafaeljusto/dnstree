@@ -347,13 +347,11 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 	limit := make(chan struct{}, maxParallel)
 	var wait sync.WaitGroup
 	for i, server := range servers {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			limit <- struct{}{}
 			defer func() { <-limit }()
 			hops[i] = r.query(ctx, zone, server, qname, qtype)
-		}()
+		})
 	}
 	wait.Wait()
 

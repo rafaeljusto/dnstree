@@ -74,9 +74,7 @@ func (r *Resolver) Annotate(ctx context.Context, tr *trace.Trace) {
 		failure error
 	)
 	for addr := range steps {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			limit <- struct{}{}
 			defer func() { <-limit }()
 
@@ -93,7 +91,7 @@ func (r *Resolver) Annotate(ctx context.Context, tr *trace.Trace) {
 					step.Server.ASN = info
 				}
 			}
-		}()
+		})
 	}
 	wait.Wait()
 

@@ -170,14 +170,15 @@ func edgeAttributes(step *trace.Step) string {
 // caption is the question the graph answers, and whatever the walk could not
 // do: a warning belongs on the picture rather than only in the tree.
 func caption(tr *trace.Trace) string {
-	caption := "dnstree"
+	var caption strings.Builder
+	caption.WriteString("dnstree")
 	if question := strings.TrimSpace(tr.Question.Name + " " + tr.Question.Type); question != "" {
-		caption += " " + question
+		caption.WriteString(" " + question)
 	}
 	for _, warning := range tr.Warnings {
-		caption += "\nwarning: " + warning
+		caption.WriteString("\nwarning: " + warning)
 	}
-	return caption
+	return caption.String()
 }
 
 // duration keeps an edge label short: a graph is read at a glance.
