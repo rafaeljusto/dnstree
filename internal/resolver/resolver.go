@@ -15,6 +15,7 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 
+	"github.com/rafaeljusto/dnstree/internal/dnssec"
 	"github.com/rafaeljusto/dnstree/internal/roothints"
 	"github.com/rafaeljusto/dnstree/internal/trace"
 	"github.com/rafaeljusto/dnstree/internal/transport"
@@ -49,8 +50,12 @@ type Config struct {
 	// UDPSize advertises an EDNS0 buffer, zero asks without EDNS0.
 	UDPSize uint16
 
-	// DNSSEC sets the DO bit, so that servers include their signatures.
+	// DNSSEC sets the DO bit and follows the chain of trust down.
 	DNSSEC bool
+
+	// Anchors are the DS records the chain starts from. Empty means the ones
+	// embedded in the binary. Only read when DNSSEC is set.
+	Anchors roothints.Anchors
 
 	// All asks every nameserver of a zone instead of stopping at the first one
 	// that answers. The walk still follows a single path down.
@@ -85,6 +90,21 @@ func New(cfg Config) (*Resolver, error) {
 	case 0, 4, 6:
 	default:
 		return nil, fmt.Errorf("resolver: address family %d is neither 4 nor 6", cfg.Family)
+	}
+
+	if cfg.DNSSEC {
+		// Signatures do not fit in a bare 512 byte answer, so asking for them
+		// without EDNS0 would only ever bring back truncation.
+		if cfg.UDPSize == 0 {
+			cfg.UDPSize = transport.DefaultUDPSize
+		}
+		if len(cfg.Anchors) == 0 {
+			anchors, err := roothints.DefaultAnchors()
+			if err != nil {
+				return nil, fmt.Errorf("resolver: reading the trust anchors: %w", err)
+			}
+			cfg.Anchors = anchors
+		}
 	}
 	return &Resolver{cfg: cfg}, nil
 }
@@ -130,6 +150,13 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	return run.trace, nil
 }
 
+// hop is a step and the message behind it. The trace deliberately keeps no DNS
+// records of its own, but the chain of trust has to see the real thing.
+type hop struct {
+	step *trace.Step
+	resp *dns.Msg
+}
+
 // run is the state of one resolution.
 type run struct {
 	cfg      Config
@@ -151,19 +178,39 @@ type run struct {
 func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trace.Step, side int) *trace.Step {
 	zone, servers := ".", r.cfg.Roots
 
+	// Every walk starts again from the anchors: a walk for an alias or for a
+	// nameserver's name is its own resolution, and must not borrow the keys of
+	// the one that needed it.
+	var chain *dnssec.Chain
+	if r.cfg.DNSSEC {
+		chain = dnssec.New(r.cfg.Anchors)
+	}
+	var delegation []dns.RR // the authority section that led into this zone
+
 	for depth := 0; ; depth++ {
 		if depth >= r.counters.max.MaxDepth {
 			return r.fail(parent, zone, fmt.Sprintf("gave up after %d zone cuts", r.counters.max.MaxDepth))
 		}
 
-		step := r.queryZone(ctx, zone, servers, parent, qname, qtype)
-		switch {
-		case step == nil:
+		hop := r.queryZone(ctx, zone, servers, parent, qname, qtype)
+		if hop == nil {
 			r.warnf("no server answered for %s", zone)
 			return nil
+		}
+		step := hop.step
+
+		// A server of the zone has answered, so the zone can now be asked for
+		// its keys. The verdict belongs on the step that pointed here.
+		if chain != nil {
+			parent.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
+		}
+
+		switch {
 		case step.Kind == trace.KindCNAME && qtype != dns.TypeCNAME:
+			r.verify(chain, hop, qname, qtype)
 			return r.chaseCNAME(ctx, step, qname, qtype, side)
 		case step.Kind != trace.KindReferral:
+			r.verify(chain, hop, qname, qtype)
 			if side == 0 {
 				r.checkNS(ctx, step, parent)
 			}
@@ -176,13 +223,48 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			return step
 		}
 		zone, servers, parent = step.Delegation.Zone, next, step
+		delegation = nil
+		if hop.resp != nil {
+			delegation = hop.resp.Ns
+		}
 	}
+}
+
+// enterZone fetches the keys of the zone the walk has reached and checks them
+// against the DS its parent handed out. The query hangs under the hop that
+// reached the zone; the verdict belongs further up, on the step that pointed
+// here, because that is the one that published the DS.
+func (r *run) enterZone(ctx context.Context, chain *dnssec.Chain, zone string, reached *trace.Step, delegation []dns.RR) *trace.DNSSECStatus {
+	var keys []dns.RR
+	// Once the chain has left secure there is no way back to it, so there is
+	// nothing left to learn from the keys below.
+	if err := r.counters.query(); err == nil && chain.State() == trace.Secure {
+		hop := r.query(ctx, zone, reached.Server, zone, dns.TypeDNSKEY)
+		hop.step.Aside = true
+		hop.step.Records = nil // a key set is not something to read in a tree
+		hop.step.Notes = append(hop.step.Notes, "DNSKEY of "+zone)
+		reached.Children = append(reached.Children, hop.step)
+
+		if hop.resp != nil {
+			keys = hop.resp.Answer
+		}
+	}
+	return chain.Enter(zone, delegation, keys)
+}
+
+// verify checks the signatures over an answer, once the zone that gave it is
+// known to be trustworthy.
+func (r *run) verify(chain *dnssec.Chain, hop *hop, qname string, qtype uint16) {
+	if chain == nil || hop.resp == nil {
+		return
+	}
+	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, qname, qtype)
 }
 
 // queryZone asks the servers of one zone. By default it stops at the first that
 // is any use and shows the rest as unqueried; with All it asks every one of
 // them. It returns nil when none of them was any use.
-func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *trace.Step {
+func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *hop {
 	var usable []trace.Server
 	for _, server := range dedupe(servers) {
 		// A server of the wrong family is shown rather than hidden: a zone
@@ -203,15 +285,15 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 }
 
 // queryFirst is the default strategy: ask until one of them answers.
-func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *trace.Step {
+func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *hop {
 	for i, server := range servers {
 		if err := r.counters.query(); err != nil {
-			return r.fail(parent, zone, err.Error())
+			return &hop{step: r.fail(parent, zone, err.Error())}
 		}
 
-		step := r.query(ctx, zone, server, qname, qtype)
-		parent.Children = append(parent.Children, step)
-		switch step.Kind {
+		hop := r.query(ctx, zone, server, qname, qtype)
+		parent.Children = append(parent.Children, hop.step)
+		switch hop.step.Kind {
 		case trace.KindLame, trace.KindTimeout, trace.KindError:
 			continue
 		}
@@ -219,14 +301,14 @@ func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Serve
 		for _, rest := range servers[i+1:] {
 			parent.Children = append(parent.Children, skipped(zone, rest))
 		}
-		return step
+		return hop
 	}
 	return nil
 }
 
 // queryAll asks every server at once, a few at a time, and keeps them in the
 // order they were delegated so that the tree stays the same between runs.
-func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *trace.Step {
+func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *hop {
 	var budget error
 	for i := range servers {
 		if err := r.counters.query(); err != nil {
@@ -235,7 +317,7 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 		}
 	}
 
-	steps := make([]*trace.Step, len(servers))
+	hops := make([]*hop, len(servers))
 	limit := make(chan struct{}, maxParallel)
 	var wait sync.WaitGroup
 	for i, server := range servers {
@@ -244,29 +326,31 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 			defer wait.Done()
 			limit <- struct{}{}
 			defer func() { <-limit }()
-			steps[i] = r.query(ctx, zone, server, qname, qtype)
+			hops[i] = r.query(ctx, zone, server, qname, qtype)
 		}()
 	}
 	wait.Wait()
 
-	parent.Children = append(parent.Children, steps...)
+	for _, hop := range hops {
+		parent.Children = append(parent.Children, hop.step)
+	}
 	if budget != nil {
 		r.fail(parent, zone, budget.Error())
 	}
 
-	for _, step := range steps {
-		switch step.Kind {
+	for _, hop := range hops {
+		switch hop.step.Kind {
 		case trace.KindLame, trace.KindTimeout, trace.KindError:
 			continue
 		}
-		return step
+		return hop
 	}
 	return nil
 }
 
 // query is one hop: a single question to a single server, including whatever it
 // took to get a whole answer out of it.
-func (r *run) query(ctx context.Context, zone string, server trace.Server, qname string, qtype uint16) *trace.Step {
+func (r *run) query(ctx context.Context, zone string, server trace.Server, qname string, qtype uint16) *hop {
 	step := &trace.Step{Zone: zone, Server: server, Proto: r.cfg.Transport.Proto()}
 
 	udpSize := r.cfg.UDPSize
@@ -276,7 +360,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		if transport.IsTimeout(err) {
 			step.Kind = trace.KindTimeout
 		}
-		return step
+		return &hop{step: step}
 	}
 
 	// A server that cannot parse EDNS0 gets the question again without it.
@@ -311,7 +395,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	case trace.KindAnswer, trace.KindCNAME:
 		step.Records = records(resp.Answer)
 	}
-	return step
+	return &hop{step: step, resp: resp}
 }
 
 // exchange sends one message and adds what it cost to the step.
@@ -412,7 +496,7 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 		return
 	}
 
-	step := r.query(ctx, delegated.Zone, answer.Server, delegated.Zone, dns.TypeNS)
+	step := r.query(ctx, delegated.Zone, answer.Server, delegated.Zone, dns.TypeNS).step
 	step.Aside = true
 	step.Notes = append(step.Notes, "parent/child NS check")
 	answer.Children = append(answer.Children, step)
@@ -520,10 +604,15 @@ func dedupe(servers []trace.Server) []trace.Server {
 	return unique
 }
 
-// records flattens a section to the text the renderers work with.
+// records flattens a section to the text the renderers work with. Signatures
+// are left out: a screenful of base64 says nothing a reader can check, and the
+// DNSSEC verdict on the step is what a signature is worth knowing for.
 func records(rrs []dns.RR) []trace.RR {
 	var records []trace.RR
 	for _, rr := range rrs {
+		if dns.RRToType(rr) == dns.TypeRRSIG {
+			continue
+		}
 		records = append(records, trace.RR{
 			Name: rr.Header().Name,
 			TTL:  rr.Header().TTL,
