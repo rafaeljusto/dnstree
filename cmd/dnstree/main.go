@@ -33,9 +33,10 @@ const (
 	exitBogus    = 3 // the chain of trust is broken
 )
 
-// asnTimeout bounds the metadata lookups, which are worth having but never
-// worth waiting for.
-const asnTimeout = 5 * time.Second
+// asnTimeout bounds the metadata lookups. A working lookup answers in
+// milliseconds, so this is the patience of somebody who wants the trace, not of
+// somebody who wants the AS numbers.
+const asnTimeout = 2 * time.Second
 
 // version is stamped into a release build; see the dist target of the Makefile.
 var version = "dev"
