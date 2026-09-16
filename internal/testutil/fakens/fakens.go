@@ -264,6 +264,16 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 		}
 	}
 
+	// An alias answers for every type, and chasing it is the client's job.
+	if len(answer) == 0 && qtype != dns.TypeCNAME {
+		for _, rr := range owned {
+			if dns.RRToType(rr) == dns.TypeCNAME {
+				reply.Answer = []dns.RR{rr}
+				return
+			}
+		}
+	}
+
 	switch {
 	case len(answer) > 0:
 		reply.Answer = answer
