@@ -483,31 +483,40 @@ footer a:hover{color:var(--ink)}
       <h2>Get it</h2>
       <p class="section-lede">One static binary, one dependency, no runtime to install.</p>
 
+      <!-- A row whose command names a version carries the template too: the
+      markup ships the release that was current when the page was written, and
+      the script at the foot refreshes it. Both spellings appear, because the
+      tag keeps its v and the packages drop it. -->
       <div class="installs">
         <div class="cmd">
           <span class="what">go</span>
           <code>go install github.com/rafaeljusto/dnstree/cmd/dnstree@latest</code>
-          <button class="copy" type="button" data-copy="go install github.com/rafaeljusto/dnstree/cmd/dnstree@latest">copy</button>
+          <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd">
           <span class="what">docker</span>
           <code>docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A</code>
-          <button class="copy" type="button" data-copy="docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A">copy</button>
+          <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd">
           <span class="what">brew</span>
           <code>curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree.rb &amp;&amp; brew install --formula ./dnstree.rb</code>
-          <button class="copy" type="button" data-copy="curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree.rb &amp;&amp; brew install --formula ./dnstree.rb">copy</button>
+          <button class="copy" type="button">copy</button>
         </div>
-        <div class="cmd">
+        <div class="cmd" data-versioned="curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree_{v}_amd64.deb &amp;&amp; sudo dpkg -i dnstree_{v}_amd64.deb">
           <span class="what">deb</span>
-          <code>curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree_&lt;version&gt;_amd64.deb &amp;&amp; sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb</code>
-          <button class="copy" type="button" data-copy="curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree_&lt;version&gt;_amd64.deb &amp;&amp; sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb">copy</button>
+          <code>curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v0.1.3/dnstree_0.1.3_amd64.deb &amp;&amp; sudo dpkg -i dnstree_0.1.3_amd64.deb</code>
+          <button class="copy" type="button">copy</button>
         </div>
-        <div class="cmd">
+        <div class="cmd" data-versioned="sudo rpm -i https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree-{v}-1.x86_64.rpm">
           <span class="what">rpm</span>
-          <code>sudo rpm -i dnstree-&lt;version&gt;-1.x86_64.rpm</code>
-          <button class="copy" type="button" data-copy="sudo rpm -i dnstree-&lt;version&gt;-1.x86_64.rpm">copy</button>
+          <code>sudo rpm -i https://github.com/rafaeljusto/dnstree/releases/download/v0.1.3/dnstree-0.1.3-1.x86_64.rpm</code>
+          <button class="copy" type="button">copy</button>
+        </div>
+        <div class="cmd" data-versioned="curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree_{v}_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_{v}_x86_64.apk">
+          <span class="what">apk</span>
+          <code>curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v0.1.3/dnstree_0.1.3_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_0.1.3_x86_64.apk</code>
+          <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd">
           <span class="what">binary</span>
@@ -515,9 +524,11 @@ footer a:hover{color:var(--ink)}
         </div>
       </div>
 
-      <p class="section-lede" style="margin-top:1.2rem">Every release carries the
-      packages and an Alpine <code>.apk</code> too, for amd64, arm64 and armhf,
-      each with a man page. The release notes give the whole command.</p>
+      <p class="section-lede" style="margin-top:1.2rem">The three package lines
+      name the release that was current when the page was built, and the page
+      refreshes them from GitHub when it can. Every release carries the same
+      packages for arm64 and armhf, each with a man page, and a
+      <code>checksums.txt</code> over every file.</p>
 
       <h3 style="margin-top:2.2rem">Set it once</h3>
       <p class="section-lede">The flags you always type belong in
@@ -660,16 +671,21 @@ timeout = 3s</pre>
   });
 })();
 
-// Copy buttons.
+// Copy buttons. The command is read off the row rather than repeated in an
+// attribute, so what is copied is always what is on screen — including the
+// version the block below fills in.
 (function () {
   document.querySelectorAll(".copy").forEach(function (button) {
+    var timer;
     button.addEventListener("click", function () {
-      var text = button.getAttribute("data-copy");
+      var code = button.parentNode.querySelector("code");
+      if (!code) return;
       var done = function () {
-        var was = button.textContent;
         button.textContent = "copied";
-        setTimeout(function () { button.textContent = was; }, 1400);
+        clearTimeout(timer);
+        timer = setTimeout(function () { button.textContent = "copy"; }, 1400);
       };
+      var text = code.textContent;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done, function () {});
         return;
@@ -682,6 +698,29 @@ timeout = 3s</pre>
       document.body.removeChild(field);
     });
   });
+})();
+
+// The package filenames carry the version, so those rows cannot point at
+// /releases/latest/download the way the formula does. The markup ships the
+// release that was current when the page was written — already a command that
+// runs — and this only moves it forward once a newer one exists. Anything less
+// than an answer that parses leaves the page as it stands.
+(function () {
+  var rows = document.querySelectorAll("[data-versioned]");
+  if (!rows.length || !window.fetch) return;
+
+  fetch("https://api.github.com/repos/rafaeljusto/dnstree/releases/latest", {
+    headers: { Accept: "application/vnd.github+json" }
+  }).then(function (response) {
+    return response.ok ? response.json() : null;
+  }).then(function (release) {
+    var version = release && release.tag_name ? String(release.tag_name).replace(/^v/, "") : "";
+    if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) return;
+    rows.forEach(function (row) {
+      var code = row.querySelector("code");
+      if (code) code.textContent = row.getAttribute("data-versioned").split("{v}").join(version);
+    });
+  }).catch(function () { /* the page already carries a working command */ });
 })();
 </script>
 
