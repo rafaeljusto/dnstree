@@ -55,7 +55,7 @@ docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A
 Every [release](https://github.com/rafaeljusto/dnstree/releases) also carries a
 binary for macOS, Linux, FreeBSD and Windows, a Debian, RPM and Alpine package
 for amd64, arm64 and armhf, and a Homebrew formula. The release notes give the
-command for each; taking the packages of v0.1.3 as the example:
+command for each; taking the packages of `v0.1.3` as the example:
 
 ```
 # Debian, Ubuntu
