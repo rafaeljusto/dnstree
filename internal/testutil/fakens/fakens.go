@@ -337,7 +337,7 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 		reply.Ns = append(reply.Ns, published...)
 		if len(published) == 0 {
 			// No DS is a claim of its own, and a signed parent signs it.
-			reply.Ns = append(reply.Ns, s.denial(child)...)
+			reply.Ns = append(reply.Ns, s.denial(child, false)...)
 		}
 		reply.Extra = s.glue(delegation)
 		return // a referral carries no AA
@@ -348,7 +348,7 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 	if s.signer != nil && qtype == dns.TypeDS && !dns.EqualName(name, s.origin) &&
 		dnsutil.IsBelow(s.origin, name) && len(s.ds(name)) == 0 {
 		reply.Authoritative = true
-		reply.Ns = append(s.soa(), s.denial(name)...)
+		reply.Ns = append(s.soa(), s.denial(name, false)...)
 		return
 	}
 
@@ -386,10 +386,12 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 	case len(answer) > 0:
 		reply.Answer = answer
 	case len(owned) > 0 || s.hasChildren(name):
-		reply.Ns = s.soa() // NODATA, including the empty non-terminal
+		// NODATA, including the empty non-terminal: the name is there and the
+		// type is not, and a signed zone says so rather than only implying it.
+		reply.Ns = append(s.soa(), s.denial(name, false)...)
 	default:
 		reply.Rcode = dns.RcodeNameError
-		reply.Ns = s.soa()
+		reply.Ns = append(s.soa(), s.denial(name, true)...)
 	}
 }
 

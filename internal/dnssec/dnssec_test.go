@@ -121,7 +121,7 @@ func TestExpiredSignature(t *testing.T) {
 	}
 	answer := []dns.RR{record, zone.sign(t, []dns.RR{record}, time.Now().Add(-time.Hour))}
 
-	status := chain.Verify(answer, "example.", dns.TypeTXT)
+	status := chain.Verify(answer, nil, dns.RcodeSuccess, "example.", dns.TypeTXT)
 	if status.State != trace.Bogus {
 		t.Fatalf("got %+v, want an expired signature to be bogus", status)
 	}
@@ -153,7 +153,7 @@ func TestInsecureIsFinal(t *testing.T) {
 		t.Fatalf("building a record: %v", err)
 	}
 	answer := []dns.RR{record, zone.sign(t, []dns.RR{record}, time.Now().Add(time.Hour))}
-	if status := chain.Verify(answer, "example.", dns.TypeTXT); status.State != trace.Insecure {
+	if status := chain.Verify(answer, nil, dns.RcodeSuccess, "example.", dns.TypeTXT); status.State != trace.Insecure {
 		t.Errorf("got %+v, want insecure carried down", status)
 	}
 }
@@ -231,7 +231,7 @@ func TestUnchecked(t *testing.T) {
 	answer := []dns.RR{record, zone.sign(t, []dns.RR{record}, time.Now().Add(time.Hour))}
 
 	// Whatever is below an unchecked link is unchecked too, however it is signed.
-	below := chain.Verify(answer, "example.", dns.TypeTXT)
+	below := chain.Verify(answer, nil, dns.RcodeSuccess, "example.", dns.TypeTXT)
 	if below.State != trace.Indeterminate || below.Reason != status.Reason {
 		t.Errorf("got %+v below the gap, want the same verdict carried down", below)
 	}
@@ -249,7 +249,7 @@ func TestUnsignedAnswer(t *testing.T) {
 		t.Fatalf("building a record: %v", err)
 	}
 
-	status := chain.Verify([]dns.RR{record}, "example.", dns.TypeTXT)
+	status := chain.Verify([]dns.RR{record}, nil, dns.RcodeSuccess, "example.", dns.TypeTXT)
 	if status.State != trace.Bogus {
 		t.Fatalf("got %+v, want bogus", status)
 	}

@@ -133,19 +133,19 @@ func (c *Chain) Unchecked(reason string) *trace.DNSSECStatus {
 	return c.settleAs(&trace.DNSSECStatus{}, trace.Indeterminate, reason, nil)
 }
 
-// Verify checks the records that answer qname and qtype against the keys of the
-// zone the chain is in.
-func (c *Chain) Verify(answer []dns.RR, qname string, qtype uint16) *trace.DNSSECStatus {
+// Verify checks what a server said about qname and qtype against the keys of
+// the zone the chain is in: the records that answer it, or, when there are
+// none, the denial in authority that says there are none to give. rcode is what
+// the server answered with, which is the difference between a name that is not
+// there and a name that has nothing of this type.
+func (c *Chain) Verify(answer, authority []dns.RR, rcode uint16, qname string, qtype uint16) *trace.DNSSECStatus {
 	if c.state != trace.Secure {
 		return &trace.DNSSECStatus{State: c.state, Reason: c.reason}
 	}
 
 	rrset, signatures := rrset(answer, qname, qtype)
 	if len(rrset) == 0 {
-		// Denial of existence needs NSEC or NSEC3, which is not read here, so an
-		// empty answer is neither proved nor disproved.
-		return &trace.DNSSECStatus{State: trace.Indeterminate,
-			Reason: "an answer with no records is not checked without NSEC"}
+		return c.verifyDenial(authority, rcode, qname, qtype)
 	}
 	if len(signatures) == 0 {
 		return &trace.DNSSECStatus{State: trace.Bogus, Reason: "the answer carries no signature"}
@@ -162,12 +162,45 @@ func (c *Chain) Verify(answer []dns.RR, qname string, qtype uint16) *trace.DNSSE
 		return status
 	}
 
+	// A signature covering fewer labels than the name it answers for was made
+	// over a wildcard, and the zone owes a proof that there was nothing closer.
+	if covered := int(signature.Labels); covered < dnsutil.Labels(qname) {
+		if err := c.provesNoCloserMatch(authority, qname, signature.Labels); err != nil {
+			status.State = trace.Bogus
+			if unsupported(err) {
+				status.State = trace.Indeterminate
+			}
+			status.Reason = "the answer came from a wildcard: " + err.Error()
+			return status
+		}
+		status.Reason = "answered by a wildcard"
+	}
+
 	// Mid rollover an RRset carries several signatures; the one that held is
 	// the one worth naming.
 	status.State = trace.Secure
 	status.Algorithm = algorithm(signature.Algorithm)
 	status.KeyTags = []uint16{signature.KeyTag}
 	return status
+}
+
+// verifyDenial checks an answer that carried no records. A signed zone signs
+// the gaps in itself, so an empty answer from one is as checkable as a full
+// one: either the name is not there, or it is and the type is not.
+func (c *Chain) verifyDenial(authority []dns.RR, rcode uint16, qname string, qtype uint16) *trace.DNSSECStatus {
+	proved, what := c.provesNoType(authority, qname, qtype), "has no "+dnsutil.TypeToString(qtype)
+	if rcode == dns.RcodeNameError {
+		proved, what = c.provesNoName(authority, qname), "does not exist"
+	}
+	if proved != nil {
+		state := trace.Bogus
+		if unsupported(proved) {
+			state = trace.Indeterminate
+		}
+		return &trace.DNSSECStatus{State: state,
+			Reason: "the zone did not prove that " + qname + " " + what + ": " + proved.Error()}
+	}
+	return &trace.DNSSECStatus{State: trace.Secure, Reason: "proved that " + qname + " " + what}
 }
 
 // verify checks an RRset against every signature that one of keys can carry,

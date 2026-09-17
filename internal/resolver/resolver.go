@@ -308,7 +308,9 @@ func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname s
 		return
 	}
 	r.crossCut(ctx, chain, hop, qname)
-	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, qname, qtype)
+	// The authority section comes too: an answer with no records is denied
+	// there rather than answered, and the denial is what makes it checkable.
+	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, hop.resp.Ns, hop.resp.Rcode, qname, qtype)
 }
 
 // crossCut enters a zone the walk was never referred to. A server authoritative
@@ -321,7 +323,7 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname
 		return
 	}
 	zone := hop.step.Zone
-	cut := signerOf(hop.resp.Answer, qname)
+	cut := signerOf(hop.resp, qname)
 	if cut == "" || dns.EqualName(cut, zone) || !dnsutil.IsBelow(zone, cut) {
 		return
 	}
@@ -351,15 +353,25 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname
 		append(append([]dns.RR{}, ds.resp.Answer...), ds.resp.Ns...))
 }
 
-// signerOf is the zone that signed the answer to qname, as its signatures name
-// it. It is the only thing in a message that says a zone cut was crossed.
-func signerOf(answer []dns.RR, qname string) string {
-	for _, rr := range answer {
+// signerOf is the zone that signed a response, as its signatures name it. It is
+// the only thing in a message that says a zone cut was crossed.
+//
+// An answer names its zone in the records that answer; an empty one has none to
+// name it with, so the denial does it instead. Both a NODATA and an NXDOMAIN
+// carry the zone's own SOA, and the signature over that is made by the apex of
+// the zone that made the denial.
+func signerOf(resp *dns.Msg, qname string) string {
+	for _, rr := range resp.Answer {
 		signature, ok := rr.(*dns.RRSIG)
 		if !ok || !dns.EqualName(signature.Hdr.Name, qname) {
 			continue
 		}
 		return dnsutil.Fqdn(signature.SignerName)
+	}
+	for _, rr := range resp.Ns {
+		if signature, ok := rr.(*dns.RRSIG); ok && signature.TypeCovered == dns.TypeSOA {
+			return dnsutil.Fqdn(signature.SignerName)
+		}
 	}
 	return ""
 }

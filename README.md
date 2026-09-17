@@ -205,11 +205,18 @@ $ dnstree --dnssec --no-asn cloudflare.com A
 └── (and 22 more not queried)
 ```
 
-A zone whose parent publishes no DS reads `[insecure]`, and everything below it
-stays that way. A link that cannot be checked at all — an algorithm this build
-does not know — reads `[indeterminate]`, which is not the same as `[bogus]`.
-Denial of existence is not proved: NSEC and NSEC3 are not read, so an empty
-answer in a signed zone is reported as indeterminate rather than claimed.
+A zone whose parent proves it publishes no DS reads `[insecure]`, and everything
+below it stays that way. A parent that publishes neither a DS nor the signed
+proof that it has none is not taken at its word: dropping the DS out of a
+referral is all it would take to walk the chain off the secure path. A link that
+cannot be checked at all — an algorithm this build does not know — reads
+`[indeterminate]`, which is not the same as `[bogus]`.
+
+Denial of existence is proved. NSEC and NSEC3 are read, opt-out included, so an
+answer with nothing in it is checked like any other: an NXDOMAIN has to show the
+gap the name falls in and the gap the wildcard would have answered from, a
+NODATA has to name the types the name does hold, and an answer a wildcard was
+stretched over has to show there was nothing closer to answer with.
 
 A registry that serves its own domains from the machines of its ccTLD answers
 for a child zone with no referral to it, so the cut is invisible from the walk.

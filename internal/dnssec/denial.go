@@ -136,10 +136,11 @@ func (c *Chain) signedBy(authority []dns.RR, owner string, rrtype uint16) error 
 		}
 	}
 	if len(signatures) == 0 {
-		return fmt.Errorf("the denial of a DS carries no signature")
+		return fmt.Errorf("the %s of %s carries no signature", dnsutil.TypeToString(rrtype), owner)
 	}
 	if _, err := c.verify(rrset, signatures, c.keys); err != nil {
-		return fmt.Errorf("the denial of a DS is not signed by the keys of the parent")
+		return fmt.Errorf("the %s of %s is not signed by the keys of the zone: %w",
+			dnsutil.TypeToString(rrtype), owner, err)
 	}
 	return nil
 }
@@ -181,4 +182,108 @@ func decode(hash string) string {
 
 func hasType(bitmap []uint16, rrtype uint16) bool {
 	return slices.Contains(bitmap, rrtype)
+}
+
+// Below here is the machinery the existence proofs share: what an NSEC or an
+// NSEC3 says about one name, and the name arithmetic RFC 5155 section 8 is
+// written in.
+
+// nsecsOf and nsec3sOf are the denial records of a section. A hash nothing here
+// computes, or an iteration count not worth grinding through, stops the reading
+// rather than failing it.
+func nsecsOf(authority []dns.RR) []*dns.NSEC {
+	var records []*dns.NSEC
+	for _, rr := range authority {
+		if nsec, ok := rr.(*dns.NSEC); ok {
+			records = append(records, nsec)
+		}
+	}
+	return records
+}
+
+func nsec3sOf(authority []dns.RR) ([]*dns.NSEC3, error) {
+	var records []*dns.NSEC3
+	for _, rr := range authority {
+		nsec3, ok := rr.(*dns.NSEC3)
+		if !ok {
+			continue
+		}
+		if nsec3.Hash != 1 {
+			return nil, unsupportedError{fmt.Sprintf("NSEC3 hash algorithm %d is not supported here", nsec3.Hash)}
+		}
+		if nsec3.Iterations > maxNSEC3Iterations {
+			return nil, unsupportedError{fmt.Sprintf("the NSEC3 asks for %d iterations, more than the %d worth hashing",
+				nsec3.Iterations, maxNSEC3Iterations)}
+		}
+		records = append(records, nsec3)
+	}
+	return records, nil
+}
+
+// nsecMatches and nsecCovers are the two things an NSEC can say: this name is
+// the one I am about, or this name falls in the gap I span. The last NSEC of a
+// zone wraps past the end of the ordering back to the apex.
+func nsecMatches(nsec *dns.NSEC, name string) bool {
+	return dns.EqualName(nsec.Hdr.Name, name)
+}
+
+func nsecCovers(nsec *dns.NSEC, name string) bool {
+	owner, next := nsec.Hdr.Name, nsec.NextDomain
+	if dns.CompareName(owner, next) >= 0 {
+		return dns.CompareName(owner, name) < 0 || dns.CompareName(name, next) < 0
+	}
+	return dns.CompareName(owner, name) < 0 && dns.CompareName(name, next) < 0
+}
+
+// nsec3Matches and nsec3Covers are the same two things, about the hash of a
+// name rather than the name itself.
+func nsec3Matches(nsec3 *dns.NSEC3, name string) bool {
+	hashed := dnsutil.NSEC3Name(dnsutil.Canonical(name), nsec3.Salt, nsec3.Iterations)
+	return hashed != "" && ownerHash(nsec3.Hdr.Name) == hashed
+}
+
+func nsec3Covers(nsec3 *dns.NSEC3, name string) bool {
+	hashed := dnsutil.NSEC3Name(dnsutil.Canonical(name), nsec3.Salt, nsec3.Iterations)
+	return hashed != "" && covers(ownerHash(nsec3.Hdr.Name), nsec3.NextDomain, hashed)
+}
+
+// ancestorOf is the last n labels of name, which is how the closest encloser
+// and the name one label below it are named.
+func ancestorOf(name string, n int) string {
+	if n <= 0 {
+		return "."
+	}
+	labels := dnsutil.Split(dnsutil.Fqdn(name))
+	if name == "." || n >= len(labels) {
+		return dnsutil.Fqdn(name)
+	}
+	return dnsutil.Fqdn(strings.Join(labels[len(labels)-n:], "."))
+}
+
+// wildcardAt is the name a wildcard would answer under an encloser.
+func wildcardAt(encloser string) string {
+	if encloser == "." {
+		return "*."
+	}
+	return "*." + dnsutil.Fqdn(encloser)
+}
+
+// closestEncloser is the deepest ancestor of qname an NSEC3 says exists, and
+// the name one label below it: the pair every NSEC3 proof of absence is built
+// on. RFC 5155 section 8.3.
+func closestEncloser(nsec3s []*dns.NSEC3, qname, zone string) (encloser, nextCloser string, found bool) {
+	deepest, apex := dnsutil.Labels(qname), dnsutil.Labels(zone)
+	for n := deepest; n >= apex; n-- {
+		candidate := ancestorOf(qname, n)
+		for _, nsec3 := range nsec3s {
+			if !nsec3Matches(nsec3, candidate) {
+				continue
+			}
+			if n < deepest {
+				nextCloser = ancestorOf(qname, n+1)
+			}
+			return candidate, nextCloser, true
+		}
+	}
+	return "", "", false
 }

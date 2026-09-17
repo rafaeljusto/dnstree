@@ -69,8 +69,12 @@ Each of these has been a bug, or would be a silent regression.
   inside that call, which is safe for exactly that reason; a hop attached from
   anywhere else is a data race against the live drawing.
 - **DNSSEC never claims more than it checked.** An algorithm this build does not
-  know, or a denial of existence it cannot read, is `indeterminate` — never
+  know, or a denial of existence it cannot compute, is `indeterminate` — never
   `bogus`. Bogus is exit code 3 and has to keep meaning something.
+- **What a zone does not say is checked like what it does.** An insecure
+  delegation, an NXDOMAIN, a NODATA and a wildcard all rest on a proof the zone
+  signed, never on an absence: an absence is what anyone able to drop records
+  from a response can manufacture.
 - **The AS lookups are best effort.** They start as the walk discovers each
   server, are waited on briefly after it, and never fail a resolution. When they
   come back empty they say in one line which of the two things went wrong: the

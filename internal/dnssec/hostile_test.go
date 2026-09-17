@@ -58,7 +58,7 @@ func TestStrayKeyIsNotTrusted(t *testing.T) {
 	answer := []dns.RR{record(t, `example. 3600 IN TXT "forged"`)}
 	answer = append(answer, elsewhere.sign(t, answer, time.Now()))
 
-	if status := chain.Verify(answer, "example.", dns.TypeTXT); status.State == trace.Secure {
+	if status := chain.Verify(answer, nil, dns.RcodeSuccess, "example.", dns.TypeTXT); status.State == trace.Secure {
 		t.Errorf("got %+v, want an answer signed by a key nobody vouched for refused", status)
 	}
 }
@@ -82,7 +82,7 @@ func TestVerifyNamesTheKeyThatSigned(t *testing.T) {
 	answer = append(answer, retired.sign(t, rrset, time.Now()))
 	answer = append(answer, root.sign(t, rrset, time.Now()))
 
-	status := chain.Verify(answer, "example.", dns.TypeTXT)
+	status := chain.Verify(answer, nil, dns.RcodeSuccess, "example.", dns.TypeTXT)
 	if status.State != trace.Secure {
 		t.Fatalf("got %s (%s), want secure", status.State, status.Reason)
 	}
