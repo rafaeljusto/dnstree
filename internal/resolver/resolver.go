@@ -247,10 +247,10 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 
 		switch {
 		case step.Kind == trace.KindCNAME && qtype != dns.TypeCNAME:
-			r.verify(chain, hop, qname, qtype)
+			r.verify(ctx, chain, hop, qname, qtype)
 			return r.chaseCNAME(ctx, step, qname, qtype, side)
 		case step.Kind != trace.KindReferral:
-			r.verify(chain, hop, qname, qtype)
+			r.verify(ctx, chain, hop, qname, qtype)
 			if side == 0 {
 				r.checkNS(ctx, step, parent)
 			}
@@ -294,11 +294,62 @@ func (r *run) enterZone(ctx context.Context, chain *dnssec.Chain, zone string, r
 
 // verify checks the signatures over an answer, once the zone that gave it is
 // known to be trustworthy.
-func (r *run) verify(chain *dnssec.Chain, hop *hop, qname string, qtype uint16) {
+func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname string, qtype uint16) {
 	if chain == nil || hop.resp == nil {
 		return
 	}
+	r.crossCut(ctx, chain, hop, qname)
 	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, qname, qtype)
+}
+
+// crossCut enters a zone the walk was never referred to. A server authoritative
+// for a child as well as for the zone it was asked about answers across the cut
+// without a referral, which leaves the chain holding the parent's keys and the
+// answer signed with the child's. The signatures name the zone to enter, and
+// its DS comes from the same server, which serves the parent side of the cut.
+func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname string) {
+	if chain.State() != trace.Secure {
+		return
+	}
+	zone := hop.step.Zone
+	cut := signerOf(hop.resp.Answer, qname)
+	if cut == "" || dns.EqualName(cut, zone) || !dnsutil.IsBelow(zone, cut) {
+		return
+	}
+	if err := r.counters.query(); err != nil {
+		chain.Unchecked("the budget ran out before the DS of " + cut + " could be fetched")
+		return
+	}
+
+	ds := r.query(ctx, zone, hop.step.Server, cut, dns.TypeDS)
+	ds.step.Aside = true
+	ds.step.Records = nil // the verdict is what the DS is worth reading for
+	ds.step.Notes = append(ds.step.Notes, "DS of "+cut)
+	r.attach(hop.step, ds.step)
+
+	// A DS that never arrived is not a DS the parent does not publish, so the
+	// cut is left unchecked rather than called insecure.
+	if ds.resp == nil {
+		ds.step.DNSSEC = chain.Unchecked("the DS of " + cut + " could not be fetched")
+		return
+	}
+
+	// The verdict belongs on the step that published the DS, the way a
+	// referral's does: it is the same zone cut, crossed without one.
+	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, hop.step, ds.resp.Answer)
+}
+
+// signerOf is the zone that signed the answer to qname, as its signatures name
+// it. It is the only thing in a message that says a zone cut was crossed.
+func signerOf(answer []dns.RR, qname string) string {
+	for _, rr := range answer {
+		signature, ok := rr.(*dns.RRSIG)
+		if !ok || !dns.EqualName(signature.Hdr.Name, qname) {
+			continue
+		}
+		return dnsutil.Fqdn(signature.SignerName)
+	}
+	return ""
 }
 
 // queryZone asks the servers of one zone. By default it stops at the first that
