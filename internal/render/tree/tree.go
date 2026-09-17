@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
@@ -113,7 +114,7 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, warning := range tr.Warnings {
 		mark := "warning: "
 		if r.glyphs.icons {
-			mark = "⚠️  "
+			mark = spaced("⚠️")
 		}
 		r.write(r.paint.paint(mark+warning, yellow) + "\n")
 	}
@@ -247,6 +248,17 @@ func (r *renderer) notes(step *trace.Step) string {
 	return r.paint.dim("(" + strings.Join(step.Notes, "; ") + ")")
 }
 
+// spaced sets an icon off from what it introduces. A symbol from before the
+// emoji blocks is only drawn as one by the variation selector after it, and a
+// terminal that keeps the one cell such a symbol has always had lets the glyph
+// spill over the space that follows, so it is given another.
+func spaced(icon string) string {
+	if r, _ := utf8.DecodeRuneInString(icon); r < 0x1f000 && strings.ContainsRune(icon, 0xfe0f) {
+		return icon + "  "
+	}
+	return icon + " "
+}
+
 // join puts two fields together, dropping an empty one.
 func join(fields ...string) string {
 	var set []string
@@ -343,7 +355,7 @@ func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 	label = "[" + label + "]"
 	if r.glyphs.icons {
 		if icon := dnssecIcons[status.State]; icon != "" {
-			label = icon + " " + label
+			label = spaced(icon) + label
 		}
 	}
 
@@ -370,7 +382,7 @@ func (r *renderer) recordLabel(record trace.RR) string {
 	if icon == "" {
 		icon = "📄"
 	}
-	return icon + " " + label
+	return spaced(icon) + label
 }
 
 // duration keeps a round trip readable: milliseconds for anything a network
