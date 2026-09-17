@@ -92,7 +92,6 @@ dnstree [flags] NAME [TYPE]
 | `--dnssec` | ask for signatures and follow the chain of trust |
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
-
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | do not put the same question to a recursive resolver, or compare its answer |
 | `--format` | `tree`, `ascii`, `emoji`, `json` or `dot` |
