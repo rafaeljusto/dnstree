@@ -246,11 +246,10 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		// saying so here does not rely on that and reads better than "the
 		// DNSKEY set could not be fetched".
 		if chain != nil {
-			switch {
-			case step.Server.IP.IsValid():
-				parent.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
-			default:
+			if !step.Server.IP.IsValid() {
 				parent.DNSSEC = chain.Unchecked("no server of " + zone + " answered")
+			} else {
+				parent.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
 			}
 		}
 
@@ -506,14 +505,13 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	// An answer that did not fit has to be fetched again over TCP.
 	if resp.Truncated && r.cfg.TCP != nil && step.Proto != r.cfg.TCP.Proto() {
 		retry, retryErr := r.exchange(ctx, step, r.cfg.TCP, qname, qtype, udpSize, port)
-		switch {
-		case retryErr == nil:
+		if retryErr != nil {
+			step.Notes = append(step.Notes,
+				"truncated over "+step.Proto+", and "+r.cfg.TCP.Proto()+" did not get through")
+		} else {
 			step.Notes = append(step.Notes, "truncated over "+step.Proto)
 			step.Proto = r.cfg.TCP.Proto()
 			resp = retry
-		default:
-			step.Notes = append(step.Notes,
-				"truncated over "+step.Proto+", and "+r.cfg.TCP.Proto()+" did not get through")
 		}
 	}
 
