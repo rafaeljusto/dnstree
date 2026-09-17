@@ -69,6 +69,19 @@ func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		status.KeyTags = append(status.KeyTags, ds.KeyTag)
 	}
 
+	// A DS is the parent's word for the child, and worth no more than the
+	// parent's signature over it. The anchors are the one thing trusted on
+	// sight.
+	if zone != "." {
+		signed := dsSignatures(authority, zone)
+		if len(signed) == 0 {
+			return c.settleAs(status, trace.Bogus, "the parent published a DS it did not sign", nil)
+		}
+		if err := c.verify(asRRs(delegated), signed, c.keys); err != nil {
+			return c.settleAs(status, trace.Bogus, "the DS is not signed by the keys of the parent", nil)
+		}
+	}
+
 	keys, signatures := split(dnskeys)
 	if len(keys) == 0 {
 		return c.settleAs(status, trace.Indeterminate, "the DNSKEY set could not be fetched", nil)
@@ -90,6 +103,15 @@ func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 
 	status.KeyTags = []uint16{key.KeyTag()}
 	return c.settleAs(status, trace.Secure, "", keys)
+}
+
+// Unchecked stops the chain where a link could not be fetched at all, which is
+// neither a break nor a pass: everything below it is reported as unchecked.
+func (c *Chain) Unchecked(reason string) *trace.DNSSECStatus {
+	if c.state != trace.Secure {
+		return &trace.DNSSECStatus{State: c.state, Reason: c.reason}
+	}
+	return c.settleAs(&trace.DNSSECStatus{}, trace.Indeterminate, reason, nil)
 }
 
 // Verify checks the records that answer qname and qtype against the keys of the
@@ -193,6 +215,22 @@ func unsupported(err error) bool {
 	return errors.As(err, &unsupported)
 }
 
+// dsSignatures are the signatures over the DS RRset of zone, which the parent
+// makes and the parent's keys check.
+func dsSignatures(authority []dns.RR, zone string) []*dns.RRSIG {
+	var signatures []*dns.RRSIG
+	for _, rr := range authority {
+		signature, ok := rr.(*dns.RRSIG)
+		if !ok || signature.TypeCovered != dns.TypeDS {
+			continue
+		}
+		if dns.EqualName(signature.Hdr.Name, zone) {
+			signatures = append(signatures, signature)
+		}
+	}
+	return signatures
+}
+
 // dsRecords are the DS records of zone in an authority section.
 func dsRecords(authority []dns.RR, zone string) []*dns.DS {
 	var delegated []*dns.DS
@@ -272,10 +310,11 @@ func rrset(answer []dns.RR, qname string, qtype uint16) ([]dns.RR, []*dns.RRSIG)
 	return rrset, signatures
 }
 
-func asRRs(keys []*dns.DNSKEY) []dns.RR {
-	rrs := make([]dns.RR, 0, len(keys))
-	for _, key := range keys {
-		rrs = append(rrs, key)
+// asRRs widens a typed set to the records a signature covers.
+func asRRs[T dns.RR](records []T) []dns.RR {
+	rrs := make([]dns.RR, 0, len(records))
+	for _, record := range records {
+		rrs = append(rrs, record)
 	}
 	return rrs
 }

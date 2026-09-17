@@ -78,6 +78,93 @@ func TestDNSSECSecure(t *testing.T) {
 	}
 }
 
+// hostedZone is a child served by the machines of its parent, the way a
+// registry serves both a ccTLD and its own domains. Nothing delegates to it:
+// the server holding the parent answers for it straight away.
+const hostedZone = `
+@   IN SOA ns.com. hostmaster 1 7200 3600 1209600 3600
+@   IN NS  ns.com.
+www IN A   192.0.2.11
+`
+
+// TestDNSSECHiddenCut covers a zone cut no referral crosses. A server
+// authoritative for both sides of it answers for the child with the child's
+// signatures, and a walk that only counts referrals is left checking them
+// against the parent's keys, which calls a perfectly good answer bogus.
+func TestDNSSECHiddenCut(t *testing.T) {
+	tests := map[string]struct {
+		hosted fakens.Behaviour
+		state  trace.DNSSECState
+		reason string
+	}{
+		"the child is properly signed": {
+			state: trace.Secure,
+		},
+		"the keys of the child are not the ones vouched for": {
+			hosted: fakens.Behaviour{StrayDNSKEY: true},
+			state:  trace.Bogus,
+			reason: "matches the DS",
+		},
+		"the child is not vouched for at all": {
+			hosted: fakens.Behaviour{NoDS: true},
+			state:  trace.Insecure,
+			reason: "no DS",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+			// The same declared address as ns.com., so the walk never learns
+			// there is a cut here except from the signatures.
+			h.hierarchy.Add(fakens.Config{
+				Name: "ns.com.", Origin: "hosted.com.", Zone: hostedZone, Declared: "192.0.2.2",
+				DNSSEC: true, Behaviour: test.hosted,
+			})
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.hosted.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if len(tr.Warnings) != 0 {
+				t.Errorf("got warnings %q, want none", tr.Warnings)
+			}
+
+			answer := tr.Result()
+			if answer == nil || answer.Kind != trace.KindAnswer {
+				t.Fatalf("got %+v, want an answer: %s", answer, format(steps(tr)))
+			}
+			if answer.Zone != "com." {
+				t.Errorf("got the answer under %s, want the zone that was asked", answer.Zone)
+			}
+			if answer.DNSSEC == nil || answer.DNSSEC.State != test.state {
+				t.Fatalf("got %+v on the answer, want %s: %s", answer.DNSSEC, test.state, format(steps(tr)))
+			}
+			if !strings.Contains(answer.DNSSEC.Reason, test.reason) {
+				t.Errorf("got reason %q, want it to mention %q", answer.DNSSEC.Reason, test.reason)
+			}
+
+			// The cut is crossed where it happened: under the answer, with the
+			// DS asked of the server that serves the parent side of it.
+			var ds *trace.Step
+			for _, step := range answer.Children {
+				if len(step.Notes) > 0 && step.Notes[0] == "DS of hosted.com." {
+					ds = step
+				}
+			}
+			if ds == nil {
+				t.Fatalf("the DS of hosted.com. was never asked for: %s", format(steps(tr)))
+			}
+			if !ds.Aside || len(ds.Records) != 0 {
+				t.Errorf("got %+v for the DS query, want an aside with no records in the tree", ds)
+			}
+			if ds.DNSSEC == nil || ds.DNSSEC.State != test.state {
+				t.Errorf("got %+v on the cut, want %s", ds.DNSSEC, test.state)
+			}
+		})
+	}
+}
+
 // TestDNSSECBroken covers one broken link at a time, each of which has its own
 // verdict: a missing DS is not a failure, a missing key set is not a forgery,
 // and a signature that does not verify is.

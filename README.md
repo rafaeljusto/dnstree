@@ -195,6 +195,13 @@ does not know — reads `[indeterminate]`, which is not the same as `[bogus]`.
 Denial of existence is not proved: NSEC and NSEC3 are not read, so an empty
 answer in a signed zone is reported as indeterminate rather than claimed.
 
+A registry that serves its own domains from the machines of its ccTLD answers
+for a child zone with no referral to it, so the cut is invisible from the walk.
+The signatures name the zone that made them, and the same server holds the
+parent side of the cut, so it is asked for the child's DS — an aside reading
+`(DS of registro.br.)` — and the chain crosses the cut before the answer is
+checked.
+
 ### Watching it happen
 
 `--live` redraws the tree in place as the walk makes it, so the referrals
