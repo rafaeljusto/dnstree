@@ -1,0 +1,121 @@
+# dnstree reads a file like this one before the command line, and takes from
+# it whatever the command line does not say. Copy it to ~/.dnstreerc, to
+# ~/.config/dnstree/config, or anywhere $DNSTREE_CONFIG points.
+#
+# One long flag name per line, with the value it takes. The dashes are
+# optional, "name value" works as well as "name = value", and a flag that
+# stands on its own needs no value at all. Only a line opening with # is a
+# comment: a # partway along a line is part of the value, so a setting and
+# what it is for go on separate lines.
+#
+# The command line is read last and wins. --format ascii beats a format set
+# here, --dnssec=false turns off a flag set here, and --no-config ignores the
+# file altogether. Flags that answer one question in different ways give way
+# together: name any transport on the command line and whichever this file
+# chose is dropped rather than collided with, and the same goes for the
+# address family, for where the walk starts, and for how TLS is verified.
+#
+# Every setting below is commented out, written as "name = value" so that a
+# test can check each one still parses, and carrying its default where it has
+# one. Uncomment what you want.
+
+
+# What to follow
+
+# Ask for signatures and follow the chain of trust. A broken one is exit code
+# 3, which a script reading the answer wants to know about first.
+# dnssec = true
+
+# Ask every nameserver of a zone rather than the first that answers. Slower,
+# and the only way to see one server of a set disagree with the others.
+# all = true
+
+# Ask each zone for its own NS set and compare it with the one its parent
+# hands out. A mismatch is a real delegation fault that still resolves.
+# check-ns = true
+
+
+# How to ask
+
+# Ask only IPv4 servers, or write 6 for only IPv6. The two are alternatives,
+# so naming either on the command line replaces this line.
+# 4 = true
+
+# Carry the queries over TCP, TLS or HTTPS instead of plain DNS: tcp, dot or
+# doh, one at a time. Plain UDP is what a walk does without any of them.
+# dot = true
+
+# Let plain DNS pick up a hop the chosen transport could not reach, rather
+# than leaving it in the tree as a failure.
+# fallback = true
+
+# How long one query may take, and how often to ask again after a silence.
+# timeout = 2s
+# retries = 1
+
+# The port nameservers are asked on, for a test bed that does not use 53.
+# port = 5353
+
+
+# What to draw
+
+# tree, ascii, emoji, json or dot. ascii emits nothing above codepoint 127,
+# for pasting somewhere that cannot carry box drawing.
+# format = tree
+
+# Draw the tree as the walk makes it. Asking for json or dot on the command
+# line drops this line rather than failing on it, since both are written once
+# at the end.
+# live = true
+
+# auto, always or never. auto colours a terminal and nothing else.
+# color = auto
+
+# Skip the origin AS lookups. They are the one thing a walk asks a resolver
+# for, which is what to weigh where nothing may leave the host.
+# no-asn = true
+
+# Send the origin AS lookups somewhere other than the host's own resolver.
+# asn-resolver = 9.9.9.9
+
+
+# Where the walk starts
+
+# Roots of your own, instead of the built-in hints. Repeat the line for every
+# server the walk may start from. One --root on the command line replaces
+# every line here rather than adding to them, and so does --root-hints.
+# root = a.root.test@192.0.2.53
+# root = b.root.test@192.0.2.54
+
+# A hints file, as the alternative to the root lines above.
+# root-hints = /etc/dnstree/root.hints
+
+# The DS records to trust. A walk that starts off the real root usually wants
+# its own anchors with it, or the chain has nothing to end at.
+# trust-anchors = /etc/dnstree/anchors.txt
+
+
+# What bounds a walk
+
+# Zone cuts followed, queries made in total, aliases chased. Every walk ends;
+# these say when.
+# max-depth = 16
+# max-queries = 64
+# max-cname = 8
+
+
+# Reaching a test server
+
+# Verify --dot and --doh against these roots rather than the system's.
+# dot = true
+# tls-ca = /etc/ssl/certs/ca-certificates.crt
+
+# Or do not verify them at all, which only a certificate you issued deserves.
+# dot = true
+# tls-insecure = true
+
+
+# Debugging
+
+# Report every hop on stderr as it is made.
+# debug = true

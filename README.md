@@ -118,16 +118,32 @@ dnssec
 timeout = 3s
 ```
 
-One long flag name per line, with the value it takes; `#` opens a comment, and a
-flag that stands on its own needs no value. The command line wins over the file,
-so `--format ascii` overrides the line above, `--udp` replaces a transport the
-file chose, and `--dnssec=false` turns a flag it set back off. `--config FILE`
+One long flag name per line, with the value it takes. `name value` works as well
+as `name = value`, the dashes of a pasted command line are allowed and ignored,
+and a flag that stands on its own needs no value. A line opening with `#` is a
+comment; a `#` partway along a line is part of the value, so a setting and what
+it is for go on separate lines. A name that is not a flag, or one missing the
+value it takes, is reported against the line that wrote it.
+
+Only `$DNSTREE_CONFIG` has to be there — named outright, a file that is missing
+is an error. The two conventional locations are simply read if they exist.
+
+The command line wins over the file, so `--format ascii` overrides the line
+above and `--dnssec=false` turns a flag it set back off. Flags that answer one
+question in different ways give way as a group, rather than colliding: naming
+any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
+chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
+for `--tls-ca` and `--tls-insecure`. `--format json` and `--format dot` drop a
+`live` the file set, since both are written once at the end. `--config FILE`
 reads somewhere else, and `--no-config` reads nowhere.
 
 `root` is the one line worth repeating: a file may carry as many as the walk
 should start from, in the order they are written. One `--root` on the command
 line replaces every one of them, rather than adding to them, and so does
 `--root-hints`.
+
+[`dnstreerc.example`](dnstreerc.example) is a file of every setting worth
+making, annotated and commented out. Copy it and uncomment what you want.
 
 ### Pointing it somewhere else
 

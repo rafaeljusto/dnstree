@@ -147,6 +147,15 @@ The man page is not a fifth place. `cmd/mkman` renders it from `cli.Usage` at
 release time, and refuses to render a usage text whose shape it cannot read, so
 a flag added to the usage string reaches the packages on its own.
 
+`dnstreerc.example` is written by hand, but it is not a fifth place either.
+`TestExampleParses` reads it as it ships and then reads every run of adjacent
+setting lines in it with the comment markers taken off, so a flag that is
+renamed or dropped, or an example value that stops being one, fails there. That
+is why every setting in the file is written as `name = value` and why settings
+that contradict each other are kept apart by a line of prose. What the test
+cannot notice is a new flag missing from the file: it is a menu rather than the
+surface, and a flag worth setting every day belongs on it.
+
 ## Style
 
 - Comments explain why, in sentences, and only where the reason is not on the

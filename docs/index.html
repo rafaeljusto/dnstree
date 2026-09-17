@@ -496,13 +496,13 @@ footer a:hover{color:var(--ink)}
         </div>
         <div class="cmd">
           <span class="what">brew</span>
-          <code>curl -LO .../dnstree.rb &amp;&amp; brew install --formula ./dnstree.rb</code>
-          <button class="copy" type="button" data-copy="brew install --formula ./dnstree.rb">copy</button>
+          <code>curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree.rb &amp;&amp; brew install --formula ./dnstree.rb</code>
+          <button class="copy" type="button" data-copy="curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree.rb &amp;&amp; brew install --formula ./dnstree.rb">copy</button>
         </div>
         <div class="cmd">
           <span class="what">deb</span>
-          <code>sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb</code>
-          <button class="copy" type="button" data-copy="sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb">copy</button>
+          <code>curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree_&lt;version&gt;_amd64.deb &amp;&amp; sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb</code>
+          <button class="copy" type="button" data-copy="curl -LO https://github.com/rafaeljusto/dnstree/releases/latest/download/dnstree_&lt;version&gt;_amd64.deb &amp;&amp; sudo dpkg -i dnstree_&lt;version&gt;_amd64.deb">copy</button>
         </div>
         <div class="cmd">
           <span class="what">rpm</span>
@@ -538,6 +538,12 @@ dnssec
 timeout = 3s</pre>
         </div>
       </div>
+
+      <p class="section-lede" style="margin-top:1.2rem">A line opening with
+      <code>#</code> is a comment, and a flag that stands on its own needs no
+      value.
+      <a href="https://github.com/rafaeljusto/dnstree/blob/main/dnstreerc.example">dnstreerc.example</a>
+      carries every setting worth making, annotated and commented out.</p>
 
       <h3 style="margin-top:2.2rem">What it tells a script</h3>
       <table class="exits">
