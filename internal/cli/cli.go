@@ -84,8 +84,12 @@ opening with # is a comment, and anything the command line asks for wins. The
 file may carry a root line for every server a walk starts from; one --root on
 the command line replaces all of them rather than adding to them.
 
-Exit codes: 0 an answer, 1 a problem with the command, 2 nothing answered,
-3 the chain of trust is broken.
+Exit codes:
+  0 an answer
+  1 a problem with the command
+  2 nothing answered
+  3 the chain of trust is broken.
+
 `
 
 // Config is a run of dnstree, as the command line asked for it.
