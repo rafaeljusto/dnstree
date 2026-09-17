@@ -1,0 +1,268 @@
+package dnssec_test
+
+import (
+	"encoding/base32"
+	"strings"
+	"testing"
+	"time"
+
+	"codeberg.org/miekg/dns"
+	"codeberg.org/miekg/dns/dnsutil"
+
+	"github.com/rafaeljusto/dnstree/internal/dnssec"
+	"github.com/rafaeljusto/dnstree/internal/trace"
+)
+
+const (
+	denialSalt = "aabbccdd"
+	denialIter = 12
+)
+
+var b32 = base32.HexEncoding.WithPadding(base32.NoPadding)
+
+// nsec3 builds one NSEC3 of this zone, spanning from one hash to the next.
+func (z *zone) nsec3(tb testing.TB, from, to []byte, flags uint8, bitmap []uint16) *dns.NSEC3 {
+	tb.Helper()
+
+	owner := b32.EncodeToString(from) + "." + strings.TrimPrefix(z.name, ".")
+	rr := &dns.NSEC3{Hdr: dns.Header{Name: owner, Class: dns.ClassINET, TTL: 3600}}
+	rr.Hash, rr.Flags, rr.Iterations = 1, flags, denialIter
+	rr.Salt, rr.SaltLength = denialSalt, uint8(len(denialSalt)/2)
+	rr.HashLength = 20
+	rr.NextDomain = b32.EncodeToString(to)
+	rr.TypeBitMap = bitmap
+	return rr
+}
+
+// hashOf is the NSEC3 owner hash of a name under this zone's parameters.
+func hashOf(tb testing.TB, name string) []byte {
+	tb.Helper()
+
+	raw, err := b32.DecodeString(dnsutil.NSEC3Name(dnsutil.Canonical(name), denialSalt, denialIter))
+	if err != nil {
+		tb.Fatalf("hashing %s: %v", name, err)
+	}
+	return raw
+}
+
+// step is the hash either side of this one, which is what a range covering
+// exactly one name is built from.
+func step(hash []byte, by int) []byte {
+	out := append([]byte(nil), hash...)
+	for i := len(out) - 1; i >= 0; i-- {
+		if by > 0 {
+			out[i]++
+			if out[i] != 0 {
+				break
+			}
+			continue
+		}
+		if out[i] != 0 {
+			out[i]--
+			break
+		}
+		out[i] = 0xff
+	}
+	return out
+}
+
+// entered is the verdict on a zone with no DS, given whatever the parent said
+// about it.
+func entered(tb testing.TB, authority func(*zone) []dns.RR) *trace.DNSSECStatus {
+	tb.Helper()
+
+	root := newZone(tb, ".")
+	chain := dnssec.New(root.anchors(tb, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(tb)); status.State != trace.Secure {
+		tb.Fatalf("got %+v entering the root, want it secure", status)
+	}
+	return chain.Enter("example.", authority(root), root.dnskeys(tb))
+}
+
+// signedBy is the RRset plus the signature of a zone over it.
+func signedBy(tb testing.TB, z *zone, rrset ...dns.RR) []dns.RR {
+	tb.Helper()
+	return append(rrset, z.sign(tb, rrset, time.Now().Add(time.Hour)))
+}
+
+// TestNoDSNeedsAProof is the rule this whole file is about. A delegation with
+// no DS is the parent saying the child is unsigned, and anyone able to drop
+// records from a referral can say it too. Without the parent's signature over
+// the claim, the chain has not gone insecure, it has stopped being checkable.
+func TestNoDSNeedsAProof(t *testing.T) {
+	status := entered(t, func(*zone) []dns.RR { return nil })
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want a stripped DS not to read as an unsigned zone", status)
+	}
+	if status.State != trace.Bogus {
+		t.Errorf("got %s, want bogus", status.State)
+	}
+	if !strings.Contains(status.Reason, "no proof") {
+		t.Errorf("got reason %q, want it to say the proof is missing", status.Reason)
+	}
+}
+
+// TestNoDSProvenByNSEC covers the small-zone shape: an NSEC owned by the
+// delegation, saying it is a delegation and carries no DS.
+func TestNoDSProvenByNSEC(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		nsec := &dns.NSEC{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET, TTL: 3600}}
+		nsec.NextDomain = z.name
+		nsec.TypeBitMap = []uint16{dns.TypeNS, dns.TypeRRSIG}
+		return signedBy(t, z, nsec)
+	})
+	if status.State != trace.Insecure {
+		t.Fatalf("got %+v, want a proven insecure delegation", status)
+	}
+}
+
+// TestNoDSProvenByNSEC3 covers an NSEC3 naming the delegation outright.
+func TestNoDSProvenByNSEC3(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		return signedBy(t, z, z.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeNS, dns.TypeRRSIG}))
+	})
+	if status.State != trace.Insecure {
+		t.Fatalf("got %+v, want a proven insecure delegation", status)
+	}
+}
+
+// TestNoDSProvenByOptOut covers what com. and net. actually publish: an NSEC3
+// covering the delegation without naming it, with the opt-out flag set.
+func TestNoDSProvenByOptOut(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		return signedBy(t, z, z.nsec3(t, step(hash, -1), step(hash, +1), 1, []uint16{dns.TypeNS}))
+	})
+	if status.State != trace.Insecure {
+		t.Fatalf("got %+v, want an opt-out delegation to read insecure", status)
+	}
+}
+
+// TestDenialMustBeSigned covers the proof arriving unsigned, which is the same
+// as it not arriving: anyone can write an NSEC3.
+func TestDenialMustBeSigned(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		return []dns.RR{z.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeNS})}
+	})
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want an unsigned denial refused", status)
+	}
+}
+
+// TestDenialSignedByAnotherZone covers a proof carrying a signature that does
+// not belong to the parent.
+func TestDenialSignedByAnotherZone(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		elsewhere := newZone(t, ".")
+		hash := hashOf(t, "example.")
+		return signedBy(t, elsewhere, z.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeNS}))
+	})
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want a denial signed by a stranger refused", status)
+	}
+}
+
+// TestCoveringWithoutOptOut covers the flag that makes a covering NSEC3 mean
+// anything. Without it, covering a delegation says nothing about its DS.
+func TestCoveringWithoutOptOut(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		return signedBy(t, z, z.nsec3(t, step(hash, -1), step(hash, +1), 0, []uint16{dns.TypeNS}))
+	})
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want a covering NSEC3 with no opt-out refused", status)
+	}
+}
+
+// TestDenialForAnotherName covers a genuine, properly signed NSEC3 of the same
+// zone that simply has nothing to do with this delegation: replaying one must
+// not prove anything about another name.
+func TestDenialForAnotherName(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "unrelated.")
+		return signedBy(t, z, z.nsec3(t, step(hash, -1), step(hash, +1), 1, []uint16{dns.TypeNS}))
+	})
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want a denial about another name refused", status)
+	}
+}
+
+// TestDenialClaimingADS covers a proof that contradicts the referral it came
+// with, by saying the delegation does have a DS.
+func TestDenialClaimingADS(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		return signedBy(t, z, z.nsec3(t, hash, step(hash, +1), 0,
+			[]uint16{dns.TypeNS, dns.TypeDS}))
+	})
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want a denial that names a DS refused", status)
+	}
+}
+
+// TestDenialFromTheChild covers a proof taken from below the cut. The SOA bit
+// is what says the record belongs to the child, whose word about its own DS is
+// worth nothing.
+func TestDenialFromTheChild(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		return signedBy(t, z, z.nsec3(t, hash, step(hash, +1), 0,
+			[]uint16{dns.TypeNS, dns.TypeSOA}))
+	})
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want a denial from the child refused", status)
+	}
+}
+
+// TestDenialNotADelegation covers a proof about a name that is not a delegation
+// at all, which proves nothing about a zone cut.
+func TestDenialNotADelegation(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		return signedBy(t, z, z.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeA}))
+	})
+	if status.State == trace.Insecure {
+		t.Fatalf("got %+v, want a denial that is not about a delegation refused", status)
+	}
+}
+
+// TestUnsupportedNSEC3Hash covers a hash algorithm this build cannot compute,
+// which is a link it could not check rather than one that failed.
+func TestUnsupportedNSEC3Hash(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		nsec3 := z.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeNS})
+		nsec3.Hash = 2 // nothing defines one
+		return signedBy(t, z, nsec3)
+	})
+	if status.State != trace.Indeterminate {
+		t.Fatalf("got %+v, want a hash nothing here computes to read indeterminate", status)
+	}
+}
+
+// TestNSEC3IterationsAreCapped covers a referral asking the validator to hash
+// tens of thousands of times per record. Grinding through it is work an
+// attacker gets for the price of one packet, so the link is left unchecked
+// rather than checked at any cost.
+func TestNSEC3IterationsAreCapped(t *testing.T) {
+	root := newZone(t, ".")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+		t.Fatalf("got %+v entering the root, want it secure", status)
+	}
+
+	hash := hashOf(t, "example.")
+	nsec3 := root.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeNS})
+	nsec3.Iterations = 65535
+
+	started := time.Now()
+	status := chain.Enter("example.", signedBy(t, root, nsec3), root.dnskeys(t))
+	if status.State != trace.Indeterminate {
+		t.Fatalf("got %+v, want a refusal to grind to read indeterminate", status)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Errorf("took %v, want the iterations rejected rather than run", elapsed)
+	}
+}

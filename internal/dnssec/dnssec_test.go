@@ -75,6 +75,20 @@ func (z *zone) sign(tb testing.TB, rrset []dns.RR, expiry time.Time) dns.RR {
 	return signature
 }
 
+// denies is the parent's signed word that child is a delegation carrying no DS,
+// which is what an insecure delegation rests on. The NSEC form, since a zone
+// this small has nothing to hide behind a hash.
+func (z *zone) denies(tb testing.TB, child string) []dns.RR {
+	tb.Helper()
+
+	nsec := &dns.NSEC{Hdr: dns.Header{Name: child, Class: dns.ClassINET, TTL: 3600}}
+	nsec.NextDomain = z.name
+	nsec.TypeBitMap = []uint16{dns.TypeNS, dns.TypeRRSIG}
+
+	rrset := []dns.RR{nsec}
+	return append(rrset, z.sign(tb, rrset, time.Now().Add(time.Hour)))
+}
+
 // TestUnsupportedDigest covers the difference the blueprint insists on: a link
 // nothing here can check is not a link that failed.
 func TestUnsupportedDigest(t *testing.T) {
@@ -125,8 +139,9 @@ func TestInsecureIsFinal(t *testing.T) {
 	if status := chain.Enter(".", nil, zone.dnskeys(t)); status.State != trace.Secure {
 		t.Fatalf("got %+v entering the root, want it secure", status)
 	}
-	if status := chain.Enter("example.", nil, zone.dnskeys(t)); status.State != trace.Insecure {
-		t.Fatalf("got %+v for a zone with no DS, want it insecure", status)
+	denial := zone.denies(t, "example.")
+	if status := chain.Enter("example.", denial, zone.dnskeys(t)); status.State != trace.Insecure {
+		t.Fatalf("got %+v for a zone proven to have no DS, want it insecure", status)
 	}
 	if chain.State() != trace.Insecure {
 		t.Fatalf("got chain state %s, want insecure", chain.State())

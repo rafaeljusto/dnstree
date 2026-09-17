@@ -42,6 +42,7 @@ type Behaviour struct {
 
 	// The ways a signed zone can break its own chain of trust.
 	NoDS         bool // the parent vouches for nobody, leaving the zone unsigned
+	NoDenial     bool // and does not sign the claim that it has nobody to vouch for
 	NoDNSKEY     bool // the keys cannot be fetched at all
 	StrayDNSKEY  bool // the keys served are not the ones the DS points at
 	BadSignature bool // the signatures over the records do not verify
@@ -74,6 +75,10 @@ type Config struct {
 	// DNSSEC signs the zone and answers with the signatures when they are asked
 	// for.
 	DNSSEC bool
+
+	// Denial is how the zone proves a child of it has no DS. The zero value is
+	// the opt-out NSEC3 the large TLDs publish.
+	Denial Denial
 
 	// TLS and DoH serve the same zone over the encrypted transports, each on a
 	// port of its own.
@@ -108,10 +113,11 @@ type Server struct {
 	TLSAddr netip.AddrPort
 	DoHAddr netip.AddrPort
 
-	name      string
-	origin    string
-	signer    *signer
-	behaviour Behaviour
+	name       string
+	origin     string
+	signer     *signer
+	behaviour  Behaviour
+	denialKind Denial
 
 	// zone is read by the handlers and written when a child publishes its DS,
 	// so it is replaced whole rather than appended to.
@@ -126,9 +132,10 @@ func New(tb testing.TB, cfg Config) *Server {
 	tb.Helper()
 
 	server := &Server{
-		name:      dnsutil.Fqdn(cfg.Name),
-		origin:    dnsutil.Fqdn(cfg.Origin),
-		behaviour: cfg.Behaviour,
+		name:       dnsutil.Fqdn(cfg.Name),
+		origin:     dnsutil.Fqdn(cfg.Origin),
+		behaviour:  cfg.Behaviour,
+		denialKind: cfg.Denial,
 	}
 	if cfg.DNSSEC {
 		server.signer = newSigner(tb, server.origin, cfg.Behaviour)
@@ -324,10 +331,25 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 	if delegation := s.delegation(name); len(delegation) > 0 {
 		// The delegated NS RRset is never signed by the parent; the DS is what
 		// the parent puts its name to.
+		child := delegation[0].Header().Name
 		reply.Ns = delegation
-		reply.Ns = append(reply.Ns, s.ds(delegation[0].Header().Name)...)
+		published := s.ds(child)
+		reply.Ns = append(reply.Ns, published...)
+		if len(published) == 0 {
+			// No DS is a claim of its own, and a signed parent signs it.
+			reply.Ns = append(reply.Ns, s.denial(child)...)
+		}
 		reply.Extra = s.glue(delegation)
 		return // a referral carries no AA
+	}
+
+	// The parent side of a cut answering for a DS it does not hold denies it
+	// rather than saying the name is not there.
+	if s.signer != nil && qtype == dns.TypeDS && !dns.EqualName(name, s.origin) &&
+		dnsutil.IsBelow(s.origin, name) && len(s.ds(name)) == 0 {
+		reply.Authoritative = true
+		reply.Ns = append(s.soa(), s.denial(name)...)
+		return
 	}
 
 	if s.signer != nil && qtype == dns.TypeDNSKEY && dns.EqualName(name, s.origin) {

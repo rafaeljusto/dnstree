@@ -58,6 +58,25 @@ func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		delegated = anchorDS(c.anchors)
 	}
 	if len(delegated) == 0 {
+		// The root has no parent to prove anything: without an anchor there is
+		// nothing to start from, which is a chain that cannot begin rather than
+		// one that ended.
+		if zone == "." {
+			return c.settleAs(&trace.DNSSECStatus{}, trace.Indeterminate,
+				"there is no trust anchor to start the chain from", nil)
+		}
+		// An insecure delegation is something the parent says, and saying it is
+		// what a DS-denying NSEC or NSEC3 is for. Taking the absence of a DS on
+		// trust is what lets anyone who can drop records from a referral walk
+		// the chain off the secure path.
+		if err := c.provesNoDS(authority, zone); err != nil {
+			state := trace.Bogus
+			if unsupported(err) {
+				state = trace.Indeterminate
+			}
+			return c.settleAs(&trace.DNSSECStatus{}, state,
+				"the parent published no DS: "+err.Error(), nil)
+		}
 		return c.settleAs(&trace.DNSSECStatus{}, trace.Insecure, "the parent published no DS", nil)
 	}
 
@@ -77,12 +96,12 @@ func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		if len(signed) == 0 {
 			return c.settleAs(status, trace.Bogus, "the parent published a DS it did not sign", nil)
 		}
-		if err := c.verify(asRRs(delegated), signed, c.keys); err != nil {
+		if _, err := c.verify(asRRs(delegated), signed, c.keys); err != nil {
 			return c.settleAs(status, trace.Bogus, "the DS is not signed by the keys of the parent", nil)
 		}
 	}
 
-	keys, signatures := split(dnskeys)
+	keys, signatures := split(dnskeys, zone)
 	if len(keys) == 0 {
 		return c.settleAs(status, trace.Indeterminate, "the DNSKEY set could not be fetched", nil)
 	}
@@ -97,7 +116,7 @@ func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 	}
 
 	// The key the DS points at has to be the one that signed the whole set.
-	if err := c.verify(asRRs(keys), signatures, []*dns.DNSKEY{key}); err != nil {
+	if _, err := c.verify(asRRs(keys), signatures, []*dns.DNSKEY{key}); err != nil {
 		return c.settleAs(status, trace.Bogus, "the DNSKEY set is not signed by the key the DS points at", nil)
 	}
 
@@ -133,7 +152,8 @@ func (c *Chain) Verify(answer []dns.RR, qname string, qtype uint16) *trace.DNSSE
 	}
 
 	status := &trace.DNSSECStatus{Algorithm: algorithm(signatures[0].Algorithm)}
-	if err := c.verify(rrset, signatures, c.keys); err != nil {
+	signature, err := c.verify(rrset, signatures, c.keys)
+	if err != nil {
 		status.State = trace.Bogus
 		if unsupported(err) {
 			status.State = trace.Indeterminate
@@ -142,19 +162,36 @@ func (c *Chain) Verify(answer []dns.RR, qname string, qtype uint16) *trace.DNSSE
 		return status
 	}
 
+	// Mid rollover an RRset carries several signatures; the one that held is
+	// the one worth naming.
 	status.State = trace.Secure
-	status.KeyTags = []uint16{signatures[0].KeyTag}
+	status.Algorithm = algorithm(signature.Algorithm)
+	status.KeyTags = []uint16{signature.KeyTag}
 	return status
 }
 
-// verify checks an RRset against every signature that one of keys can carry.
-func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSKEY) error {
+// verify checks an RRset against every signature that one of keys can carry,
+// and reports the signature that carried it, so that what is reported is the
+// key that actually signed rather than the first one offered.
+//
+// The codec verifies the maths and nothing else: it neither checks that rrset
+// is one RRset nor that the signature covers its type, so both are checked
+// here. A set of mixed owners or types would otherwise be packed whole into
+// the signed data, where one stray record is enough to fail a sound zone.
+func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSKEY) (*dns.RRSIG, error) {
 	if len(signatures) == 0 {
-		return fmt.Errorf("there is no signature to check")
+		return nil, fmt.Errorf("there is no signature to check")
 	}
+	if !dnsutil.IsRRset(rrset) {
+		return nil, fmt.Errorf("the records to check are not one RRset")
+	}
+	covered := dns.RRToType(rrset[0])
 
 	reason := fmt.Errorf("no signature matches a key of the zone")
 	for _, signature := range signatures {
+		if signature.TypeCovered != covered {
+			continue
+		}
 		for _, key := range keys {
 			if signature.KeyTag != key.KeyTag() || signature.Algorithm != key.Algorithm {
 				continue
@@ -167,10 +204,10 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 				reason = fmt.Errorf("the signature of key %d does not verify", key.KeyTag())
 				continue
 			}
-			return nil
+			return signature, nil
 		}
 	}
-	return reason
+	return nil, reason
 }
 
 // settleAs moves the chain to a state and reports it.
@@ -255,13 +292,18 @@ func anchorDS(anchors roothints.Anchors) []*dns.DS {
 	return delegated
 }
 
-// split separates a DNSKEY answer into the keys and the signatures over them.
-func split(records []dns.RR) ([]*dns.DNSKEY, []*dns.RRSIG) {
+// split separates a DNSKEY answer into the keys of zone and the signatures over
+// them. Anything owned by another name is not part of this zone's key set, and
+// a server that bundles one in must not be able to spoil the set it did sign.
+func split(records []dns.RR, zone string) ([]*dns.DNSKEY, []*dns.RRSIG) {
 	var (
 		keys       []*dns.DNSKEY
 		signatures []*dns.RRSIG
 	)
 	for _, rr := range records {
+		if !dns.EqualName(rr.Header().Name, zone) {
+			continue
+		}
 		switch record := rr.(type) {
 		case *dns.DNSKEY:
 			keys = append(keys, record)

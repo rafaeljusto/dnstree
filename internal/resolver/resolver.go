@@ -240,9 +240,18 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		step := hop.step
 
 		// A server of the zone has answered, so the zone can now be asked for
-		// its keys. The verdict belongs on the step that pointed here.
+		// its keys. The verdict belongs on the step that pointed here. A step
+		// that names no server never got that far; today only an exhausted
+		// budget leaves one, and the budget stops the DNSKEY query too, but
+		// saying so here does not rely on that and reads better than "the
+		// DNSKEY set could not be fetched".
 		if chain != nil {
-			parent.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
+			switch {
+			case step.Server.IP.IsValid():
+				parent.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
+			default:
+				parent.DNSSEC = chain.Unchecked("no server of " + zone + " answered")
+			}
 		}
 
 		switch {
@@ -277,8 +286,9 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 func (r *run) enterZone(ctx context.Context, chain *dnssec.Chain, zone string, reached *trace.Step, delegation []dns.RR) *trace.DNSSECStatus {
 	var keys []dns.RR
 	// Once the chain has left secure there is no way back to it, so there is
-	// nothing left to learn from the keys below.
-	if err := r.counters.query(); err == nil && chain.State() == trace.Secure {
+	// nothing left to learn from the keys below. The budget is asked second:
+	// a slot spent here is a query that never goes out.
+	if chain.State() == trace.Secure && r.counters.query() == nil {
 		hop := r.query(ctx, zone, reached.Server, zone, dns.TypeDNSKEY)
 		hop.step.Aside = true
 		hop.step.Records = nil // a key set is not something to read in a tree
@@ -335,8 +345,11 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname
 	}
 
 	// The verdict belongs on the step that published the DS, the way a
-	// referral's does: it is the same zone cut, crossed without one.
-	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, hop.step, ds.resp.Answer)
+	// referral's does: it is the same zone cut, crossed without one. A DS that
+	// is not there is denied in the authority section rather than answered, so
+	// both are handed over.
+	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, hop.step,
+		append(append([]dns.RR{}, ds.resp.Answer...), ds.resp.Ns...))
 }
 
 // signerOf is the zone that signed the answer to qname, as its signatures name
@@ -492,11 +505,33 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 
 	// An answer that did not fit has to be fetched again over TCP.
 	if resp.Truncated && r.cfg.TCP != nil && step.Proto != r.cfg.TCP.Proto() {
-		if retry, err := r.exchange(ctx, step, r.cfg.TCP, qname, qtype, udpSize, port); err == nil {
+		retry, retryErr := r.exchange(ctx, step, r.cfg.TCP, qname, qtype, udpSize, port)
+		switch {
+		case retryErr == nil:
 			step.Notes = append(step.Notes, "truncated over "+step.Proto)
 			step.Proto = r.cfg.TCP.Proto()
 			resp = retry
+		default:
+			step.Notes = append(step.Notes,
+				"truncated over "+step.Proto+", and "+r.cfg.TCP.Proto()+" did not get through")
 		}
+	}
+
+	// What is left of a truncated message is not what the server holds, and
+	// reading it as one would turn a dropped section into a statement about
+	// the zone: a missing answer into NODATA, a missing NS set into a lame
+	// server. The hop says the answer could not be fetched whole instead.
+	if resp.Truncated {
+		step.Rcode = dnsutil.RcodeToString(resp.Rcode)
+		step.Flags.TC = true
+		step.Kind = trace.KindError
+		step.Err = "the answer did not fit and could not be fetched whole"
+		if r.cfg.TCP == nil {
+			step.Err += "; no TCP transport to fetch it with"
+		}
+		r.warnf("%s answered %s truncated, and the whole answer could not be fetched",
+			step.Server.IP, qname)
+		return &hop{step: step}
 	}
 
 	step.Rcode = dnsutil.RcodeToString(resp.Rcode)
@@ -583,7 +618,9 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) []tra
 			continue
 		}
 		for _, record := range result.Records {
-			if record.Type != typeName {
+			// A server may answer with more than was asked for. Only the
+			// records the name itself owns are addresses of that nameserver.
+			if record.Type != typeName || !dns.EqualName(record.Name, name) {
 				continue
 			}
 			// The model keeps rdata as text, and an address is its own text.
@@ -639,7 +676,7 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 
 	child := make([]string, 0, len(step.Records))
 	for _, record := range step.Records {
-		if record.Type == "NS" {
+		if record.Type == "NS" && dns.EqualName(record.Name, delegated.Zone) {
 			child = append(child, record.Data)
 		}
 	}
