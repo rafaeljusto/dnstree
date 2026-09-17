@@ -12,7 +12,7 @@ make dist VERSION=v0.1.2   # everything, into dist/
 | Stage | What it writes |
 | --- | --- |
 | `man` | `build/dnstree.1` and the gzipped copy the packages install |
-| `archives` | the binary per platform, in `build/`, and a `.tar.gz` or `.zip` per platform in `dist/` |
+| `archives` | the binary per platform, in `build/`, and a `.tar.gz` or `.zip` per platform in `dist/`, each carrying `dnstreerc.example` |
 | `packages` | `.deb`, `.rpm` and `.apk` per architecture, in `dist/` |
 | `formula` | `dist/dnstree.rb`, pointing at the archives above |
 | `checksums` | `dist/checksums.txt`, over every file |
@@ -30,6 +30,14 @@ dropping a section it cannot parse. Nothing here is written by hand, and
 
 The page also goes into every `.tar.gz`, because the Homebrew formula installs
 it from there.
+
+## The example file of defaults
+
+[`dnstreerc.example`](../dnstreerc.example) rides along with every channel: into
+`/usr/share/doc/dnstree/` in the native packages, into each archive beside the
+binary — the `.zip` included, since the file of defaults is read on Windows too
+— and into Homebrew's `doc` from the tarball. It is checked by
+`TestExampleParses` rather than by eye, so what ships parses.
 
 ## The native packages
 

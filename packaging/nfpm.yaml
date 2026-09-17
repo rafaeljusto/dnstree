@@ -32,6 +32,9 @@ contents:
   - src: ./README.md
     dst: /usr/share/doc/dnstree/README.md
 
+  - src: ./dnstreerc.example
+    dst: /usr/share/doc/dnstree/dnstreerc.example
+
   # Where each format's users look for it.
   - src: ./LICENSE
     dst: /usr/share/doc/dnstree/copyright

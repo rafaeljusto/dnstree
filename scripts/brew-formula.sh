@@ -58,6 +58,7 @@ $(block linux intel amd64)
   def install
     bin.install "dnstree"
     man1.install "dnstree.1"
+    doc.install "dnstreerc.example"
   end
 
   test do

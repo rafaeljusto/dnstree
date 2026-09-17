@@ -119,13 +119,16 @@ archives:
 		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 \
 			$(GO) build -trimpath -ldflags '$(LDFLAGS)' \
 			-o $(BUILD)/$${os}_$${arch}/$$name ./cmd/dnstree || exit 1; \
+		cp dnstreerc.example $(BUILD)/$${os}_$${arch}/; \
 		if [ "$$os" = windows ]; then \
 			(cd $(BUILD)/$${os}_$${arch} && \
-				zip -q $(CURDIR)/dist/dnstree_$(VERSION)_$${os}_$${arch}.zip $$name); \
+				zip -q $(CURDIR)/dist/dnstree_$(VERSION)_$${os}_$${arch}.zip \
+					$$name dnstreerc.example); \
 		else \
 			cp $(BUILD)/dnstree.1 $(BUILD)/$${os}_$${arch}/; \
 			(cd $(BUILD)/$${os}_$${arch} && \
-				tar czf $(CURDIR)/dist/dnstree_$(VERSION)_$${os}_$${arch}.tar.gz $$name dnstree.1); \
+				tar czf $(CURDIR)/dist/dnstree_$(VERSION)_$${os}_$${arch}.tar.gz \
+					$$name dnstree.1 dnstreerc.example); \
 		fi; \
 	done
 
