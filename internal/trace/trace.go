@@ -18,8 +18,24 @@ type Trace struct {
 
 	Elapsed time.Duration
 
+	// Resolver is the same question put to a recursive server, when the run
+	// asked for the comparison. A walk from the root is deliberately the slow
+	// way round — it keeps no cache and takes every step itself — so the time
+	// it took only means something next to the time the ordinary path takes.
+	Resolver *Resolver
+
 	// Warnings are what the resolver could not do, in the order it found out.
 	Warnings []string
+}
+
+// Resolver is what one recursive server made of the question. It is metadata,
+// like the origin AS lookups: nothing about the walk depends on it, and a
+// server that will not answer leaves Err rather than failing the resolution.
+type Resolver struct {
+	Server  Server
+	Elapsed time.Duration
+	Rcode   string
+	Err     string
 }
 
 // Question is what the resolution set out to answer.

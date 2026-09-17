@@ -30,6 +30,7 @@ var groups = [][]string{
 	{"4", "6"},
 	{"udp", "tcp", "dot", "doh"},
 	{"root", "root-hints"},
+	{"resolver", "asn-resolver"},
 	{"tls-ca", "tls-insecure"},
 }
 

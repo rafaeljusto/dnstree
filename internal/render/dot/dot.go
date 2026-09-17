@@ -186,10 +186,29 @@ func caption(tr *trace.Trace) string {
 	if question := strings.TrimSpace(tr.Question.Name + " " + tr.Question.Type); question != "" {
 		caption.WriteString(" " + question)
 	}
+	if line := resolver(tr.Resolver); line != "" {
+		caption.WriteString("\n" + line)
+	}
 	for _, warning := range tr.Warnings {
 		caption.WriteString("\nwarning: " + warning)
 	}
 	return caption.String()
+}
+
+// resolver is what a recursive server made of the same question, for the
+// caption to carry beside what the walk cost.
+func resolver(answer *trace.Resolver) string {
+	if answer == nil {
+		return ""
+	}
+	who := "a resolver"
+	if answer.Server.IP.IsValid() {
+		who = answer.Server.IP.String()
+	}
+	if answer.Err != "" {
+		return who + " did not answer"
+	}
+	return who + " answered in " + duration(answer.Elapsed)
 }
 
 // duration keeps an edge label short: a graph is read at a glance.

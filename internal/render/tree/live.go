@@ -136,13 +136,13 @@ func newLive(w io.Writer, opts Options) *Live {
 		start:   time.Now(),
 		spin:    spinnerUnicode,
 		arrow:   "→",
-		sep:     " · ",
+		sep:     separator(opts.Charset),
 		stop:    make(chan struct{}),
 		servers: make(map[netip.Addr]struct{}),
 		pending: make(map[int]inflight),
 	}
 	if opts.Charset == ASCII {
-		live.spin, live.arrow, live.sep = spinnerASCII, "->", " | "
+		live.spin, live.arrow = spinnerASCII, "->"
 	}
 	return live
 }
@@ -229,8 +229,9 @@ func (l *Live) Clear() {
 }
 
 // Summary is what the drawing leaves behind: one line under the finished tree
-// saying how the walk went and what it cost. Only someone who watched the walk
-// happen gets it, which is the same person the frames were for.
+// saying how the walk went and what it cost. It counts the queries it watched
+// go out rather than reading them back off the trace, which is the one thing a
+// live drawing knows better.
 func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 	if l == nil || tr == nil {
 		return
@@ -238,28 +239,12 @@ func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	paint := painter(l.opts.Color == ColorAlways)
-	mark, verdict, color := "✔", "answered", green
-	switch {
-	case bogus(tr):
-		mark, verdict, color = "✘", "bogus", red
-	case tr.Result() == nil:
-		mark, verdict, color = "✘", "no answer", yellow
-	}
-	if l.opts.Charset == ASCII {
-		mark = ""
-	}
-
 	elapsed := tr.Elapsed
 	if elapsed == 0 {
 		elapsed = time.Since(l.start)
 	}
-	fields := append([]string{verdict + " in " + clock(elapsed)}, l.counts()...)
-	line := paint.dim(strings.Join(fields, l.sep))
-	if mark != "" {
-		line = paint.paint(mark, color) + " " + line
-	}
-	_, _ = io.WriteString(w, line+"\n")
+	writeSummary(w, tr, painter(l.opts.Color == ColorAlways), l.sep,
+		l.opts.Charset, elapsed, l.counts())
 }
 
 // bogus reports whether the walk found a chain of trust that does not hold,
@@ -387,14 +372,7 @@ func (l *Live) tailLines() []string {
 
 // counts are what the walk has spent so far.
 func (l *Live) counts() []string {
-	var fields []string
-	if l.queries > 0 {
-		fields = append(fields, plural(l.queries, "query", "queries"))
-	}
-	if servers := len(l.servers); servers > 0 {
-		fields = append(fields, plural(servers, "server", "servers"))
-	}
-	return fields
+	return counts(l.queries, len(l.servers))
 }
 
 // spinner is the frame the clock has reached. It is read off the clock rather

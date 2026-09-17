@@ -92,6 +92,7 @@ dnstree [flags] NAME [TYPE]
 | `--dnssec` | ask for signatures and follow the chain of trust |
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
 | `--no-asn` | skip the origin AS lookups |
+| `--no-compare` | do not time the same question against a recursive resolver |
 | `--format` | `tree`, `ascii`, `emoji`, `json` or `dot` |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--color` | `auto`, `always` or `never` |
@@ -100,7 +101,7 @@ dnstree [flags] NAME [TYPE]
 | `--port` | the port nameservers are asked on |
 | `--root-hints`, `--trust-anchors` | start somewhere other than the built-in root |
 | `--root` | one server to start from, instead of a hints file; repeat it for more |
-| `--asn-resolver` | where the origin AS lookups go, instead of the host's own resolver |
+| `--resolver` | the recursive server to use, instead of the host's own |
 | `--tls-ca`, `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
 | `--config`, `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
@@ -160,9 +161,11 @@ by glue below it — glue carries addresses and never ports, so a hierarchy on o
 host wants its root on a port of its own and the rest on `--port`. `--root` and
 `--root-hints` say the same thing two ways, so only one of them may be given.
 
-The metadata has its own way out: `--asn-resolver ADDR` sends the origin AS
-lookups to one recursive server instead of the host's, and `--no-asn` skips them
-altogether. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of
+The metadata has its own way out: `--resolver ADDR` points everything that needs
+a recursive server at one of your own — the origin AS lookups, and the question
+timed against an ordinary resolution — while `--no-asn` and `--no-compare` skip
+either of those altogether. `--asn-resolver` is the older name for `--resolver`
+and still works. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of
 your own and `--tls-insecure` verifies nothing, which is what it takes to reach
 a server holding a test certificate.
 

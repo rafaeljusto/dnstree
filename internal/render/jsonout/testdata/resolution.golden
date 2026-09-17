@@ -6,6 +6,14 @@
     "class": "IN"
   },
   "elapsed_ms": 41.5,
+  "resolver": {
+    "server": {
+      "ip": "192.0.2.53",
+      "port": 53
+    },
+    "elapsed_ms": 23,
+    "rcode": "NOERROR"
+  },
   "root": {
     "zone": ".",
     "kind": "zone",

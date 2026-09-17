@@ -32,7 +32,7 @@ func TestParse(t *testing.T) {
 		},
 		"the whole surface": {
 			args: []string{
-				"-6", "--dot", "--fallback", "--all", "--dnssec", "--check-ns", "--no-asn",
+				"-6", "--dot", "--fallback", "--all", "--dnssec", "--check-ns", "--no-asn", "--no-compare",
 				"--format", "json", "--color", "never", "--timeout", "5s", "--retries", "3",
 				"--max-depth", "8", "--max-queries", "32", "--max-cname", "4", "--port", "5353",
 				"--root-hints", "hints", "--trust-anchors", "anchors",
@@ -68,12 +68,23 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
-		"the origin AS lookups sent elsewhere": {
+		"a recursive server of its own": {
+			args: []string{"--resolver", "192.0.2.1", "example.com"},
+			want: cli.Config{
+				Name: "example.com", Type: "A",
+				Resolver: netip.MustParseAddrPort("192.0.2.1:53"),
+			},
+		},
+		"the older name for it": {
 			args: []string{"--asn-resolver", "192.0.2.1", "example.com"},
 			want: cli.Config{
 				Name: "example.com", Type: "A",
-				ASNResolver: netip.MustParseAddrPort("192.0.2.1:53"),
+				Resolver: netip.MustParseAddrPort("192.0.2.1:53"),
 			},
+		},
+		"no question put to a resolver": {
+			args: []string{"--no-compare", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A"},
 		},
 	}
 
@@ -87,8 +98,12 @@ func TestParse(t *testing.T) {
 			if want.Format == "" {
 				want.Format = "tree"
 			}
-			if !strings.Contains(strings.Join(test.args, " "), "--no-asn") {
+			given := strings.Join(test.args, " ")
+			if !strings.Contains(given, "--no-asn") {
 				want.ASN = true
+			}
+			if !strings.Contains(given, "--no-compare") {
+				want.Compare = true
 			}
 
 			got, err := cli.Parse(test.args, io.Discard)
@@ -118,13 +133,13 @@ func TestParseRejects(t *testing.T) {
 		"a flag nobody has":       {"--recursive", "example.com"},
 		"help":                    {"--help"},
 
-		"two ways to start a walk":          {"--root", "127.0.0.1", "--root-hints", "hints", "example.com"},
-		"a root that is no address":         {"--root", "localhost", "example.com"},
-		"a root with no address":            {"--root", "ns.example.com@", "example.com"},
-		"a root with a bad port":            {"--root", "127.0.0.1:70000", "example.com"},
-		"an AS resolver that is no address": {"--asn-resolver", "cymru.com", "example.com"},
-		"an AS resolver with no lookup to carry": {
-			"--no-asn", "--asn-resolver", "192.0.2.1", "example.com",
+		"two ways to start a walk":      {"--root", "127.0.0.1", "--root-hints", "hints", "example.com"},
+		"a root that is no address":     {"--root", "localhost", "example.com"},
+		"a root with no address":        {"--root", "ns.example.com@", "example.com"},
+		"a root with a bad port":        {"--root", "127.0.0.1:70000", "example.com"},
+		"a resolver that is no address": {"--resolver", "cymru.com", "example.com"},
+		"a resolver with nothing to answer": {
+			"--no-asn", "--no-compare", "--resolver", "192.0.2.1", "example.com",
 		},
 		"TLS settings with no TLS":  {"--tls-insecure", "example.com"},
 		"a CA with nothing to sign": {"--dot", "--tls-ca", "ca.pem", "--tls-insecure", "example.com"},

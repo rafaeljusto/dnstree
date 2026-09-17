@@ -75,8 +75,14 @@
 # for, which is what to weigh where nothing may leave the host.
 # no-asn = true
 
-# Send the origin AS lookups somewhere other than the host's own resolver.
-# asn-resolver = 9.9.9.9
+# Do not put the same question to a recursive server. The timing that comes
+# back is what says whether a slow walk was the name's doing or the method's,
+# and it is the one thing that sends the name being resolved to a resolver.
+# no-compare = true
+
+# The recursive server to use for both, instead of the host's own: the origin
+# AS lookups, and the question timed against an ordinary resolution.
+# resolver = 9.9.9.9
 
 
 # Where the walk starts

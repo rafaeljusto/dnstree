@@ -88,7 +88,7 @@ func TestRun(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := run(t.Context(), []string{
-				"--root-hints", hints, "--port", port, "--no-asn", "--format", test.format,
+				"--root-hints", hints, "--port", port, "--no-asn", "--no-compare", "--format", test.format,
 				".", "NS",
 			}, &stdout, &stderr)
 
@@ -115,7 +115,7 @@ func TestRunLiveNowhere(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		code := run(t.Context(), append(args,
-			"--root-hints", hints, "--port", port, "--no-asn", ".", "NS"), &stdout, &stderr)
+			"--root-hints", hints, "--port", port, "--no-asn", "--no-compare", ".", "NS"), &stdout, &stderr)
 		if code != exitAnswer {
 			tb.Fatalf("got exit %d, want %d: %s%s", code, exitAnswer, stdout.String(), stderr.String())
 		}
@@ -142,21 +142,21 @@ func TestRunExitCodes(t *testing.T) {
 		want int
 	}{
 		"an answer": {
-			args: []string{"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())), "--no-asn", ".", "NS"},
+			args: []string{"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())), "--no-asn", "--no-compare", ".", "NS"},
 			want: exitAnswer,
 		},
 		"nothing to resolve": {args: nil, want: exitUsage},
 		"a type nobody has": {
-			args: []string{"--root-hints", hints, "--no-asn", "example.com", "NONSENSE"},
+			args: []string{"--root-hints", hints, "--no-asn", "--no-compare", "example.com", "NONSENSE"},
 			want: exitUsage,
 		},
 		"root hints that are not there": {
-			args: []string{"--root-hints", filepath.Join(t.TempDir(), "missing"), ".", "NS"},
+			args: []string{"--root-hints", filepath.Join(t.TempDir(), "missing"), "--no-compare", ".", "NS"},
 			want: exitUsage,
 		},
 		"nobody home": {
 			// Port 1 is reserved and nothing answers there.
-			args: []string{"--root-hints", hints, "--port", "1", "--no-asn", "--timeout", "200ms", "--retries", "0", ".", "NS"},
+			args: []string{"--root-hints", hints, "--port", "1", "--no-asn", "--no-compare", "--timeout", "200ms", "--retries", "0", ".", "NS"},
 			want: exitNoAnswer,
 		},
 	}
@@ -177,7 +177,7 @@ func TestRunDebug(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	run(t.Context(), []string{
 		"--root-hints", rootHintsFile(t), "--port", strconv.Itoa(int(server.Addr.Port())),
-		"--no-asn", "--debug", ".", "NS",
+		"--no-asn", "--no-compare", "--debug", ".", "NS",
 	}, &stdout, &stderr)
 
 	if !strings.Contains(stderr.String(), "asked a nameserver") {
@@ -229,7 +229,7 @@ func TestRunRoot(t *testing.T) {
 	code := run(t.Context(), []string{
 		"--root", "a.root-servers.net@" + root.Addr.String(),
 		"--port", strconv.Itoa(int(child.Addr.Port())),
-		"--no-asn", "--color", "never", "www.test", "A",
+		"--no-asn", "--no-compare", "--color", "never", "www.test", "A",
 	}, &stdout, &stderr)
 
 	if code != exitAnswer {
@@ -250,7 +250,7 @@ func TestRunRootWithoutName(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := run(t.Context(), []string{
-		"--root", server.Addr.String(), "--no-asn", "--color", "never", ".", "NS",
+		"--root", server.Addr.String(), "--no-asn", "--no-compare", "--color", "never", ".", "NS",
 	}, &stdout, &stderr)
 
 	if code != exitAnswer {
@@ -269,7 +269,7 @@ func TestRunRootIgnoresThePort(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run(t.Context(), []string{
 		"--root", server.Addr.String(), "--port", "1", // nothing answers on port 1
-		"--no-asn", "--timeout", "500ms", "--retries", "0", "--color", "never", ".", "NS",
+		"--no-asn", "--no-compare", "--timeout", "500ms", "--retries", "0", "--color", "never", ".", "NS",
 	}, &stdout, &stderr)
 
 	if code != exitAnswer {
@@ -292,7 +292,7 @@ func TestRunRootOverTLS(t *testing.T) {
 	args := []string{
 		"--root", "a.root-servers.net@" + root.TLSAddr.String(),
 		"--port", strconv.Itoa(int(child.TLSAddr.Port())),
-		"--dot", "--no-asn", "--timeout", "2s", "--color", "never", "www.test", "A",
+		"--dot", "--no-asn", "--no-compare", "--timeout", "2s", "--color", "never", "www.test", "A",
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -309,6 +309,30 @@ func TestRunRootOverTLS(t *testing.T) {
 	if code := run(t.Context(), args, &stdout, &stderr); code != exitNoAnswer {
 		t.Errorf("got exit %d without --tls-insecure, want %d: the certificate refused\n%s%s",
 			code, exitNoAnswer, stdout.String(), stderr.String())
+	}
+}
+
+// TestRunCompare puts the same question to a recursive server beside the walk.
+// A walk from the root is the slow way round by design, so that timing is what
+// says whether the wait was the name's doing or the method's.
+func TestRunCompare(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", server.Addr.String(), "--resolver", server.Addr.String(),
+		"--no-asn", "--color", "never", ".", "NS",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "resolver in ") {
+		t.Errorf("got no resolver to read the walk against:\n%s", out)
+	}
+	if !strings.Contains(out, "answered in ") {
+		t.Errorf("got no summary under the tree:\n%s", out)
 	}
 }
 
@@ -329,8 +353,8 @@ func TestRunASNResolver(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run(t.Context(), []string{
 		"--root", server.Addr.String(),
-		"--asn-resolver", cymru.Addr.String(),
-		"--color", "never", ".", "NS",
+		"--resolver", cymru.Addr.String(),
+		"--no-compare", "--color", "never", ".", "NS",
 	}, &stdout, &stderr)
 
 	if code != exitAnswer {

@@ -16,7 +16,7 @@ import (
 func TestLive(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
-	code := run(t.Context(), []string{"--dnssec", "--no-asn", "--color", "never", "example.com", "A"}, &stdout, &stderr)
+	code := run(t.Context(), []string{"--dnssec", "--no-asn", "--no-compare", "--color", "never", "example.com", "A"}, &stdout, &stderr)
 	if code != exitAnswer {
 		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
 	}

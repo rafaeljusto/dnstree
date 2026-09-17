@@ -20,6 +20,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 	if tr != nil {
 		document.Question = question{Name: tr.Question.Name, Type: tr.Question.Type, Class: tr.Question.Class}
 		document.ElapsedMS = milliseconds(tr.Elapsed)
+		document.Resolver = convertResolver(tr.Resolver)
 		document.Root = convert(tr.Root)
 		document.Warnings = tr.Warnings
 	}
@@ -30,11 +31,21 @@ func Render(w io.Writer, tr *trace.Trace) error {
 }
 
 type document struct {
-	SchemaVersion int      `json:"schema_version"`
-	Question      question `json:"question"`
-	ElapsedMS     float64  `json:"elapsed_ms"`
-	Root          *step    `json:"root,omitempty"`
-	Warnings      []string `json:"warnings,omitempty"`
+	SchemaVersion int       `json:"schema_version"`
+	Question      question  `json:"question"`
+	ElapsedMS     float64   `json:"elapsed_ms"`
+	Resolver      *resolver `json:"resolver,omitempty"`
+	Root          *step     `json:"root,omitempty"`
+	Warnings      []string  `json:"warnings,omitempty"`
+}
+
+// resolver is the same question put to a recursive server, for whatever reads
+// this to set the walk's time against.
+type resolver struct {
+	Server    *server `json:"server,omitempty"`
+	ElapsedMS float64 `json:"elapsed_ms"`
+	Rcode     string  `json:"rcode,omitempty"`
+	Error     string  `json:"error,omitempty"`
 }
 
 type question struct {
@@ -135,6 +146,18 @@ func convert(from *trace.Step) *step {
 		to.Children = append(to.Children, convert(child))
 	}
 	return to
+}
+
+func convertResolver(from *trace.Resolver) *resolver {
+	if from == nil {
+		return nil
+	}
+	return &resolver{
+		Server:    convertServer(from.Server),
+		ElapsedMS: milliseconds(from.Elapsed),
+		Rcode:     from.Rcode,
+		Error:     from.Err,
+	}
 }
 
 func convertServer(from trace.Server) *server {

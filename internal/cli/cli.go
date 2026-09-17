@@ -35,6 +35,7 @@ path it took. TYPE defaults to A.
   --dnssec                ask for signatures and follow the chain of trust
   --check-ns              ask each zone for its own NS set and compare
   --no-asn                skip the origin AS lookups
+  --no-compare            do not time the same question against a resolver
   --format FORMAT         tree, ascii, emoji, json or dot (default tree)
   --live                  draw the tree as the walk makes it
   --color WHEN            auto, always or never (default auto)
@@ -47,7 +48,7 @@ path it took. TYPE defaults to A.
   --root-hints FILE       where the walk starts, instead of the built-in hints
   --root [NAME@]ADDR      one server to start from, instead of a hints file
   --trust-anchors FILE    the DS records to trust, instead of the built-in ones
-  --asn-resolver ADDR     where the origin AS lookups go, not the host's own
+  --resolver ADDR         the recursive server to use, not the host's own
   --tls-ca FILE           verify --dot and --doh against these roots
   --tls-insecure          do not verify --dot and --doh at all
   --config FILE           take the defaults from FILE, instead of the usual one
@@ -60,7 +61,10 @@ which may carry a :PORT, optionally introduced by NAME@ to say what the server
 answers under; without a port, --port says where it is asked. A walk that starts
 somewhere other than the real root usually wants --trust-anchors with it, and
 --tls-ca or --tls-insecure to reach a --dot or --doh server holding a test
-certificate. --asn-resolver points the origin AS lookups at one server too.
+certificate. --resolver points everything that needs a recursive server at one
+of its own: the origin AS lookups, and the question dnstree times against an
+ordinary resolution to say what the walk cost over it. --asn-resolver is the
+older name for it, and still means the same thing.
 
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
@@ -86,6 +90,7 @@ type Config struct {
 	DNSSEC     bool
 	CheckNS    bool
 	ASN        bool
+	Compare    bool
 	Format     string
 	Live       bool
 	Color      tree.ColorMode
@@ -104,9 +109,9 @@ type Config struct {
 	// the hints entirely, so the two cannot both be set.
 	Roots []Root
 
-	// ASNResolver is the recursive server the origin AS lookups go to, empty
-	// for the host's own.
-	ASNResolver netip.AddrPort
+	// Resolver is the recursive server the origin AS lookups and the timed
+	// comparison go to, empty for the host's own.
+	Resolver netip.AddrPort
 
 	// TLSCA and TLSInsecure loosen the verification the encrypted transports
 	// do, which is what it takes to reach a server holding a test certificate.
@@ -137,13 +142,14 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		udp, tcp, dot bool
 		doh           bool
 		noASN         bool
+		noCompare     bool
 		noConfig      bool
 		configPath    string
 		color, format string
 		timeout       time.Duration
 		port          uint
 		roots         rootList
-		asnResolver   string
+		resolverAddr  string
 	)
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
 	flags.BoolVar(&six, "6", false, "ask only IPv6 servers")
@@ -156,6 +162,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
+	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json or dot")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
@@ -168,7 +175,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&cfg.RootHints, "root-hints", "", "where the walk starts")
 	flags.Var(&roots, "root", "one server to start from")
 	flags.StringVar(&cfg.TrustAnchors, "trust-anchors", "", "the DS records to trust")
-	flags.StringVar(&asnResolver, "asn-resolver", "", "where the origin AS lookups go")
+	flags.StringVar(&resolverAddr, "resolver", "", "the recursive server to use")
+	flags.StringVar(&resolverAddr, "asn-resolver", "", "the older name for --resolver")
 	flags.StringVar(&cfg.TLSCA, "tls-ca", "", "verify the encrypted transports against these roots")
 	flags.BoolVar(&cfg.TLSInsecure, "tls-insecure", false, "do not verify the encrypted transports")
 	flags.StringVar(&configPath, "config", "", "take the defaults from this file")
@@ -257,16 +265,17 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 	cfg.Port = uint16(port)
 	cfg.ASN = !noASN
+	cfg.Compare = !noCompare
 
 	if cfg.Roots = roots.servers; len(cfg.Roots) > 0 && cfg.RootHints != "" {
 		return nil, fmt.Errorf("%w: --root and --root-hints both say where the walk starts", ErrUsage)
 	}
-	if asnResolver != "" {
-		if !cfg.ASN {
-			return nil, fmt.Errorf("%w: --no-asn asks for no lookup for --asn-resolver to carry", ErrUsage)
+	if resolverAddr != "" {
+		if !cfg.ASN && !cfg.Compare {
+			return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
 		}
-		if cfg.ASNResolver, err = address(asnResolver, transport.PortDNS); err != nil {
-			return nil, fmt.Errorf("%w: --asn-resolver %w", ErrUsage, err)
+		if cfg.Resolver, err = address(resolverAddr, transport.PortDNS); err != nil {
+			return nil, fmt.Errorf("%w: --resolver %w", ErrUsage, err)
 		}
 	}
 	if (cfg.TLSCA != "" || cfg.TLSInsecure) && cfg.Proto != "dot" && cfg.Proto != "doh" {

@@ -2,7 +2,7 @@ digraph dnstree {
 	rankdir=LR;
 	node [shape=box, style=rounded, fontname="monospace", fontsize=10];
 	edge [fontname="monospace", fontsize=9];
-	label="dnstree www.example.com. A\nwarning: the delegation to example.com. lists a nameserver the zone does not";
+	label="dnstree www.example.com. A\n192.0.2.53 answered in 23ms\nwarning: the delegation to example.com. lists a nameserver the zone does not";
 	labelloc=t;
 
 	subgraph cluster_0 {

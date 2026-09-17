@@ -324,5 +324,6 @@ func complete(want cli.Config) cli.Config {
 	if want.Retries == 0 {
 		want.Retries = 1
 	}
+	want.Compare = true
 	return want
 }

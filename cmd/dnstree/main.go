@@ -20,6 +20,7 @@ import (
 
 	"github.com/rafaeljusto/dnstree/internal/asn"
 	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/internal/recursive"
 	"github.com/rafaeljusto/dnstree/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
@@ -82,6 +83,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		lookups = asn.New(asnLookup(cfg), log)
 	}
 
+	// The comparison runs beside the walk rather than after it: a recursive
+	// server answers in the time one hop of the walk takes, so waiting for it
+	// separately would be time spent on metadata.
+	timed := compare(ctx, cfg, log)
+
 	// The live drawing owns the screen until it is cleared, and the finished
 	// tree is then written exactly where it stood.
 	var live *tree.Live
@@ -102,6 +108,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		defer cancel()
 		lookups.Annotate(grace, tr)
 	}
+	if timed != nil {
+		tr.Resolver = <-timed
+	}
 
 	// The last frame stays up until there is something to put in its place.
 	live.Clear()
@@ -109,7 +118,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
-	live.Summary(stdout, tr)
+	if live != nil {
+		live.Summary(stdout, tr)
+	} else if cfg.Format != "json" && cfg.Format != "dot" {
+		tree.Summary(stdout, tr, treeOptions(cfg))
+	}
 	return verdict(tr)
 }
 
@@ -215,16 +228,53 @@ func clientTLS(cfg *cli.Config) (*tls.Config, error) {
 	return &tls.Config{RootCAs: roots}, nil
 }
 
+// compare puts the same question to a recursive server, and answers with the
+// channel the timing arrives on. Nothing comes of a run that asked for no
+// comparison, or of a host that will not say which server it resolves through.
+func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan *trace.Resolver {
+	if !cfg.Compare {
+		return nil
+	}
+	server := cfg.Resolver
+	if !server.IsValid() {
+		server = recursive.System()
+	}
+	if !server.IsValid() {
+		return nil
+	}
+
+	question := trace.Question{Name: cfg.Name, Type: cfg.Type, Class: "IN"}
+	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
+
+	timed := make(chan *trace.Resolver, 1)
+	go func() {
+		defer close(timed)
+		answer, err := recursive.Ask(ctx, carrier, server, question, cfg.DNSSEC)
+		if err != nil {
+			if log != nil {
+				log.Debug("the resolver could not be asked", "server", server, "error", err)
+			}
+			return
+		}
+		if log != nil {
+			log.Debug("asked a resolver the same question",
+				"server", server, "took", answer.Elapsed, "rcode", answer.Rcode, "error", answer.Err)
+		}
+		timed <- answer
+	}()
+	return timed
+}
+
 // asnLookup is where the origin AS lookups go. A nil lookup leaves asn.New to
 // use the host's own resolver, which is what the Cymru zones normally need.
 func asnLookup(cfg *cli.Config) asn.Lookup {
-	if !cfg.ASNResolver.IsValid() {
+	if !cfg.Resolver.IsValid() {
 		return nil
 	}
 
 	// A resolver of its own, dialling the one server, so that the lookups can
 	// be pointed somewhere the host knows nothing about.
-	server := cfg.ASNResolver.String()
+	server := cfg.Resolver.String()
 	resolver := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
