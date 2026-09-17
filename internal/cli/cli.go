@@ -34,6 +34,7 @@ path it took. TYPE defaults to A.
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
   --check-ns              ask each zone for its own NS set and compare
+  --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
   --format FORMAT         tree, ascii, emoji, json or dot (default tree)
@@ -65,6 +66,15 @@ certificate. --resolver points everything that needs a recursive server at one
 of its own: the origin AS lookups, and the question dnstree times against an
 ordinary resolution to say what the walk cost over it. --asn-resolver is the
 older name for it, and still means the same thing.
+
+--subnet asks every server the question as though it came from somebody inside
+that prefix, which is how a server that tailors its answers by network can be
+asked what it tells somewhere else. A bare address is taken as a /24 or a /56,
+since the point is the network and not the machine. Each hop says what scope
+came back: a scope of zero means that server answers the same for everybody, and
+a hop that echoes nothing ignored the subnet altogether. It is sent to every
+server on the way down, which is more than any of them needs to know about where
+the question came from, so it is off unless it is asked for.
 
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
@@ -118,6 +128,11 @@ type Config struct {
 	TLSCA       string
 	TLSInsecure bool
 
+	// Subnet is the client subnet every query carries, so that a server which
+	// answers by network can be asked what it tells somebody else. The zero
+	// value sends none.
+	Subnet netip.Prefix
+
 	// ConfigFile is the file the defaults came from, empty when none was read.
 	ConfigFile string
 
@@ -146,6 +161,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		noConfig      bool
 		configPath    string
 		color, format string
+		subnet        string
 		timeout       time.Duration
 		port          uint
 		roots         rootList
@@ -161,6 +177,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.All, "all", false, "ask every nameserver of a zone")
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
+	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json or dot")
@@ -267,6 +284,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	cfg.ASN = !noASN
 	cfg.Compare = !noCompare
 
+	if subnet != "" {
+		if cfg.Subnet, err = clientSubnet(subnet); err != nil {
+			return nil, fmt.Errorf("%w: --subnet %w", ErrUsage, err)
+		}
+	}
+
 	if cfg.Roots = roots.servers; len(cfg.Roots) > 0 && cfg.RootHints != "" {
 		return nil, fmt.Errorf("%w: --root and --root-hints both say where the walk starts", ErrUsage)
 	}
@@ -286,6 +309,37 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// The prefix lengths a bare address is read as. The subnet says which network
+// is asking, and a whole address would say which machine, which is more than
+// the question needs and more than RFC 7871 wants sent.
+const (
+	defaultSubnetV4 = 24
+	defaultSubnetV6 = 56
+)
+
+// clientSubnet reads what --subnet was given: a prefix, or a bare address that
+// stands for the network around it.
+func clientSubnet(value string) (netip.Prefix, error) {
+	if addr, err := netip.ParseAddr(value); err == nil {
+		bits := defaultSubnetV4
+		if !addr.Unmap().Is4() {
+			bits = defaultSubnetV6
+		}
+		return netip.PrefixFrom(addr.Unmap(), bits).Masked(), nil
+	}
+
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil {
+		return netip.Prefix{}, fmt.Errorf("%q is neither an address nor a prefix", value)
+	}
+	if prefix.Addr().Is4In6() {
+		// An IPv4 address written the long way keeps IPv6 prefix lengths, which
+		// would then be sent as an IPv6 subnet nobody is in.
+		return netip.Prefix{}, fmt.Errorf("%q writes an IPv4 address as IPv6; give it as IPv4", value)
+	}
+	return prefix.Masked(), nil
 }
 
 // Root is a server a walk may start from, as --root spelled it. A zero port

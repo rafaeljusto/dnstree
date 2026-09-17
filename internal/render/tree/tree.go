@@ -64,6 +64,7 @@ var (
 		trace.KindNoData:   "🕳️",
 		trace.KindNXDomain: "👻",
 		trace.KindLame:     "🦥",
+		trace.KindFiltered: "🚫",
 		trace.KindTimeout:  "⏳",
 		trace.KindError:    "💥",
 		trace.KindSkipped:  "💤",
@@ -71,6 +72,7 @@ var (
 	recordIcons = map[string]string{
 		"A": "📍", "AAAA": "🌐", "CNAME": "🔗", "MX": "📬",
 		"TXT": "📝", "NS": "🗂️", "SOA": "📜", "DS": "🔑", "DNSKEY": "🔑",
+		"HTTPS": "🔐", "SVCB": "🔐",
 	}
 	dnssecIcons = map[trace.DNSSECState]string{
 		trace.Secure: "🔒", trace.Insecure: "🔓", trace.Bogus: "☠️", trace.Indeterminate: "❓",
@@ -110,6 +112,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	if tr.Root != nil {
 		r.write(r.label(tr.Root) + "\n")
 		r.children(tr.Root, "")
+	}
+	if line := r.difference(tr); line != "" {
+		r.write(line + "\n")
 	}
 	for _, warning := range tr.Warnings {
 		mark := "warning: "
@@ -206,8 +211,14 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if flags := r.flags(step.Flags); flags != "" {
 		fields = append(fields, flags)
 	}
+	if subnet := r.subnet(step.Subnet); subnet != "" {
+		fields = append(fields, subnet)
+	}
 	if note := r.note(step); note != "" {
 		fields = append(fields, note)
+	}
+	if extended := r.extended(step.Extended); extended != "" {
+		fields = append(fields, extended)
 	}
 	if dnssec := r.dnssec(step.DNSSEC); dnssec != "" {
 		fields = append(fields, dnssec)
@@ -314,6 +325,8 @@ func (r *renderer) note(step *trace.Step) string {
 		return r.paint.paint("no data", yellow)
 	case trace.KindLame:
 		return r.paint.paint("lame", yellow)
+	case trace.KindFiltered:
+		return r.paint.paint("filtered", red)
 	case trace.KindSkipped:
 		if step.Server.Name == "" && !step.Server.IP.IsValid() {
 			return "" // a summary of the rest; its note says what it stands for
@@ -374,6 +387,13 @@ func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 func (r *renderer) recordLabel(record trace.RR) string {
 	label := fmt.Sprintf("%s %s %s %s",
 		record.Name, r.paint.dim(fmt.Sprint(record.TTL)), r.paint.rrtype(record.Type), record.Data)
+
+	// The rdata already spells every parameter out. ECH is called out again
+	// because it is the one a reader is meant to do something about: it only
+	// hides anything if this record reached the client as the zone wrote it.
+	if record.Service != nil && record.Service.ECH {
+		label += "  " + r.paint.paint("[ech]", green)
+	}
 	if !r.glyphs.icons {
 		return label
 	}
@@ -385,7 +405,95 @@ func (r *renderer) recordLabel(record trace.RR) string {
 	return spaced(icon) + label
 }
 
+// subnet is what the server made of the client subnet it was sent. The scope
+// is the part of the prefix that shaped this answer, so a zero scope is a
+// server saying it answers the same for everybody.
+func (r *renderer) subnet(subnet *trace.Subnet) string {
+	if subnet == nil {
+		return ""
+	}
+	return r.paint.dim(fmt.Sprintf("ecs scope /%d", subnet.Scope))
+}
+
+// extended is what the server said about its own answer, in the codes of RFC
+// 8914. A code that admits the answer was withheld is the reader's business;
+// the rest is background, and dimmed.
+func (r *renderer) extended(errors []trace.ExtendedError) string {
+	if len(errors) == 0 {
+		return ""
+	}
+
+	set := make([]string, 0, len(errors))
+	withheld := false
+	for _, ede := range errors {
+		set = append(set, ede.String())
+		withheld = withheld || ede.Withheld()
+	}
+
+	label := "ede " + strings.Join(set, "; ")
+	if withheld {
+		return r.paint.paint(label, yellow)
+	}
+	return r.paint.dim(label)
+}
+
+// difference sets the resolver's answer beside the walk's, and only when the
+// two disagree. Agreement is worth no room: it is what the reader expects, and
+// the summary already says the comparison was made.
+//
+// A difference is not by itself a wrong answer. The two questions were asked
+// from different places and a server that answers by where the question came
+// from will honestly answer them differently; so will a name whose TTL turned
+// over between them. It is what the difference might instead be — a resolver
+// answering out of a policy rather than out of the zone — that earns the line.
+func (r *renderer) difference(tr *trace.Trace) string {
+	if tr.Resolver == nil || tr.Resolver.Match != trace.MatchDiffers {
+		return ""
+	}
+	result := tr.Result()
+	if result == nil {
+		return ""
+	}
+
+	who := "the resolver"
+	if tr.Resolver.Server.IP.IsValid() {
+		who = tr.Resolver.Server.IP.String()
+	}
+
+	var text string
+	ours := trace.Answers(result.Records, tr.Question.Type)
+	theirs := trace.Answers(tr.Resolver.Records, tr.Question.Type)
+	switch {
+	case result.Rcode != tr.Resolver.Rcode:
+		text = fmt.Sprintf("%s answers %s where the walk found %s",
+			who, tr.Resolver.Rcode, result.Rcode)
+	default:
+		text = fmt.Sprintf("%s answers %s, the walk found %s",
+			who, list(theirs), list(ours))
+	}
+
+	mark := "differs: "
+	if r.glyphs.icons {
+		mark = spaced("🔀")
+	}
+	return r.paint.paint(mark+text, yellow)
+}
+
+// list is a set of rdata as a reader wants it, kept short: a round robin of a
+// dozen addresses says nothing more than the first few of them and a count.
+func list(data []string) string {
+	const most = 3
+	if len(data) == 0 {
+		return "nothing"
+	}
+	if len(data) <= most {
+		return strings.Join(data, ", ")
+	}
+	return strings.Join(data[:most], ", ") + fmt.Sprintf(" (and %d more)", len(data)-most)
+}
+
 // duration keeps a round trip readable: milliseconds for anything a network
+
 // does, finer only when the answer came from next door.
 func (r *renderer) duration(d time.Duration) string {
 	var rounded time.Duration

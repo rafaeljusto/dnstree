@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"codeberg.org/miekg/dns"
+
+	"github.com/rafaeljusto/dnstree/internal/trace"
 )
 
 // The ports each transport expects a nameserver to listen on.
@@ -98,6 +100,78 @@ func NewQuery(name string, qtype uint16, udpSize uint16, dnssec bool) (*dns.Msg,
 	req.UDPSize = udpSize
 	req.Security = dnssec
 	return req, nil
+}
+
+// WithSubnet attaches the client subnet of RFC 7871 to a query, which asks the
+// server to answer as it would for somebody inside that prefix. The address is
+// masked to the prefix, since the bits past it are nobody's business and the
+// protocol requires them to be zero.
+//
+// An option needs EDNS0 to ride in, so a query asked without it is left alone:
+// that is the fallback for a server that could not parse EDNS0 in the first
+// place, and it is no place to try again.
+func WithSubnet(req *dns.Msg, prefix netip.Prefix) {
+	if !prefix.IsValid() || req.UDPSize == 0 {
+		return
+	}
+
+	addr := prefix.Masked().Addr()
+	family := uint16(1) // IP
+	if !addr.Unmap().Is4() {
+		family = 2 // IP6
+	}
+	req.Pseudo = append(req.Pseudo, &dns.SUBNET{
+		Family:  family,
+		Netmask: uint8(prefix.Bits()),
+		Address: addr,
+	})
+}
+
+// Extended reads what a server said about its own answer: the extended errors
+// of RFC 8914, in the order they arrived. An rcode says what happened and these
+// say why, which is the difference between a name that is not there and a name
+// somebody would not answer for.
+func Extended(resp *dns.Msg) []trace.ExtendedError {
+	if resp == nil {
+		return nil
+	}
+
+	var extended []trace.ExtendedError
+	for _, rr := range resp.Pseudo {
+		ede, ok := rr.(*dns.EDE)
+		if !ok {
+			continue
+		}
+		extended = append(extended, trace.ExtendedError{
+			Code:   ede.InfoCode,
+			Reason: dns.ExtendedErrorToString[ede.InfoCode],
+			Text:   ede.ExtraText,
+		})
+	}
+	return extended
+}
+
+// EchoedSubnet is the client subnet a server handed back, nil when it handed
+// back none. A server that echoes one has taken it into account; the scope is
+// how much of it shaped the answer, and a zero scope means the answer is the
+// same wherever it was asked from.
+func EchoedSubnet(resp *dns.Msg) *trace.Subnet {
+	if resp == nil {
+		return nil
+	}
+
+	for _, rr := range resp.Pseudo {
+		subnet, ok := rr.(*dns.SUBNET)
+		if !ok || !subnet.Address.IsValid() {
+			continue
+		}
+		prefix, err := subnet.Address.Unmap().Prefix(int(subnet.Netmask))
+		if err != nil {
+			continue // a netmask the address cannot carry says nothing
+		}
+		return &trace.Subnet{Prefix: prefix, Scope: subnet.Scope}
+	}
+	return nil
 }
 
 // IsTimeout reports whether err is the server staying silent, which the tree

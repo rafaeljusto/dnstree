@@ -12,8 +12,42 @@ import (
 // classify decides what a response means for the zone that was queried and the
 // name being chased. It looks at nothing but the message, so a referral it
 // reports still has to survive the walk's own checks.
-func classify(resp *dns.Msg, zone, qname string, qtype uint16) (trace.StepKind, *trace.Delegation) {
+//
+// extended is what the server said about its own answer, which the rcode alone
+// cannot say: a reply with nothing in it reads differently once the server
+// admits it withheld what it had.
+func classify(resp *dns.Msg, zone, qname string, qtype uint16, extended []trace.ExtendedError) (trace.StepKind, *trace.Delegation) {
+	kind, delegation := outcome(resp, zone, qname, qtype)
+
+	// A server that says it withheld the answer is not a server with no
+	// business serving the zone, and a name it would not answer for is not a
+	// name that is not there. Only a reply with nothing in it is read again
+	// this way: an answer that arrived is an answer, whatever the server
+	// attached to it.
+	switch kind {
+	case trace.KindLame, trace.KindNXDomain, trace.KindNoData, trace.KindError:
+		if withheld(extended) {
+			return trace.KindFiltered, nil
+		}
+	}
+	return kind, delegation
+}
+
+// withheld reports whether any of the codes says somebody decided the answer.
+func withheld(extended []trace.ExtendedError) bool {
+	for _, ede := range extended {
+		if ede.Withheld() {
+			return true
+		}
+	}
+	return false
+}
+
+// outcome is what the message says on its own, before the server's own account
+// of it is taken into any consideration.
+func outcome(resp *dns.Msg, zone, qname string, qtype uint16) (trace.StepKind, *trace.Delegation) {
 	switch resp.Rcode {
+
 	case dns.RcodeSuccess:
 	case dns.RcodeNameError:
 		return trace.KindNXDomain, nil

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "question": {
     "name": "www.example.com.",
     "type": "A",

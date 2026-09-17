@@ -25,7 +25,7 @@ func TestAsk(t *testing.T) {
 	carrier := transport.NewUDP(transport.Config{})
 
 	answer, err := recursive.Ask(t.Context(), carrier, server.Addr,
-		trace.Question{Name: "www.test", Type: "A", Class: "IN"}, false)
+		trace.Question{Name: "www.test", Type: "A", Class: "IN"}, false, netip.Prefix{})
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestAskSilent(t *testing.T) {
 
 	// Port 1 is reserved and nothing answers there.
 	answer, err := recursive.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:1"),
-		trace.Question{Name: "www.test", Type: "A", Class: "IN"}, false)
+		trace.Question{Name: "www.test", Type: "A", Class: "IN"}, false, netip.Prefix{})
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestAskSilent(t *testing.T) {
 func TestAskUnknownType(t *testing.T) {
 	carrier := transport.NewUDP(transport.Config{})
 	if _, err := recursive.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:53"),
-		trace.Question{Name: "www.test", Type: "NONSENSE", Class: "IN"}, false); err == nil {
+		trace.Question{Name: "www.test", Type: "NONSENSE", Class: "IN"}, false, netip.Prefix{}); err == nil {
 		t.Error("got no error, want a question that cannot be asked")
 	}
 }

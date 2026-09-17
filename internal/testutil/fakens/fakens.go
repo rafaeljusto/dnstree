@@ -50,6 +50,23 @@ type Behaviour struct {
 	// BadKeySignature breaks the other link: the key set the DS points at is
 	// there, but it did not sign itself.
 	BadKeySignature bool
+
+	// Extended attaches an RFC 8914 extended error to every answer, which is
+	// how a server says why it answered as it did. Paired with Refuse it is a
+	// filtering resolver; on its own it is a server explaining itself.
+	Extended *ExtendedError
+
+	// EchoSubnet answers a query carrying a client subnet with that subnet and
+	// SubnetScope, the way a server that tailors its answers by network does. A
+	// server without it ignores the subnet, which is also worth testing.
+	EchoSubnet  bool
+	SubnetScope uint8
+}
+
+// ExtendedError is what a server says about its own answer (RFC 8914).
+type ExtendedError struct {
+	Code uint16
+	Text string
 }
 
 // Config describes one fake nameserver.
@@ -298,6 +315,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 
 	reply := dnsutil.SetReply(new(dns.Msg), req)
 	reply.UDPSize = req.UDPSize
+	s.echo(reply, req)
 
 	switch {
 	case s.behaviour.FormErrEDNS && req.UDPSize > 0:
@@ -318,6 +336,33 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		dnsutil.Truncate(reply)
 	}
 	_, _ = reply.WriteTo(w)
+}
+
+// echo puts the EDNS0 options the server was set up to answer with into the
+// reply: its account of the answer, and the client subnet it took into
+// account. Both need EDNS0 to ride in, so a query that carried none gets
+// neither, exactly as in the wild.
+func (s *Server) echo(reply, req *dns.Msg) {
+	if req.UDPSize == 0 {
+		return
+	}
+
+	if ede := s.behaviour.Extended; ede != nil {
+		reply.Pseudo = append(reply.Pseudo, &dns.EDE{InfoCode: ede.Code, ExtraText: ede.Text})
+	}
+	if !s.behaviour.EchoSubnet {
+		return
+	}
+	for _, rr := range req.Pseudo {
+		if subnet, ok := rr.(*dns.SUBNET); ok {
+			reply.Pseudo = append(reply.Pseudo, &dns.SUBNET{
+				Family:  subnet.Family,
+				Netmask: subnet.Netmask,
+				Scope:   s.behaviour.SubnetScope,
+				Address: subnet.Address,
+			})
+		}
+	}
 }
 
 // respond fills in the reply the way an authoritative server would: an answer,

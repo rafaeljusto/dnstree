@@ -91,8 +91,10 @@ dnstree [flags] NAME [TYPE]
 | `--all` | ask every nameserver of a zone, not just the first that answers |
 | `--dnssec` | ask for signatures and follow the chain of trust |
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
+| `--subnet` | ask as though from this client subnet, and say what each server made of it |
+
 | `--no-asn` | skip the origin AS lookups |
-| `--no-compare` | do not time the same question against a recursive resolver |
+| `--no-compare` | do not put the same question to a recursive resolver, or compare its answer |
 | `--format` | `tree`, `ascii`, `emoji`, `json` or `dot` |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--color` | `auto`, `always` or `never` |
@@ -163,7 +165,9 @@ host wants its root on a port of its own and the rest on `--port`. `--root` and
 
 The metadata has its own way out: `--resolver ADDR` points everything that needs
 a recursive server at one of your own — the origin AS lookups, and the question
-timed against an ordinary resolution — while `--no-asn` and `--no-compare` skip
+put to an ordinary resolution and held against the walk's own answer — while
+`--no-asn` and `--no-compare` skip
+
 either of those altogether. `--asn-resolver` is the older name for `--resolver`
 and still works. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of
 your own and `--tls-insecure` verifies nothing, which is what it takes to reach
@@ -228,7 +232,113 @@ parent side of the cut, so it is asked for the child's DS — an aside reading
 `(DS of registro.br.)` — and the chain crosses the cut before the answer is
 checked.
 
+### What a server said about its answer
+
+An rcode says what happened. The extended errors of RFC 8914 say why, and they
+are the only thing in a reply that tells an answer somebody kept back apart from
+an answer that is not there:
+
+```
+$ dnstree blocked.example A
+. (root)
+├── a.root-servers.net. 198.41.0.4  21ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  19ms  NOERROR  referral → example.
+│   │   └── ns1.example. 192.0.2.53  4ms  REFUSED  filtered  ede Prohibited (18): not from this network
+└── (and 24 more not queried)
+✘ filtered in 61ms · 3 queries · 3 servers
+```
+
+Without the code on the end that hop reads as a lame server — one with no
+business serving the zone, which is a fault to take to whoever runs it. With it,
+the server is working exactly as somebody configured it, and the fault, if there
+is one, is not the zone's. They are different findings and the tree now says
+which one it found. The same goes for an NXDOMAIN carrying `Blocked (15)`: the
+name is not missing, it is being denied, and a walk that ends that way reports
+`filtered` rather than `no answer`.
+
+A code that claims nothing of the sort — a stale answer served from a cache,
+say — is carried on the hop and changes nothing else. Every code reaches
+`--format json` as `extended`, with a `withheld` flag on the ones that mean
+somebody decided the answer, so a script need not carry the list itself.
+
+Exit code 2 covers a filtered walk, as it does any other walk that ends without
+an answer.
+
+### ECH, and what makes it worth anything
+
+Encrypted client hello hides the name a client is about to connect to. The
+configuration that does the hiding is published in DNS, in the HTTPS record of
+the name itself, which means the thing being protected travels in the same
+answer as the protection. Anything that can rewrite that answer can drop the
+configuration out of it, and a client that finds none does not fail: it connects
+the old way and sends the name in the clear.
+
+So dnstree reads the service parameters of an HTTPS or SVCB record rather than
+only printing them, marks the records that publish a configuration, and says
+when nothing vouched for the answer that carried it:
+
+```
+$ dnstree --dnssec www.example.com HTTPS
+...
+└── ns3.example.com. 192.0.2.53  18ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+    └── www.example.com. 300 HTTPS 1 . alpn="h2,h3" ech="AEX+DQBB..."  [ech]
+```
+
+Run without `--dnssec`, or against a zone whose answer comes back `insecure` or
+`bogus`, the same record earns a warning: the configuration is there, and
+nothing here can tell whether it is the one the zone published. The parameters
+are in `--format json` under `service`, `ech` included.
+
+### Asking from somewhere else
+
+A server that answers by where the question came from — which is every CDN —
+tells a walk from your desk about your desk. `--subnet` asks it the question
+somebody else would be asking:
+
+```
+$ dnstree --subnet 203.0.113.0/24 www.example.com A
+...
+└── ns3.example.com. 192.0.2.53  18ms  NOERROR  AA  ecs scope /24
+    └── www.example.com. 60 A 198.51.100.7
+```
+
+`ecs scope /24` is the server saying it used the whole prefix to choose that
+answer, so somebody else in that /24 gets the same one. A scope of `/0` is the
+server saying the answer is the same everywhere, and a hop that echoes nothing
+at all ignored the subnet, which earns a warning: what came back is what that
+server tells everybody, and the question went unanswered.
+
+A bare address is read as the /24 or /56 around it, since the point is the
+network and not the machine. The subnet is sent to every server on the way down,
+which is more than the root servers need to know about where you are, so it is
+never sent unless it is asked for.
+
+### Against your resolver
+
+Every walk also puts the question to a recursive resolver — the host's own, or
+whichever `--resolver` names — and now keeps the answer as well as the clock.
+When the two disagree, the tree says so:
+
+```
+$ dnstree intranet.example.com A
+...
+✔ answered in 412ms · resolver in 3ms (differs) · 4 queries · 4 servers
+differs: 192.168.1.1 answers 10.4.2.9, the walk found 203.0.113.80
+```
+
+This is not by itself a wrong answer. The two questions were asked from
+different places, so a CDN will honestly answer them differently, and a short
+TTL can turn over between one and the other. What it might instead be is the
+reason the line is there: a split horizon, a filtering resolver, a policy
+answering in the zone's place. dnstree reports the difference and leaves the
+reading to you.
+
+Agreement is worth no room and gets none. `--no-compare` turns the whole thing
+off, which is also the only way to keep the name being resolved from reaching a
+resolver at all.
+
 ### Watching it happen
+
 
 `--live` redraws the tree in place as the walk makes it, so the referrals
 arrive one at a time instead of all at once at the end. The hop that just

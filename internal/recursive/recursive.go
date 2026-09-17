@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,7 +53,7 @@ func SystemFrom(path string) netip.AddrPort {
 // resolver and says nothing about the walk. An error means the question could
 // not be asked at all.
 func Ask(ctx context.Context, carrier transport.Transport, server netip.AddrPort,
-	question trace.Question, dnssec bool) (*trace.Resolver, error) {
+	question trace.Question, dnssec bool, subnet netip.Prefix) (*trace.Resolver, error) {
 
 	qtype, ok := dns.StringToType[strings.ToUpper(question.Type)]
 	if !ok {
@@ -62,6 +63,7 @@ func Ask(ctx context.Context, carrier transport.Transport, server netip.AddrPort
 	if err != nil {
 		return nil, fmt.Errorf("recursive: %w", err)
 	}
+	transport.WithSubnet(req, subnet)
 
 	// The whole point: the server is asked to do the walking this time.
 	req.RecursionDesired = true
@@ -75,6 +77,81 @@ func Ask(ctx context.Context, carrier transport.Transport, server netip.AddrPort
 		answer.Err = err.Error()
 	} else {
 		answer.Rcode = dnsutil.RcodeToString(resp.Rcode)
+		answer.Records = records(resp.Answer)
+		answer.Extended = transport.Extended(resp)
+		answer.Subnet = transport.EchoedSubnet(resp)
 	}
 	return answer, nil
+
+}
+
+// Compare sets how the resolver's answer stands against the one the walk found
+// for itself, which is the whole reason for keeping both.
+//
+// They are allowed to differ honestly. A CDN answers for where the question
+// seems to come from, and a walk from the root and a resolver are rarely in
+// the same place; a short TTL can turn over between the two questions. What a
+// difference is worth looking at for is the other reason: a resolver that is
+// not resolving, but answering out of a policy, a split horizon or a filter.
+// The tool reports the difference and leaves that reading to the reader.
+func Compare(tr *trace.Trace) {
+	if tr == nil || tr.Resolver == nil || tr.Resolver.Err != "" {
+		return
+	}
+	result := tr.Result()
+	if result == nil {
+		return // nothing of our own to set it against
+	}
+
+	// A resolver that answered REFUSED or SERVFAIL did not resolve anything,
+	// so there is no answer of its own to hold against the walk's. The rcode
+	// is already on the summary line and says the whole of it; calling that a
+	// difference would be reading a broken resolver as a disagreeing one.
+	switch tr.Resolver.Rcode {
+	case "NOERROR", "NXDOMAIN":
+	default:
+		return
+	}
+
+	// A different rcode is a difference whatever the records say, and it is the
+	// loud one: the name is there for one of them and not for the other.
+	if result.Rcode != "" && result.Rcode != tr.Resolver.Rcode {
+
+		tr.Resolver.Match = trace.MatchDiffers
+		return
+	}
+
+	// Only the records that answer the question are compared, by rdata and not
+	// by order: a nameserver is free to rotate an RRset between two questions,
+	// and an alias chain reaches the same records by a different name.
+	ours := trace.Answers(result.Records, tr.Question.Type)
+	theirs := trace.Answers(tr.Resolver.Records, tr.Question.Type)
+	if len(ours) == 0 && len(theirs) == 0 {
+		return
+	}
+	if slices.Equal(ours, theirs) {
+		tr.Resolver.Match = trace.MatchSame
+		return
+	}
+	tr.Resolver.Match = trace.MatchDiffers
+}
+
+// records flattens an answer section the way the walk does, minus the
+// signatures. This package keeps its own copy rather than reaching into the
+// resolver: what it does is the opposite of walking, and the two only meet in
+// the model.
+func records(rrs []dns.RR) []trace.RR {
+	var records []trace.RR
+	for _, rr := range rrs {
+		if dns.RRToType(rr) == dns.TypeRRSIG {
+			continue
+		}
+		records = append(records, trace.RR{
+			Name: rr.Header().Name,
+			TTL:  rr.Header().TTL,
+			Type: dnsutil.TypeToString(dns.RRToType(rr)),
+			Data: fmt.Sprint(rr.Data()),
+		})
+	}
+	return records
 }

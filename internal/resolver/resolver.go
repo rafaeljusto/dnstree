@@ -16,6 +16,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
+	"codeberg.org/miekg/dns/rdata"
+	"codeberg.org/miekg/dns/svcb"
 
 	"github.com/rafaeljusto/dnstree/internal/dnssec"
 	"github.com/rafaeljusto/dnstree/internal/roothints"
@@ -105,6 +107,13 @@ type Config struct {
 	// CheckNS asks the zone it ends in for its own NS RRset and warns when that
 	// does not match what the parent delegated. It costs one more query.
 	CheckNS bool
+
+	// Subnet rides along on every query as the client subnet of RFC 7871, so
+	// that a server which tailors its answers is asked the question somebody
+	// inside that prefix would be asking. The zero value sends none, which is
+	// what keeps an ordinary walk from telling every server on the way down
+	// where the person running it sits.
+	Subnet netip.Prefix
 
 	Budget Budget
 }
@@ -260,9 +269,12 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		case step.Kind != trace.KindReferral:
 			r.verify(ctx, chain, hop, qname, qtype)
 			if side == 0 {
+				r.checkECH(step)
+				r.checkSubnet(step)
 				r.checkNS(ctx, step, parent)
 			}
 			return step
+
 		}
 
 		next := r.nextServers(ctx, step, side)
@@ -533,6 +545,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	// server. The hop says the answer could not be fetched whole instead.
 	if resp.Truncated {
 		step.Rcode = dnsutil.RcodeToString(resp.Rcode)
+		step.Extended = transport.Extended(resp)
 		step.Flags.TC = true
 		step.Kind = trace.KindError
 		step.Err = "the answer did not fit and could not be fetched whole"
@@ -545,6 +558,8 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	}
 
 	step.Rcode = dnsutil.RcodeToString(resp.Rcode)
+	step.Extended = transport.Extended(resp)
+	step.Subnet = transport.EchoedSubnet(resp)
 	step.Flags = trace.Flags{
 		AA:   resp.Authoritative,
 		TC:   resp.Truncated,
@@ -552,7 +567,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		DO:   resp.Security,
 		EDNS: resp.UDPSize > 0,
 	}
-	step.Kind, step.Delegation = classify(resp, zone, qname, qtype)
+	step.Kind, step.Delegation = classify(resp, zone, qname, qtype, step.Extended)
 
 	switch step.Kind {
 	case trace.KindAnswer, trace.KindCNAME:
@@ -572,6 +587,7 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 		if req, err = transport.NewQuery(qname, qtype, udpSize, r.cfg.DNSSEC); err != nil {
 			return nil, err
 		}
+		transport.WithSubnet(req, r.cfg.Subnet)
 
 		var (
 			resp *dns.Msg
@@ -665,6 +681,50 @@ func (r *run) chaseCNAME(ctx context.Context, step *trace.Step, qname string, qt
 	root := &trace.Step{Zone: ".", Kind: trace.KindZone, Notes: []string{"resolving " + target}}
 	r.attach(step, root)
 	return r.walk(ctx, target, qtype, root, side)
+}
+
+// checkECH warns when an answer publishes an encrypted client hello that
+// nothing here could vouch for. ECH hides the name a client is about to ask
+// for, and the configuration doing the hiding rides in this very answer:
+// whatever can rewrite the answer can drop the configuration out of it, and a
+// client that finds none falls back to sending the name in the clear. Only a
+// signature says that did not happen on the way.
+func (r *run) checkECH(step *trace.Step) {
+	name := ""
+	for _, record := range step.Records {
+		if record.Service != nil && record.Service.ECH {
+			name = record.Name
+			break
+		}
+	}
+	if name == "" {
+		return
+	}
+
+	switch {
+	case !r.cfg.DNSSEC:
+		r.warnf("%s publishes an ECH configuration, and without --dnssec nothing here checked that it arrived as the zone wrote it", name)
+	case step.DNSSEC == nil:
+		r.warnf("%s publishes an ECH configuration in an answer whose signatures were never checked", name)
+	case step.DNSSEC.State != trace.Secure:
+		r.warnf("%s publishes an ECH configuration in an answer that is %s, so a client cannot tell whether it was stripped on the way",
+			name, step.DNSSEC.State)
+	}
+}
+
+// checkSubnet warns when the server that answered ignored the client subnet.
+// The answer is then whatever that server tells everybody, rather than what it
+// would tell somebody inside the prefix, which is the only reason to have sent
+// one.
+func (r *run) checkSubnet(step *trace.Step) {
+	if !r.cfg.Subnet.IsValid() || step.Subnet != nil {
+		return
+	}
+	who := step.Server.Name
+	if who == "" {
+		who = step.Server.IP.String()
+	}
+	r.warnf("%s ignored the client subnet, so this answer is not tailored to %s", who, r.cfg.Subnet)
 }
 
 // checkNS asks the zone that answered for its own NS RRset and warns when it
@@ -807,11 +867,38 @@ func records(rrs []dns.RR) []trace.RR {
 			continue
 		}
 		records = append(records, trace.RR{
-			Name: rr.Header().Name,
-			TTL:  rr.Header().TTL,
-			Type: dnsutil.TypeToString(dns.RRToType(rr)),
-			Data: fmt.Sprint(rr.Data()),
+			Name:    rr.Header().Name,
+			TTL:     rr.Header().TTL,
+			Type:    dnsutil.TypeToString(dns.RRToType(rr)),
+			Data:    fmt.Sprint(rr.Data()),
+			Service: service(rr),
 		})
 	}
 	return records
+}
+
+// service decodes an HTTPS or SVCB record, and nothing else. The text of the
+// record already carries every parameter; what is pulled out here is what the
+// tool has something to say about.
+func service(rr dns.RR) *trace.Service {
+	var data rdata.SVCB
+	switch rr := rr.(type) {
+	case *dns.HTTPS:
+		data = rr.SVCB.SVCB
+	case *dns.SVCB:
+		data = rr.SVCB
+	default:
+		return nil
+	}
+
+	decoded := &trace.Service{Priority: data.Priority, Target: dnsutil.Fqdn(data.Target)}
+	for _, pair := range data.Value {
+		switch pair := pair.(type) {
+		case *svcb.ALPN:
+			decoded.ALPN = pair.Alpn
+		case *svcb.ECHCONFIG:
+			decoded.ECH = len(pair.ECH) > 0
+		}
+	}
+	return decoded
 }

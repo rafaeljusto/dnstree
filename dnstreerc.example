@@ -34,6 +34,14 @@
 # hands out. A mismatch is a real delegation fault that still resolves.
 # check-ns = true
 
+# Ask as though the question came from somebody inside this network, which is
+# how a server that answers by where you are can be asked what it tells
+# somewhere else. A bare address is read as the /24 or /56 around it. Every
+# server on the way down is told, so this is a thing to ask for rather than a
+# thing to leave on.
+# subnet = 203.0.113.0/24
+
+
 
 # How to ask
 

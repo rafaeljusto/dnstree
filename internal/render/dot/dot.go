@@ -134,6 +134,12 @@ func label(step *trace.Step) string {
 	if step.DNSSEC != nil {
 		lines = append(lines, "["+string(step.DNSSEC.State)+"]")
 	}
+	for _, ede := range step.Extended {
+		lines = append(lines, "ede "+ede.String())
+	}
+	if step.Subnet != nil {
+		lines = append(lines, fmt.Sprintf("ecs scope /%d", step.Subnet.Scope))
+	}
 	for _, record := range step.Records {
 		lines = append(lines, record.Name+" "+record.Type+" "+record.Data)
 	}
@@ -154,6 +160,8 @@ func attributes(step *trace.Step) string {
 		return ", color=darkgreen"
 	case trace.KindNoData, trace.KindNXDomain, trace.KindLame:
 		return ", color=darkgoldenrod"
+	case trace.KindFiltered:
+		return ", color=darkorange, style=\"rounded,bold\""
 	case trace.KindTimeout, trace.KindError:
 		return ", color=firebrick"
 	case trace.KindSkipped:
@@ -208,7 +216,12 @@ func resolver(answer *trace.Resolver) string {
 	if answer.Err != "" {
 		return who + " did not answer"
 	}
-	return who + " answered in " + duration(answer.Elapsed)
+	line := who + " answered in " + duration(answer.Elapsed)
+	if answer.Match == trace.MatchDiffers {
+		line += ", and not what the walk found"
+	}
+	return line
+
 }
 
 // duration keeps an edge label short: a graph is read at a glance.

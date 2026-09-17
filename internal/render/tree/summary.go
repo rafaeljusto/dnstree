@@ -32,6 +32,10 @@ func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 	switch {
 	case bogus(tr):
 		mark, verdict, color = "✘", "bogus", red
+	case tr.Result() == nil && tr.Filtered() != nil:
+		// Not the same as nothing answering: something did answer, and what it
+		// answered was that it would not.
+		mark, verdict, color = "✘", "filtered", red
 	case tr.Result() == nil:
 		mark, verdict, color = "✘", "no answer", yellow
 	}
@@ -61,10 +65,23 @@ func resolverField(answer *trace.Resolver) string {
 		return ""
 	case answer.Err != "":
 		return "resolver did not answer"
-	case answer.Rcode != "" && answer.Rcode != "NOERROR" && answer.Rcode != "NXDOMAIN":
-		return "resolver in " + clock(answer.Elapsed) + " (" + answer.Rcode + ")"
 	}
-	return "resolver in " + clock(answer.Elapsed)
+
+	var aside []string
+	if answer.Rcode != "" && answer.Rcode != "NOERROR" && answer.Rcode != "NXDOMAIN" {
+		aside = append(aside, answer.Rcode)
+	}
+	// Only a disagreement is worth the room. Agreement is what the reader is
+	// expecting, and the tree says what the difference is when there is one.
+	if answer.Match == trace.MatchDiffers {
+		aside = append(aside, "differs")
+	}
+
+	field := "resolver in " + clock(answer.Elapsed)
+	if len(aside) > 0 {
+		field += " (" + strings.Join(aside, ", ") + ")"
+	}
+	return field
 }
 
 // spent is what a finished walk cost, read off the trace: one query per hop it

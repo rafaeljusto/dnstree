@@ -110,6 +110,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	if timed != nil {
 		tr.Resolver = <-timed
+		recursive.Compare(tr)
 	}
 
 	// The last frame stays up until there is something to put in its place.
@@ -145,6 +146,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		All:       cfg.All,
 		Family:    cfg.Family,
 		CheckNS:   cfg.CheckNS,
+		Subnet:    cfg.Subnet,
 		Retries:   cfg.Retries,
 		Budget: resolver.Budget{
 			MaxDepth:   cfg.MaxDepth,
@@ -249,7 +251,8 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan *tra
 	timed := make(chan *trace.Resolver, 1)
 	go func() {
 		defer close(timed)
-		answer, err := recursive.Ask(ctx, carrier, server, question, cfg.DNSSEC)
+		answer, err := recursive.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
+
 		if err != nil {
 			if log != nil {
 				log.Debug("the resolver could not be asked", "server", server, "error", err)

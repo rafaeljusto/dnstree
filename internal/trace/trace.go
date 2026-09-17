@@ -5,6 +5,9 @@ package trace
 import (
 	"iter"
 	"net/netip"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,6 +39,83 @@ type Resolver struct {
 	Elapsed time.Duration
 	Rcode   string
 	Err     string
+
+	// Records is what it answered with, kept so that its answer can be set
+	// against the one the walk found, rather than only the time it took.
+	Records []RR
+
+	// Extended is what the server said about its own answer, which is where a
+	// resolver that filtered rather than resolved says so.
+	Extended []ExtendedError
+
+	// Subnet is the client subnet it echoed, when the question carried one.
+	Subnet *Subnet
+
+	// Match is how its answer stands against the walk's, empty when there was
+	// nothing to compare.
+	Match Match
+}
+
+// Match is how a recursive server's answer stands against the one the walk
+// found for itself. The two are allowed to differ honestly: a CDN tailors its
+// answer to where the question seems to come from, and the walk and the
+// resolver are rarely in the same place. A difference is something to look at,
+// not a verdict.
+type Match string
+
+// What the comparison came to.
+const (
+	MatchSame    Match = "same"
+	MatchDiffers Match = "differs"
+)
+
+// ExtendedError is what a server said about its own answer, in the codes of
+// RFC 8914. An rcode says what happened; this says why, and it is the only
+// thing in a reply that tells an answer withheld apart from an answer that is
+// not there.
+type ExtendedError struct {
+	Code uint16
+
+	// Reason is the registered name of the code, empty for one this build does
+	// not know. An unregistered code is still worth showing: the number and
+	// whatever the server wrote beside it are what a reader has.
+	Reason string
+
+	// Text is EXTRA-TEXT, whatever the server chose to add in words.
+	Text string
+}
+
+// Withheld reports whether the code says somebody decided this answer rather
+// than served it. These are what a filtering resolver, a captive network or a
+// blocklist answers with, and they are why a REFUSED is not always a server
+// with no business serving the zone.
+func (e ExtendedError) Withheld() bool {
+	switch e.Code {
+	case 4, 15, 16, 17, 18: // forged, blocked, censored, filtered, prohibited
+		return true
+	}
+	return false
+}
+
+// String is the code as a reader wants it: the name when there is one, the
+// number always, and whatever the server added.
+func (e ExtendedError) String() string {
+	label := strconv.FormatUint(uint64(e.Code), 10)
+	if e.Reason != "" {
+		label = e.Reason + " (" + label + ")"
+	}
+	if e.Text != "" {
+		label += ": " + e.Text
+	}
+	return label
+}
+
+// Subnet is the client subnet of RFC 7871 as a server handed it back. A server
+// that answers with one has taken it into account; Scope is how much of it it
+// actually used, and a zero scope means this answer is the same for everybody.
+type Subnet struct {
+	Prefix netip.Prefix
+	Scope  uint8
 }
 
 // Question is what the resolution set out to answer.
@@ -57,9 +137,15 @@ const (
 	KindNoData   StepKind = "nodata" // the name exists, the type does not
 	KindNXDomain StepKind = "nxdomain"
 	KindLame     StepKind = "lame" // not serving the zone it was asked about
-	KindTimeout  StepKind = "timeout"
-	KindError    StepKind = "error"
-	KindSkipped  StepKind = "skipped" // known, never queried
+
+	// KindFiltered is an answer somebody decided rather than served, as the
+	// server's own extended error says. It is neither lameness nor a name that
+	// is not there: the zone was never consulted.
+	KindFiltered StepKind = "filtered"
+
+	KindTimeout StepKind = "timeout"
+	KindError   StepKind = "error"
+	KindSkipped StepKind = "skipped" // known, never queried
 )
 
 // Step is one query and the queries it led to.
@@ -79,6 +165,14 @@ type Step struct {
 	// Notes are what it took to get the answer: a retry over TCP, a query sent
 	// again without EDNS0. They belong to this hop, not to a new one.
 	Notes []string
+
+	// Extended is what the server said about its own answer, in the codes of
+	// RFC 8914. One reply may carry several.
+	Extended []ExtendedError
+
+	// Subnet is the client subnet the server echoed, set only when the query
+	// carried one and the server answered with it.
+	Subnet *Subnet
 
 	// Aside marks work that answers a different question: the address of a
 	// nameserver, or the NS set of a zone. The resolution's own answer is never
@@ -133,6 +227,24 @@ type RR struct {
 	TTL  uint32
 	Type string
 	Data string
+
+	// Service is what an HTTPS or SVCB record offers, decoded. Nil for every
+	// other type.
+	Service *Service
+}
+
+// Service is the parameters of an HTTPS or SVCB record. Data carries them as
+// text already; this is the part worth acting on, which is ECH: a client that
+// finds a configuration here encrypts the name it is about to ask for, and
+// that is worth something only if the record reached it unforged.
+type Service struct {
+	Priority uint16
+	Target   string
+	ALPN     []string
+
+	// ECH reports whether the record publishes an encrypted client hello
+	// configuration.
+	ECH bool
 }
 
 // Delegation is the zone cut a referral pointed at.
@@ -228,4 +340,33 @@ func result(step *Step) *Step {
 		}
 	}
 	return found
+}
+
+// Answers is the rdata of the records that answer a question of this type,
+// sorted and deduplicated. Two answers to the same question can be held
+// against each other this way without the order counting: a nameserver is free
+// to rotate an RRset between one question and the next, and an alias chain
+// reaches the same records under a different name.
+func Answers(records []RR, qtype string) []string {
+	var data []string
+	for _, record := range records {
+		if strings.EqualFold(record.Type, qtype) {
+			data = append(data, record.Data)
+		}
+	}
+	slices.Sort(data)
+	return slices.Compact(data)
+}
+
+// Filtered is a hop where somebody decided the answer rather than serving it,
+// or nil where nothing did. It is not a [Trace.Result]: a walk that ends here
+// has not been answered, it has been turned away, and the two are worth saying
+// differently.
+func (t *Trace) Filtered() *Step {
+	for step := range t.Steps() {
+		if step.Kind == KindFiltered {
+			return step
+		}
+	}
+	return nil
 }
