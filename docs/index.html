@@ -147,17 +147,18 @@ h3{font-size:1rem; margin:0 0 .35rem; font-weight:600}
 .dissect{background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px; padding:1.4rem 0 .4rem; margin-top:1.6rem; overflow-x:auto}
 .dissect-inner{min-width:60rem; padding-inline:1.4rem; position:relative}
 .dissect pre{font-size:14px}
-.callouts{position:relative; height:7.5rem; margin-top:.2rem; font-family:"IBM Plex Mono",monospace; font-size:14px}
-.callout{position:absolute; top:0}
-.callout .tick{display:block; width:1px; height:var(--h,1.1rem); background:var(--term-line); margin-left:.4ch}
-.callout .label{display:block; margin-top:.3rem; font-size:12px; color:var(--term-dim); white-space:nowrap}
-.callout .label b{display:block; color:var(--term-ink); font-weight:500}
+/* The callouts are drawn, not positioned: one elbow per column, rightmost
+   first, so no two labels can ever land on top of each other. */
+.annot{margin-top:.2rem; font-size:14px; color:var(--term-dim)}
+.annot b{color:var(--term-ink); font-weight:500}
 .legend{display:none; list-style:none; margin:1.2rem 0 0; padding:0; gap:.7rem 1.4rem; flex-wrap:wrap}
 .legend li{font-size:.86rem; color:var(--muted)}
 .legend b{color:var(--ink); font-weight:600; font-family:"IBM Plex Mono",monospace}
 @media (max-width:760px){
   .dissect{padding-bottom:1.2rem}
-  .callouts{display:none}
+  /* the drawn callouts give way to the legend, which needs to wrap */
+  .dissect-inner{min-width:0}
+  .annot{display:none}
   .legend{display:flex}
 }
 
@@ -278,29 +279,13 @@ footer a:hover{color:var(--ink)}
 
       <div class="dissect">
         <div class="dissect-inner">
-<pre><span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS397197</span>  <span class="rtt">12ms</span>  <span class="ok">NOERROR</span>  <span class="note">referral → com.</span></pre>
-          <div class="callouts" aria-hidden="true">
-            <div class="callout" style="left:0ch">
-              <span class="tick" style="--h:1.1rem"></span>
-              <span class="label"><b>who was asked</b>the name from the delegation</span>
-            </div>
-            <div class="callout" style="left:20ch">
-              <span class="tick" style="--h:2.4rem"></span>
-              <span class="label"><b>at which address</b>glue, taken only from a<br>server entitled to give it</span>
-            </div>
-            <div class="callout" style="left:32ch">
-              <span class="tick" style="--h:3.7rem"></span>
-              <span class="label"><b>whose network</b>origin AS, looked up after<br>the walk and never fatal</span>
-            </div>
-            <div class="callout" style="left:42ch">
-              <span class="tick" style="--h:5rem"></span>
-              <span class="label"><b>what it cost</b>the whole hop, retries<br>included</span>
-            </div>
-            <div class="callout" style="left:56ch">
-              <span class="tick" style="--h:1.1rem"></span>
-              <span class="label"><b>what it said</b>and what that meant:<br>a referral one zone down</span>
-            </div>
-          </div>
+          <pre><span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS397197</span>  <span class="rtt">12ms</span>  <span class="ok">NOERROR</span>  <span class="note">referral → com.</span></pre>
+          <pre class="annot"><span class="guide" aria-hidden="true">│                   │           │         │     │</span>
+<span class="guide" aria-hidden="true">│                   │           │         │     └─ </span><b>what it said</b> — a referral one zone down
+<span class="guide" aria-hidden="true">│                   │           │         └─ </span><b>what it cost</b> — the whole hop, retries included
+<span class="guide" aria-hidden="true">│                   │           └─ </span><b>whose network</b> — origin AS, looked up after the walk
+<span class="guide" aria-hidden="true">│                   └─ </span><b>at which address</b> — glue, only from a server entitled to give it
+<span class="guide" aria-hidden="true">└─ </span><b>who was asked</b> — the name from the delegation</pre>
           <ul class="legend">
             <li><b>a.root-servers.net.</b> — who was asked, named by the delegation</li>
             <li><b>198.41.0.4</b> — glue, taken only from a server entitled to give it</li>
