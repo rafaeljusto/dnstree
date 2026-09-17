@@ -15,6 +15,9 @@ func TestParse(t *testing.T) {
 		"a usage text with every part": {
 			usage: "usage: dnstree [flags] NAME\n\nWhat it does.\n\n  --all   ask everyone\n\nExit codes: 0 fine.\n",
 		},
+		"exit codes as one indented entry per line": {
+			usage: "usage: dnstree NAME\n\nWhat it does.\n\n  --all   ask everyone\n\nExit codes:\n  0 fine\n  1 not.\n",
+		},
 		"a synopsis of more than one line": {
 			usage: "usage: dnstree NAME\nusage: dnstree TYPE\n\nWhat it does.\n\n  --all   ask everyone\n\nExit codes: 0 fine.\n",
 			err:   true,

@@ -141,15 +141,19 @@ func options(lines []string) ([]option, error) {
 }
 
 func exits(lines []string) ([]exit, error) {
-	sentence := strings.Join(lines, " ")
-	sentence = strings.TrimPrefix(sentence, "Exit codes:")
-	sentence = strings.TrimSuffix(strings.TrimSpace(sentence), ".")
+	// The codes come either as one indented entry per line, or as a sentence
+	// of comma separated entries that may wrap.
+	entries := strings.Split(strings.TrimPrefix(strings.Join(lines, " "), "Exit codes:"), ",")
+	if len(lines) > 1 && strings.HasPrefix(lines[1], " ") {
+		entries = lines[1:]
+	}
 
 	var out []exit
-	for entry := range strings.SplitSeq(sentence, ",") {
-		match := exitRE.FindStringSubmatch(strings.TrimSpace(entry))
+	for _, entry := range entries {
+		entry = strings.TrimSuffix(strings.TrimSpace(entry), ".")
+		match := exitRE.FindStringSubmatch(entry)
 		if match == nil {
-			return nil, fmt.Errorf("mkman: %q does not read as an exit code and its meaning", strings.TrimSpace(entry))
+			return nil, fmt.Errorf("mkman: %q does not read as an exit code and its meaning", entry)
 		}
 		out = append(out, exit{code: match[1], text: match[2]})
 	}
