@@ -244,9 +244,9 @@ func (r *renderer) pace(rtt time.Duration) string {
 	case !r.glyphs.icons:
 		return ""
 	case rtt < 50*time.Millisecond:
-		return "⚡"
+		return spaced("⚡")
 	case rtt > 500*time.Millisecond:
-		return "🐢"
+		return spaced("🐢")
 	}
 	return ""
 }
