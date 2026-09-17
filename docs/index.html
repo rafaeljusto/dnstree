@@ -196,22 +196,28 @@ h3{font-size:1rem; margin:0 0 .35rem; font-weight:600}
 .panel[hidden]{display:none!important}
 
 /* ── install ──────────────────────────────────────────────────────────── */
-.installs{display:grid; gap:.7rem; margin-top:1.5rem; max-width:52rem}
+.installs{display:grid; grid-template-columns:minmax(0,1fr); gap:.7rem; margin-top:1.5rem; max-width:52rem}
 .cmd{
   display:flex; align-items:center; gap:.8rem; background:var(--sunken); border:1px solid var(--line);
   border-radius:8px; padding:.7rem .9rem; font-family:"IBM Plex Mono",monospace; font-size:.85rem;
+  min-width:0;
 }
 .cmd .what{color:var(--faint); flex:0 0 auto; min-width:4.5rem}
-.cmd code{flex:1 1 auto; overflow-x:auto; white-space:nowrap; color:var(--ink)}
+/* min-width:0 is what keeps the long command inside the row: without it the
+   nowrap code refuses to shrink and widens the whole page. It scrolls in
+   place instead. */
+.cmd code{flex:1 1 auto; min-width:0; overflow-x:auto; white-space:nowrap; color:var(--ink)}
 /* The repeated host carries nothing the reader needs, so it recedes — but it
    stays in the text, because the copy button reads the row it is in. */
 .cmd code .host{color:var(--muted)}
+/* Not a command to copy, so it wraps rather than scrolls. */
+.cmd code.prose{white-space:normal; overflow-wrap:anywhere}
 .copy{
   flex:0 0 auto; border:1px solid var(--line-strong); background:transparent; color:var(--muted);
   border-radius:5px; padding:.2rem .5rem; font-size:.74rem; cursor:pointer; font-family:inherit;
 }
 .copy:hover{color:var(--ink); border-color:var(--ink)}
-@media (max-width:560px){ .cmd{flex-wrap:wrap} .cmd .what{min-width:0} }
+@media (max-width:560px){ .cmd{flex-wrap:wrap} .cmd .what{min-width:0} .cmd code{flex-basis:100%} }
 
 /* ── exit codes ───────────────────────────────────────────────────────── */
 .exits{width:100%; border-collapse:collapse; margin-top:1.3rem; max-width:34rem; font-size:.92rem}
@@ -509,7 +515,7 @@ footer a:hover{color:var(--ink)}
         </div>
         <div class="cmd">
           <span class="what">binary</span>
-          <code><a href="https://github.com/rafaeljusto/dnstree/releases">github.com/rafaeljusto/dnstree/releases</a> — macOS, Linux, FreeBSD, Windows</code>
+          <code class="prose"><a href="https://github.com/rafaeljusto/dnstree/releases">github.com/rafaeljusto/dnstree/releases</a> — macOS, Linux, FreeBSD, Windows</code>
         </div>
       </div>
 
