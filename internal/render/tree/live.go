@@ -450,8 +450,8 @@ func newest(tr *trace.Trace) *trace.Step {
 // for. The servers a hop did not need are attached after the one that answered,
 // so the plain last child is as often a road not taken as it is the way down.
 func deeper(step *trace.Step, keep func(*trace.Step) bool) *trace.Step {
-	for i := len(step.Children) - 1; i >= 0; i-- {
-		if child := step.Children[i]; keep(child) {
+	for _, child := range slices.Backward(step.Children) {
+		if keep(child) {
 			return child
 		}
 	}

@@ -170,7 +170,7 @@ func TestTruncateFits(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	for _, line := range strings.Split(buf.String(), "\n") {
+	for line := range strings.SplitSeq(buf.String(), "\n") {
 		for _, cells := range []int{1, 8, 40, 79} {
 			if got := width(truncate(line, cells)); got > cells {
 				t.Errorf("got %d columns of %q, want at most %d", got, line, cells)

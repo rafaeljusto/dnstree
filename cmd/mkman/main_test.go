@@ -69,7 +69,7 @@ func TestRenderCoversTheCommandLine(t *testing.T) {
 	page := render(doc, "0.1.2", "2026-09-16")
 
 	for _, opt := range doc.options {
-		for _, word := range strings.Fields(strings.ReplaceAll(opt.flags, ",", " ")) {
+		for word := range strings.FieldsSeq(strings.ReplaceAll(opt.flags, ",", " ")) {
 			if !strings.HasPrefix(word, "-") {
 				continue
 			}

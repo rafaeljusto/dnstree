@@ -146,7 +146,7 @@ func exits(lines []string) ([]exit, error) {
 	sentence = strings.TrimSuffix(strings.TrimSpace(sentence), ".")
 
 	var out []exit
-	for _, entry := range strings.Split(sentence, ",") {
+	for entry := range strings.SplitSeq(sentence, ",") {
 		match := exitRE.FindStringSubmatch(strings.TrimSpace(entry))
 		if match == nil {
 			return nil, fmt.Errorf("mkman: %q does not read as an exit code and its meaning", strings.TrimSpace(entry))
@@ -229,11 +229,11 @@ func synopsis(line string) string {
 	args := make([]string, 0, len(fields)-1)
 	for _, field := range fields[1:] {
 		var left, right string
-		if strings.HasPrefix(field, "[") {
-			left, field = "[", strings.TrimPrefix(field, "[")
+		if after, ok := strings.CutPrefix(field, "["); ok {
+			left, field = "[", after
 		}
-		if strings.HasSuffix(field, "]") {
-			right, field = "]", strings.TrimSuffix(field, "]")
+		if before, ok := strings.CutSuffix(field, "]"); ok {
+			right, field = "]", before
 		}
 		args = append(args, left+`\fI`+roff(field)+`\fR`+right)
 	}
