@@ -441,6 +441,8 @@ query, clustered by zone:
 dnstree --format dot www.example.com | dot -Tsvg > trace.svg
 ```
 
+![dnstree dot format example](docs/demo-dot.svg "dnstree dot format example")
+
 ## How it walks
 
 Every hop is a question to one server, and every answer is classified before
