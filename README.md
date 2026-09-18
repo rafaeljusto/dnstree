@@ -14,11 +14,11 @@ every referral — and draw the path it took.
 ```
 $ dnstree www.example.com A
 . (root)
-├── a.root-servers.net. 198.41.0.4  270ms  NOERROR  referral → com.
-│   ├── l.gtld-servers.net. 192.41.162.30  246ms  NOERROR  referral → example.com.
-│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  231ms  NOERROR  AA
-│   │   │   ├── www.example.com. 300 A 104.20.23.154
-│   │   │   └── www.example.com. 300 A 172.66.147.243
+├── a.root-servers.net. 198.41.0.4  AS19836  241ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  AS19836  247ms  NOERROR  referral → example.com.
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  AS13335  233ms  NOERROR  AA
+│   │   │   ├── www.example.com. 300 A 172.66.147.243
+│   │   │   └── www.example.com. 300 A 104.20.23.154
 │   │   ├── hera.ns.cloudflare.com. 172.64.32.162  (not queried)
 │   │   ├── hera.ns.cloudflare.com. 173.245.58.162  (not queried)
 │   │   ├── hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
@@ -31,14 +31,13 @@ $ dnstree www.example.com A
 ├── b.root-servers.net. 170.247.170.2  (not queried)
 ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
 └── (and 22 more not queried)
+✔ answered in 722ms · resolver in 243ms · 3 queries · 3 servers
 ```
 
-`dig +trace` tells you the same story in prose. dnstree draws it, and says what
-it found on the way: which servers were lame, which delegations are broken, how
-long each hop took, which AS announces each address, and whether the chain of
-trust holds. (These are real runs, recorded on a slow link and with the origin
-AS lookups unable to reach anything; on a normal network the hops are quicker
-and each address carries the AS that announces it.)
+`dig +trace` tells you the same story in prose. `dnstree` draws it, and says
+what it found on the way: which servers were lame, which delegations are
+broken, how long each hop took, which AS announces each address, and whether
+the chain of trust holds.
 
 ## Installing
 
@@ -54,25 +53,31 @@ docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A
 
 Every [release](https://github.com/rafaeljusto/dnstree/releases) also carries a
 binary for macOS, Linux, FreeBSD and Windows, a Debian, RPM and Alpine package
-for amd64, arm64 and armhf, and a Homebrew formula. The release notes give the
-command for each; taking the packages of `v0.1.3` as the example:
+for amd64, arm64 and armhf, and a Homebrew formula. The packages install a man
+page: `man dnstree`. `checksums.txt` covers every file in the release.
+[`packaging/`](packaging/) says how they are built.
+
+<details>
+<summary>Installing a downloaded package</summary>
+
+The release notes give the command for each; taking the packages of `v1.1.1`
+as the example:
 
 ```
 # Debian, Ubuntu
-sudo dpkg -i dnstree_0.1.3_amd64.deb
+sudo dpkg -i dnstree_1.1.1_amd64.deb
 
 # Fedora, RHEL
-sudo rpm -i dnstree-0.1.3-1.x86_64.rpm
+sudo rpm -i dnstree-1.1.1-1.x86_64.rpm
 
 # Alpine
-sudo apk add --allow-untrusted dnstree_0.1.3_x86_64.apk
+sudo apk add --allow-untrusted dnstree_1.1.1_x86_64.apk
 
 # Homebrew
 brew install --formula ./dnstree.rb
 ```
 
-The packages install a man page: `man dnstree`. `checksums.txt` covers every
-file in the release. [`packaging/`](packaging/) says how they are built.
+</details>
 
 ## Using it
 
@@ -93,19 +98,20 @@ dnstree [flags] NAME [TYPE]
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
-| `--no-compare` | do not put the same question to a recursive resolver, or compare its answer |
-| `--format` | `tree`, `ascii`, `emoji`, `json` or `dot` |
+| `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
+| `--format` | `tree` (the default), `ascii`, `emoji`, `json` or `dot` |
 | `--live` | draw the tree as the walk makes it, hop by hop |
-| `--color` | `auto`, `always` or `never` |
-| `--timeout`, `--retries` | how long one query may take, and how often to ask again |
-| `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite |
-| `--port` | the port nameservers are asked on |
+| `--color` | `auto` (the default), `always` or `never` |
+| `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
+| `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
+| `--port` | the port nameservers are asked on (53) |
 | `--root-hints`, `--trust-anchors` | start somewhere other than the built-in root |
 | `--root` | one server to start from, instead of a hints file; repeat it for more |
 | `--resolver` | the recursive server to use, instead of the host's own |
 | `--tls-ca`, `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
 | `--config`, `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
+| `--version` | print the version and stop |
 
 ### Defaults
 
@@ -125,10 +131,14 @@ as `name = value`, the dashes of a pasted command line are allowed and ignored,
 and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
-value it takes, is reported against the line that wrote it.
+value it takes, is reported against the line that wrote it, and so are `config`,
+`no-config` and `version`: those three ask something of the run rather than set
+a default for it.
 
-Only `$DNSTREE_CONFIG` has to be there — named outright, a file that is missing
-is an error. The two conventional locations are simply read if they exist.
+> [!NOTE]
+> A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be
+> there, and a missing one is an error. The two conventional locations are
+> simply read if they exist.
 
 The command line wins over the file, so `--format ascii` overrides the line
 above and `--dnssec=false` turns a flag it set back off. Flags that answer one
@@ -144,8 +154,9 @@ should start from, in the order they are written. One `--root` on the command
 line replaces every one of them, rather than adding to them, and so does
 `--root-hints`.
 
-[`dnstreerc.example`](dnstreerc.example) is a file of every setting worth
-making, annotated and commented out. Copy it and uncomment what you want.
+> [!TIP]
+> [`dnstreerc.example`](dnstreerc.example) is a file of every setting worth
+> making, annotated and commented out. Copy it and uncomment what you want.
 
 ### Pointing it somewhere else
 
@@ -158,19 +169,23 @@ $ dnstree --root a.root-servers.net@127.0.0.1:5353 --port 5354 \
 ```
 
 A root that carries no port is asked on `--port`, and so is everything reached
-by glue below it — glue carries addresses and never ports, so a hierarchy on one
-host wants its root on a port of its own and the rest on `--port`. `--root` and
-`--root-hints` say the same thing two ways, so only one of them may be given.
+by glue below it — glue carries addresses and never ports, so a hierarchy on
+one host wants its root on a port of its own and the rest on `--port`.
+`--root` and `--root-hints` say the same thing two ways, so only one of them
+may be given.
 
-The metadata has its own way out: `--resolver ADDR` points everything that needs
-a recursive server at one of your own — the origin AS lookups, and the question
-put to an ordinary resolution and held against the walk's own answer — while
-`--no-asn` and `--no-compare` skip
+The metadata has its own way out: `--resolver ADDR` points everything that
+needs a recursive server at one of your own — the origin AS lookups, and the
+question put to an ordinary resolution and held against the walk's own answer —
+while `--no-asn` and `--no-compare` skip either of those altogether. Asking for
+both leaves `--resolver` nothing to answer, which is refused rather than
+quietly ignored. `--asn-resolver` is the older name for `--resolver` and still
+works. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your
+own.
 
-either of those altogether. `--asn-resolver` is the older name for `--resolver`
-and still works. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of
-your own and `--tls-insecure` verifies nothing, which is what it takes to reach
-a server holding a test certificate.
+> [!CAUTION]
+> `--tls-insecure` verifies nothing at all. It is there to reach a server
+> holding a test certificate, and it is worth nothing anywhere else.
 
 ### Exit codes
 
@@ -209,6 +224,7 @@ $ dnstree --dnssec --no-asn cloudflare.com A
 ├── b.root-servers.net. 170.247.170.2  (not queried)
 ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
 └── (and 22 more not queried)
+✔ answered in 1.5s · resolver in 14ms · 6 queries · 3 servers
 ```
 
 A zone whose parent proves it publishes no DS reads `[insecure]`, and everything
@@ -234,16 +250,17 @@ checked.
 ### What a server said about its answer
 
 An rcode says what happened. The extended errors of RFC 8914 say why, and they
-are the only thing in a reply that tells an answer somebody kept back apart from
-an answer that is not there:
+are the only thing in a reply that tells an answer somebody kept back from an
+answer that was never there:
 
 ```
-$ dnstree blocked.example A
+$ dnstree blocked.example.com A
 . (root)
 ├── a.root-servers.net. 198.41.0.4  21ms  NOERROR  referral → com.
-│   ├── l.gtld-servers.net. 192.41.162.30  19ms  NOERROR  referral → example.
-│   │   └── ns1.example. 192.0.2.53  4ms  REFUSED  filtered  ede Prohibited (18): not from this network
-└── (and 24 more not queried)
+│   ├── l.gtld-servers.net. 192.41.162.30  19ms  NOERROR  referral → example.com.
+│   │   └── ns1.example.com. 192.0.2.53  4ms  REFUSED  filtered  ede Prohibited (18): not from this network
+│   └── (and 25 more not queried)
+└── (and 25 more not queried)
 ✘ filtered in 61ms · 3 queries · 3 servers
 ```
 
@@ -272,7 +289,7 @@ answer as the protection. Anything that can rewrite that answer can drop the
 configuration out of it, and a client that finds none does not fail: it connects
 the old way and sends the name in the clear.
 
-So dnstree reads the service parameters of an HTTPS or SVCB record rather than
+So `dnstree` reads the service parameters of an HTTPS or SVCB record rather than
 only printing them, marks the records that publish a configuration, and says
 when nothing vouched for the answer that carried it:
 
@@ -283,10 +300,12 @@ $ dnstree --dnssec www.example.com HTTPS
     └── www.example.com. 300 HTTPS 1 . alpn="h2,h3" ech="AEX+DQBB..."  [ech]
 ```
 
-Run without `--dnssec`, or against a zone whose answer comes back `insecure` or
-`bogus`, the same record earns a warning: the configuration is there, and
-nothing here can tell whether it is the one the zone published. The parameters
-are in `--format json` under `service`, `ech` included.
+> [!WARNING]
+> Without `--dnssec`, or against a zone whose answer comes back `insecure` or
+> `bogus`, the same record earns a warning: the configuration is there, and
+> nothing here can tell whether it is the one the zone published.
+
+The parameters are in `--format json` under `service`, `ech` included.
 
 ### Asking from somewhere else
 
@@ -308,36 +327,39 @@ at all ignored the subnet, which earns a warning: what came back is what that
 server tells everybody, and the question went unanswered.
 
 A bare address is read as the /24 or /56 around it, since the point is the
-network and not the machine. The subnet is sent to every server on the way down,
-which is more than the root servers need to know about where you are, so it is
-never sent unless it is asked for.
+network and not the machine.
+
+> [!IMPORTANT]
+> The subnet is sent to every server on the way down, which is more than the
+> root servers need to know about where you are, so it is never sent unless it
+> is asked for.
 
 ### Against your resolver
 
 Every walk also puts the question to a recursive resolver — the host's own, or
-whichever `--resolver` names — and now keeps the answer as well as the clock.
-When the two disagree, the tree says so:
+whichever `--resolver` names — and keeps the answer as well as the clock. When
+the two disagree, the tree says so, under the walk and above the summary:
 
 ```
 $ dnstree intranet.example.com A
 ...
-✔ answered in 412ms · resolver in 3ms (differs) · 4 queries · 4 servers
 differs: 192.168.1.1 answers 10.4.2.9, the walk found 203.0.113.80
+✔ answered in 412ms · resolver in 3ms (differs) · 4 queries · 4 servers
 ```
 
-This is not by itself a wrong answer. The two questions were asked from
-different places, so a CDN will honestly answer them differently, and a short
-TTL can turn over between one and the other. What it might instead be is the
-reason the line is there: a split horizon, a filtering resolver, a policy
-answering in the zone's place. dnstree reports the difference and leaves the
-reading to you.
+> [!IMPORTANT]
+> A difference is not by itself a wrong answer. The two questions were asked
+> from different places, so a CDN will honestly answer them differently, and a
+> short TTL can turn over between one and the other. What it might instead be is
+> the reason the line is there: a split horizon, a filtering resolver, a policy
+> answering in the zone's place. `dnstree` reports the difference and leaves the
+> reading to you.
 
 Agreement is worth no room and gets none. `--no-compare` turns the whole thing
 off, which is also the only way to keep the name being resolved from reaching a
 resolver at all.
 
 ### Watching it happen
-
 
 `--live` redraws the tree in place as the walk makes it, so the referrals
 arrive one at a time instead of all at once at the end. The hop that just
@@ -353,7 +375,7 @@ hop — here, half a second into a walk:
 │   └─▸ l.gtld-servers.net. 192.41.162.30  260ms  NOERROR  referral → example.com.
 ├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
 ├── b.root-servers.net. 170.247.170.2  (not queried)
-└── (and 24 more not queried)
+└── (and 23 more not queried)
     ⠧ asking hera.ns.cloudflare.com. 108.162.192.162  example.com.  51ms
 
 ⠧  562ms · 3 queries · 3 servers · . → com. → example.com.
@@ -372,21 +394,25 @@ prints, followed by one line saying how it went:
 ✔ answered in 747ms · 3 queries · 3 servers
 ```
 
-Off a terminal the flag does nothing, and it cannot be combined with
-`--format json` or `--format dot`, both of which are written once, at the end.
+> [!NOTE]
+> Off a terminal the flag does nothing, and it cannot be combined with
+> `--format json` or `--format dot`, both of which are written once, at the end.
 
 ### Other formats
 
 `--format emoji` tells the same walk in emoji — a 🛰️ for a referral, a 🎯 for
 the answer, a 💤 for a server nobody asked, ⚡ and 🐢 for the fast and the slow.
-It pairs well with `--live`:
+It pairs well with `--live`.
+
+<details>
+<summary>The same walk, in emoji</summary>
 
 ```
 $ dnstree --format emoji --live www.example.com
 🌍  . (root)
-├── 🛰️  a.root-servers.net. 198.41.0.4  248ms  NOERROR  referral → com.
-│   ├── 🛰️  l.gtld-servers.net. 192.41.162.30  251ms  NOERROR  referral → example.com.
-│   │   ├── 🎯  hera.ns.cloudflare.com. 108.162.192.162  236ms  NOERROR  AA
+├── 🛰️  a.root-servers.net. 198.41.0.4  AS19836  248ms  NOERROR  referral → com.
+│   ├── 🛰️  l.gtld-servers.net. 192.41.162.30  AS19836  251ms  NOERROR  referral → example.com.
+│   │   ├── 🎯  hera.ns.cloudflare.com. 108.162.192.162  AS13335  236ms  NOERROR  AA
 │   │   │   ├── 📍 www.example.com. 300 A 172.66.147.243
 │   │   │   └── 📍 www.example.com. 300 A 104.20.23.154
 │   │   ├── 💤  hera.ns.cloudflare.com. 172.64.32.162  (not queried)
@@ -401,7 +427,10 @@ $ dnstree --format emoji --live www.example.com
 ├── 💤  b.root-servers.net. 170.247.170.2  (not queried)
 ├── 💤  b.root-servers.net. 2801:1b8:10::b  (not queried)
 └── 💤  (and 22 more not queried)
+✔ answered in 749ms · resolver in 11ms · 3 queries · 3 servers
 ```
+
+</details>
 
 `--format ascii` swaps the branches for `` |-- `` and drops the colour, for
 pasting into documents. `--format json` writes a versioned document with
@@ -436,8 +465,8 @@ anything is followed:
   terminates and always draws what it learned.
 
 The root hints and the DNSSEC trust anchors are embedded in the binary.
-`scripts/refresh-roothints.sh` refreshes them, verifying ICANN's signature over
-the anchors before believing a byte.
+`make roothints` refreshes them, verifying ICANN's signature over the anchors
+before believing a byte.
 
 ## Developing
 
@@ -448,6 +477,7 @@ make lint-docker  # hadolint against the Dockerfile
 make vuln         # govulncheck against the vulnerability database
 make live         # the smoke test that goes out to the real root servers
 make demos        # re-record the terminal demos in docs/ from tapes/
+make roothints    # refresh the embedded root hints and trust anchors
 make dist         # cross compile a release into dist/
 make image        # build the container image for this machine
 ```
