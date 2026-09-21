@@ -79,6 +79,12 @@ Each of these has been a bug, or would be a silent regression.
   delegation, an NXDOMAIN, a NODATA and a wildcard all rest on a proof the zone
   signed, never on an absence: an absence is what anyone able to drop records
   from a response can manufacture.
+- **Nothing reaches the disk unless `--diff` asks for it.** `internal/history`
+  is the only writer, it keeps one file per question, and the file names what
+  was looked up and when. A cache that cannot be read or written costs the
+  comparison and says so in one line, never the resolution. What the file does
+  not carry cannot be compared, which is what keeps a comparison from claiming
+  to have watched something no walk recorded.
 - **The AS lookups are best effort.** They start as the walk discovers each
   server, are waited on briefly after it, and never fail a resolution. When they
   come back empty they say in one line which of the two things went wrong: the

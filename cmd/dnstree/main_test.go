@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/internal/history"
 	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
 )
 
@@ -458,5 +459,48 @@ func TestRunSchema(t *testing.T) {
 	properties, _ := document["properties"].(map[string]any)
 	if properties["schema_version"] == nil {
 		t.Errorf("got %v, want it to describe the document --format json writes", document)
+	}
+}
+
+// TestRunDiff covers --diff end to end: the first walk has nothing to compare
+// against and remembers itself, and the second is held against it. The cache
+// goes in a directory of the test's own, because a run that wrote to the one on
+// the machine would change what the next run of the real command says.
+func TestRunDiff(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+	hints := rootHintsFile(t)
+	port := strconv.Itoa(int(server.Addr.Port()))
+	cache := t.TempDir()
+	t.Setenv(history.DirEnv, cache)
+
+	walk := func(tb testing.TB) string {
+		tb.Helper()
+
+		var stdout, stderr bytes.Buffer
+		code := run(t.Context(), []string{
+			"--root-hints", hints, "--port", port,
+			"--no-asn", "--no-compare", "--color", "never", "--diff", ".", "NS",
+		}, &stdout, &stderr)
+
+		if code != exitAnswer {
+			tb.Fatalf("got exit %d, want %d: %s%s", code, exitAnswer, stdout.String(), stderr.String())
+		}
+		if stderr.Len() > 0 {
+			tb.Errorf("got %q on stderr, want the comparison to have gone through", stderr.String())
+		}
+		return stdout.String()
+	}
+
+	if first := walk(t); !strings.Contains(first, "nothing to compare") {
+		t.Errorf("got %q, want the first walk to have nothing to compare against", first)
+	}
+
+	// Remembered under a name that can be read and thrown away by hand.
+	if entries, err := os.ReadDir(cache); err != nil || len(entries) != 1 {
+		t.Fatalf("got %v and %v, want the one walk remembered", entries, err)
+	}
+
+	if second := walk(t); !strings.Contains(second, "nothing has changed since the walk of . NS") {
+		t.Errorf("got %q, want the second walk held against the first", second)
 	}
 }

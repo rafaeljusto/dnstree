@@ -20,6 +20,8 @@ import (
 
 	"github.com/rafaeljusto/dnstree/internal/asn"
 	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/internal/explain"
+	"github.com/rafaeljusto/dnstree/internal/history"
 	"github.com/rafaeljusto/dnstree/internal/recursive"
 	"github.com/rafaeljusto/dnstree/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
@@ -131,10 +133,42 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	} else if cfg.Format != "json" && cfg.Format != "dot" {
 		tree.Summary(stdout, tr, treeOptions(cfg))
 	}
-	if cfg.Explain {
-		tree.Explain(stdout, tr, treeOptions(cfg))
+	if findings := readings(cfg, tr, stderr); len(findings) > 0 {
+		tree.Explain(stdout, findings, treeOptions(cfg))
 	}
 	return verdict(tr)
+}
+
+// readings is what is said under the tree: the sentences the trace says about
+// itself, and what has changed since the last walk of the same question.
+func readings(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) []explain.Finding {
+	var findings []explain.Finding
+	if cfg.Explain {
+		findings = append(findings, explain.Findings(tr)...)
+	}
+	if cfg.Diff {
+		findings = append(findings, changed(tr, stderr)...)
+	}
+	return findings
+}
+
+// changed holds this walk against the one remembered for the same question, and
+// remembers this one in its place. Like the origin AS lookups it is metadata: a
+// cache that cannot be read or written costs the comparison, says so in one
+// line, and never the resolution.
+func changed(tr *trace.Trace, stderr io.Writer) []explain.Finding {
+	dir, err := history.Dir()
+	if err != nil {
+		fmt.Fprintln(stderr, "nothing to compare with: "+err.Error())
+		return nil
+	}
+
+	now := history.Of(tr, time.Now())
+	findings := history.Changes(history.Load(dir, tr.Question), now)
+	if err := history.Save(dir, now); err != nil {
+		fmt.Fprintln(stderr, "this walk will not be remembered: "+err.Error())
+	}
+	return findings
 }
 
 // resolve builds the resolution the flags asked for and runs it.

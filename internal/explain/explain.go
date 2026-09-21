@@ -28,6 +28,7 @@ const (
 	Spread                // what the nameservers of the zone have in common
 	Servers               // the servers that made the walk harder
 	Resolver              // what an ordinary resolution made of the same question
+	Change                // what is not what it was when this walk was last made
 )
 
 // Level is how much a finding matters, which is all a renderer needs in order

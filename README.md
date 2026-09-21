@@ -102,6 +102,7 @@ dnstree [flags] NAME [TYPE]
 | `--format` | `tree` (the default), `ascii`, `emoji`, `json` or `dot` |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--explain` | say in sentences what the walk came to, under the tree |
+| `--diff` | say what has changed since the last walk of the same question |
 | `--color` | `auto` (the default), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
@@ -416,6 +417,49 @@ so a zone with no IPv4 anywhere in its delegation is named without `--all`.
 
 `--format json` and `--format dot` refuse `--explain`: both are read by a
 program, which has the same facts in fields already.
+
+### What has changed since last time
+
+Most of diagnosis is working out what is different. `--diff` holds the walk
+against the last one it remembers of the same question, says what moved, and
+remembers this one in its place:
+
+```
+$ dnstree --diff www.example.com
+...
+✔ answered in 745ms · resolver in 254ms · 3 queries · 3 servers
+
+· nothing to compare: this is the first walk of www.example.com. A that was remembered
+```
+
+```
+$ dnstree --diff www.example.com
+...
+✔ answered in 754ms · resolver in 261ms · 3 queries · 3 servers
+
+· nothing has changed since the walk of www.example.com. A moments ago
+```
+
+It always says something. Silence would read as nothing having changed when it
+may mean nothing was remembered.
+
+What it watches is the answer and the path to it: an answer that changed, a name
+that stopped answering or stopped existing, a TTL cut short before a move, a
+nameserver that came or went, a zone cut that appeared or disappeared, and the
+chain of trust over each zone — a zone that was signed and is not any more, or
+one that has gone bogus since, which is the line worth being woken up for.
+
+Answers are compared as sets, so a nameserver rotating an RRset between one
+walk and the next is not a change. Neither is a fact only one of the two walks
+kept: a run without `--dnssec` follows no chain and remembers no verdict, and
+that is not a zone that stopped being signed.
+
+> [!NOTE]
+> `--diff` is the only thing in `dnstree` that writes to the disk, and it writes
+> the names you looked up and when. One small file per question goes under
+> `$DNSTREE_CACHE`, or `$XDG_CACHE_HOME/dnstree`, or `~/.cache/dnstree` —
+> readable, and safe to delete at any time. Without the flag, nothing is read
+> and nothing is kept.
 
 ### Watching it happen
 

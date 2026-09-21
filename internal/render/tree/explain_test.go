@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rafaeljusto/dnstree/internal/explain"
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
@@ -16,7 +17,7 @@ func explained(t *testing.T, opts tree.Options) string {
 
 	tr := oneHop(&trace.Step{Kind: trace.KindLame, Rcode: "NOERROR"})
 	var out bytes.Buffer
-	tree.Explain(&out, tr, opts)
+	tree.Explain(&out, explain.Findings(tr), opts)
 	return out.String()
 }
 

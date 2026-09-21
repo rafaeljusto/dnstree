@@ -5,16 +5,17 @@ import (
 	"io"
 
 	"github.com/rafaeljusto/dnstree/internal/explain"
-	"github.com/rafaeljusto/dnstree/internal/trace"
 )
 
-// Explain writes what the walk came to under the tree it was drawn from: the
-// sentences read off the trace, one to a line, set apart from the summary by a
-// blank line. It is prose about a resolution, so it belongs only to the formats
-// a person reads; --format json and --format dot carry the same facts in the
-// fields a program reads instead.
-func Explain(w io.Writer, tr *trace.Trace, opts Options) {
-	findings := explain.Findings(tr)
+// Explain writes findings under the tree they were read off: one sentence to a
+// line, set apart from the summary by a blank line. It is prose about a
+// resolution, so it belongs only to the formats a person reads; --format json
+// and --format dot carry the same facts in the fields a program reads instead.
+//
+// What is in the list is the caller's business. The sentences the trace says
+// about itself come from [explain.Findings], and what has changed since the
+// last walk of the same question from the history package.
+func Explain(w io.Writer, findings []explain.Finding, opts Options) {
 	if len(findings) == 0 {
 		return
 	}

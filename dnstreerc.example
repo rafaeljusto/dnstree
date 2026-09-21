@@ -81,6 +81,12 @@
 # both are read by a program and carry the same facts in fields.
 # explain = true
 
+# Say what has changed since the last walk of the same question, and remember
+# this one in its place. It is the one thing here that writes to the disk: one
+# file per question under $XDG_CACHE_HOME/dnstree, naming what was looked up
+# and when. Asking for json or dot on the command line drops this line too.
+# diff = true
+
 # auto, always or never. auto colours a terminal and nothing else.
 # color = auto
 

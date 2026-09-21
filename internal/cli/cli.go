@@ -40,6 +40,7 @@ path it took. TYPE defaults to A.
   --format FORMAT         tree, ascii, emoji, json or dot (default tree)
   --live                  draw the tree as the walk makes it
   --explain               say in sentences what the walk came to
+  --diff                  say what has changed since the last walk remembered
   --color WHEN            auto, always or never (default auto)
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
@@ -110,6 +111,7 @@ type Config struct {
 	Format     string
 	Live       bool
 	Explain    bool
+	Diff       bool
 	Color      tree.ColorMode
 	Timeout    time.Duration
 	Retries    int
@@ -195,6 +197,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json or dot")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
 	flags.BoolVar(&cfg.Explain, "explain", false, "say in sentences what the walk came to")
+	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
 	flags.DurationVar(&timeout, "timeout", transport.DefaultTimeout, "how long one query may take")
 	flags.IntVar(&cfg.Retries, "retries", 1, "how often to ask again after a silence")
@@ -277,7 +280,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so it cannot be drawn live",
 			ErrUsage, cfg.Format)
 	}
-	if cfg.Explain && (cfg.Format == "json" || cfg.Format == "dot") {
+	if (cfg.Explain || cfg.Diff) && (cfg.Format == "json" || cfg.Format == "dot") {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
 			ErrUsage, cfg.Format)
 	}

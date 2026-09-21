@@ -100,6 +100,11 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--format", "json", "example.com"},
 			want: cli.Config{Format: "json"},
 		},
+		"and outlives the file's comparison too": {
+			file: "diff\nformat = emoji\n",
+			args: []string{"--format", "json", "example.com"},
+			want: cli.Config{Format: "json"},
+		},
 		"the type is still read from the command line": {
 			file: "format = emoji\n",
 			args: []string{"example.com", "mx"},
