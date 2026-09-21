@@ -338,3 +338,80 @@ func warned(tr *trace.Trace, text string) bool {
 	}
 	return false
 }
+
+// TestNSIDIsRecorded covers the one thing in a reply that tells the machines
+// behind an anycast address apart. Two hops to the same address are the same
+// server as far as everything else in a trace can see.
+func TestNSIDIsRecorded(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{NSID: "fra2"})
+	cfg.NSID = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	answer := tr.Result()
+	if answer == nil {
+		t.Fatalf("got no answer: %s", format(steps(tr)))
+	}
+	if answer.NSID != "fra2" {
+		t.Errorf("got %q, want the identifier the server published", answer.NSID)
+	}
+}
+
+// TestNSIDNotAsked covers the default. A server answers with an identifier
+// because it was asked for one, and a walk that did not ask gets none.
+func TestNSIDNotAsked(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{NSID: "fra2"})
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if answer := tr.Result(); answer == nil || answer.NSID != "" {
+		t.Errorf("got %+v, want no identifier anywhere: none was asked for", answer)
+	}
+}
+
+// TestNSIDUnpublished covers the server with none to give, which is most of
+// them below the root. The hop reads as it would without the flag, rather than
+// as a hop that went wrong.
+func TestNSIDUnpublished(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{})
+	cfg.NSID = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	answer := tr.Result()
+	if answer == nil {
+		t.Fatalf("got no answer: %s", format(steps(tr)))
+	}
+	if answer.NSID != "" {
+		t.Errorf("got %q, want nothing: this server publishes no identifier", answer.NSID)
+	}
+}
+
+// TestNSIDIsNotTakenAtItsWord covers an identifier that is not a name at all.
+// The bytes are the server's own choice, and they end up on a line of a tree
+// that has a charset to keep, so what is not printable stays hex.
+func TestNSIDIsNotTakenAtItsWord(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{NSID: "\x00\x1b[2Jfra2"})
+	cfg.NSID = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	answer := tr.Result()
+	if answer == nil {
+		t.Fatalf("got no answer: %s", format(steps(tr)))
+	}
+	if answer.NSID != "001b5b324a66726132" {
+		t.Errorf("got %q, want the hex it arrived as", answer.NSID)
+	}
+}

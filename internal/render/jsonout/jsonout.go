@@ -93,6 +93,7 @@ type step struct {
 	Notes      []string        `json:"notes,omitempty"`
 	Extended   []extendedError `json:"extended,omitempty"`
 	Subnet     *subnet         `json:"subnet,omitempty"`
+	NSID       string          `json:"nsid,omitempty"`
 	Aside      bool            `json:"aside,omitempty"`
 	Delegation *delegation     `json:"delegation,omitempty"`
 	DNSSEC     *dnssec         `json:"dnssec,omitempty"`
@@ -175,6 +176,7 @@ func convert(from *trace.Step) *step {
 		Notes:      from.Notes,
 		Extended:   convertExtended(from.Extended),
 		Subnet:     convertSubnet(from.Subnet),
+		NSID:       from.NSID,
 		Aside:      from.Aside,
 		Delegation: convertDelegation(from.Delegation),
 		DNSSEC:     convertDNSSEC(from.DNSSEC),

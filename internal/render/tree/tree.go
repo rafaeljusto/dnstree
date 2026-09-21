@@ -199,6 +199,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if who := r.who(step.Server); who != "" {
 		fields = append(fields, who)
 	}
+	if step.NSID != "" {
+		fields = append(fields, r.paint.dim("@"+step.NSID))
+	}
 	if step.Server.ASN != nil {
 		fields = append(fields, r.paint.dim(fmt.Sprintf("AS%d", step.Server.ASN.Number)))
 	}

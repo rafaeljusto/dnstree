@@ -1,5 +1,5 @@
 . (root)
-└── a.root-servers.net. 198.41.0.4  AS397197  12ms  NOERROR  referral → com.  [secure]
+└── a.root-servers.net. 198.41.0.4  @fra2  AS397197  12ms  NOERROR  referral → com.  [secure]
     ├── b.gtld-servers.net. 192.33.14.30  2s  timeout
     └── a.gtld-servers.net. 192.5.6.30  AS26415  18ms  NOERROR  referral → example.com.  [secure]
         ├── a.iana-servers.net. 199.43.135.53  AS10745  9ms  NOERROR  AA DO  [secure]

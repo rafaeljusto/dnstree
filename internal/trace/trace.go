@@ -174,6 +174,12 @@ type Step struct {
 	// carried one and the server answered with it.
 	Subnet *Subnet
 
+	// NSID is what the server called itself (RFC 5001), empty when the query
+	// asked for no identifier or the server gave none. It belongs to the answer
+	// rather than to the server: one anycast address is many machines, and
+	// which of them answered is the whole of what this says.
+	NSID string
+
 	// Aside marks work that answers a different question: the address of a
 	// nameserver, or the NS set of a zone. The resolution's own answer is never
 	// inside one. Following an alias is not an aside: the target is what the

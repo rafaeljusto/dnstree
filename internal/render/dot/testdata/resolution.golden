@@ -10,7 +10,7 @@ digraph dnstree {
 		style=dashed;
 		color=gray60;
 		n0 [label=".", shape=oval, color=gray40];
-		n1 [label="a.root-servers.net.\n198.41.0.4\nNOERROR referral\n[insecure]"];
+		n1 [label="a.root-servers.net.\n198.41.0.4\nNOERROR referral\n[insecure]\n@fra2"];
 	}
 
 	subgraph cluster_1 {

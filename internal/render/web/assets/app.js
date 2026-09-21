@@ -121,7 +121,7 @@ function verdictOf(hops) {
 function haystack(step) {
   return [
     step.zone, step.kind, step.server?.name, step.server?.ip, step.rcode, step.proto,
-    step.server?.asn && `AS${step.server.asn.number}`, step.delegation?.zone,
+    step.server?.asn && `AS${step.server.asn.number}`, step.delegation?.zone, step.nsid,
     step.dnssec?.state, step.error, ...(step.notes ?? []),
     ...(step.records ?? []).flatMap((rr) => [rr.name, rr.type, rr.data]),
   ].filter(Boolean).join(" ").toLowerCase();
@@ -146,6 +146,7 @@ function chipsFor(step) {
   const flags = flagsOf(step.flags).filter((flag) => flag !== "EDNS");
   if (flags.length) chips.push(chip(flags.join(" "), "quiet", "the header bits that are set"));
   if (step.subnet) chips.push(chip(`ecs /${step.subnet.scope}`, "quiet", `answered for ${step.subnet.prefix}`));
+  if (step.nsid) chips.push(chip(`@${step.nsid}`, "quiet", "the instance behind this address, as it names itself"));
   if (step.dnssec) {
     const trust = trustOf(step.dnssec.state);
     chips.push(el("span", { class: `chip tone-${trust.tone}`, title: step.dnssec.reason || "the chain of trust at this cut" },
@@ -481,6 +482,7 @@ class DnsInspector extends HTMLElement {
       ["rcode", step.rcode],
       ["flags", flagsOf(step.flags).join(" ")],
       ["subnet", step.subnet && `${step.subnet.prefix} scope /${step.subnet.scope}`],
+      ["instance", step.nsid],
       ["origin", as && `AS${as.number} ${as.prefix ?? ""}`.trim()],
       ["registry", as && [as.country_code, as.registry, as.allocated].filter(Boolean).join(" · ")],
       ["error", step.error],

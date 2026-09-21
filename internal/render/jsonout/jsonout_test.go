@@ -86,6 +86,7 @@ func resolution() *trace.Trace {
 		RTT:        12 * time.Millisecond,
 		Rcode:      "NOERROR",
 		Kind:       trace.KindReferral,
+		NSID:       "fra2",
 		Delegation: &trace.Delegation{Zone: "com.", NS: []string{"a.gtld-servers.net."}, DSPresent: true},
 		DNSSEC:     &trace.DNSSECStatus{State: trace.Insecure, Reason: "the parent published no DS"},
 		Children:   []*trace.Step{timeout, tld},

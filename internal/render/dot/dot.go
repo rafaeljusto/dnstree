@@ -140,6 +140,9 @@ func label(step *trace.Step) string {
 	if step.Subnet != nil {
 		lines = append(lines, fmt.Sprintf("ecs scope /%d", step.Subnet.Scope))
 	}
+	if step.NSID != "" {
+		lines = append(lines, "@"+step.NSID)
+	}
 	for _, record := range step.Records {
 		lines = append(lines, record.Name+" "+record.Type+" "+record.Data)
 	}

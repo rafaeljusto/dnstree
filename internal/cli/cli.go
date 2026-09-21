@@ -35,6 +35,7 @@ path it took. TYPE defaults to A.
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
   --check-ns              ask each zone for its own NS set and compare
+  --nsid                  ask each server which of itself answered (RFC 5001)
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
@@ -91,6 +92,14 @@ a hop that echoes nothing ignored the subnet altogether. It is sent to every
 server on the way down, which is more than any of them needs to know about where
 the question came from, so it is off unless it is asked for.
 
+--nsid asks every server for the name it goes by (RFC 5001), and draws it
+beside the address. One anycast address is a great many machines in a great many
+places, and the identifier is the only thing in a reply that says which of them
+answered: two hops that look like the same server may be a continent apart. It
+rides along on queries that are being made anyway and costs none of its own. A
+server that publishes no identifier says nothing, and its hop reads as it would
+without the flag.
+
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
 where that is unset), then ~/.dnstreerc. Each line of it is a long flag name and
@@ -118,6 +127,7 @@ type Config struct {
 	All        bool
 	DNSSEC     bool
 	CheckNS    bool
+	NSID       bool
 	ASN        bool
 	Compare    bool
 	Format     string
@@ -210,6 +220,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.All, "all", false, "ask every nameserver of a zone")
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
+	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")

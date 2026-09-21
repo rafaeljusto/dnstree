@@ -96,6 +96,7 @@ dnstree [flags] NAME [TYPE]
 | `--all` | ask every nameserver of a zone, not just the first that answers |
 | `--dnssec` | ask for signatures and follow the chain of trust |
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
+| `--nsid` | ask each server which of itself answered, and draw it beside the address |
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
@@ -338,6 +339,37 @@ network and not the machine.
 > The subnet is sent to every server on the way down, which is more than the
 > root servers need to know about where you are, so it is never sent unless it
 > is asked for.
+
+### Which machine answered
+
+An address is not a server. `a.root-servers.net.` is one address announced from
+hundreds of places at once, and so is every nameserver of every large zone, so
+a hop that says `198.41.0.4` has named a network and not a machine. `--nsid`
+asks each server for the identifier it publishes for itself (RFC 5001) and
+draws it beside the address:
+
+```
+$ dnstree --nsid --no-asn www.example.com A
+. (root)
+├── a.root-servers.net. 198.41.0.4  @a.r.ams5.nlams-0  259ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  @nnn1-ams5  252ms  NOERROR  referral → example.com.
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  @52m278  239ms  NOERROR  AA
+│   │   │   ├── www.example.com. 300 A 104.20.23.154
+│   │   │   └── www.example.com. 300 A 172.66.147.243
+...
+✔ answered in 750ms · resolver in 258ms · 3 queries · 3 servers
+```
+
+Two hops to the one address can come back with two identifiers, which is not a
+contradiction: it is two machines, and it is the answer to why one of them is
+slow and the other is not, or why one of them is serving an older zone. It
+rides along on queries that are being made anyway and costs none of its own.
+
+The identifier is opaque bytes that the server alone chooses. Operators write
+names into them, and those are drawn as names; anything else is drawn as the
+hex it arrived as, and an identifier longer than a line has room for is cut.
+A server that publishes none says nothing, which is most of them below the
+root, and its hop reads as it would without the flag.
 
 ### Against your resolver
 

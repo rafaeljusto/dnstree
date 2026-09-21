@@ -29,6 +29,7 @@
         "proto": "udp",
         "rtt_ms": 12,
         "rcode": "NOERROR",
+        "nsid": "fra2",
         "delegation": {
           "zone": "com.",
           "ns": [

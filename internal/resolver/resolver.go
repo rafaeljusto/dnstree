@@ -108,6 +108,11 @@ type Config struct {
 	// does not match what the parent delegated. It costs one more query.
 	CheckNS bool
 
+	// NSID asks every server which of itself is answering (RFC 5001). An
+	// anycast address is a great many machines, and this is the only thing in a
+	// reply that tells them apart. It costs no query of its own.
+	NSID bool
+
 	// Subnet rides along on every query as the client subnet of RFC 7871, so
 	// that a server which tailors its answers is asked the question somebody
 	// inside that prefix would be asking. The zero value sends none, which is
@@ -560,6 +565,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	step.Rcode = dnsutil.RcodeToString(resp.Rcode)
 	step.Extended = transport.Extended(resp)
 	step.Subnet = transport.EchoedSubnet(resp)
+	step.NSID = transport.EchoedNSID(resp)
 	step.Flags = trace.Flags{
 		AA:   resp.Authoritative,
 		TC:   resp.Truncated,
@@ -588,6 +594,9 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 			return nil, err
 		}
 		transport.WithSubnet(req, r.cfg.Subnet)
+		if r.cfg.NSID {
+			transport.WithNSID(req)
+		}
 
 		var (
 			resp *dns.Msg

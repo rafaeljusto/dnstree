@@ -7,6 +7,7 @@ package fakens
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -61,6 +62,12 @@ type Behaviour struct {
 	// server without it ignores the subnet, which is also worth testing.
 	EchoSubnet  bool
 	SubnetScope uint8
+
+	// NSID is what the server calls itself when a query asks (RFC 5001), in the
+	// bytes an operator would have written into it; the wire carries them hex
+	// encoded. A server with none published answers a query that asks with
+	// nothing, which is the other case worth testing.
+	NSID string
 }
 
 // ExtendedError is what a server says about its own answer (RFC 8914).
@@ -350,6 +357,9 @@ func (s *Server) echo(reply, req *dns.Msg) {
 	if ede := s.behaviour.Extended; ede != nil {
 		reply.Pseudo = append(reply.Pseudo, &dns.EDE{InfoCode: ede.Code, ExtraText: ede.Text})
 	}
+	if s.behaviour.NSID != "" && asks[*dns.NSID](req) {
+		reply.Pseudo = append(reply.Pseudo, &dns.NSID{Nsid: hex.EncodeToString([]byte(s.behaviour.NSID))})
+	}
 	if !s.behaviour.EchoSubnet {
 		return
 	}
@@ -363,6 +373,17 @@ func (s *Server) echo(reply, req *dns.Msg) {
 			})
 		}
 	}
+}
+
+// asks reports whether the query carried an EDNS0 option of this type. A server
+// answers with an identifier because it was asked for one, never unprompted.
+func asks[T dns.RR](req *dns.Msg) bool {
+	for _, rr := range req.Pseudo {
+		if _, ok := rr.(T); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // respond fills in the reply the way an authoritative server would: an answer,

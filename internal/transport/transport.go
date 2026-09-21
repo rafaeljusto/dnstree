@@ -5,6 +5,7 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -125,6 +126,71 @@ func WithSubnet(req *dns.Msg, prefix netip.Prefix) {
 		Netmask: uint8(prefix.Bits()),
 		Address: addr,
 	})
+}
+
+// WithNSID asks the server to say which of itself answered (RFC 5001). One
+// anycast address is many machines, and nothing else in a reply tells them
+// apart.
+//
+// Like a client subnet the option needs EDNS0 to ride in, so a query asked
+// without it is left alone: that is the fallback for a server that could not
+// parse EDNS0 in the first place.
+func WithNSID(req *dns.Msg) {
+	if req.UDPSize == 0 {
+		return
+	}
+	req.Pseudo = append(req.Pseudo, &dns.NSID{})
+}
+
+// MaxNSID is how much of an identifier is kept. A server may answer with as
+// much as it likes, and a line of a tree has room for a name.
+const MaxNSID = 32
+
+// EchoedNSID is what a server called itself, empty for one that called itself
+// nothing. The identifier is opaque bytes that operators write names into, and
+// it arrives hex encoded: a name is handed back as the name, and anything else
+// stays the hex it came as.
+//
+// It is the one part of a reply whose bytes the server alone chooses, and it is
+// drawn on a line of a tree that has a width and a charset to keep, so what
+// leaves here is printable, bounded, and holds no spaces to break a line into
+// fields at.
+func EchoedNSID(resp *dns.Msg) string {
+	if resp == nil {
+		return ""
+	}
+	for _, rr := range resp.Pseudo {
+		nsid, ok := rr.(*dns.NSID)
+		if !ok || nsid.Nsid == "" {
+			continue
+		}
+		return clip(readable(nsid.Nsid))
+	}
+	return ""
+}
+
+// readable is the text an identifier carries, or the hex it arrived as where it
+// carries none. The space counts as unreadable here: a drawn field ends at one,
+// and an identifier is one field.
+func readable(hexed string) string {
+	raw, err := hex.DecodeString(hexed)
+	if err != nil {
+		return hexed // not hex at all, and not ours to make sense of
+	}
+	for _, b := range raw {
+		if b <= ' ' || b > '~' {
+			return hexed
+		}
+	}
+	return string(raw)
+}
+
+// clip bounds what a server can take up, and says where it was cut.
+func clip(text string) string {
+	if len(text) <= MaxNSID {
+		return text
+	}
+	return text[:MaxNSID] + "..."
 }
 
 // Extended reads what a server said about its own answer: the extended errors

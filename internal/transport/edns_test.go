@@ -1,7 +1,9 @@
 package transport_test
 
 import (
+	"encoding/hex"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"codeberg.org/miekg/dns"
@@ -160,5 +162,96 @@ func TestEchoedSubnetAbsent(t *testing.T) {
 	}
 	if subnet := transport.EchoedSubnet(nil); subnet != nil {
 		t.Errorf("got %+v, want nothing", subnet)
+	}
+}
+
+// TestWithNSID covers the question a query asks about the server itself: an
+// empty option, since only the answer carries an identifier.
+func TestWithNSID(t *testing.T) {
+	req, err := transport.NewQuery("www.test.", dns.TypeA, transport.DefaultUDPSize, false)
+	if err != nil {
+		t.Fatalf("NewQuery: %v", err)
+	}
+
+	transport.WithNSID(req)
+	if len(req.Pseudo) != 1 {
+		t.Fatalf("got %d options, want the identifier asked for", len(req.Pseudo))
+	}
+	nsid, ok := req.Pseudo[0].(*dns.NSID)
+	if !ok {
+		t.Fatalf("got %T, want an NSID option", req.Pseudo[0])
+	}
+	if nsid.Nsid != "" {
+		t.Errorf("got %q, want nothing: a query claims no identifier of its own", nsid.Nsid)
+	}
+}
+
+// TestWithNSIDNeedsEDNS covers the query that has nowhere to carry an option,
+// which is what a server that could not parse EDNS0 is asked again with.
+func TestWithNSIDNeedsEDNS(t *testing.T) {
+	req, err := transport.NewQuery("www.test.", dns.TypeA, 0, false)
+	if err != nil {
+		t.Fatalf("NewQuery: %v", err)
+	}
+
+	transport.WithNSID(req)
+	if len(req.Pseudo) != 0 {
+		t.Errorf("got %d options, want none", len(req.Pseudo))
+	}
+}
+
+// TestEchoedNSID covers what a server is free to put in the one field of a
+// reply whose bytes it alone chooses. It is drawn on a line of a tree, and
+// --format ascii promises that line stays printable.
+func TestEchoedNSID(t *testing.T) {
+	long := strings.Repeat("a", transport.MaxNSID+8)
+
+	for _, tt := range []struct {
+		name  string
+		given string
+		want  string
+	}{{
+		name:  "a name is read as the name",
+		given: hex.EncodeToString([]byte("fra2")),
+		want:  "fra2",
+	}, {
+		name:  "bytes that spell no name stay the hex they came as",
+		given: hex.EncodeToString([]byte{0x00, 0xff}),
+		want:  "00ff",
+	}, {
+		name:  "a space would break the line into fields, so it is not a name",
+		given: hex.EncodeToString([]byte("two words")),
+		want:  hex.EncodeToString([]byte("two words")),
+	}, {
+		name:  "what is not hex at all is left as it came",
+		given: "not hex",
+		want:  "not hex",
+	}, {
+		name:  "more than a line can take is cut, and says so",
+		given: hex.EncodeToString([]byte(long)),
+		want:  long[:transport.MaxNSID] + "...",
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := new(dns.Msg)
+			resp.Pseudo = []dns.RR{&dns.NSID{Nsid: tt.given}}
+
+			if got := transport.EchoedNSID(resp); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestEchoedNSIDAbsent covers the servers that name themselves nothing: one
+// that carried no option at all, and one that echoed the empty option a query
+// asks with.
+func TestEchoedNSIDAbsent(t *testing.T) {
+	empty := new(dns.Msg)
+	empty.Pseudo = []dns.RR{&dns.NSID{}}
+
+	for _, resp := range []*dns.Msg{new(dns.Msg), empty, nil} {
+		if got := transport.EchoedNSID(resp); got != "" {
+			t.Errorf("got %q, want nothing", got)
+		}
 	}
 }

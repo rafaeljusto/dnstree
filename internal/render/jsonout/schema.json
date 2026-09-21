@@ -107,6 +107,10 @@
           "items": { "$ref": "#/$defs/extended_error" }
         },
         "subnet": { "$ref": "#/$defs/subnet" },
+        "nsid": {
+          "description": "What the server called itself, as RFC 5001 asks it to, absent where the query asked for no identifier or the server published none. It belongs to the answer rather than to the server: one anycast address is many machines, and this says which of them answered. An identifier whose bytes spell no printable name is carried as the hex it arrived as, and one longer than 32 bytes is cut and ends in an ellipsis.",
+          "type": "string"
+        },
         "aside": {
           "description": "Set on work that answers a different question: the address of a nameserver, or the NS set of a zone. The resolution's own answer is never inside one. Following an alias is not an aside: the target is what the question meant all along.",
           "type": "boolean"

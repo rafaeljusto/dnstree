@@ -227,6 +227,7 @@ func TestASCIIStaysASCII(t *testing.T) {
 	tr.Root.Children[0].Kind = trace.KindFiltered
 	tr.Root.Children[0].Extended = []trace.ExtendedError{{Code: 15, Reason: "Blocked"}}
 	tr.Root.Children[0].Subnet = &trace.Subnet{Prefix: netip.MustParsePrefix("203.0.113.0/24"), Scope: 24}
+	tr.Root.Children[0].NSID = "fra2"
 
 	var out bytes.Buffer
 	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorNever}); err != nil {
