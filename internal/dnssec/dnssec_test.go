@@ -219,7 +219,7 @@ func TestUnchecked(t *testing.T) {
 	chain := dnssec.New(zone.anchors(t, dns.SHA256))
 	chain.Enter(".", nil, zone.dnskeys(t))
 
-	status := chain.Unchecked("the DS of example. could not be fetched")
+	status := chain.Unchecked("example.", "the DS of example. could not be fetched")
 	if status.State != trace.Indeterminate {
 		t.Fatalf("got %+v, want indeterminate", status)
 	}

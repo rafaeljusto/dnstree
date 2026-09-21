@@ -26,13 +26,19 @@ type Chain struct {
 	// keys are the validated keys of the zone the chain is in.
 	keys []*dns.DNSKEY
 
+	// zone is the zone those keys belong to, carried on every verdict. The step
+	// a verdict is drawn on is not always that zone: a cut is judged from
+	// above, so a referral holds the verdict of the zone it points at, and a
+	// cut crossed without a referral is judged on the hop that crossed it.
+	zone string
+
 	// now is the clock signature validity is judged against.
 	now func() time.Time
 }
 
 // New starts a chain at the root, trusting anchors and nothing else.
 func New(anchors roothints.Anchors) *Chain {
-	return &Chain{anchors: anchors, state: trace.Secure, now: time.Now}
+	return &Chain{anchors: anchors, state: trace.Secure, zone: ".", now: time.Now}
 }
 
 // State is how far the chain got.
@@ -44,7 +50,12 @@ func (c *Chain) State() trace.DNSSECState { return c.state }
 // answer to a DNSKEY query; either may be empty. The root takes its DS from the
 // anchors instead of from a parent.
 func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECStatus {
+	return c.about(c.enter(zone, authority, dnskeys))
+}
+
+func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECStatus {
 	zone = dnsutil.Fqdn(zone)
+	c.zone = zone
 
 	// An unsigned or broken zone stays that way all the way down: there is no
 	// way back to secure without a DS to hang it on.
@@ -126,11 +137,15 @@ func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 
 // Unchecked stops the chain where a link could not be fetched at all, which is
 // neither a break nor a pass: everything below it is reported as unchecked.
-func (c *Chain) Unchecked(reason string) *trace.DNSSECStatus {
-	if c.state != trace.Secure {
-		return &trace.DNSSECStatus{State: c.state, Reason: c.reason}
+func (c *Chain) Unchecked(zone, reason string) *trace.DNSSECStatus {
+	status := &trace.DNSSECStatus{State: c.state, Reason: c.reason}
+	if c.state == trace.Secure {
+		status = c.settleAs(&trace.DNSSECStatus{}, trace.Indeterminate, reason, nil)
 	}
-	return c.settleAs(&trace.DNSSECStatus{}, trace.Indeterminate, reason, nil)
+	// The chain never reached this zone, so it is the caller that knows which
+	// one was being fetched.
+	status.Zone = dnsutil.Fqdn(zone)
+	return status
 }
 
 // Verify checks what a server said about qname and qtype against the keys of
@@ -139,6 +154,10 @@ func (c *Chain) Unchecked(reason string) *trace.DNSSECStatus {
 // the server answered with, which is the difference between a name that is not
 // there and a name that has nothing of this type.
 func (c *Chain) Verify(answer, authority []dns.RR, rcode uint16, qname string, qtype uint16) *trace.DNSSECStatus {
+	return c.about(c.verifyAnswer(answer, authority, rcode, qname, qtype))
+}
+
+func (c *Chain) verifyAnswer(answer, authority []dns.RR, rcode uint16, qname string, qtype uint16) *trace.DNSSECStatus {
 	if c.state != trace.Secure {
 		return &trace.DNSSECStatus{State: c.state, Reason: c.reason}
 	}
@@ -241,6 +260,15 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 		}
 	}
 	return nil, reason
+}
+
+// about stamps a verdict with the zone the chain was in when it was reached,
+// which is what the verdict is about.
+func (c *Chain) about(status *trace.DNSSECStatus) *trace.DNSSECStatus {
+	if status != nil {
+		status.Zone = c.zone
+	}
+	return status
 }
 
 // settleAs moves the chain to a state and reports it.

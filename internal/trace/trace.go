@@ -286,8 +286,14 @@ const (
 // digest are always carried, so that an algorithm nothing here supports reads
 // differently from a signature that genuinely does not verify.
 type DNSSECStatus struct {
-	State     DNSSECState
-	Reason    string
+	State  DNSSECState
+	Reason string
+
+	// Zone is the zone the verdict is about, which is not always the zone of
+	// the step it is drawn on: a cut is judged from above, so a referral holds
+	// the verdict of the zone it points at.
+	Zone string
+
 	KeyTags   []uint16
 	Algorithm string // the signing algorithm, e.g. ECDSAP256SHA256
 	Digest    string // the DS digest type, e.g. SHA256

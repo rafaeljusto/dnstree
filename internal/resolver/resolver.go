@@ -256,7 +256,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		// DNSKEY set could not be fetched".
 		if chain != nil {
 			if !step.Server.IP.IsValid() {
-				parent.DNSSEC = chain.Unchecked("no server of " + zone + " answered")
+				parent.DNSSEC = chain.Unchecked(zone, "no server of "+zone+" answered")
 			} else {
 				parent.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
 			}
@@ -340,7 +340,7 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname
 		return
 	}
 	if err := r.counters.query(); err != nil {
-		chain.Unchecked("the budget ran out before the DS of " + cut + " could be fetched")
+		chain.Unchecked(cut, "the budget ran out before the DS of "+cut+" could be fetched")
 		return
 	}
 
@@ -353,7 +353,7 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname
 	// A DS that never arrived is not a DS the parent does not publish, so the
 	// cut is left unchecked rather than called insecure.
 	if ds.resp == nil {
-		ds.step.DNSSEC = chain.Unchecked("the DS of " + cut + " could not be fetched")
+		ds.step.DNSSEC = chain.Unchecked(cut, "the DS of "+cut+" could not be fetched")
 		return
 	}
 
