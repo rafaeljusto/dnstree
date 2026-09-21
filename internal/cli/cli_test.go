@@ -30,6 +30,14 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "emoji", "--live", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "emoji", Live: true},
 		},
+		"a walk in a browser": {
+			args: []string{"--format", "web", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "web", WebAddr: "127.0.0.1:0"},
+		},
+		"a walk served somewhere else": {
+			args: []string{"--format", "web", "--web-addr", "0.0.0.0:8080", "--no-browser", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "web", WebAddr: "0.0.0.0:8080"},
+		},
 		"a walk explained": {
 			args: []string{"--explain", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Explain: true},
@@ -113,6 +121,9 @@ func TestParse(t *testing.T) {
 			if !strings.Contains(given, "--no-compare") {
 				want.Compare = true
 			}
+			if !strings.Contains(given, "--no-browser") {
+				want.Browser = true
+			}
 
 			got, err := cli.Parse(test.args, io.Discard)
 			if err != nil {
@@ -134,6 +145,9 @@ func TestParseRejects(t *testing.T) {
 		"an unknown format":       {"--format", "runes", "example.com"},
 		"live json":               {"--format", "json", "--live", "example.com"},
 		"live dot":                {"--format", "dot", "--live", "example.com"},
+		"live web":                {"--format", "web", "--live", "example.com"},
+		"a page nobody serves":    {"--web-addr", "127.0.0.1:8080", "example.com"},
+		"a browser for a tree":    {"--no-browser", "example.com"},
 		"explained json":          {"--format", "json", "--explain", "example.com"},
 		"explained dot":           {"--format", "dot", "--explain", "example.com"},
 		"compared json":           {"--format", "json", "--diff", "example.com"},
@@ -187,7 +201,10 @@ func TestParseUsage(t *testing.T) {
 		t.Fatalf("got error %v, want a usage problem", err)
 	}
 
-	for _, want := range []string{"usage: dnstree", "--dnssec", "--format", "--explain", "--diff", "--schema", "Exit codes"} {
+	for _, want := range []string{
+		"usage: dnstree", "--dnssec", "--format", "--web-addr", "--no-browser",
+		"--explain", "--diff", "--schema", "Exit codes",
+	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got usage without %q:\n%s", want, out.String())
 		}

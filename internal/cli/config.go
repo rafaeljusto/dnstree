@@ -192,9 +192,16 @@ func override(flags *flag.FlagSet, fileArgs, args []string) []string {
 	// A format written once, at the end, cannot be drawn live, and one read by
 	// a program has no use for prose. Asked for either, the file's --live and
 	// --explain are about the other formats: they are dropped rather than held
-	// against the run.
-	if format := given["format"]; format == "json" || format == "dot" {
+	// against the run. The same goes the other way round for the flags only a
+	// served page takes.
+	switch format := given["format"]; format {
+	case "":
+	case "json", "dot":
 		drop["live"], drop["explain"], drop["diff"] = true, true, true
+	case "web":
+		drop["live"] = true
+	default:
+		drop["web-addr"], drop["no-browser"] = true, true
 	}
 
 	if len(drop) == 0 {

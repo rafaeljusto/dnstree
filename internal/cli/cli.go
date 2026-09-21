@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/internal/render/web"
 	"github.com/rafaeljusto/dnstree/internal/transport"
 )
 
@@ -37,7 +38,9 @@ path it took. TYPE defaults to A.
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
-  --format FORMAT         tree, ascii, emoji, json or dot (default tree)
+  --format FORMAT         tree, ascii, emoji, json, dot or web (default tree)
+  --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
+  --no-browser            do not open a browser at the page --format web serves
   --live                  draw the tree as the walk makes it
   --explain               say in sentences what the walk came to
   --diff                  say what has changed since the last walk remembered
@@ -69,6 +72,15 @@ certificate. --resolver points everything that needs a recursive server at one
 of its own: the origin AS lookups, and the question dnstree times against an
 ordinary resolution to say what the walk cost over it. --asn-resolver is the
 older name for it, and still means the same thing.
+
+--format web draws nothing in the terminal. It serves the finished walk as a
+page instead, on this machine and on whatever port is free, and opens a browser
+at it: the tree is the same walk with every hop worth clicking on, beside what
+each server cost, who they belong to and the chain of trust over them. The page
+is served until the command is interrupted. --web-addr moves it, which is what a
+walk made on another machine needs, and --no-browser leaves the address to be
+opened by hand. Whatever is pointed at the same server can read the walk as
+--format json writes it, under /trace.json.
 
 --subnet asks every server the question as though it came from somebody inside
 that prefix, which is how a server that tailors its answers by network can be
@@ -142,6 +154,12 @@ type Config struct {
 	// value sends none.
 	Subnet netip.Prefix
 
+	// WebAddr is where --format web serves the page, and Browser whether one is
+	// opened at it. A walk names the servers it asked and the addresses they
+	// answered from, so the page stays on this machine unless it is moved.
+	WebAddr string
+	Browser bool
+
 	// ConfigFile is the file the defaults came from, empty when none was read.
 	ConfigFile string
 
@@ -172,6 +190,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		doh           bool
 		noASN         bool
 		noCompare     bool
+		noBrowser     bool
 		noConfig      bool
 		configPath    string
 		color, format string
@@ -194,7 +213,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json or dot")
+	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot or web")
+	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
+	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
 	flags.BoolVar(&cfg.Explain, "explain", false, "say in sentences what the walk came to")
 	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
@@ -271,12 +292,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, err
 	}
 	switch format {
-	case "tree", "ascii", "emoji", "json", "dot":
+	case "tree", "ascii", "emoji", "json", "dot", "web":
 		cfg.Format = format
 	default:
 		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
 	}
-	if cfg.Live && (cfg.Format == "json" || cfg.Format == "dot") {
+	if cfg.Live && (cfg.Format == "json" || cfg.Format == "dot" || cfg.Format == "web") {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so it cannot be drawn live",
 			ErrUsage, cfg.Format)
 	}
@@ -304,6 +325,15 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	cfg.Port = uint16(port)
 	cfg.ASN = !noASN
 	cfg.Compare = !noCompare
+	cfg.Browser = !noBrowser
+
+	if cfg.Format == "web" {
+		if cfg.WebAddr == "" {
+			cfg.WebAddr = web.DefaultAddr
+		}
+	} else if cfg.WebAddr != "" || noBrowser {
+		return nil, fmt.Errorf("%w: only --format web serves a page", ErrUsage)
+	}
 
 	if subnet != "" {
 		if cfg.Subnet, err = clientSubnet(subnet); err != nil {

@@ -123,6 +123,21 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--root", "192.0.2.9", "example.com"},
 			want: cli.Config{Roots: []cli.Root{{Addr: netip.MustParseAddrPort("192.0.2.9:0")}}},
 		},
+		"a page served where the file says": {
+			file: "format = web\nweb-addr = 127.0.0.1:8080\n",
+			args: []string{"example.com"},
+			want: cli.Config{Format: "web", WebAddr: "127.0.0.1:8080"},
+		},
+		"a format that serves nothing outlives the file's address for the page": {
+			file: "format = web\nweb-addr = 127.0.0.1:8080\nno-browser\n",
+			args: []string{"--format", "emoji", "example.com"},
+			want: cli.Config{Format: "emoji"},
+		},
+		"a page cannot be drawn live either": {
+			file: "live\nformat = tree\n",
+			args: []string{"--format", "web", "example.com"},
+			want: cli.Config{Format: "web", WebAddr: "127.0.0.1:0"},
+		},
 		"a root asked for replaces the file's hints": {
 			file: "root-hints = hints\n",
 			args: []string{"--root", "192.0.2.9", "example.com"},
@@ -336,5 +351,6 @@ func complete(want cli.Config) cli.Config {
 		want.Retries = 1
 	}
 	want.Compare = true
+	want.Browser = true
 	return want
 }

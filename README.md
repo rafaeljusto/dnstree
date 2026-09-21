@@ -99,7 +99,8 @@ dnstree [flags] NAME [TYPE]
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
-| `--format` | `tree` (the default), `ascii`, `emoji`, `json` or `dot` |
+| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot` or `web` |
+| `--web-addr`, `--no-browser` | where `--format web` serves the page, and whether a browser is opened at it |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--explain` | say in sentences what the walk came to, under the tree |
 | `--diff` | say what has changed since the last walk of the same question |
@@ -149,7 +150,8 @@ question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
 for `--tls-ca` and `--tls-insecure`. `--format json` and `--format dot` drop a
-`live` the file set, since both are written once at the end. `--config FILE`
+`live` the file set, since both are written once at the end, and so does
+`--format web`; a format that serves no page drops a `web-addr` it set. `--config FILE`
 reads somewhere else, and `--no-config` reads nowhere.
 
 `root` is the one line worth repeating: a file may carry as many as the walk
@@ -533,6 +535,31 @@ $ dnstree --format emoji --live www.example.com
 ```
 
 </details>
+
+`--format web` draws nothing in the terminal at all. It serves the finished walk
+as a page on this machine and opens a browser at it:
+
+```
+$ dnstree --format web --dnssec www.example.com
+the walk is at http://127.0.0.1:52341/
+it is served until this command is interrupted
+```
+
+The page is the same walk with every hop worth clicking on — the records it
+returned, the delegation it pointed at, what the server said about its own
+answer — beside three other ways to read it: what each server cost, who the
+addresses belong to grouped by origin AS, and the chain of trust cut by cut.
+`--explain` and `--diff` put their sentences on the page rather than under a
+tree. Nothing is fetched from anywhere: the page is in the binary, and the walk
+behind it is served under `/trace.json`, byte for byte what `--format json`
+writes.
+
+It listens on `127.0.0.1` and a free port, and answers only a request that
+reached it by address — a walk names the servers it asked and the addresses they
+answered from, which is nobody else's business. `--web-addr :8080` moves it,
+which is what a walk made on another machine needs, and says so in a line when
+the address it was given is not this machine's alone. `--no-browser` leaves the
+address to be opened by hand.
 
 `--format ascii` swaps the branches for `` |-- `` and drops the colour, for
 pasting into documents. `--format json` writes a versioned document with

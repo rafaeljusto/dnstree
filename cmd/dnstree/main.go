@@ -26,6 +26,7 @@ import (
 	"github.com/rafaeljusto/dnstree/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/internal/render/web"
 	"github.com/rafaeljusto/dnstree/internal/resolver"
 	"github.com/rafaeljusto/dnstree/internal/roothints"
 	"github.com/rafaeljusto/dnstree/internal/trace"
@@ -124,6 +125,23 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	// The last frame stays up until there is something to put in its place.
 	live.Clear()
+
+	// A served walk is drawn in a browser rather than here, and the sentences
+	// the run asked for go to the page with it.
+	if cfg.Format == "web" {
+		options := web.Options{
+			Addr:    cfg.WebAddr,
+			Browser: cfg.Browser,
+			Version: version,
+			Now:     time.Now(),
+		}
+		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, stderr), options); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		return verdict(tr)
+	}
+
 	if err := render(stdout, cfg, tr); err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage

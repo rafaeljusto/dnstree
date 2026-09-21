@@ -71,6 +71,14 @@
 # for pasting somewhere that cannot carry box drawing.
 # format = tree
 
+# web draws nothing in the terminal. It serves the finished walk as a page on
+# this machine, opens a browser at it, and keeps serving until the command is
+# interrupted. The address it listens on is where a browser can reach it; a
+# machine with no browser to open wants the address printed instead.
+# format = web
+# web-addr = 127.0.0.1:0
+# no-browser = true
+
 # Draw the tree as the walk makes it. Asking for json or dot on the command
 # line drops this line rather than failing on it, since both are written once
 # at the end.

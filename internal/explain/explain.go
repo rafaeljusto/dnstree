@@ -31,6 +31,25 @@ const (
 	Change                // what is not what it was when this walk was last made
 )
 
+// String names the topic, for a renderer that groups the sentences by what
+// they are about rather than only colouring them.
+func (t Topic) String() string {
+	switch t {
+	case Trust:
+		return "trust"
+	case Spread:
+		return "spread"
+	case Servers:
+		return "servers"
+	case Resolver:
+		return "resolver"
+	case Change:
+		return "change"
+	default:
+		return "outcome"
+	}
+}
+
 // Level is how much a finding matters, which is all a renderer needs in order
 // to colour it.
 type Level int
@@ -41,6 +60,19 @@ const (
 	Warn               // cost the walk work, or is worth a look
 	Fault              // why there is no answer, or none to trust
 )
+
+// String names the level, for a renderer that cannot colour a sentence and has
+// to say how much it matters some other way.
+func (l Level) String() string {
+	switch l {
+	case Warn:
+		return "warn"
+	case Fault:
+		return "fault"
+	default:
+		return "note"
+	}
+}
 
 // Finding is one thing worth saying about a resolution.
 type Finding struct {

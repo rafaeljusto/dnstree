@@ -2,13 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/cli"
 	"github.com/rafaeljusto/dnstree/internal/history"
@@ -102,6 +107,97 @@ func TestRun(t *testing.T) {
 			test.check(t, stdout.String())
 		})
 	}
+}
+
+// TestRunWeb covers the format that draws nothing: the walk is served instead,
+// the address is printed where somebody can open it, and interrupting the run
+// is what takes it down.
+func TestRunWeb(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+	hints := rootHintsFile(t)
+
+	ctx, stop := context.WithCancel(t.Context())
+	defer stop()
+
+	out := new(served)
+	done := make(chan int, 1)
+	go func() {
+		done <- run(ctx, []string{
+			"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
+			"--no-asn", "--no-compare", "--format", "web",
+			"--web-addr", "127.0.0.1:0", "--no-browser", "--explain", ".", "NS",
+		}, out, io.Discard)
+	}()
+
+	base := out.address(t)
+	answer, err := http.Get(base + "page.json")
+	if err != nil {
+		t.Fatalf("reading the page: %v", err)
+	}
+	defer answer.Body.Close()
+
+	var page struct {
+		Trace struct {
+			Question struct {
+				Name string `json:"name"`
+			} `json:"question"`
+		} `json:"trace"`
+		Findings []struct {
+			Text string `json:"text"`
+		} `json:"findings"`
+	}
+	if err := json.NewDecoder(answer.Body).Decode(&page); err != nil {
+		t.Fatalf("the page is not JSON: %v", err)
+	}
+	if page.Trace.Question.Name != "." {
+		t.Errorf("got %q, want the walk that was made", page.Trace.Question.Name)
+	}
+	if len(page.Findings) == 0 {
+		t.Error("got no findings, want --explain carried to the page")
+	}
+
+	stop()
+	select {
+	case code := <-done:
+		if code != exitAnswer {
+			t.Errorf("got exit %d, want %d", code, exitAnswer)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the command is still running after it was interrupted")
+	}
+}
+
+// served is what the command writes while it is still running, which is where
+// the address of the page appears.
+type served struct {
+	mutex sync.Mutex
+	buf   bytes.Buffer
+}
+
+func (s *served) Write(p []byte) (int, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *served) String() string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.buf.String()
+}
+
+func (s *served) address(tb testing.TB) string {
+	tb.Helper()
+
+	found := regexp.MustCompile(`http://[^\s]+/`)
+	for range 400 {
+		if at := found.FindString(s.String()); at != "" {
+			return at
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	tb.Fatalf("got %q, want the address of the page in it", s.String())
+	return ""
 }
 
 // TestRunLiveNowhere covers --live where there is no one to watch: a pipe, a

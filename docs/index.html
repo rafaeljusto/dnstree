@@ -439,10 +439,10 @@ footer a:hover{color:var(--ink)}
     </section>
 
     <section id="formats">
-      <h2>Five ways out</h2>
+      <h2>Six ways out</h2>
       <p class="section-lede">
-        The tree is for reading, and the emoji for enjoying it. The other three are for
-        pasting into a document, a pipeline, or a picture.
+        The tree is for reading, and the emoji for enjoying it. Three more are for pasting
+        into a document, a pipeline, or a picture. The last one opens a browser.
       </p>
 
       <div class="tabs" role="tablist" aria-label="Output formats">
@@ -451,6 +451,7 @@ footer a:hover{color:var(--ink)}
         <button class="tab" role="tab" id="tab-ascii" aria-controls="panel-ascii" aria-selected="false">--format ascii</button>
         <button class="tab" role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">--format json</button>
         <button class="tab" role="tab" id="tab-dot" aria-controls="panel-dot" aria-selected="false">--format dot</button>
+        <button class="tab" role="tab" id="tab-web" aria-controls="panel-web" aria-selected="false">--format web</button>
       </div>
 
       <div class="term">
@@ -530,8 +531,26 @@ footer a:hover{color:var(--ink)}
 	n1 -&gt; n3 [label=<span class="s">"18ms"</span>];
 }</pre>
           </div>
+
+          <div class="panel" role="tabpanel" id="panel-web" aria-labelledby="tab-web" hidden>
+<pre><span class="prompt">$ <b>dnstree --format web --dnssec www.example.com</b></span>
+<span class="note">the walk is at</span> <span class="k">http://127.0.0.1:52341/</span>
+<span class="dim">it is served until this command is interrupted</span></pre>
+          </div>
         </div>
       </div>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        <code>--format web</code> draws nothing in the terminal. It serves the finished walk
+        as a page on this machine and opens a browser at it: the same tree with every hop
+        worth clicking on, beside what each server cost, who the addresses belong to grouped
+        by origin AS, and the chain of trust cut by cut. Nothing is fetched from anywhere —
+        the page is in the binary, and the walk behind it is served under
+        <code>/trace.json</code>, byte for byte what <code>--format json</code> writes. It
+        listens on <code>127.0.0.1</code> and a free port, and answers only a request that
+        reached it by address; <code>--web-addr</code> moves it and <code>--no-browser</code>
+        leaves the address to be opened by hand.
+      </p>
 
       <figure class="demo">
         <video autoplay muted loop playsinline preload="metadata" aria-label="dnstree --format emoji --live resolving www.example.com, the same walk drawn with a satellite for each referral and a target for the answer">
@@ -719,7 +738,8 @@ timeout = 3s</pre>
     "tab-emoji": "~ · the same walk, told in emoji",
     "tab-ascii": "~ · plain enough to paste into a document",
     "tab-json": "~ · versioned, with durations in milliseconds",
-    "tab-dot": "~ · one node per query, clustered by zone"
+    "tab-dot": "~ · one node per query, clustered by zone",
+    "tab-web": "~ · served on this machine, and opened in a browser"
   };
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
   var title = document.getElementById("format-title");
