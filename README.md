@@ -101,6 +101,7 @@ dnstree [flags] NAME [TYPE]
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
 | `--format` | `tree` (the default), `ascii`, `emoji`, `json` or `dot` |
 | `--live` | draw the tree as the walk makes it, hop by hop |
+| `--explain` | say in sentences what the walk came to, under the tree |
 | `--color` | `auto` (the default), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
@@ -358,6 +359,41 @@ differs: 192.168.1.1 answers 10.4.2.9, the walk found 203.0.113.80
 Agreement is worth no room and gets none. `--no-compare` turns the whole thing
 off, which is also the only way to keep the name being resolved from reaching a
 resolver at all.
+
+### Saying what happened
+
+`--explain` writes a handful of sentences under the tree: what the walk came
+to, what the chain of trust made of it, which servers made it harder, and
+whether a recursive resolver agreed.
+
+```
+$ dnstree --explain www.example.com
+...
+✔ answered in 751ms · resolver in 250ms · 3 queries · 3 servers
+
+· www.example.com. A is 104.20.23.154 and 172.66.147.243, answered by hera.ns.cloudflare.com. for example.com.
+```
+
+Every sentence is read off the trace the walk recorded, and nothing is worked
+out a second time, so the sentences and the tree above them cannot come to
+disagree. It is the same reason none of them claims more than the walk checked:
+a chain this build could not check reads as unchecked, never as broken.
+
+```
+$ dnstree --dnssec --explain dnssec-failed.org
+...
+✘ bogus in 4.4s · resolver in 484ms (SERVFAIL) · 12 queries · 5 servers
+
+· dnssec-failed.org. A is 96.99.227.255, answered by dns101.comcast.net. for dnssec-failed.org.
+· the chain of trust breaks at dnssec-failed.org.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name
+```
+
+There is nothing in them that is not already in the tree. They are for the walk
+you did not draw yourself — a paste from somebody else, a run out of a script —
+and they leave the exit code alone.
+
+`--format json` and `--format dot` refuse `--explain`: both are read by a
+program, which has the same facts in fields already.
 
 ### Watching it happen
 

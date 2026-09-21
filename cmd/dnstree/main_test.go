@@ -364,3 +364,76 @@ func TestRunASNResolver(t *testing.T) {
 		t.Errorf("got no origin AS from the resolver that was named:\n%s", out)
 	}
 }
+
+// TestRunExplain covers --explain end to end. The sentences are read off the
+// trace the walk recorded, so a real walk is the only thing worth reading them
+// against: one that answered, and one that ran into a server with no business
+// answering for the zone.
+func TestRunExplain(t *testing.T) {
+	t.Run("a walk that answered", func(t *testing.T) {
+		server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+
+		var stdout, stderr bytes.Buffer
+		code := run(t.Context(), []string{
+			"--root-hints", rootHintsFile(t), "--port", strconv.Itoa(int(server.Addr.Port())),
+			"--no-asn", "--no-compare", "--color", "never", "--explain", ".", "NS",
+		}, &stdout, &stderr)
+
+		if code != exitAnswer {
+			t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"· ", ". NS is a.root-servers.net.", "answered by"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("got no %q in the run:\n%s", want, out)
+			}
+		}
+	})
+
+	t.Run("a walk that met a lame server", func(t *testing.T) {
+		root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+		child := fakens.New(t, fakens.Config{
+			Name: "ns.test.", Origin: "test.", Zone: splitChildZone,
+			Behaviour: fakens.Behaviour{Lame: true},
+		})
+
+		var stdout, stderr bytes.Buffer
+		code := run(t.Context(), []string{
+			"--root", "a.root-servers.net@" + root.Addr.String(),
+			"--port", strconv.Itoa(int(child.Addr.Port())),
+			"--no-asn", "--no-compare", "--format", "ascii", "--explain", "www.test", "A",
+		}, &stdout, &stderr)
+
+		if code != exitNoAnswer {
+			t.Fatalf("got exit %d, want %d\n%s%s", code, exitNoAnswer, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{"nothing answered for www.test. A", "answered without authority", "ns.test."} {
+			if !strings.Contains(out, want) {
+				t.Errorf("got no %q in the run:\n%s", want, out)
+			}
+		}
+		// The findings are prose, which is the easiest place to break what
+		// --format ascii promises about the whole run.
+		for _, r := range out {
+			if r > 127 {
+				t.Fatalf("got %q in ascii output, want none", r)
+			}
+		}
+	})
+
+	// Nothing is said unless it is asked for.
+	t.Run("a walk that was not asked to explain itself", func(t *testing.T) {
+		server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+
+		var stdout, stderr bytes.Buffer
+		run(t.Context(), []string{
+			"--root-hints", rootHintsFile(t), "--port", strconv.Itoa(int(server.Addr.Port())),
+			"--no-asn", "--no-compare", "--color", "never", ".", "NS",
+		}, &stdout, &stderr)
+
+		if out := stdout.String(); strings.Contains(out, "answered by") {
+			t.Errorf("got an explanation nobody asked for:\n%s", out)
+		}
+	})
+}

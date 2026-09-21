@@ -76,6 +76,11 @@
 # at the end.
 # live = true
 
+# Say in sentences what the walk came to, under the tree. Asking for json or
+# dot on the command line drops this line rather than failing on it, since
+# both are read by a program and carry the same facts in fields.
+# explain = true
+
 # auto, always or never. auto colours a terminal and nothing else.
 # color = auto
 

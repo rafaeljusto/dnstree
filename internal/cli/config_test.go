@@ -95,6 +95,11 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--format", "json", "example.com"},
 			want: cli.Config{Format: "json"},
 		},
+		"a format read by a program outlives the file's explanation": {
+			file: "explain\nformat = emoji\n",
+			args: []string{"--format", "json", "example.com"},
+			want: cli.Config{Format: "json"},
+		},
 		"the type is still read from the command line": {
 			file: "format = emoji\n",
 			args: []string{"example.com", "mx"},

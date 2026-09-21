@@ -242,6 +242,7 @@ footer a:hover{color:var(--ink)}
     <nav>
       <a href="#hop">Read a hop</a>
       <a href="#dnssec" data-optional>DNSSEC</a>
+      <a href="#explain" data-optional>Explain</a>
       <a href="#formats" data-optional>Formats</a>
       <a href="#install">Install</a>
       <a href="https://github.com/rafaeljusto/dnstree">GitHub</a>
@@ -366,6 +367,37 @@ footer a:hover{color:var(--ink)}
         An unsigned zone turns the chain grey from that point down; nothing below it can
         be secure again. Denial of existence is reported as unchecked rather than claimed:
         NSEC proofs are not read.
+      </p>
+    </section>
+
+    <section id="explain">
+      <h2>Or have it say what happened</h2>
+      <p class="section-lede">
+        <code>--explain</code> writes the walk out in sentences under the tree: what it came
+        to, what the chain of trust made of it, which servers made it harder, and whether a
+        recursive resolver agreed.
+      </p>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">~ · dnstree --dnssec --explain dnssec-failed.org</span>
+        </div>
+        <div class="term-body">
+<pre><span class="dim">...</span>
+<span class="bad">&#10008;</span> <span class="dim">bogus in 4.4s · resolver in 484ms (SERVFAIL) · 12 queries · 5 servers</span>
+
+<span class="dim">·</span> dnssec-failed.org. A is 96.99.227.255, answered by dns101.comcast.net. for dnssec-failed.org.
+<span class="dim">·</span> <span class="bad">the chain of trust breaks at dnssec-failed.org.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name</span></pre>
+        </div>
+      </div>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        Every sentence is read off the trace the walk recorded, so the sentences and the
+        tree above them cannot come to disagree, and none of them claims more than the walk
+        checked: a chain this build could not check reads as unchecked, never as broken.
+        <code>--format json</code> and <code>--format dot</code> refuse the flag — both are
+        read by a program, which has the same facts in fields already.
       </p>
     </section>
 

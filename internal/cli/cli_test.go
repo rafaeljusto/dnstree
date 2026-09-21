@@ -30,6 +30,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "emoji", "--live", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "emoji", Live: true},
 		},
+		"a walk explained": {
+			args: []string{"--explain", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Explain: true},
+		},
 		"the whole surface": {
 			args: []string{
 				"-6", "--dot", "--fallback", "--all", "--dnssec", "--check-ns", "--no-asn", "--no-compare",
@@ -126,6 +130,8 @@ func TestParseRejects(t *testing.T) {
 		"an unknown format":       {"--format", "runes", "example.com"},
 		"live json":               {"--format", "json", "--live", "example.com"},
 		"live dot":                {"--format", "dot", "--live", "example.com"},
+		"explained json":          {"--format", "json", "--explain", "example.com"},
+		"explained dot":           {"--format", "dot", "--explain", "example.com"},
 		"an unknown colour":       {"--color", "sometimes", "example.com"},
 		"a timeout of nothing":    {"--timeout", "0", "example.com"},
 		"a negative retry count":  {"--retries", "-1", "example.com"},
@@ -162,7 +168,7 @@ func TestParseUsage(t *testing.T) {
 		t.Fatalf("got error %v, want a usage problem", err)
 	}
 
-	for _, want := range []string{"usage: dnstree", "--dnssec", "--format", "Exit codes"} {
+	for _, want := range []string{"usage: dnstree", "--dnssec", "--format", "--explain", "Exit codes"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got usage without %q:\n%s", want, out.String())
 		}

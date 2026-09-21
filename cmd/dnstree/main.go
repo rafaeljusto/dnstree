@@ -124,6 +124,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	} else if cfg.Format != "json" && cfg.Format != "dot" {
 		tree.Summary(stdout, tr, treeOptions(cfg))
 	}
+	if cfg.Explain {
+		tree.Explain(stdout, tr, treeOptions(cfg))
+	}
 	return verdict(tr)
 }
 
