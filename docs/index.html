@@ -337,6 +337,11 @@ footer a:hover{color:var(--ink)}
           <p>A server may vouch for names at or below its own zone and no further. Anything else is dropped and resolved separately, drawn as a branch of its own.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">out of date</span>
+          <h3>Nameservers holding different zones</h3>
+          <p><code>--serial</code> asks every nameserver of the zone which copy it is serving. A secondary a transfer left behind is reachable, authoritative, and answering correctly out of an older zone, and a walk that stops at the first server to answer never sees it.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-ok">bounded</span>
           <h3>A walk that always ends</h3>
           <p>Queries, zone cuts, aliases and nameserver lookups each have a budget, so a hostile delegation wastes time and nothing more.</p>

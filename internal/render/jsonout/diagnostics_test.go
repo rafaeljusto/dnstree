@@ -129,7 +129,7 @@ func TestRenderCarriesTheDenialLifetime(t *testing.T) {
 		Question: trace.Question{Name: "www.test.", Type: "A", Class: "IN"},
 		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
 			Zone: "test.", Kind: trace.KindNXDomain, Rcode: "NXDOMAIN",
-			SOA: &trace.SOA{TTL: 3600, Minimum: 900},
+			SOA: &trace.SOA{Serial: 2024061201, TTL: 3600, Minimum: 900},
 		}}},
 	}
 
@@ -143,6 +143,9 @@ func TestRenderCarriesTheDenialLifetime(t *testing.T) {
 	}
 	if soa["ttl"] != float64(3600) || soa["minimum"] != float64(900) {
 		t.Errorf("got %+v, want both fields the zone can say a lifetime with", soa)
+	}
+	if soa["serial"] != float64(2024061201) {
+		t.Errorf("got %+v, want the copy of the zone the denial came out of", soa)
 	}
 }
 

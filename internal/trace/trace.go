@@ -203,8 +203,15 @@ type Step struct {
 	Err      string
 }
 
-// SOA is as much of a zone's start of authority as a denial is read for.
+// SOA is as much of a zone's start of authority as it is read for: how long a
+// denial from it lives, and which copy of the zone the server answering holds.
 type SOA struct {
+	// Serial is the version of the zone the server is serving. Two nameservers
+	// of one zone that answer with different serials are answering from
+	// different copies of it, which is what a secondary that has fallen behind
+	// looks like from outside.
+	Serial uint32
+
 	// TTL is the TTL on the SOA record itself, and Minimum the last field of
 	// its rdata. A denial lives for the shorter of the two (RFC 2308). Both are
 	// kept: which of them wins is a reading, and the trace records what the

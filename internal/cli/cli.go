@@ -35,6 +35,7 @@ path it took. TYPE defaults to A.
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
   --check-ns              ask each zone for its own NS set and compare
+  --serial                ask every nameserver of the zone which copy it serves
   --nsid                  ask each server which of itself answered (RFC 5001)
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
@@ -92,6 +93,17 @@ a hop that echoes nothing ignored the subnet altogether. It is sent to every
 server on the way down, which is more than any of them needs to know about where
 the question came from, so it is off unless it is asked for.
 
+--serial asks every nameserver of the zone the walk ends in for that zone's
+start of authority, and says so when they do not all serve the same copy of it.
+A walk stops at the first nameserver that answers, so a secondary left behind by
+a zone transfer is invisible to everything else here: it answers the question
+correctly, out of an older zone. It costs a query per nameserver, and which of
+the serials is the newer one is not claimed, because serial arithmetic wraps.
+
+--all sees the other half of the same thing without being asked to: where it
+puts the question itself to every nameserver of a zone, it says so when they do
+not all answer it alike.
+
 --nsid asks every server for the name it goes by (RFC 5001), and draws it
 beside the address. One anycast address is a great many machines in a great many
 places, and the identifier is the only thing in a reply that says which of them
@@ -127,6 +139,7 @@ type Config struct {
 	All        bool
 	DNSSEC     bool
 	CheckNS    bool
+	Serial     bool
 	NSID       bool
 	ASN        bool
 	Compare    bool
@@ -220,6 +233,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.All, "all", false, "ask every nameserver of a zone")
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
+	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")

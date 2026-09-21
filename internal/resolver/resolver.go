@@ -108,6 +108,13 @@ type Config struct {
 	// does not match what the parent delegated. It costs one more query.
 	CheckNS bool
 
+	// Serial asks every nameserver of the zone the walk ends in for that zone's
+	// start of authority, and holds the answers against each other. It costs a
+	// query per nameserver, and it is the only way from outside to see a
+	// secondary that is serving an older copy of a zone: it answers everything
+	// correctly, and answers it out of date.
+	Serial bool
+
 	// NSID asks every server which of itself is answering (RFC 5001). An
 	// anycast address is a great many machines, and this is the only thing in a
 	// reply that tells them apart. It costs no query of its own.
@@ -277,6 +284,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 				r.checkECH(step)
 				r.checkSubnet(step)
 				r.checkNS(ctx, step, parent)
+				r.checkSerial(ctx, step, zone, servers)
 			}
 			return step
 
@@ -474,6 +482,8 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 		r.fail(parent, zone, budget.Error())
 	}
 
+	r.compareAnswers(zone, qname, qtype, hops)
+
 	for _, hop := range hops {
 		switch hop.step.Kind {
 		case trace.KindLame, trace.KindTimeout, trace.KindError:
@@ -482,6 +492,56 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 		return hop
 	}
 	return nil
+}
+
+// compareAnswers warns where the nameservers of one zone answer the same
+// question differently. Only --all asks more than one of them, so only --all
+// can see it: a walk that stops at the first server to answer has one answer
+// and nothing to hold it against.
+//
+// A difference is not by itself a fault — a zone served by something that
+// answers by where the question came from will do this honestly, and so will an
+// RRset caught mid-change — but it is never nothing, and nothing else in a
+// trace says it.
+func (r *run) compareAnswers(zone, qname string, qtype uint16, hops []*hop) {
+	typeName := dnsutil.TypeToString(qtype)
+
+	var order []string
+	saying := make(map[string][]string)
+	for _, hop := range hops {
+		switch hop.step.Kind {
+		case trace.KindAnswer, trace.KindCNAME, trace.KindNoData, trace.KindNXDomain:
+		default:
+			continue // a server that said nothing is not a server that disagreed
+		}
+		what := said(hop.step, typeName)
+		if _, seen := saying[what]; !seen {
+			order = append(order, what)
+		}
+		saying[what] = append(saying[what], at(hop.step))
+	}
+	if len(order) < 2 {
+		return
+	}
+
+	differing := make([]string, 0, len(order))
+	for _, answer := range order {
+		differing = append(differing, answer+" at "+strings.Join(saying[answer], " and "))
+	}
+	r.warnf("the nameservers of %s do not answer %s %s alike: %s",
+		zone, qname, typeName, strings.Join(differing, ", "))
+}
+
+// said is what a hop said about the name, as one string to hold against
+// another: the records where there are any, and what the hop was where there
+// are none, since a name that is not there is an answer as much as a name that
+// is. The records are sorted and deduplicated, so a server rotating an RRset
+// between one question and the next is not a server that disagrees.
+func said(step *trace.Step, qtype string) string {
+	if data := trace.Answers(step.Records, qtype); len(data) > 0 {
+		return strings.Join(data, " ")
+	}
+	return string(step.Kind)
 }
 
 // query is one hop: a single question to a single server, including whatever it
@@ -777,6 +837,112 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 	}
 }
 
+// checkSerial asks every nameserver of the zone the walk ended in which copy of
+// that zone it is serving. Only the parent's list says who they all are, and a
+// walk stops at the first that answers, so a secondary left behind by a zone
+// transfer is invisible to everything else here: it answers the question
+// correctly, out of an older zone.
+//
+// The queries go out together and join the trace afterwards, the way --all's
+// do, because a step may only be attached from the goroutine doing the walking.
+func (r *run) checkSerial(ctx context.Context, answer *trace.Step, zone string, servers []trace.Server) {
+	if !r.cfg.Serial {
+		return
+	}
+
+	var usable []trace.Server
+	for _, server := range dedupe(servers) {
+		// A server of the wrong family was never asked the question either, so
+		// holding the zone against it here would be holding it against a
+		// nameserver this walk has nothing to say about.
+		if r.cfg.Family != 0 && family(server.IP) != r.cfg.Family {
+			continue
+		}
+		usable = append(usable, server)
+	}
+
+	var budget error
+	for i := range usable {
+		if err := r.counters.query(); err != nil {
+			usable, budget = usable[:i], err
+			break
+		}
+	}
+
+	hops := make([]*hop, len(usable))
+	limit := make(chan struct{}, maxParallel)
+	var wait sync.WaitGroup
+	for i, server := range usable {
+		wait.Go(func() {
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			hops[i] = r.query(ctx, zone, server, zone, dns.TypeSOA)
+		})
+	}
+	wait.Wait()
+
+	for _, hop := range hops {
+		step := hop.step
+		if hop.resp != nil {
+			step.SOA = soa(hop.resp.Answer)
+		}
+		step.Aside = true
+		step.Records = nil // the serial is the point, and it is on the step
+		step.Notes = append(step.Notes, serialNote(zone, step.SOA))
+		r.attach(answer, step)
+	}
+	if budget != nil {
+		r.warnf("the budget ran out before every nameserver of %s could be asked for its serial", zone)
+	}
+	r.compareSerials(zone, hops)
+}
+
+// serialNote labels the aside for a reader of the tree. A server that answered
+// with no SOA is labelled by what it was asked rather than by what it gave,
+// since the step itself already says how the query went.
+func serialNote(zone string, soa *trace.SOA) string {
+	if soa == nil {
+		return "SOA of " + zone
+	}
+	return fmt.Sprintf("SOA of %s: %d", zone, soa.Serial)
+}
+
+// compareSerials warns where the nameservers of a zone do not hold the same
+// copy of it. Which serial is the newer one is deliberately not claimed: serial
+// arithmetic wraps (RFC 1982), and a walk that named the wrong one as behind
+// would send somebody to restart the wrong server.
+func (r *run) compareSerials(zone string, hops []*hop) {
+	var order []uint32
+	serving := make(map[uint32][]string)
+	for _, hop := range hops {
+		if hop.step.SOA == nil {
+			continue
+		}
+		serial := hop.step.SOA.Serial
+		if _, seen := serving[serial]; !seen {
+			order = append(order, serial)
+		}
+		serving[serial] = append(serving[serial], at(hop.step))
+	}
+	if len(order) < 2 {
+		return
+	}
+
+	held := make([]string, 0, len(order))
+	for _, serial := range order {
+		held = append(held, fmt.Sprintf("%d at %s", serial, strings.Join(serving[serial], " and ")))
+	}
+	r.warnf("the nameservers of %s are serving different copies of it: %s", zone, strings.Join(held, ", "))
+}
+
+// at is a server as a reader would name it.
+func at(step *trace.Step) string {
+	if step.Server.Name != "" {
+		return step.Server.Name
+	}
+	return step.Server.IP.String()
+}
+
 // attach hangs a step under its parent and tells whoever is watching. Every
 // hop joins the trace through here, and always from the walking goroutine, so
 // a watcher reading the trace never races the walk that is building it.
@@ -868,14 +1034,14 @@ func dedupe(servers []trace.Server) []trace.Server {
 	return unique
 }
 
-// soa is the start of authority a denial carries, nil where it carries none. A
-// name that is not there and a type that is not there are both answered with
-// the zone's own SOA, and how long the denial may be cached is the only thing
-// in it worth keeping: the rest is about transfers between the zone's servers.
+// soa is the start of authority in a section, nil where there is none. A denial
+// carries it in place of the records it has none of, and a zone asked for it
+// outright answers with it; what is kept of it is what can be read from
+// outside, which is the copy being served and how long a denial from it lives.
 func soa(authority []dns.RR) *trace.SOA {
 	for _, rr := range authority {
 		if record, ok := rr.(*dns.SOA); ok {
-			return &trace.SOA{TTL: record.Header().TTL, Minimum: record.Minttl}
+			return &trace.SOA{Serial: record.Serial, TTL: record.Header().TTL, Minimum: record.Minttl}
 		}
 	}
 	return nil

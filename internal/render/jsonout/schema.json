@@ -200,10 +200,15 @@
       }
     },
     "soa": {
-      "description": "As much of a zone's start of authority as a denial is read for, present on a nodata or an nxdomain and nowhere else: an answer carries its lifetime on the records themselves, and a denial carries the zone's SOA in their place.",
+      "description": "As much of a zone's start of authority as it is read for. It is present where the zone was asked for it outright, which --serial does of every nameserver, and on a nodata or an nxdomain, which carry the zone's SOA in place of the records they have none of.",
       "type": "object",
-      "required": ["ttl", "minimum"],
+      "required": ["serial", "ttl", "minimum"],
       "properties": {
+        "serial": {
+          "description": "The version of the zone the answering server is serving. Two nameservers of one zone answering with different serials are answering out of different copies of it. Which of them is the newer is not something to work out by comparing the numbers: serial arithmetic wraps (RFC 1982).",
+          "type": "integer",
+          "minimum": 0
+        },
         "ttl": {
           "description": "The TTL on the SOA record itself, in seconds.",
           "type": "integer",

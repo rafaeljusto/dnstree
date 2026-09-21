@@ -96,6 +96,7 @@ dnstree [flags] NAME [TYPE]
 | `--all` | ask every nameserver of a zone, not just the first that answers |
 | `--dnssec` | ask for signatures and follow the chain of trust |
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
+| `--serial` | ask every nameserver of the zone which copy of it they serve, and compare |
 | `--nsid` | ask each server which of itself answered, and draw it beside the address |
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
@@ -339,6 +340,54 @@ network and not the machine.
 > The subnet is sent to every server on the way down, which is more than the
 > root servers need to know about where you are, so it is never sent unless it
 > is asked for.
+
+### Whether they all have the same zone
+
+A walk stops at the first nameserver that answers, which is what a resolver
+does and what makes a secondary left behind by a zone transfer invisible: it is
+reachable, it is authoritative, and it answers the question correctly out of an
+older zone. `--serial` asks every one of them which copy it is holding:
+
+```
+$ dnstree --serial --no-asn wikipedia.org A
+...
+│   │   ├── ns2.wikimedia.org. 198.35.27.27  246ms  NOERROR  AA
+│   │   │   ├── wikipedia.org. 180 A 185.15.59.224
+│   │   │   ├── ns2.wikimedia.org. 198.35.27.27  274ms  NOERROR  AA  (SOA of wikipedia.org.: 2026060420)
+│   │   │   ├── ns2.wikimedia.org. 2a02:ec80:53::1  14ms  NOERROR  AA  (SOA of wikipedia.org.: 2026060420)
+│   │   │   ├── ns0.wikimedia.org. 208.80.154.238  340ms  NOERROR  AA  (SOA of wikipedia.org.: 2026060420)
+│   │   │   ├── ns0.wikimedia.org. 2620:0:861:53::1  134ms  NOERROR  AA  (SOA of wikipedia.org.: 2026060420)
+│   │   │   ├── ns1.wikimedia.org. 208.80.153.231  358ms  NOERROR  AA  (SOA of wikipedia.org.: 2026060420)
+│   │   │   └── ns1.wikimedia.org. 2620:0:860:53::1  158ms  NOERROR  AA  (SOA of wikipedia.org.: 2026060420)
+...
+✔ answered in 1.3s · resolver in 249ms · 9 queries · 8 servers
+```
+
+Six addresses, one zone, and nothing to report. Where they do not all hold the
+same copy, the walk says so above the summary, naming who holds what:
+
+> the nameservers of test. are serving different copies of it: 2 at ns1.test., 1 at ns2.test.
+
+Which of the serials is the newer one is deliberately not claimed. Serial
+arithmetic wraps around (RFC 1982), so the larger number is not reliably the
+later zone, and a tool that guessed would send somebody to restart the wrong
+server.
+
+It costs a query per nameserver and is off unless asked for. It does not need
+`--all`: the sweep is one cheap question to each of them, rather than the whole
+resolution done over again.
+
+`--all` sees the other half of the same thing, and needs no flag of its own to
+say it. Where it has put the question itself to every nameserver of a zone, two
+of them answering differently is worth a line:
+
+> the nameservers of test. do not answer www.test. A alike: 192.0.2.10 at ns1.test., 192.0.2.99 at ns2.test.
+
+Answers are held against each other as sets, so a nameserver rotating an RRset
+between one question and the next is not a nameserver that disagrees. A real
+difference is not by itself a fault — a zone served by something that answers by
+where the question came from will do this honestly, and so will an RRset caught
+halfway through a change — but nothing else in a trace says it at all.
 
 ### Which machine answered
 

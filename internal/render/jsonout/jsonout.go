@@ -155,6 +155,7 @@ type delegation struct {
 }
 
 type soa struct {
+	Serial  uint32 `json:"serial"`
 	TTL     uint32 `json:"ttl"`
 	Minimum uint32 `json:"minimum"`
 }
@@ -282,7 +283,7 @@ func convertSOA(from *trace.SOA) *soa {
 	if from == nil {
 		return nil
 	}
-	return &soa{TTL: from.TTL, Minimum: from.Minimum}
+	return &soa{Serial: from.Serial, TTL: from.TTL, Minimum: from.Minimum}
 }
 
 func convertDelegation(from *trace.Delegation) *delegation {

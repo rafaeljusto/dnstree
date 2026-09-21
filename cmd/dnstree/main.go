@@ -208,6 +208,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		All:       cfg.All,
 		Family:    cfg.Family,
 		CheckNS:   cfg.CheckNS,
+		Serial:    cfg.Serial,
 		NSID:      cfg.NSID,
 		Subnet:    cfg.Subnet,
 		Retries:   cfg.Retries,

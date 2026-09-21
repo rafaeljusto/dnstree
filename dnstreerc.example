@@ -34,6 +34,11 @@
 # hands out. A mismatch is a real delegation fault that still resolves.
 # check-ns = true
 
+# Ask every nameserver of the zone which copy of it they are serving, and say
+# so when they do not all serve the same one. A secondary a transfer left
+# behind answers correctly, out of an older zone. One query per nameserver.
+# serial = true
+
 # Ask each server which of itself answered (RFC 5001). One anycast address is a
 # great many machines, and this is the only thing in a reply that tells them
 # apart. It costs no query of its own.
