@@ -365,8 +365,9 @@ footer a:hover{color:var(--ink)}
       </figure>
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
         An unsigned zone turns the chain grey from that point down; nothing below it can
-        be secure again. Denial of existence is reported as unchecked rather than claimed:
-        NSEC proofs are not read.
+        be secure again. Denial of existence is proved rather than taken on trust: NSEC and
+        NSEC3 are read, opt-out included, so an answer with nothing in it is checked like
+        any other.
       </p>
     </section>
 
