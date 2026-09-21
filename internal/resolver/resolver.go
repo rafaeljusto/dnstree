@@ -578,6 +578,8 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	switch step.Kind {
 	case trace.KindAnswer, trace.KindCNAME:
 		step.Records = records(resp.Answer)
+	case trace.KindNoData, trace.KindNXDomain:
+		step.SOA = soa(resp.Ns)
 	}
 	return &hop{step: step, resp: resp}
 }
@@ -864,6 +866,19 @@ func dedupe(servers []trace.Server) []trace.Server {
 		unique = append(unique, server)
 	}
 	return unique
+}
+
+// soa is the start of authority a denial carries, nil where it carries none. A
+// name that is not there and a type that is not there are both answered with
+// the zone's own SOA, and how long the denial may be cached is the only thing
+// in it worth keeping: the rest is about transfers between the zone's servers.
+func soa(authority []dns.RR) *trace.SOA {
+	for _, rr := range authority {
+		if record, ok := rr.(*dns.SOA); ok {
+			return &trace.SOA{TTL: record.Header().TTL, Minimum: record.Minttl}
+		}
+	}
+	return nil
 }
 
 // records flattens a section to the text the renderers work with. Signatures

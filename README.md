@@ -399,15 +399,39 @@ resolver at all.
 ### Saying what happened
 
 `--explain` writes a handful of sentences under the tree: what the walk came
-to, what the chain of trust made of it, what the zone's nameservers have in
-common, which servers made it harder, and whether a recursive resolver agreed.
+to, how long it goes on being served after it changes, what the chain of trust
+made of it, what the zone's nameservers have in common, which servers made it
+harder, and whether a recursive resolver agreed.
 
 ```
 $ dnstree --explain www.example.com
 ...
-✔ answered in 751ms · resolver in 250ms · 3 queries · 3 servers
+✔ answered in 758ms · resolver in 261ms · 3 queries · 3 servers
 
 · www.example.com. A is 104.20.23.154 and 172.66.147.243, answered by hera.ns.cloudflare.com. for example.com.
+· a cache may hold this answer for 5 minutes, and the delegation to example.com. for 2 days
+```
+
+That second line is the one a change window turns on. Every TTL it reads is one
+the walk already recorded — the answer carries its own, the referral above it
+carries the parent's — and the two are usually days apart: changing a record is
+over in minutes, changing the nameservers that serve it is not. A name that is
+not there has no records to carry a lifetime, so the zone's SOA says how long
+being denied lasts instead, the shorter of the two fields that can say it.
+
+The resolver the walk is timed against says the other half, where it has
+something to say: an answer it had to go and fetch comes back with the zone's
+lifetime entire, and one it is serving out of its own cache comes back with
+less.
+
+```
+$ dnstree --explain www.iana.org
+...
+✔ answered in 1.6s · resolver in 252ms · 6 queries · 5 servers
+
+· www.iana.org. A is 104.18.24.232 and 104.18.25.232, answered by ns1.cloudflare.net. for cloudflare.net., after 1 alias
+· a cache may hold this answer for 5 minutes, and the delegation to cloudflare.net. for 2 days
+· 8.8.8.8 is answering this from its cache, with 4 minutes 57 seconds left on the copy it is serving
 ```
 
 Every sentence is read off the trace the walk recorded, and nothing is worked
@@ -418,9 +442,10 @@ a chain this build could not check reads as unchecked, never as broken.
 ```
 $ dnstree --dnssec --explain dnssec-failed.org
 ...
-✘ bogus in 4.4s · resolver in 484ms (SERVFAIL) · 12 queries · 5 servers
+✘ bogus in 4.5s · resolver in 453ms (SERVFAIL) · 12 queries · 5 servers
 
 · dnssec-failed.org. A is 96.99.227.255, answered by dns101.comcast.net. for dnssec-failed.org.
+· a cache may hold this answer for 5 minutes, and the delegation to dnssec-failed.org. for 1 hour
 · the chain of trust breaks at dnssec-failed.org.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name
 ```
 

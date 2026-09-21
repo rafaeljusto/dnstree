@@ -413,3 +413,127 @@ func TestFindingsSpread(t *testing.T) {
 		})
 	}
 }
+
+// cut is a walk that was told where test. lives before it got there, so
+// that the delegation carries a lifetime of its own.
+func cut(ttl uint32, answer *trace.Step) *trace.Trace {
+	return walk(&trace.Step{
+		Zone:       ".",
+		Kind:       trace.KindReferral,
+		Server:     trace.Server{Name: "a.root-servers.net.", IP: netip.MustParseAddr("192.0.2.1"), Port: 53},
+		Delegation: &trace.Delegation{Zone: "test.", TTL: ttl, NS: []string{"ns.test."}},
+		Children:   []*trace.Step{answer},
+	})
+}
+
+// answered is one hop that answered, with that TTL on the records.
+func answered(ttl uint32) *trace.Step {
+	step := hop(trace.KindAnswer, "ns.test.")
+	step.Records = []trace.RR{{Name: "www.test.", TTL: ttl, Type: "A", Data: "192.0.2.1"}}
+	return step
+}
+
+// TestCache covers the question a change window turns on: how long what the
+// walk found goes on being served after it has changed. Nothing here is worked
+// out from a message — every number is a TTL the walk recorded.
+func TestCache(t *testing.T) {
+	tests := map[string]struct {
+		trace *trace.Trace
+		want  []string
+		avoid []string
+	}{
+		"an answer says how long a cache may keep it": {
+			trace: walk(answered(300)),
+			want:  []string{"a cache may hold this answer for 5 minutes"},
+		},
+		"the delegation is said beside it, because it is the longer wait": {
+			trace: cut(172800, answered(300)),
+			want:  []string{"a cache may hold this answer for 5 minutes, and the delegation to test. for 2 days"},
+		},
+		"a delegation with nothing under it is still worth the wait it costs": {
+			trace: cut(172800, hop(trace.KindTimeout, "ns.test.")),
+			avoid: []string{"a cache may hold"}, // nothing answered, so there is nothing to hold
+		},
+		"a denial lives for the shorter of the two fields that can say so": {
+			trace: walk(func() *trace.Step {
+				step := hop(trace.KindNXDomain, "ns.test.")
+				step.SOA = &trace.SOA{TTL: 3600, Minimum: 900}
+				return step
+			}()),
+			want: []string{"a cache may hold this denial for 15 minutes"},
+		},
+		"a denial the zone said nothing about is not given a lifetime": {
+			trace: walk(hop(trace.KindNoData, "ns.test.")),
+			avoid: []string{"a cache may hold"},
+		},
+		"a resolver serving from its cache says how much of it is left": {
+			trace: func() *trace.Trace {
+				tr := walk(answered(300))
+				tr.Resolver = &trace.Resolver{
+					Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+					Records: []trace.RR{{Name: "www.test.", TTL: 213, Type: "A", Data: "192.0.2.1"}},
+				}
+				return tr
+			}(),
+			want: []string{"192.0.2.53 is answering this from its cache, with 3 minutes 33 seconds left"},
+		},
+		"a resolver that had to go and fetch it says nothing the zone has not": {
+			trace: func() *trace.Trace {
+				tr := walk(answered(300))
+				tr.Resolver = &trace.Resolver{
+					Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+					Records: []trace.RR{{Name: "www.test.", TTL: 300, Type: "A", Data: "192.0.2.1"}},
+				}
+				return tr
+			}(),
+			avoid: []string{"from its cache"},
+		},
+		"a walk that came to nothing has nothing to say about caches": {
+			trace: walk(hop(trace.KindTimeout, "ns.test.")),
+			avoid: []string{"a cache may hold"},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := said(test.trace)
+			for _, want := range test.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("got %q, want it to say %q", got, want)
+				}
+			}
+			for _, avoid := range test.avoid {
+				if strings.Contains(got, avoid) {
+					t.Errorf("got %q, want it not to say %q", got, avoid)
+				}
+			}
+		})
+	}
+}
+
+// TestCacheLifetimesAreSpelledOut covers the words themselves. A lifetime is
+// read by somebody deciding whether to wait through it, so it is written the
+// way they would say it rather than the way a TTL is stored.
+func TestCacheLifetimesAreSpelledOut(t *testing.T) {
+	for _, tt := range []struct {
+		ttl  uint32
+		want string
+	}{
+		{ttl: 45, want: "45 seconds"},
+		{ttl: 60, want: "1 minute"},
+		{ttl: 90, want: "1 minute 30 seconds"},
+		{ttl: 300, want: "5 minutes"},
+		{ttl: 3600, want: "1 hour"},
+		{ttl: 5400, want: "1 hour 30 minutes"},
+		{ttl: 86400, want: "1 day"},
+		{ttl: 90000, want: "1 day 1 hour"},
+		{ttl: 172800, want: "2 days"},
+	} {
+		t.Run(tt.want, func(t *testing.T) {
+			want := "a cache may hold this answer for " + tt.want
+			if got := said(walk(answered(tt.ttl))); !strings.Contains(got, want) {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}

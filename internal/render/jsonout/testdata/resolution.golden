@@ -32,6 +32,7 @@
         "nsid": "fra2",
         "delegation": {
           "zone": "com.",
+          "ttl": 172800,
           "ns": [
             "a.gtld-servers.net."
           ],
@@ -70,6 +71,7 @@
             ],
             "delegation": {
               "zone": "example.com.",
+              "ttl": 172800,
               "ns": [
                 "a.iana-servers.net.",
                 "ns.outside.example."

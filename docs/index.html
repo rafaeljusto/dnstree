@@ -384,8 +384,9 @@ footer a:hover{color:var(--ink)}
       <h2>Or have it say what happened</h2>
       <p class="section-lede">
         <code>--explain</code> writes the walk out in sentences under the tree: what it came
-        to, what the chain of trust made of it, what the zone's nameservers have in common,
-        which servers made it harder, and whether a recursive resolver agreed.
+        to, how long it goes on being served after it changes, what the chain of trust made
+        of it, what the zone's nameservers have in common, which servers made it harder, and
+        whether a recursive resolver agreed.
       </p>
 
       <div class="term">
@@ -395,9 +396,10 @@ footer a:hover{color:var(--ink)}
         </div>
         <div class="term-body">
 <pre><span class="dim">...</span>
-<span class="bad">&#10008;</span> <span class="dim">bogus in 4.4s · resolver in 484ms (SERVFAIL) · 12 queries · 5 servers</span>
+<span class="bad">&#10008;</span> <span class="dim">bogus in 4.5s · resolver in 453ms (SERVFAIL) · 12 queries · 5 servers</span>
 
 <span class="dim">·</span> dnssec-failed.org. A is 96.99.227.255, answered by dns101.comcast.net. for dnssec-failed.org.
+<span class="dim">·</span> a cache may hold this answer for 5 minutes, and the delegation to dnssec-failed.org. for 1 hour
 <span class="dim">·</span> <span class="bad">the chain of trust breaks at dnssec-failed.org.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name</span></pre>
         </div>
       </div>

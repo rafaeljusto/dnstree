@@ -107,6 +107,7 @@
           "items": { "$ref": "#/$defs/extended_error" }
         },
         "subnet": { "$ref": "#/$defs/subnet" },
+        "soa": { "$ref": "#/$defs/soa" },
         "nsid": {
           "description": "What the server called itself, as RFC 5001 asks it to, absent where the query asked for no identifier or the server published none. It belongs to the answer rather than to the server: one anycast address is many machines, and this says which of them answered. An identifier whose bytes spell no printable name is carried as the hex it arrived as, and one longer than 32 bytes is cut and ends in an ellipsis.",
           "type": "string"
@@ -198,12 +199,34 @@
         }
       }
     },
+    "soa": {
+      "description": "As much of a zone's start of authority as a denial is read for, present on a nodata or an nxdomain and nowhere else: an answer carries its lifetime on the records themselves, and a denial carries the zone's SOA in their place.",
+      "type": "object",
+      "required": ["ttl", "minimum"],
+      "properties": {
+        "ttl": {
+          "description": "The TTL on the SOA record itself, in seconds.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "minimum": {
+          "description": "The last field of the SOA rdata, in seconds. A denial lives for the shorter of this and the TTL on the record (RFC 2308); both are carried, because which of them wins is a reading and this document records what the zone said.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "delegation": {
       "description": "The zone cut a referral pointed at.",
       "type": "object",
       "required": ["zone"],
       "properties": {
         "zone": { "type": "string" },
+        "ttl": {
+          "description": "How long the parent lets the referral be cached, in seconds. It is what a resolver goes on using these nameservers for after they have been changed, which is not the TTL on the answer below them and is usually a great deal longer.",
+          "type": "integer",
+          "minimum": 0
+        },
         "ns": {
           "description": "The nameserver names, in the order they were received.",
           "type": "array",

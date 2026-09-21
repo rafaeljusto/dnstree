@@ -25,7 +25,7 @@ ns.test.            IN A    192.0.2.5
 `
 
 	serviceZone = `
-@    IN SOA    ns hostmaster 1 7200 3600 1209600 3600
+@    300 IN SOA    ns hostmaster 1 7200 3600 1209600 3600
 @    IN NS     ns
 ns   IN A      192.0.2.5
 www  IN A      192.0.2.10
@@ -413,5 +413,77 @@ func TestNSIDIsNotTakenAtItsWord(t *testing.T) {
 	}
 	if answer.NSID != "001b5b324a66726132" {
 		t.Errorf("got %q, want the hex it arrived as", answer.NSID)
+	}
+}
+
+// TestDelegationCarriesItsLifetime covers the number a change of nameservers is
+// measured in. The parent decides how long its referral may be cached, and
+// nothing below it can shorten that: the answer's own TTL says when a record
+// change is everywhere, and this says when a nameserver change is.
+func TestDelegationCarriesItsLifetime(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{})
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	var delegation *trace.Delegation
+	for step := range tr.Mainline() {
+		if step.Delegation != nil && step.Delegation.Zone == "test." {
+			delegation = step.Delegation
+		}
+	}
+	if delegation == nil {
+		t.Fatalf("got no referral to test.: %s", format(steps(tr)))
+	}
+	if delegation.TTL != 3600 {
+		t.Errorf("got %d, want the TTL the root put on the NS set of test.", delegation.TTL)
+	}
+}
+
+// TestDenialCarriesTheZonesSOA covers what a denial has in place of records. An
+// answer says on the records themselves how long it may be cached; a name that
+// is not there has none to say it on, and the zone's SOA says it instead.
+func TestDenialCarriesTheZonesSOA(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{})
+
+	for name, question := range map[string]struct{ name, qtype string }{
+		"a name that is not there":      {name: "nothere.test", qtype: "A"},
+		"a type the name does not have": {name: "www.test", qtype: "MX"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), question.name, question.qtype)
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+
+			result := tr.Result()
+			if result == nil {
+				t.Fatalf("got no result: %s", format(steps(tr)))
+			}
+			if result.SOA == nil {
+				t.Fatalf("got %+v, want the SOA the denial came with", result)
+			}
+			// The zone gives its SOA a TTL of 300 and a minimum of 3600, so
+			// the two cannot be confused for one another here.
+			if result.SOA.TTL != 300 || result.SOA.Minimum != 3600 {
+				t.Errorf("got %+v, want both fields as the zone wrote them", result.SOA)
+			}
+		})
+	}
+}
+
+// TestAnswerCarriesNoSOA covers the other half: an answer carries its lifetime
+// on the records, so reading a denial's SOA onto it would be inventing one.
+func TestAnswerCarriesNoSOA(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{})
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if result := tr.Result(); result == nil || result.SOA != nil {
+		t.Errorf("got %+v, want an answer with no SOA against it", result)
 	}
 }

@@ -24,6 +24,7 @@ type Topic int
 // What a finding is about.
 const (
 	Outcome  Topic = iota // what the walk came to
+	Cache                 // how long a cache may go on serving it
 	Trust                 // the chain of trust over it
 	Spread                // what the nameservers of the zone have in common
 	Servers               // the servers that made the walk harder
@@ -35,6 +36,8 @@ const (
 // they are about rather than only colouring them.
 func (t Topic) String() string {
 	switch t {
+	case Cache:
+		return "cache"
 	case Trust:
 		return "trust"
 	case Spread:
@@ -92,6 +95,7 @@ func Findings(tr *trace.Trace) []Finding {
 	}
 
 	findings := []Finding{outcome(tr)}
+	findings = append(findings, cache(tr)...)
 	findings = append(findings, trust(tr)...)
 	findings = append(findings, spread(tr)...)
 	findings = append(findings, servers(tr)...)
@@ -185,6 +189,89 @@ func stopped(tr *trace.Trace) (zone, why string) {
 		}
 	}
 	return zone, why
+}
+
+// cache is how long what the walk found goes on being served after it has
+// changed. Every number in it is a TTL the walk recorded; what is added is the
+// arithmetic nobody wants to be doing in their head with a change window open.
+func cache(tr *trace.Trace) []Finding {
+	var findings []Finding
+	if finding, ok := lifetimes(tr); ok {
+		findings = append(findings, finding)
+	}
+	if finding, ok := leftover(tr); ok {
+		findings = append(findings, finding)
+	}
+	return findings
+}
+
+// lifetimes is what a cache may hold this resolution for: what the walk came
+// to, and the delegation it took to get there. The two are said together
+// because they are the two halves of one question and they are usually days
+// apart — changing a record is over in minutes, changing the nameservers that
+// serve it is not — and a resolution with neither is said nothing about.
+func lifetimes(tr *trace.Trace) (Finding, bool) {
+	result := tr.Result()
+	if result == nil {
+		return Finding{}, false
+	}
+	answer, what := held(result, tr.Question.Type)
+
+	var cut uint32
+	zone := ended(tr)
+	if delegation := delegated(tr, zone); delegation != nil {
+		cut = delegation.TTL
+	}
+
+	var text string
+	switch {
+	case answer > 0 && cut > 0:
+		text = fmt.Sprintf("a cache may hold %s for %s, and the delegation to %s for %s",
+			what, spell(answer), zone, spell(cut))
+	case answer > 0:
+		text = fmt.Sprintf("a cache may hold %s for %s", what, spell(answer))
+	case cut > 0:
+		text = fmt.Sprintf("a cache may hold the delegation to %s for %s", zone, spell(cut))
+	default:
+		return Finding{}, false
+	}
+	return Finding{Topic: Cache, Level: Note, Text: text}, true
+}
+
+// held is how long a cache may keep what the walk came to, and what to call it.
+// An answer carries its lifetime on the records that answer; a denial carries
+// no records to carry one, and says in the zone's SOA how long being denied
+// lasts instead — the shorter of the two fields that can say so (RFC 2308).
+func held(result *trace.Step, qtype string) (uint32, string) {
+	switch result.Kind {
+	case trace.KindNXDomain, trace.KindNoData:
+		if result.SOA == nil {
+			return 0, ""
+		}
+		return min(result.SOA.TTL, result.SOA.Minimum), "this denial"
+	}
+	return trace.TTL(result.Records, qtype), "this answer"
+}
+
+// leftover is the resolver's own copy, said only where it is older than the
+// zone would make it. A resolver that had to go and fetch the answer hands back
+// the zone's lifetime entire, which says nothing the line above it has not; one
+// that hands back less is answering from a cache, and how much less is how long
+// it will go on doing so.
+func leftover(tr *trace.Trace) (Finding, bool) {
+	result := tr.Result()
+	if tr.Resolver == nil || result == nil {
+		return Finding{}, false
+	}
+
+	zone := trace.TTL(result.Records, tr.Question.Type)
+	cached := trace.TTL(tr.Resolver.Records, tr.Question.Type)
+	if zone == 0 || cached == 0 || cached >= zone {
+		return Finding{}, false
+	}
+	return Finding{Topic: Cache, Level: Note, Text: fmt.Sprintf(
+		"%s is answering this from its cache, with %s left on the copy it is serving",
+		tr.Resolver.Server.IP, spell(cached))}, true
 }
 
 // trust is what the chain of trust came to, said only where one was followed.
@@ -514,6 +601,33 @@ func add(names []string, name string) []string {
 		return names
 	}
 	return append(names, name)
+}
+
+// spell writes a lifetime out in words: the largest unit it fills, and the one
+// below where there is a remainder. It is read by somebody working out whether
+// to wait through it, so "2 days" earns its room over "172800" and over "48h".
+func spell(seconds uint32) string {
+	switch n := int(seconds); {
+	case n < 60:
+		return plural(n, "second", "seconds")
+	case n < 3600:
+		return spelled(n, 60, 1, "minute", "second")
+	case n < 86400:
+		return spelled(n, 3600, 60, "hour", "minute")
+	default:
+		return spelled(n, 86400, 3600, "day", "hour")
+	}
+}
+
+// spelled is a count of one unit and, where the remainder does not divide away,
+// of the one below it. Two are as far as it goes: the third would be noise
+// against the first, and nobody waiting out a delegation cares about seconds.
+func spelled(seconds, size, smaller int, unit, below string) string {
+	whole := plural(seconds/size, unit, unit+"s")
+	if rest := (seconds % size) / smaller; rest > 0 {
+		return whole + " " + plural(rest, below, below+"s")
+	}
+	return whole
 }
 
 func plural(n int, one, many string) string {

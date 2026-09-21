@@ -174,6 +174,13 @@ type Step struct {
 	// carried one and the server answered with it.
 	Subnet *Subnet
 
+	// SOA is what the zone said about itself when it said the answer was not
+	// there. A denial carries the zone's start of authority in place of records,
+	// and how long the denial may be cached is in it; an answer carries its TTL
+	// on the records themselves, so this is set on a NODATA or an NXDOMAIN and
+	// nowhere else.
+	SOA *SOA
+
 	// NSID is what the server called itself (RFC 5001), empty when the query
 	// asked for no identifier or the server gave none. It belongs to the answer
 	// rather than to the server: one anycast address is many machines, and
@@ -194,6 +201,16 @@ type Step struct {
 
 	Children []*Step
 	Err      string
+}
+
+// SOA is as much of a zone's start of authority as a denial is read for.
+type SOA struct {
+	// TTL is the TTL on the SOA record itself, and Minimum the last field of
+	// its rdata. A denial lives for the shorter of the two (RFC 2308). Both are
+	// kept: which of them wins is a reading, and the trace records what the
+	// zone said rather than what somebody made of it.
+	TTL     uint32
+	Minimum uint32
 }
 
 // Server is the nameserver a step queried.
@@ -256,6 +273,12 @@ type Service struct {
 // Delegation is the zone cut a referral pointed at.
 type Delegation struct {
 	Zone string
+
+	// TTL is how long the parent lets its referral be cached, in seconds. It is
+	// what a resolver goes on using these nameservers for after they have been
+	// changed, which is not the same as the TTL on the answer below them and is
+	// usually a great deal longer.
+	TTL uint32
 
 	// NS are the nameserver names, in the order they were received.
 	NS []string
@@ -394,6 +417,22 @@ func Answers(records []RR, qtype string) []string {
 	}
 	slices.Sort(data)
 	return slices.Compact(data)
+}
+
+// TTL is how long a cache may keep the records that answer a question of this
+// type: the shortest of them where they disagree, which is the one every copy
+// of the set has run out by.
+func TTL(records []RR, qtype string) uint32 {
+	var shortest uint32
+	for _, record := range records {
+		if !strings.EqualFold(record.Type, qtype) {
+			continue
+		}
+		if shortest == 0 || record.TTL < shortest {
+			shortest = record.TTL
+		}
+	}
+	return shortest
 }
 
 // Filtered is a hop where somebody decided the answer rather than serving it,

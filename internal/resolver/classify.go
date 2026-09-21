@@ -114,6 +114,12 @@ func referral(resp *dns.Msg, zone, qname string) *trace.Delegation {
 		case dns.RRToType(rr) == dns.TypeDS && dnsutil.IsBelow(zone, rr.Header().Name):
 			delegation.DSPresent = true
 		case dns.RRToType(rr) == dns.TypeNS && dns.EqualName(rr.Header().Name, child):
+			if len(delegation.NS) == 0 {
+				// An RRset carries one TTL, so the first record speaks for the
+				// set. Counted from the first rather than left until the last,
+				// because a TTL of zero is a TTL and not an absence.
+				delegation.TTL = rr.Header().TTL
+			}
 			delegation.NS = append(delegation.NS, rr.(*dns.NS).Ns)
 		}
 	}

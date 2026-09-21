@@ -61,6 +61,7 @@ func resolution() *trace.Trace {
 		Notes:  []string{"truncated over udp"},
 		Delegation: &trace.Delegation{
 			Zone: "example.com.",
+			TTL:  172800,
 			NS:   []string{"a.iana-servers.net.", "ns.outside.example."},
 			Glue: map[string][]netip.Addr{
 				"a.iana-servers.net.": {netip.MustParseAddr("199.43.135.53")},
@@ -87,7 +88,7 @@ func resolution() *trace.Trace {
 		Rcode:      "NOERROR",
 		Kind:       trace.KindReferral,
 		NSID:       "fra2",
-		Delegation: &trace.Delegation{Zone: "com.", NS: []string{"a.gtld-servers.net."}, DSPresent: true},
+		Delegation: &trace.Delegation{Zone: "com.", TTL: 172800, NS: []string{"a.gtld-servers.net."}, DSPresent: true},
 		DNSSEC:     &trace.DNSSECStatus{State: trace.Insecure, Reason: "the parent published no DS"},
 		Children:   []*trace.Step{timeout, tld},
 	}

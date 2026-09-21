@@ -121,6 +121,31 @@ func TestRenderResolverComparison(t *testing.T) {
 	}
 }
 
+// TestRenderCarriesTheDenialLifetime covers the one thing a denial has in place
+// of records: an answer says how long it may be cached on the records
+// themselves, and a name that is not there has none to say it on.
+func TestRenderCarriesTheDenialLifetime(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A", Class: "IN"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: "test.", Kind: trace.KindNXDomain, Rcode: "NXDOMAIN",
+			SOA: &trace.SOA{TTL: 3600, Minimum: 900},
+		}}},
+	}
+
+	root, _ := render(t, tr)["root"].(map[string]any)
+	children, _ := root["children"].([]any)
+	step, _ := children[0].(map[string]any)
+
+	soa, ok := step["soa"].(map[string]any)
+	if !ok {
+		t.Fatalf("got %+v, want the SOA the denial came with", step)
+	}
+	if soa["ttl"] != float64(3600) || soa["minimum"] != float64(900) {
+		t.Errorf("got %+v, want both fields the zone can say a lifetime with", soa)
+	}
+}
+
 // TestRenderOmitsWhatIsNotThere guards the schema against growing noise: an
 // ordinary walk asks for none of this and its output must not carry the keys.
 func TestRenderOmitsWhatIsNotThere(t *testing.T) {
@@ -136,7 +161,7 @@ func TestRenderOmitsWhatIsNotThere(t *testing.T) {
 	children, _ := root["children"].([]any)
 	step, _ := children[0].(map[string]any)
 
-	for _, key := range []string{"extended", "subnet"} {
+	for _, key := range []string{"extended", "subnet", "soa", "nsid"} {
 		if _, ok := step[key]; ok {
 			t.Errorf("got %q on a hop that has none", key)
 		}

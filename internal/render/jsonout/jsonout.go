@@ -93,6 +93,7 @@ type step struct {
 	Notes      []string        `json:"notes,omitempty"`
 	Extended   []extendedError `json:"extended,omitempty"`
 	Subnet     *subnet         `json:"subnet,omitempty"`
+	SOA        *soa            `json:"soa,omitempty"`
 	NSID       string          `json:"nsid,omitempty"`
 	Aside      bool            `json:"aside,omitempty"`
 	Delegation *delegation     `json:"delegation,omitempty"`
@@ -145,11 +146,17 @@ type service struct {
 
 type delegation struct {
 	Zone           string              `json:"zone"`
+	TTL            uint32              `json:"ttl"`
 	NS             []string            `json:"ns,omitempty"`
 	Glue           map[string][]string `json:"glue,omitempty"`
 	GlueLess       []string            `json:"glueless,omitempty"`
 	OutOfBailiwick []string            `json:"out_of_bailiwick,omitempty"`
 	DSPresent      bool                `json:"ds_present,omitempty"`
+}
+
+type soa struct {
+	TTL     uint32 `json:"ttl"`
+	Minimum uint32 `json:"minimum"`
 }
 
 type dnssec struct {
@@ -176,6 +183,7 @@ func convert(from *trace.Step) *step {
 		Notes:      from.Notes,
 		Extended:   convertExtended(from.Extended),
 		Subnet:     convertSubnet(from.Subnet),
+		SOA:        convertSOA(from.SOA),
 		NSID:       from.NSID,
 		Aside:      from.Aside,
 		Delegation: convertDelegation(from.Delegation),
@@ -270,6 +278,13 @@ func convertFlags(from trace.Flags) *flags {
 	return &flags{AA: from.AA, TC: from.TC, AD: from.AD, DO: from.DO, EDNS: from.EDNS}
 }
 
+func convertSOA(from *trace.SOA) *soa {
+	if from == nil {
+		return nil
+	}
+	return &soa{TTL: from.TTL, Minimum: from.Minimum}
+}
+
 func convertDelegation(from *trace.Delegation) *delegation {
 	if from == nil {
 		return nil
@@ -277,6 +292,7 @@ func convertDelegation(from *trace.Delegation) *delegation {
 
 	to := &delegation{
 		Zone:           from.Zone,
+		TTL:            from.TTL,
 		NS:             from.NS,
 		GlueLess:       from.GlueLess,
 		OutOfBailiwick: from.OutOfBailiwick,

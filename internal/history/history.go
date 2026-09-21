@@ -89,7 +89,7 @@ func Of(tr *trace.Trace, now time.Time) *Walk {
 	if result := tr.Result(); result != nil {
 		walk.Kind = string(result.Kind)
 		walk.Answer = trace.Answers(result.Records, tr.Question.Type)
-		walk.TTL = ttl(result.Records, tr.Question.Type)
+		walk.TTL = trace.TTL(result.Records, tr.Question.Type)
 	}
 	walk.Zones = zones(tr)
 	return walk
@@ -131,21 +131,6 @@ func zones(tr *trace.Trace) []Zone {
 		})
 	}
 	return crossed
-}
-
-// ttl is what the zone put on the records that answered, the shortest of them
-// where they disagree.
-func ttl(records []trace.RR, qtype string) uint32 {
-	var shortest uint32
-	for _, record := range records {
-		if !strings.EqualFold(record.Type, qtype) {
-			continue
-		}
-		if shortest == 0 || record.TTL < shortest {
-			shortest = record.TTL
-		}
-	}
-	return shortest
 }
 
 // Dir is where remembered walks are kept: the directory named by the
