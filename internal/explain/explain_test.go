@@ -238,10 +238,15 @@ func TestFindingsLevels(t *testing.T) {
 // TestFindingsOrder covers the reading order: what came of the walk first, and
 // the workings under it.
 func TestFindingsOrder(t *testing.T) {
-	step := hop(trace.KindAnswer, "ns.test.")
-	step.DNSSEC = &trace.DNSSECStatus{State: trace.Secure}
+	answer := hop(trace.KindAnswer, "ns.test.")
+	answer.DNSSEC = &trace.DNSSECStatus{State: trace.Secure}
 
-	tr := walk(hop(trace.KindTimeout, "dead.test."), step)
+	tr := walk(&trace.Step{
+		Zone: ".", Kind: trace.KindReferral,
+		Server:     trace.Server{Name: "root.test.", IP: netip.MustParseAddr("192.0.2.53")},
+		Delegation: &trace.Delegation{Zone: "test.", NS: []string{"ns.test."}},
+		Children:   []*trace.Step{hop(trace.KindTimeout, "dead.test."), answer},
+	})
 	tr.Resolver = &trace.Resolver{Match: trace.MatchDiffers}
 
 	var topics []explain.Topic
@@ -249,7 +254,7 @@ func TestFindingsOrder(t *testing.T) {
 		topics = append(topics, finding.Topic)
 	}
 
-	want := []explain.Topic{explain.Outcome, explain.Trust, explain.Servers, explain.Resolver}
+	want := []explain.Topic{explain.Outcome, explain.Trust, explain.Spread, explain.Servers, explain.Resolver}
 	if len(topics) != len(want) {
 		t.Fatalf("got %v, want one finding of each of %v", topics, want)
 	}
@@ -271,6 +276,139 @@ func TestFindingsNothing(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if findings := explain.Findings(tr); len(findings) != 0 {
 				t.Errorf("got %v, want nothing said", findings)
+			}
+		})
+	}
+}
+
+// ns is one nameserver address, with an origin AS where the lookups answered
+// for it and none where they did not.
+func ns(name, ip string, as uint32) trace.Server {
+	server := trace.Server{Name: name, IP: netip.MustParseAddr(ip), Port: 53}
+	if as > 0 {
+		server.ASN = &trace.ASNInfo{Number: as}
+	}
+	return server
+}
+
+// askedAll builds a walk that was referred to test. and asked every nameserver
+// it was given, which is the shape --all leaves behind: every one of them
+// queried, so every one of them looked up.
+func askedAll(names []string, servers ...trace.Server) *trace.Trace {
+	return referred(names, true, servers...)
+}
+
+// askedFirst builds the ordinary shape: the first server answered and the rest
+// were listed and never asked, so nothing looked them up. The parent's glue
+// still carries all of their addresses, because glue is what it handed over
+// rather than anything the walk had to go and fetch.
+func askedFirst(names []string, servers ...trace.Server) *trace.Trace {
+	return referred(names, false, servers...)
+}
+
+func referred(names []string, all bool, servers ...trace.Server) *trace.Trace {
+	glue := make(map[string][]netip.Addr, len(names))
+	children := make([]*trace.Step, 0, len(servers))
+	for i, server := range servers {
+		step := &trace.Step{Zone: "test.", Kind: trace.KindSkipped, Server: server}
+		if all || i == 0 {
+			step.Kind = trace.KindAnswer
+			step.Records = []trace.RR{{Name: "www.test.", Type: "A", Data: "192.0.2.1"}}
+		}
+		children = append(children, step)
+		glue[server.Name] = append(glue[server.Name], server.IP)
+	}
+
+	return walk(&trace.Step{
+		Zone: ".", Kind: trace.KindReferral,
+		Server:     trace.Server{Name: "root.test.", IP: netip.MustParseAddr("192.0.2.53")},
+		Delegation: &trace.Delegation{Zone: "test.", NS: names, Glue: glue},
+		Children:   children,
+	})
+}
+
+func TestFindingsSpread(t *testing.T) {
+	both := []string{"a.ns.test.", "b.ns.test."}
+
+	tests := map[string]struct {
+		trace *trace.Trace
+		want  []string
+		avoid []string
+	}{
+		"a zone with one nameserver has nothing to fall back on": {
+			trace: askedAll([]string{"only.ns.test."}, ns("only.ns.test.", "192.0.2.1", 64496)),
+			want:  []string{"test. is delegated to one nameserver, only.ns.test."},
+		},
+		"nameservers that all sit in one AS go down together": {
+			trace: askedAll(both, ns("a.ns.test.", "192.0.2.1", 64496), ns("b.ns.test.", "198.51.100.1", 64496)),
+			want:  []string{"all 2 nameservers of test. are in AS64496", "one operator's outage"},
+		},
+		"nameservers spread over two is what anyone would want, and gets no room": {
+			trace: askedAll(both, ns("a.ns.test.", "192.0.2.1", 64496), ns("b.ns.test.", "198.51.100.1", 64497)),
+			avoid: []string{"AS", "nameserver"},
+		},
+		"an AS lookup that did not answer is a gap, not a concentration": {
+			trace: askedAll(both, ns("a.ns.test.", "192.0.2.1", 64496), ns("b.ns.test.", "198.51.100.1", 0)),
+			avoid: []string{"AS64496", "one operator"},
+		},
+		"a nameserver the walk never asked leaves nothing to say about the set": {
+			trace: askedFirst(both, ns("a.ns.test.", "192.0.2.1", 64496), ns("b.ns.test.", "198.51.100.1", 64496)),
+			avoid: []string{"AS64496", "one operator"},
+		},
+		"a nameserver the delegation named and nothing resolved says nothing either": {
+			trace: askedAll([]string{"a.ns.test.", "b.ns.test.", "far.example."},
+				ns("a.ns.test.", "192.0.2.1", 64496), ns("b.ns.test.", "198.51.100.1", 64496)),
+			avoid: []string{"AS64496", "one operator"},
+		},
+		"a zone reachable only over IPv6 is a zone most clients cannot reach": {
+			trace: askedAll(both, ns("a.ns.test.", "2001:db8::1", 64496), ns("b.ns.test.", "2001:db8:1::1", 64497)),
+			want:  []string{"the delegation of test. carries no IPv4 address for any of its nameservers"},
+		},
+		"the glue answers for the family whether or not the servers were asked": {
+			trace: askedFirst(both, ns("a.ns.test.", "2001:db8::1", 64496), ns("b.ns.test.", "2001:db8:1::1", 0)),
+			want:  []string{"the delegation of test. carries no IPv4 address for any of its nameservers"},
+			avoid: []string{"AS64496"},
+		},
+		"an ordinary IPv4 zone is not told it has IPv4": {
+			trace: askedAll(both, ns("a.ns.test.", "192.0.2.1", 64496), ns("b.ns.test.", "198.51.100.1", 64497)),
+			avoid: []string{"IPv4"},
+		},
+		"the zone that answered is the one read, not the ones above it": {
+			trace: walk(&trace.Step{
+				Zone: ".", Kind: trace.KindReferral, Server: ns("root.test.", "192.0.2.53", 64496),
+				Delegation: &trace.Delegation{Zone: "test.", NS: both},
+				Children: []*trace.Step{
+					{Zone: "test.", Kind: trace.KindAnswer, Server: ns("b.ns.test.", "198.51.100.1", 64497)},
+					{
+						Zone: "test.", Kind: trace.KindAnswer, Server: ns("a.ns.test.", "192.0.2.1", 64496),
+						Delegation: &trace.Delegation{Zone: "sub.test.", NS: []string{"c.ns.test.", "d.ns.test."}},
+						Children: []*trace.Step{
+							{Zone: "sub.test.", Kind: trace.KindAnswer, Server: ns("c.ns.test.", "203.0.113.1", 64498),
+								Records: []trace.RR{{Name: "www.test.", Type: "A", Data: "192.0.2.1"}}},
+							{Zone: "sub.test.", Kind: trace.KindAnswer, Server: ns("d.ns.test.", "203.0.113.2", 64498)},
+						},
+					},
+				},
+			}),
+			// sub.test. answered and its two nameservers share an AS; test. is
+			// spread across two, and is not the zone being read.
+			want:  []string{"all 2 nameservers of sub.test. are in AS64498"},
+			avoid: []string{"of test. are in"},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := said(test.trace)
+			for _, want := range test.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("got\n%s\nwant it to carry %q", got, want)
+				}
+			}
+			for _, avoid := range test.avoid {
+				if strings.Contains(got, avoid) {
+					t.Errorf("got\n%s\nwant nothing in it saying %q", got, avoid)
+				}
 			}
 		})
 	}

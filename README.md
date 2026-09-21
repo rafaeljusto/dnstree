@@ -363,8 +363,8 @@ resolver at all.
 ### Saying what happened
 
 `--explain` writes a handful of sentences under the tree: what the walk came
-to, what the chain of trust made of it, which servers made it harder, and
-whether a recursive resolver agreed.
+to, what the chain of trust made of it, what the zone's nameservers have in
+common, which servers made it harder, and whether a recursive resolver agreed.
 
 ```
 $ dnstree --explain www.example.com
@@ -391,6 +391,27 @@ $ dnstree --dnssec --explain dnssec-failed.org
 There is nothing in them that is not already in the tree. They are for the walk
 you did not draw yourself — a paste from somebody else, a run out of a script —
 and they leave the exit code alone.
+
+What the nameservers of a zone have in common is what it can lose the whole of
+at once, so that is read too — but only as far as the walk went. A walk asks one
+nameserver of a zone and lists the rest, and the origin AS of a nameserver
+nobody asked is never looked up, so it takes `--all` to say anything about the
+set:
+
+```
+$ dnstree --all --explain www.example.com
+...
+✔ answered in 3.3s · resolver in 258ms · 64 queries · 64 servers
+
+· www.example.com. A is 104.20.23.154 and 172.66.147.243, answered by elliott.ns.cloudflare.com. for example.com.
+· all 2 nameservers of example.com. are in AS13335, so one operator's outage takes the whole zone with it
+```
+
+A set that is not all accounted for is not held against itself: a nameserver
+that was never asked, or one the AS lookups did not answer for, leaves the whole
+question unanswered rather than half answered. The address families are read off
+the parent's glue instead, which is whole whether or not the servers were asked,
+so a zone with no IPv4 anywhere in its delegation is named without `--all`.
 
 `--format json` and `--format dot` refuse `--explain`: both are read by a
 program, which has the same facts in fields already.

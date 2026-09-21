@@ -375,8 +375,8 @@ footer a:hover{color:var(--ink)}
       <h2>Or have it say what happened</h2>
       <p class="section-lede">
         <code>--explain</code> writes the walk out in sentences under the tree: what it came
-        to, what the chain of trust made of it, which servers made it harder, and whether a
-        recursive resolver agreed.
+        to, what the chain of trust made of it, what the zone's nameservers have in common,
+        which servers made it harder, and whether a recursive resolver agreed.
       </p>
 
       <div class="term">
@@ -396,7 +396,10 @@ footer a:hover{color:var(--ink)}
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
         Every sentence is read off the trace the walk recorded, so the sentences and the
         tree above them cannot come to disagree, and none of them claims more than the walk
-        checked: a chain this build could not check reads as unchecked, never as broken.
+        checked: a chain this build could not check reads as unchecked, never as broken. It is
+        also why the nameservers of a zone are only weighed against each other where the walk
+        asked all of them — <code>--all</code> does, and a set that is not all accounted for
+        leaves the question unanswered rather than half answered.
         <code>--format json</code> and <code>--format dot</code> refuse the flag — both are
         read by a program, which has the same facts in fields already.
       </p>

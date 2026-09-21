@@ -10,6 +10,7 @@ package explain
 import (
 	"fmt"
 	"iter"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ type Topic int
 const (
 	Outcome  Topic = iota // what the walk came to
 	Trust                 // the chain of trust over it
+	Spread                // what the nameservers of the zone have in common
 	Servers               // the servers that made the walk harder
 	Resolver              // what an ordinary resolution made of the same question
 )
@@ -59,6 +61,7 @@ func Findings(tr *trace.Trace) []Finding {
 
 	findings := []Finding{outcome(tr)}
 	findings = append(findings, trust(tr)...)
+	findings = append(findings, spread(tr)...)
 	findings = append(findings, servers(tr)...)
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
@@ -238,6 +241,142 @@ func zoneOf(step *trace.Step) string {
 		return step.DNSSEC.Zone
 	}
 	return step.Zone
+}
+
+// spread is what the nameservers of the zone the walk ended in have in common,
+// which is what the zone can lose the whole of at once. It is arithmetic over
+// the delegation and the origin AS lookups and nothing else, and it says
+// nothing where those are not all there: a set half of which is unaccounted for
+// cannot be held against itself. Only the zone the walk came to rest in is
+// read — the zones above it are somebody else's to answer for, and how they are
+// spread is not news.
+func spread(tr *trace.Trace) []Finding {
+	zone := ended(tr)
+	delegation := delegated(tr, zone)
+	if delegation == nil || len(delegation.NS) == 0 {
+		return nil
+	}
+
+	// One name is the whole finding, and it is the parent's own word rather
+	// than anything that had to be looked up.
+	if len(delegation.NS) == 1 {
+		return []Finding{{Topic: Spread, Level: Warn, Text: fmt.Sprintf(
+			"%s is delegated to one nameserver, %s, so it has nothing to fall back on",
+			zone, delegation.NS[0])}}
+	}
+
+	var findings []Finding
+	if as, ok := concentrated(asked(tr, zone), delegation.NS); ok {
+		findings = append(findings, Finding{Topic: Spread, Level: Warn, Text: fmt.Sprintf(
+			"all %d nameservers of %s are in AS%d, so one operator's outage takes the whole zone with it",
+			len(delegation.NS), zone, as)})
+	}
+	if glue, whole := glued(delegation); whole && !slices.ContainsFunc(glue, four) {
+		findings = append(findings, Finding{Topic: Spread, Level: Warn, Text: fmt.Sprintf(
+			"the delegation of %s carries no IPv4 address for any of its nameservers, so a resolver without IPv6 has no way in",
+			zone)})
+	}
+	return findings
+}
+
+// ended is the zone the walk came to rest in: the one that answered, or the
+// last it reached when nothing did.
+func ended(tr *trace.Trace) string {
+	if result := tr.Result(); result != nil {
+		return result.Zone
+	}
+
+	var zone string
+	for step := range mainline(tr.Root) {
+		if step.Kind != trace.KindZone {
+			zone = step.Zone
+		}
+	}
+	return zone
+}
+
+// delegated is the referral that pointed the walk at zone, nil for a zone
+// nothing referred it to: the root, or wherever a walk was told to start.
+func delegated(tr *trace.Trace, zone string) *trace.Delegation {
+	for step := range mainline(tr.Root) {
+		if step.Delegation != nil && strings.EqualFold(step.Delegation.Zone, zone) {
+			return step.Delegation
+		}
+	}
+	return nil
+}
+
+// asked is the servers of the zone the walk actually put a question to, by the
+// name the delegation gave them. Only these carry an origin AS: the lookups
+// start as the walk reaches a server, so a nameserver nobody asked is a
+// nameserver nobody looked up, and --all is what asks all of them.
+func asked(tr *trace.Trace, zone string) map[string][]trace.Server {
+	servers := make(map[string][]trace.Server)
+	for step := range mainline(tr.Root) {
+		switch {
+		case step.Kind == trace.KindZone || step.Kind == trace.KindSkipped:
+			continue
+		case !strings.EqualFold(step.Zone, zone) || step.Server.Name == "":
+			continue
+		}
+		name := strings.ToLower(step.Server.Name)
+		servers[name] = append(servers[name], step.Server)
+	}
+	return servers
+}
+
+// concentrated is the one AS every nameserver of the zone sits in. It reports
+// false where they sit in more than one, where one was never asked, and where
+// the lookups did not answer for one that was: an address with no AS against it
+// is a gap rather than a server with no AS, and a set with a gap in it is not
+// one that can be called concentrated.
+func concentrated(asked map[string][]trace.Server, names []string) (uint32, bool) {
+	var (
+		only  uint32
+		found bool
+	)
+	for _, name := range names {
+		servers := asked[strings.ToLower(name)]
+		if len(servers) == 0 {
+			return 0, false
+		}
+		for _, server := range servers {
+			if server.ASN == nil {
+				return 0, false
+			}
+			if found && server.ASN.Number != only {
+				return 0, false
+			}
+			only, found = server.ASN.Number, true
+		}
+	}
+	return only, found
+}
+
+// glued is every address the parent handed out for the zone, and whether it
+// handed one out for every nameserver it named. The glue is the parent's own
+// answer, entire: the steps of a walk are not, since a walk lists only so many
+// of the servers it did not ask before counting the rest.
+func glued(delegation *trace.Delegation) ([]netip.Addr, bool) {
+	given := make(map[string][]netip.Addr, len(delegation.Glue))
+	for name, addresses := range delegation.Glue {
+		given[strings.ToLower(name)] = addresses
+	}
+
+	var addresses []netip.Addr
+	for _, name := range delegation.NS {
+		glue := given[strings.ToLower(name)]
+		if len(glue) == 0 {
+			return nil, false
+		}
+		addresses = append(addresses, glue...)
+	}
+	return addresses, true
+}
+
+// four reports whether an address is one a client with no IPv6 can reach.
+func four(addr netip.Addr) bool {
+	return addr.Is4() || addr.Is4In6()
 }
 
 // servers names the ones that made the walk harder, whether or not it got an
