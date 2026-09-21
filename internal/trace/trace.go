@@ -320,6 +320,32 @@ func walk(step *Step, yield func(*Step) bool) bool {
 	return true
 }
 
+// Mainline walks the steps the resolution itself is made of, parents before
+// children, leaving the asides out: the address of a nameserver looked up on
+// the way is work the walk did, not where it got to.
+func (t *Trace) Mainline() iter.Seq[*Step] {
+	return func(yield func(*Step) bool) {
+		if t.Root != nil {
+			mainline(t.Root, yield)
+		}
+	}
+}
+
+func mainline(step *Step, yield func(*Step) bool) bool {
+	if step.Aside {
+		return true
+	}
+	if !yield(step) {
+		return false
+	}
+	for _, child := range step.Children {
+		if !mainline(child, yield) {
+			return false
+		}
+	}
+	return true
+}
+
 // Result is the step that ended the resolution, or nil when nothing answered.
 // It is the deepest one that is not an aside: an alias is an answer, but the
 // walk it starts carries the answer that was actually asked for.

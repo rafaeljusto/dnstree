@@ -9,7 +9,6 @@ package explain
 
 import (
 	"fmt"
-	"iter"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -139,7 +138,7 @@ func unanswered(tr *trace.Trace, question string) string {
 // a lame answer carry no reason here because the servers that gave them are
 // named further down, and saying it twice reads as two findings.
 func stopped(tr *trace.Trace) (zone, why string) {
-	for step := range mainline(tr.Root) {
+	for step := range tr.Mainline() {
 		switch step.Kind {
 		case trace.KindTimeout, trace.KindLame:
 			zone, why = step.Zone, ""
@@ -224,7 +223,7 @@ func final(tr *trace.Trace) (*trace.DNSSECStatus, string) {
 		status *trace.DNSSECStatus
 		zone   string
 	)
-	for step := range mainline(tr.Root) {
+	for step := range tr.Mainline() {
 		if step.DNSSEC != nil {
 			status, zone = step.DNSSEC, zoneOf(step)
 		}
@@ -287,7 +286,7 @@ func ended(tr *trace.Trace) string {
 	}
 
 	var zone string
-	for step := range mainline(tr.Root) {
+	for step := range tr.Mainline() {
 		if step.Kind != trace.KindZone {
 			zone = step.Zone
 		}
@@ -298,7 +297,7 @@ func ended(tr *trace.Trace) string {
 // delegated is the referral that pointed the walk at zone, nil for a zone
 // nothing referred it to: the root, or wherever a walk was told to start.
 func delegated(tr *trace.Trace, zone string) *trace.Delegation {
-	for step := range mainline(tr.Root) {
+	for step := range tr.Mainline() {
 		if step.Delegation != nil && strings.EqualFold(step.Delegation.Zone, zone) {
 			return step.Delegation
 		}
@@ -312,7 +311,7 @@ func delegated(tr *trace.Trace, zone string) *trace.Delegation {
 // nameserver nobody looked up, and --all is what asks all of them.
 func asked(tr *trace.Trace, zone string) map[string][]trace.Server {
 	servers := make(map[string][]trace.Server)
-	for step := range mainline(tr.Root) {
+	for step := range tr.Mainline() {
 		switch {
 		case step.Kind == trace.KindZone || step.Kind == trace.KindSkipped:
 			continue
@@ -417,36 +416,10 @@ func comparison(tr *trace.Trace) (Finding, bool) {
 		"which a name whose answer is tailored to where it is asked from does honestly, and nothing else should"}, true
 }
 
-// mainline walks the steps the resolution itself is made of, in the order they
-// were made, leaving the asides out.
-func mainline(root *trace.Step) iter.Seq[*trace.Step] {
-	var walk func(*trace.Step, func(*trace.Step) bool) bool
-	walk = func(step *trace.Step, yield func(*trace.Step) bool) bool {
-		if step.Aside {
-			return true
-		}
-		if !yield(step) {
-			return false
-		}
-		for _, child := range step.Children {
-			if !walk(child, yield) {
-				return false
-			}
-		}
-		return true
-	}
-
-	return func(yield func(*trace.Step) bool) {
-		if root != nil {
-			walk(root, yield)
-		}
-	}
-}
-
 // aliases is how many times the walk followed an alias before it answered.
 func aliases(tr *trace.Trace) int {
 	var count int
-	for step := range mainline(tr.Root) {
+	for step := range tr.Mainline() {
 		if step.Kind == trace.KindCNAME {
 			count++
 		}
