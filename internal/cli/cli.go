@@ -56,6 +56,7 @@ path it took. TYPE defaults to A.
   --config FILE           take the defaults from FILE, instead of the usual one
   --no-config             take no defaults from a file at all
   --debug                 report every hop on stderr as it is made
+  --schema                print the JSON Schema of the json format and stop
   --version               print the version and stop
 
 Repeat --root for every server the walk may start from. Each takes an address,
@@ -142,6 +143,11 @@ type Config struct {
 	// ConfigFile is the file the defaults came from, empty when none was read.
 	ConfigFile string
 
+	// Schema asks for the JSON Schema of the json format and nothing else. Like
+	// Version it answers a question about the command rather than resolving a
+	// name, so it needs no name to resolve.
+	Schema bool
+
 	// Version asks for the version and nothing else.
 	Version bool
 }
@@ -206,6 +212,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&configPath, "config", "", "take the defaults from this file")
 	flags.BoolVar(&noConfig, "no-config", false, "take no defaults from a file")
 	flags.BoolVar(&cfg.Debug, "debug", false, "report every hop on stderr")
+	flags.BoolVar(&cfg.Schema, "schema", false, "print the JSON Schema of the json format and stop")
 	flags.BoolVar(&cfg.Version, "version", false, "print the version and stop")
 
 	// The file is parsed first and the command line over it, so a flag typed
@@ -231,7 +238,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if err := flags.Parse(args); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
 	}
-	if cfg.Version {
+	if cfg.Version || cfg.Schema {
 		return &cfg, nil
 	}
 

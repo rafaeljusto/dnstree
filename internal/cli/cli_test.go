@@ -160,6 +160,19 @@ func TestParseRejects(t *testing.T) {
 	}
 }
 
+// TestParseSchema covers a flag that answers a question about the command
+// rather than resolving a name: it needs no name, and the rest of the command
+// line is never reached.
+func TestParseSchema(t *testing.T) {
+	cfg, err := cli.Parse([]string{"--schema"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !cfg.Schema || cfg.Name != "" {
+		t.Errorf("got %+v, want the schema asked for and no name to resolve", *cfg)
+	}
+}
+
 // TestParseUsage covers the help itself, which is the only documentation a
 // reader has in front of them at the time.
 func TestParseUsage(t *testing.T) {
@@ -168,7 +181,7 @@ func TestParseUsage(t *testing.T) {
 		t.Fatalf("got error %v, want a usage problem", err)
 	}
 
-	for _, want := range []string{"usage: dnstree", "--dnssec", "--format", "--explain", "Exit codes"} {
+	for _, want := range []string{"usage: dnstree", "--dnssec", "--format", "--explain", "--schema", "Exit codes"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got usage without %q:\n%s", want, out.String())
 		}

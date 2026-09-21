@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rafaeljusto.github.io/dnstree/trace.schema.json",
+  "title": "dnstree trace",
+  "description": "One resolution walked from the root servers down, as dnstree --format json writes it. schema_version is raised whenever a field changes meaning or goes away, never for one that is merely added, so no object here forbids properties it does not name: a reader that understands a version keeps understanding it. A field that carries nothing is left out rather than written empty, so absence is the ordinary case and not an error.",
+  "type": "object",
+  "required": ["schema_version", "question", "elapsed_ms"],
+  "properties": {
+    "schema_version": {
+      "description": "The version of this document's shape. It is written as a single value rather than a lower bound, because this schema describes that one version: a document of a later version has had a field change meaning or go away, and is not a document this schema can be read against.",
+      "type": "integer",
+      "const": 2
+    },
+    "question": { "$ref": "#/$defs/question" },
+    "elapsed_ms": {
+      "description": "How long the whole walk took. A walk from the root keeps no cache and takes every step itself, so it is the slow way round by design; resolver.elapsed_ms is what it means anything against.",
+      "type": "number",
+      "minimum": 0
+    },
+    "resolver": { "$ref": "#/$defs/resolver" },
+    "root": {
+      "description": "The zone the walk started from. It carries no query of its own: its children are the servers that were asked. Absent when nothing was walked.",
+      "$ref": "#/$defs/step"
+    },
+    "warnings": {
+      "description": "What the resolver could not do, in the order it found out.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "question": {
+      "description": "What the resolution set out to answer.",
+      "type": "object",
+      "required": ["name", "type", "class"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "class": { "type": "string" }
+      }
+    },
+    "resolver": {
+      "description": "The same question put to one recursive server. It is metadata: nothing about the walk depends on it, and a server that would not answer leaves error rather than failing the resolution.",
+      "type": "object",
+      "required": ["elapsed_ms"],
+      "properties": {
+        "server": { "$ref": "#/$defs/server" },
+        "elapsed_ms": { "type": "number", "minimum": 0 },
+        "rcode": { "type": "string" },
+        "error": {
+          "description": "Why the server could not be asked at all.",
+          "type": "string"
+        },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/record" }
+        },
+        "extended": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/extended_error" }
+        },
+        "subnet": { "$ref": "#/$defs/subnet" },
+        "match": {
+          "description": "How its answer stands against the one the walk found, absent where there was nothing to compare. The two are allowed to differ honestly: a name tailored to where it is asked from will, since the walk and the resolver are rarely in the same place.",
+          "type": "string",
+          "enum": ["same", "differs"]
+        }
+      }
+    },
+    "step": {
+      "description": "One query and the queries it led to.",
+      "type": "object",
+      "required": ["zone", "kind"],
+      "properties": {
+        "zone": {
+          "description": "The zone the queried server is believed to serve.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What the hop turned out to be. The values so far are zone (the synthetic node a trace starts from), referral, answer, cname, nodata (the name exists, the type does not), nxdomain, lame (not serving the zone it was asked about), filtered (an answer somebody decided rather than served, as the server's own extended error says), timeout, error and skipped (known, never queried). It is not written here as a closed set: a kind added later is an addition, and a reader should treat one it does not know as a hop it cannot interpret rather than as a broken document.",
+          "type": "string"
+        },
+        "server": { "$ref": "#/$defs/server" },
+        "proto": {
+          "description": "What the query was carried over: udp, tcp, dot or doh.",
+          "type": "string"
+        },
+        "rtt_ms": {
+          "description": "What the whole hop cost, retries included. Absent where the hop took no measurable time.",
+          "type": "number",
+          "minimum": 0
+        },
+        "rcode": { "type": "string" },
+        "flags": { "$ref": "#/$defs/flags" },
+        "records": {
+          "description": "What the server returned, where that is the point of the step.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/record" }
+        },
+        "notes": {
+          "description": "What it took to get the answer: a retry over TCP, a query sent again without EDNS0. They belong to this hop rather than to a new one.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "extended": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/extended_error" }
+        },
+        "subnet": { "$ref": "#/$defs/subnet" },
+        "aside": {
+          "description": "Set on work that answers a different question: the address of a nameserver, or the NS set of a zone. The resolution's own answer is never inside one. Following an alias is not an aside: the target is what the question meant all along.",
+          "type": "boolean"
+        },
+        "delegation": { "$ref": "#/$defs/delegation" },
+        "dnssec": { "$ref": "#/$defs/dnssec" },
+        "error": { "type": "string" },
+        "children": {
+          "description": "The hops this one led to, in the order they were made.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/step" }
+        }
+      }
+    },
+    "server": {
+      "description": "The nameserver a step queried.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name the delegation gave it, absent where only the address is known.",
+          "type": "string"
+        },
+        "ip": { "type": "string" },
+        "port": {
+          "description": "Where the server was asked. A step of a finished trace always names it.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "asn": { "$ref": "#/$defs/asn" }
+      }
+    },
+    "asn": {
+      "description": "The origin AS of a server address, looked up behind the walk. A prefix announced by more than one AS keeps the first of them. The lookups are best effort and never fail a resolution, so this is absent whenever they could not get through or ran out of time.",
+      "type": "object",
+      "required": ["number"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 0 },
+        "prefix": { "type": "string" },
+        "country_code": { "type": "string" },
+        "registry": { "type": "string" },
+        "allocated": {
+          "description": "The date the prefix was handed out.",
+          "type": "string"
+        }
+      }
+    },
+    "flags": {
+      "description": "The header bits worth showing on a hop. Only a bit that is set is written, so reading this is a question of presence: aa (authoritative answer), tc (truncated, the answer did not fit), ad (authenticated data), do (DNSSEC records were asked for) and edns (the server answered with EDNS0).",
+      "type": "object",
+      "properties": {
+        "aa": { "type": "boolean" },
+        "tc": { "type": "boolean" },
+        "ad": { "type": "boolean" },
+        "do": { "type": "boolean" },
+        "edns": { "type": "boolean" }
+      }
+    },
+    "record": {
+      "description": "One record, flattened to text.",
+      "type": "object",
+      "required": ["name", "ttl", "type", "data"],
+      "properties": {
+        "name": { "type": "string" },
+        "ttl": { "type": "integer", "minimum": 0 },
+        "type": { "type": "string" },
+        "data": { "type": "string" },
+        "service": { "$ref": "#/$defs/service" }
+      }
+    },
+    "service": {
+      "description": "An HTTPS or SVCB record decoded. data carries every parameter as text; this is the part something reading the output can branch on.",
+      "type": "object",
+      "required": ["priority"],
+      "properties": {
+        "priority": { "type": "integer", "minimum": 0 },
+        "target": { "type": "string" },
+        "alpn": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ech": {
+          "description": "Whether the record publishes an encrypted client hello configuration. A client that finds one encrypts the name it is about to ask for, which is worth something only if the record reached it unforged.",
+          "type": "boolean"
+        }
+      }
+    },
+    "delegation": {
+      "description": "The zone cut a referral pointed at.",
+      "type": "object",
+      "required": ["zone"],
+      "properties": {
+        "zone": { "type": "string" },
+        "ns": {
+          "description": "The nameserver names, in the order they were received.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "glue": {
+          "description": "The addresses from the additional section that this zone was allowed to hand out, meaning the in-bailiwick ones. Bailiwick is judged against the zone the answering server serves, which is what lets the root hand out gTLD server addresses.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "glueless": {
+          "description": "Nameservers inside the delegated zone that came with no glue. Nothing can resolve them, so the delegation is broken.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "out_of_bailiwick": {
+          "description": "Nameservers named outside the delegated zone that came with no address the parent was entitled to give. They are found with a walk of their own instead.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ds_present": {
+          "description": "Whether the parent signed the delegation.",
+          "type": "boolean"
+        }
+      }
+    },
+    "dnssec": {
+      "description": "How far the chain of trust got at one zone cut. A cut is judged from above, so this sits on the step that pointed at the zone rather than on the zone itself: on a referral it is the verdict of the zone in that referral's delegation.",
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "state": {
+          "description": "secure is every link from the anchor down verified; insecure is a parent that proved it publishes no DS; bogus is a chain that breaks; indeterminate is a chain this build could not check, which is never the same as finding it broken.",
+          "type": "string",
+          "enum": ["secure", "insecure", "bogus", "indeterminate"]
+        },
+        "reason": { "type": "string" },
+        "key_tags": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "algorithm": {
+          "description": "The signing algorithm, so that an algorithm nothing here supports reads differently from a signature that genuinely does not verify.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "The DS digest type.",
+          "type": "string"
+        }
+      }
+    },
+    "extended_error": {
+      "description": "What a server said about its own answer, in the codes of RFC 8914. An rcode says what happened; this says why, and it is the only thing in a reply that tells an answer withheld apart from an answer that is not there.",
+      "type": "object",
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "integer", "minimum": 0 },
+        "reason": {
+          "description": "The registered name of the code, absent for one this build does not know.",
+          "type": "string"
+        },
+        "text": {
+          "description": "EXTRA-TEXT, whatever the server chose to add in words. It is the server's own copy and nothing here constrains it.",
+          "type": "string"
+        },
+        "withheld": {
+          "description": "Set where the code says somebody decided this answer rather than served it, so that a reader need not carry the list of which codes those are.",
+          "type": "boolean"
+        }
+      }
+    },
+    "subnet": {
+      "description": "The client subnet of RFC 7871 as a server handed it back. A server that answers with one has taken it into account.",
+      "type": "object",
+      "required": ["prefix", "scope"],
+      "properties": {
+        "prefix": { "type": "string" },
+        "scope": {
+          "description": "How much of the prefix the server actually used. Zero is a server saying this answer is the same for everybody.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        }
+      }
+    }
+  }
+}

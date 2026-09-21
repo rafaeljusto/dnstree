@@ -437,3 +437,26 @@ func TestRunExplain(t *testing.T) {
 		}
 	})
 }
+
+// TestRunSchema covers --schema. It answers a question about the command
+// rather than resolving a name, so it needs neither a name nor anything to
+// resolve it against.
+func TestRunSchema(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), []string{"--schema"}, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d: %s", code, exitAnswer, stderr.String())
+	}
+
+	var document map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
+		t.Fatalf("the schema is not JSON: %v\n%s", err, stdout.String())
+	}
+	if _, ok := document["$schema"]; !ok {
+		t.Errorf("got %v, want it to name the draft it is written in", document)
+	}
+
+	properties, _ := document["properties"].(map[string]any)
+	if properties["schema_version"] == nil {
+		t.Errorf("got %v, want it to describe the document --format json writes", document)
+	}
+}

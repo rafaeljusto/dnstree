@@ -233,6 +233,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"the name to resolve":                 {file: "example.com\n"},
 		"a file that says which file to read": {file: "config = elsewhere\n"},
 		"a file that asks for the version":    {file: "version\n"},
+		"a file that asks for the schema":     {file: "schema\n"},
 	}
 
 	for name, test := range tests {

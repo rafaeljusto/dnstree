@@ -507,6 +507,17 @@ footer a:hover{color:var(--ink)}
         </video>
         <figcaption><code>--format emoji --live</code>: the same walk, arriving.</figcaption>
       </figure>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        <code>--schema</code> prints the JSON Schema of that document and stops, so whatever
+        reads the output can be held against the shape of it — and told what a field means —
+        without reading the source. It describes the one version the binary it came out of
+        writes: <code>schema_version</code> is raised whenever a field changes meaning or goes
+        away, never for one that is merely added, so nothing in the schema forbids properties it
+        does not name. It is served from here too, at
+        <a href="trace.schema.json">trace.schema.json</a>, which is the address its
+        <code>$id</code> names.
+      </p>
     </section>
 
     <section id="install">

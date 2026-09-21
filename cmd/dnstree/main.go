@@ -66,6 +66,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "dnstree "+version)
 		return exitAnswer
 	}
+	if cfg.Schema {
+		if err := jsonout.WriteSchema(stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		return exitAnswer
+	}
 
 	// The lookups run behind the walk: each server is asked about the moment
 	// the walk reaches it, so the tree is not held up by metadata at the end.

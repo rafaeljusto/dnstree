@@ -22,7 +22,11 @@ That is what CI runs. Two things it does not:
   showed up on the second run.
 
 Renderer goldens are rewritten with `go test ./internal/render/... -update`.
-Read the diff before keeping it: those files are the user-visible output.
+Read the diff before keeping it: those files are the user-visible output. The
+same command writes `docs/trace.schema.json`, the copy of the JSON Schema the
+pages workflow serves: that workflow uploads what is committed and builds
+nothing, so the copy is in the tree and a test fails when it and `--schema`
+have drifted apart.
 
 ## Releasing
 

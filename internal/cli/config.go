@@ -137,8 +137,8 @@ func defaults(flags *flag.FlagSet, file configFile) ([]string, bool, error) {
 		case "config", "no-config":
 			return nil, false, fmt.Errorf("%w: %s: --%s says which file to read, so it cannot be read from one",
 				ErrUsage, where, name)
-		case "version":
-			return nil, false, fmt.Errorf("%w: %s: --version is asked for, not set", ErrUsage, where)
+		case "version", "schema":
+			return nil, false, fmt.Errorf("%w: %s: --%s is asked for, not set", ErrUsage, where, name)
 		}
 
 		switch f := flags.Lookup(name); {

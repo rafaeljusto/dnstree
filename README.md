@@ -112,6 +112,7 @@ dnstree [flags] NAME [TYPE]
 | `--tls-ca`, `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
 | `--config`, `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
+| `--schema` | print the JSON Schema of `--format json` and stop |
 | `--version` | print the version and stop |
 
 ### Defaults
@@ -499,6 +500,26 @@ dnstree --format dot www.example.com | dot -Tsvg > trace.svg
 ```
 
 ![dnstree dot format example](docs/demo-dot.svg "dnstree dot format example")
+
+`--schema` prints the JSON Schema of that document and stops, so whatever reads
+the output can be held against the shape of it — and told what a field means —
+without reading the source:
+
+```
+dnstree --schema > trace.schema.json
+dnstree --format json www.example.com | check-jsonschema --schemafile trace.schema.json -
+```
+
+It describes one version of the shape, the one the binary it came out of
+writes. `schema_version` is raised whenever a field changes meaning or goes
+away, never for one that is merely added, so nothing in the schema forbids
+properties it does not name: a reader that understands a version keeps
+understanding it.
+
+The same schema is served at
+[rafaeljusto.github.io/dnstree/trace.schema.json](https://rafaeljusto.github.io/dnstree/trace.schema.json),
+which is the address its `$id` names, so a validator can be pointed at it with
+no binary to hand.
 
 ## How it walks
 
