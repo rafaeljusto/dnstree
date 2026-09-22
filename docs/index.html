@@ -245,6 +245,7 @@ footer a:hover{color:var(--ink)}
       <a href="#explain" data-optional>Explain</a>
       <a href="#diff" data-optional>Diff</a>
       <a href="#formats" data-optional>Formats</a>
+      <a href="#scripts" data-optional>Scripts</a>
       <a href="#install">Install</a>
       <a href="https://github.com/rafaeljusto/dnstree">GitHub</a>
     </nav>
@@ -287,9 +288,9 @@ footer a:hover{color:var(--ink)}
 
       <div class="dissect">
         <div class="dissect-inner">
-          <pre><span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS19836</span>  <span class="rtt">12ms</span>  <span class="ok">NOERROR</span>  <span class="note">referral → com.</span></pre>
-          <pre class="annot"><span class="guide" aria-hidden="true">│                   │           │        │     │</span>
-<span class="guide" aria-hidden="true">│                   │           │        │     └─ </span><b>what it said</b> — a referral one zone down
+          <pre><span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS19836</span>  <span class="rtt">241ms</span>  <span class="ok">NOERROR</span>  <span class="note">referral → com.</span></pre>
+          <pre class="annot"><span class="guide" aria-hidden="true">│                   │           │        │      │</span>
+<span class="guide" aria-hidden="true">│                   │           │        │      └─ </span><b>what it said</b> — a referral one zone down
 <span class="guide" aria-hidden="true">│                   │           │        └─ </span><b>what it cost</b> — the whole hop, retries included
 <span class="guide" aria-hidden="true">│                   │           └─ </span><b>whose network</b> — origin AS, looked up after the walk
 <span class="guide" aria-hidden="true">│                   └─ </span><b>at which address</b> — glue, only from a server entitled to give it
@@ -298,7 +299,7 @@ footer a:hover{color:var(--ink)}
             <li><b>a.root-servers.net.</b> — who was asked, named by the delegation</li>
             <li><b>198.41.0.4</b> — glue, taken only from a server entitled to give it</li>
             <li><b>AS19836</b> — whose network, looked up after the walk</li>
-            <li><b>12ms</b> — what the hop cost, retries included</li>
+            <li><b>241ms</b> — what the hop cost, retries included</li>
             <li><b>NOERROR · referral → com.</b> — what it said, and what that meant</li>
           </ul>
         </div>
@@ -310,6 +311,15 @@ footer a:hover{color:var(--ink)}
         and the identifier a server publishes for itself (RFC&nbsp;5001) is the only
         thing in a reply that says which of them answered — so two hops that look like
         the same server may be a continent apart.
+      </p>
+
+      <p class="section-lede" style="margin-top:1.4rem">
+        How the question travels is a separate matter from what it asks.
+        <code>--tcp</code>, <code>--dot</code> and <code>--doh</code> carry every hop over
+        TCP, or encrypted over TLS or HTTPS, all the way down from the root servers — and
+        not every authoritative server will take one, so <code>--fallback</code> lets plain
+        DNS pick up a hop the chosen transport could not reach rather than leaving a gap
+        where the walk should be.
       </p>
     </section>
 
@@ -628,6 +638,46 @@ footer a:hover{color:var(--ink)}
       </p>
     </section>
 
+    <section id="scripts">
+      <h2>For a screen, and for a script</h2>
+      <p class="section-lede">
+        Everything above is one walk, read once. Three things take it further: the same
+        question put from several places at the same moment, the same question asked
+        again until something moves, and a walk read by something that is not a person.
+      </p>
+
+      <h3 style="margin-top:2.2rem">Ask from several places at once</h3>
+      <p class="section-lede">Repeat <code>--resolver</code> and the question goes to all of
+      them at the same moment. Two that answer differently are two views of one name, and
+      which of them somebody gets depends on nothing but which resolver they use; the summary
+      says how far apart they were and how many disagreed. With <code>--subnet</code> beside
+      it, that is most of "does this name look the same from where my users are".</p>
+
+      <h3 style="margin-top:2.2rem">Leave it running</h3>
+      <p class="section-lede"><code>--watch 30s</code> draws the tree once and then keeps
+      walking the same question, saying only what has changed since the walk before it. A
+      round that finds nothing changed says nothing: it is meant to sit in the corner of a
+      screen through a change window. With <code>--expect</code> it stops as soon as what was
+      asked for holds, which is how to wait for a change to arrive rather than to keep asking
+      whether it has.</p>
+
+      <h3 style="margin-top:2.2rem">What it tells a script</h3>
+      <p class="section-lede"><code>--expect</code> is how a script asks rather than reads:
+      give it an address, a name, or one of <code>secure</code>, <code>bogus</code>,
+      <code>nxdomain</code> and the rest, repeat it for everything that has to hold, and a
+      walk that does not meet it says so on stderr and exits 4. The walk's own verdict wins
+      where there is one, so a broken chain of trust still exits 3.</p>
+      <table class="exits">
+        <tbody>
+          <tr><td>0</td><td>something answered</td></tr>
+          <tr><td>1</td><td>the command line, or the question, could not be read</td></tr>
+          <tr><td>2</td><td>the walk ended without an answer</td></tr>
+          <tr><td>3</td><td>the chain of trust is broken</td></tr>
+          <tr><td>4</td><td>an expectation given with <code>--expect</code> was not met</td></tr>
+        </tbody>
+      </table>
+    </section>
+
     <section id="install">
       <h2>Get it</h2>
       <p class="section-lede">One static binary, one dependency, no runtime to install.</p>
@@ -705,37 +755,6 @@ timeout = 3s</pre>
       value.
       <a href="https://github.com/rafaeljusto/dnstree/blob/main/dnstreerc.example">dnstreerc.example</a>
       carries every setting worth making, annotated and commented out.</p>
-
-      <h3 style="margin-top:2.2rem">Ask from several places at once</h3>
-      <p class="section-lede">Repeat <code>--resolver</code> and the question goes to all of
-      them at the same moment. Two that answer differently are two views of one name, and
-      which of them somebody gets depends on nothing but which resolver they use; the summary
-      says how far apart they were and how many disagreed. With <code>--subnet</code> beside
-      it, that is most of "does this name look the same from where my users are".</p>
-
-      <h3 style="margin-top:2.2rem">Leave it running</h3>
-      <p class="section-lede"><code>--watch 30s</code> draws the tree once and then keeps
-      walking the same question, saying only what has changed since the walk before it. A
-      round that finds nothing changed says nothing: it is meant to sit in the corner of a
-      screen through a change window. With <code>--expect</code> it stops as soon as what was
-      asked for holds, which is how to wait for a change to arrive rather than to keep asking
-      whether it has.</p>
-
-      <h3 style="margin-top:2.2rem">What it tells a script</h3>
-      <p class="section-lede"><code>--expect</code> is how a script asks rather than reads:
-      give it an address, a name, or one of <code>secure</code>, <code>bogus</code>,
-      <code>nxdomain</code> and the rest, repeat it for everything that has to hold, and a
-      walk that does not meet it says so on stderr and exits 4. The walk's own verdict wins
-      where there is one, so a broken chain of trust still exits 3.</p>
-      <table class="exits">
-        <tbody>
-          <tr><td>0</td><td>something answered</td></tr>
-          <tr><td>1</td><td>the command line, or the question, could not be read</td></tr>
-          <tr><td>2</td><td>the walk ended without an answer</td></tr>
-          <tr><td>3</td><td>the chain of trust is broken</td></tr>
-          <tr><td>4</td><td>an expectation given with <code>--expect</code> was not met</td></tr>
-        </tbody>
-      </table>
     </section>
   </main>
 
