@@ -160,10 +160,20 @@ type Step struct {
 	Zone   string
 	Server Server
 	Proto  string // udp, tcp, dot or doh
-	RTT    time.Duration
-	Rcode  string
-	Flags  Flags
-	Kind   StepKind
+
+	// Asked is the question this hop put, which is not always the question the
+	// resolution set out to answer: a walk asks for the keys of a zone, the DS
+	// of a cut, the NS set a zone holds of itself, the serial each of its
+	// servers is on, and the address of a nameserver named somewhere else. The
+	// zero value is a step that asked nothing — a server listed and never
+	// queried, or a note about why the walk stopped.
+	//
+	// The class is the resolution's own and is not repeated here.
+	Asked Question
+	RTT   time.Duration
+	Rcode string
+	Flags Flags
+	Kind  StepKind
 
 	// Records is what the server returned, when that is the point of the step.
 	Records []RR

@@ -27,6 +27,7 @@ func resolution() *trace.Trace {
 				Registry: "arin", Allocated: "2010-03-30",
 			},
 		},
+		Asked:   trace.Question{Name: "www.example.com.", Type: "A"},
 		Proto:   "udp",
 		RTT:     9*time.Millisecond + 400*time.Microsecond,
 		Rcode:   "NOERROR",
@@ -43,6 +44,7 @@ func resolution() *trace.Trace {
 			Flags:  trace.Flags{AA: true},
 			Kind:   trace.KindAnswer,
 			Aside:  true,
+			Asked:  trace.Question{Name: "example.com.", Type: "DNSKEY"},
 			Notes:  []string{"DNSKEY of example.com."},
 		}},
 	}
@@ -54,6 +56,7 @@ func resolution() *trace.Trace {
 	tld := &trace.Step{
 		Zone:   "com.",
 		Server: trace.Server{Name: "a.gtld-servers.net.", IP: netip.MustParseAddr("192.5.6.30"), Port: 53},
+		Asked:  trace.Question{Name: "www.example.com.", Type: "A"},
 		Proto:  "tcp",
 		RTT:    18 * time.Millisecond,
 		Rcode:  "NOERROR",

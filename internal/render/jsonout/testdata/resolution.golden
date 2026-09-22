@@ -65,6 +65,10 @@
               "ip": "192.5.6.30",
               "port": 53
             },
+            "asked": {
+              "name": "www.example.com.",
+              "type": "A"
+            },
             "proto": "tcp",
             "rtt_ms": 18,
             "rcode": "NOERROR",
@@ -109,6 +113,10 @@
                     "allocated": "2010-03-30"
                   }
                 },
+                "asked": {
+                  "name": "www.example.com.",
+                  "type": "A"
+                },
                 "proto": "udp",
                 "rtt_ms": 9.4,
                 "rcode": "NOERROR",
@@ -140,6 +148,10 @@
                       "name": "a.iana-servers.net.",
                       "ip": "199.43.135.53",
                       "port": 53
+                    },
+                    "asked": {
+                      "name": "example.com.",
+                      "type": "DNSKEY"
                     },
                     "proto": "udp",
                     "rtt_ms": 8,

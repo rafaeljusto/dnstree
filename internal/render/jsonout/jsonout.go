@@ -77,6 +77,13 @@ type subnet struct {
 	Scope  uint8  `json:"scope"`
 }
 
+// asked is the question one hop put. The class is the document's own, so it is
+// not written out once per step.
+type asked struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 type question struct {
 	Name  string `json:"name"`
 	Type  string `json:"type"`
@@ -87,6 +94,7 @@ type step struct {
 	Zone       string          `json:"zone"`
 	Kind       string          `json:"kind"`
 	Server     *server         `json:"server,omitempty"`
+	Asked      *asked          `json:"asked,omitempty"`
 	Proto      string          `json:"proto,omitempty"`
 	RTTMS      float64         `json:"rtt_ms,omitempty"`
 	Rcode      string          `json:"rcode,omitempty"`
@@ -179,6 +187,7 @@ func convert(from *trace.Step) *step {
 		Zone:       from.Zone,
 		Kind:       string(from.Kind),
 		Server:     convertServer(from.Server),
+		Asked:      convertAsked(from.Asked),
 		Proto:      from.Proto,
 		RTTMS:      milliseconds(from.RTT),
 		Rcode:      from.Rcode,
@@ -251,6 +260,13 @@ func convertSubnet(from *trace.Subnet) *subnet {
 		return nil
 	}
 	return &subnet{Prefix: from.Prefix.String(), Scope: from.Scope}
+}
+
+func convertAsked(from trace.Question) *asked {
+	if from.Name == "" && from.Type == "" {
+		return nil
+	}
+	return &asked{Name: from.Name, Type: from.Type}
 }
 
 func convertServer(from trace.Server) *server {

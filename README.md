@@ -810,7 +810,11 @@ address to be opened by hand.
 
 `--format ascii` swaps the branches for `` |-- `` and drops the colour, for
 pasting into documents. `--format json` writes a versioned document with
-durations in milliseconds. `--format dot` writes a Graphviz graph, one node per
+durations in milliseconds, every hop carrying the question it put: a walk asks
+for a good deal more than the name it was given — the keys of each zone, the NS
+set a zone holds of itself, the serial each of its servers is on — and `asked`
+is how a program tells those apart from the resolution itself, where a person
+reads the note beside them. `--format dot` writes a Graphviz graph, one node per
 query, clustered by zone:
 
 ```

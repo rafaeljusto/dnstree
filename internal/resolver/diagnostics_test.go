@@ -1,7 +1,9 @@
 package resolver_test
 
 import (
+	"maps"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
@@ -485,5 +487,49 @@ func TestAnswerCarriesNoSOA(t *testing.T) {
 	}
 	if result := tr.Result(); result == nil || result.SOA != nil {
 		t.Errorf("got %+v, want an answer with no SOA against it", result)
+	}
+}
+
+// TestEveryHopSaysWhatItAsked covers the one thing that told an aside from the
+// resolution itself only in prose. A walk asks for a good deal more than the
+// question it was given — the keys of each zone, the NS set a zone holds of
+// itself, the serial every one of its servers is on — and a reader that is not
+// a person has to be able to tell which hop was which.
+func TestEveryHopSaysWhatItAsked(t *testing.T) {
+	h, cfg := service(t, true, fakens.Behaviour{})
+	cfg.CheckNS, cfg.Serial = true, true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	asked := make(map[string]bool)
+	for step := range tr.Steps() {
+		// A server that was listed and never queried asked nothing, and neither
+		// did a node that stands for a zone or a note about why a walk stopped.
+		if step.Kind == trace.KindSkipped || step.Kind == trace.KindZone || !step.Server.IP.IsValid() {
+			if step.Asked != (trace.Question{}) {
+				t.Errorf("got %+v on a hop that put no question: %s %s", step.Asked, step.Zone, step.Kind)
+			}
+			continue
+		}
+		if step.Asked.Name == "" || step.Asked.Type == "" {
+			t.Errorf("got a queried hop that does not say what it asked: %s %s", step.Zone, step.Kind)
+			continue
+		}
+		asked[step.Asked.Name+" "+step.Asked.Type] = true
+	}
+
+	for _, want := range []string{
+		"www.test. A",  // the question the walk was given
+		". DNSKEY",     // the keys of the root, to enter it
+		"test. DNSKEY", // and of the zone that answered
+		"test. NS",     // what the zone says its own nameservers are
+		"test. SOA",    // which copy of the zone each server holds
+	} {
+		if !asked[want] {
+			t.Errorf("got %v, want one of them to have asked %q", slices.Sorted(maps.Keys(asked)), want)
+		}
 	}
 }

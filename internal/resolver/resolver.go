@@ -559,7 +559,12 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 			defer done()
 		}
 	}
-	step := &trace.Step{Zone: zone, Server: server, Proto: r.cfg.Transport.Proto()}
+	step := &trace.Step{
+		Zone:   zone,
+		Server: server,
+		Proto:  r.cfg.Transport.Proto(),
+		Asked:  trace.Question{Name: qname, Type: dnsutil.TypeToString(qtype)},
+	}
 
 	udpSize := r.cfg.UDPSize
 	resp, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize, port)

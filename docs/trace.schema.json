@@ -85,6 +85,7 @@
           "type": "string"
         },
         "server": { "$ref": "#/$defs/server" },
+        "asked": { "$ref": "#/$defs/asked" },
         "proto": {
           "description": "What the query was carried over: udp, tcp, dot or doh.",
           "type": "string"
@@ -201,6 +202,15 @@
           "description": "Whether the record publishes an encrypted client hello configuration. A client that finds one encrypts the name it is about to ask for, which is worth something only if the record reached it unforged.",
           "type": "boolean"
         }
+      }
+    },
+    "asked": {
+      "description": "The question one hop put, which is not always the question the resolution set out to answer: a walk asks a zone for its keys, a parent for the DS of a cut, a zone for the NS set it holds of itself, each of its servers for the serial it is on, and the address of a nameserver named somewhere else. It is how a reader tells those apart from the hops the resolution itself is made of, without reading the notes a person reads. Absent on a hop that asked nothing: a server listed and never queried, or a note about why the walk stopped. The class is the document's own and is not repeated here.",
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" }
       }
     },
     "soa": {
