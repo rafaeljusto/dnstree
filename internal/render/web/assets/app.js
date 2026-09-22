@@ -664,7 +664,9 @@ document.getElementById("legend").append(...Object.entries(KINDS).map(([name, ki
 
 let current = "tree";
 const show = (name, { keep = false } = {}) => {
-  if (!views[name] || name === current) return;
+  // The name comes out of the address bar, so it is matched against the keys the
+  // page actually has: anything inherited, "__proto__" above all, is not a view.
+  if (!Object.hasOwn(views, name) || name === current) return;
   const swap = () => {
     for (const [key, view] of Object.entries(views)) view.hidden = key !== name;
     for (const tab of document.querySelectorAll('[role="tab"]')) {
