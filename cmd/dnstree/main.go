@@ -95,10 +95,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		lookups = asn.New(asnLookup(cfg), log)
 	}
 
-	// The comparison runs beside the walk rather than after it: a recursive
-	// server answers in the time one hop of the walk takes, so waiting for it
-	// separately would be time spent on metadata.
-	timed := compare(ctx, cfg, log)
+	if cfg.Watch > 0 {
+		return watch(ctx, cfg, log, lookups, stdout, stderr)
+	}
 
 	// The live drawing owns the screen until it is cleared, and the finished
 	// tree is then written exactly where it stood.
@@ -108,21 +107,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		defer live.Clear()
 	}
 
-	tr, err := resolve(ctx, cfg, log, lookups, live)
+	tr, err := made(ctx, cfg, log, lookups, live)
 	if err != nil {
 		live.Clear()
 		fmt.Fprintln(stderr, err)
 		return exitUsage
-	}
-
-	if lookups != nil {
-		grace, cancel := context.WithTimeout(ctx, asnGrace)
-		defer cancel()
-		lookups.Annotate(grace, tr)
-	}
-	if timed != nil {
-		tr.Resolver = <-timed
-		recursive.Compare(tr)
 	}
 
 	// The last frame stays up until there is something to put in its place.
@@ -182,6 +171,115 @@ func outcome(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) int {
 		return exitExpect
 	}
 	return code
+}
+
+// made is one whole walk: the resolution, the metadata that runs beside it, and
+// the question put to a recursive server for comparison. A run makes one of
+// these; --watch makes one after another.
+func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
+	lookups *asn.Resolver, live *tree.Live) (*trace.Trace, error) {
+
+	// The comparison runs beside the walk rather than after it: a recursive
+	// server answers in the time one hop of the walk takes, so waiting for it
+	// separately would be time spent on metadata.
+	timed := compare(ctx, cfg, log)
+
+	tr, err := resolve(ctx, cfg, log, lookups, live)
+	if err != nil {
+		return nil, err
+	}
+
+	if lookups != nil {
+		grace, cancel := context.WithTimeout(ctx, asnGrace)
+		defer cancel()
+		lookups.Annotate(grace, tr)
+	}
+	if timed != nil {
+		tr.Resolver = <-timed
+		recursive.Compare(tr)
+	}
+	return tr, nil
+}
+
+// watch draws the walk once and then keeps making it, saying only what has
+// changed since the round before. A round that found nothing changed says
+// nothing at all: the whole point of leaving it running is that it stays quiet
+// until it does not.
+//
+// It ends when it is interrupted, or when everything --expect asked for holds,
+// and it answers with whatever the last walk it made earned.
+func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
+	lookups *asn.Resolver, stdout, stderr io.Writer) int {
+
+	var (
+		previous *history.Walk
+		last     *trace.Trace // the last walk that finished of its own accord
+	)
+	for round := 0; ; round++ {
+		// A drawing cannot be cleared twice, so each round has one of its own:
+		// the frames are scratch either way, and what is left behind is the
+		// tree of the first round and the lines under it.
+		var live *tree.Live
+		if cfg.Live {
+			live = tree.NewLive(stdout, treeOptions(cfg))
+		}
+
+		tr, err := made(ctx, cfg, log, lookups, live)
+		live.Clear()
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+
+		// An interrupt part way through a walk is somebody stopping the watch,
+		// not a finding about the name. What that half-made walk came to is
+		// nothing to answer with, so the last one that finished on its own is;
+		// where none has, nothing was ever established and the walk that was
+		// cut short says so.
+		if ctx.Err() != nil {
+			if last != nil {
+				return outcome(cfg, last, stderr)
+			}
+			return outcome(cfg, tr, stderr)
+		}
+		last = tr
+
+		when := time.Now()
+		current := history.Of(tr, when)
+
+		if round == 0 {
+			// The first round is an ordinary run, --diff and all: it is the
+			// tree everything after it is read against.
+			if err := render(stdout, cfg, tr); err != nil {
+				fmt.Fprintln(stderr, err)
+				return exitUsage
+			}
+			if live != nil {
+				live.Summary(stdout, tr)
+			} else {
+				tree.Summary(stdout, tr, treeOptions(cfg))
+			}
+			if findings := readings(cfg, tr, stderr); len(findings) > 0 {
+				tree.Explain(stdout, findings, treeOptions(cfg))
+			}
+		} else {
+			tree.Watched(stdout, history.Differences(previous, current), when, treeOptions(cfg))
+		}
+		previous = current
+
+		// Nothing left to wait for: everything that was expected of the walk
+		// holds, which is what --watch with --expect was asked to wait for.
+		code := outcome(cfg, tr, io.Discard)
+		if len(cfg.Expect) > 0 && code == exitAnswer {
+			return code
+		}
+
+		select {
+		case <-ctx.Done():
+			return outcome(cfg, last, stderr)
+		case <-time.After(cfg.Watch):
+		}
+	}
 }
 
 // readings is what is said under the tree: the sentences the trace says about

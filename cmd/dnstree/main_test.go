@@ -621,3 +621,122 @@ func TestRunDiff(t *testing.T) {
 		t.Errorf("got %q, want the second walk held against the first", second)
 	}
 }
+
+// watchZone is the root, serving one address for www.test. so that a test can
+// change it under a walk that is watching.
+func watchZone(address string) string {
+	return `
+@                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                   IN NS   a.root-servers.net.
+a.root-servers.net. IN A    127.0.0.1
+www.test.           IN A    ` + address + "\n"
+}
+
+// watching starts a run in the background and hands back the buffers it writes
+// to and the code it ends with. Nothing reads the buffers until the code has
+// arrived, which is what makes reading them safe.
+func watching(ctx context.Context, tb testing.TB, args ...string) (code <-chan int, out, errs *bytes.Buffer) {
+	tb.Helper()
+
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	done := make(chan int, 1)
+	go func() { done <- run(ctx, args, stdout, stderr) }()
+	return done, stdout, stderr
+}
+
+// ended waits for a run to finish, and says so rather than hanging the suite
+// where it does not.
+func ended(tb testing.TB, code <-chan int) int {
+	tb.Helper()
+
+	select {
+	case got := <-code:
+		return got
+	case <-time.After(20 * time.Second):
+		tb.Fatal("the run did not end")
+		return 0
+	}
+}
+
+// TestRunWatch covers what is left on the screen by a watch: the tree once, a
+// line for the round that found the answer had moved, and nothing at all for
+// the rounds that found it had not.
+func TestRunWatch(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: watchZone("192.0.2.1")})
+	hints := rootHintsFile(t)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	code, stdout, stderr := watching(ctx, t,
+		"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
+		"--no-asn", "--no-compare", "--color", "never", "--watch", "1s", "www.test", "A")
+
+	time.Sleep(400 * time.Millisecond)
+	server.Replace(t, watchZone("192.0.2.2"))
+	time.Sleep(2500 * time.Millisecond)
+	cancel()
+
+	if got := ended(t, code); got != exitAnswer {
+		t.Errorf("got exit %d, want %d: %s", got, exitAnswer, stderr.String())
+	}
+
+	out := stdout.String()
+	if got := strings.Count(out, "(root)"); got != 1 {
+		t.Errorf("got %d trees, want the one drawn at the start: %s", got, out)
+	}
+
+	// Said once, by the round that found it: the rounds after that one found
+	// the same answer as the round before them and have nothing to say.
+	const moved = "the answer changed: 192.0.2.1 became 192.0.2.2"
+	if got := strings.Count(out, moved); got != 1 {
+		t.Errorf("got the change said %d times, want once: %s", got, out)
+	}
+	if !regexp.MustCompile(`(?m)^\d\d:\d\d:\d\d ` + regexp.QuoteMeta(moved)).MatchString(out) {
+		t.Errorf("got %q, want the change under the time it was found", out)
+	}
+}
+
+// TestRunWatchWaitsForWhatIsExpected covers the reason to leave one running:
+// it ends of its own accord as soon as everything expected of the walk holds.
+func TestRunWatchWaitsForWhatIsExpected(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: watchZone("192.0.2.1")})
+	hints := rootHintsFile(t)
+
+	code, _, stderr := watching(t.Context(), t,
+		"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
+		"--no-asn", "--no-compare", "--color", "never", "--watch", "1s",
+		"--expect", "192.0.2.2", "www.test", "A")
+
+	time.Sleep(1500 * time.Millisecond)
+	server.Replace(t, watchZone("192.0.2.2"))
+
+	if got := ended(t, code); got != exitAnswer {
+		t.Errorf("got exit %d, want %d once the answer arrived: %s", got, exitAnswer, stderr.String())
+	}
+}
+
+// TestRunWatchInterrupted covers the other way it ends: the answer never came,
+// and what it exits with says so rather than saying the wait went well.
+func TestRunWatchInterrupted(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: watchZone("192.0.2.1")})
+	hints := rootHintsFile(t)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	code, _, stderr := watching(ctx, t,
+		"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
+		"--no-asn", "--no-compare", "--color", "never", "--watch", "1s",
+		"--expect", "192.0.2.2", "www.test", "A")
+
+	time.Sleep(1500 * time.Millisecond)
+	cancel()
+
+	if got := ended(t, code); got != exitExpect {
+		t.Errorf("got exit %d, want %d: what was expected never arrived", got, exitExpect)
+	}
+	if !strings.Contains(stderr.String(), "expected 192.0.2.2, got 192.0.2.1") {
+		t.Errorf("got %q, want it to say what it was still waiting for", stderr.String())
+	}
+}

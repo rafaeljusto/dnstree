@@ -45,6 +45,7 @@ path it took. TYPE defaults to A.
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
   --live                  draw the tree as the walk makes it
+  --watch DURATION        walk again this often, and say only what changed
   --explain               say in sentences what the walk came to
   --diff                  say what has changed since the last walk remembered
   --expect VALUE          require this of the walk, and exit 4 where it fails
@@ -94,6 +95,20 @@ came back: a scope of zero means that server answers the same for everybody, and
 a hop that echoes nothing ignored the subnet altogether. It is sent to every
 server on the way down, which is more than any of them needs to know about where
 the question came from, so it is off unless it is asked for.
+
+--watch draws the tree once and then walks the same question again, waiting
+this long between one walk and the next, saying only what has changed since the
+walk before it. A round that finds nothing changed says nothing: silence is what
+it is for. Each round is a whole walk from the root servers down, so an interval
+is a thing to choose rather than to make as small as possible, and anything
+under a second is refused.
+
+It ends when it is interrupted, and exits with whatever the last walk it made
+earned. With --expect it ends as soon as everything expected of the walk holds,
+which is how to wait for a change to arrive rather than to keep asking whether
+it has. With --diff the first round is compared with the walk remembered from
+last time and remembers itself in its place; the rounds after it compare with
+the round before and write nothing.
 
 --expect says what the walk should have come to, and is how a script asks
 rather than reads. It takes one of the words that name how far the chain of
@@ -169,7 +184,12 @@ type Config struct {
 	// was asked for. Every one of them has to hold.
 	Expect []expect.Expectation
 
-	Color      tree.ColorMode
+	Color tree.ColorMode
+
+	// Watch is how long to wait between one walk and the next, zero for a run
+	// that makes one walk and stops.
+	Watch time.Duration
+
 	Timeout    time.Duration
 	Retries    int
 	MaxDepth   int
@@ -265,6 +285,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
+	flags.DurationVar(&cfg.Watch, "watch", 0, "walk again this often, and say only what changed")
 	flags.BoolVar(&cfg.Explain, "explain", false, "say in sentences what the walk came to")
 	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
 	flags.Var(&wanted, "expect", "require this of the walk")
@@ -349,6 +370,17 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Live && (cfg.Format == "json" || cfg.Format == "dot" || cfg.Format == "web") {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so it cannot be drawn live",
 			ErrUsage, cfg.Format)
+	}
+	if cfg.Watch != 0 && (cfg.Format == "json" || cfg.Format == "dot" || cfg.Format == "web") {
+		return nil, fmt.Errorf("%w: %s is written once, at the end, so there is nothing to watch it change",
+			ErrUsage, cfg.Format)
+	}
+	// Every round is a whole walk from the root servers down. There is nothing
+	// a change window needs below a second, and a loop tighter than that is
+	// only a way of being rude to somebody else's nameservers.
+	if cfg.Watch != 0 && cfg.Watch < time.Second {
+		return nil, fmt.Errorf("%w: %s between one walk and the next is too little; a second is the least",
+			ErrUsage, cfg.Watch)
 	}
 	if (cfg.Explain || cfg.Diff) && (cfg.Format == "json" || cfg.Format == "dot") {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",

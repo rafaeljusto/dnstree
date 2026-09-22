@@ -26,7 +26,7 @@ func Changes(before, now *Walk) []explain.Finding {
 	}
 
 	age := ago(now.Seen.Sub(before.Seen))
-	findings := slices.Concat(answer(before, now), cuts(before, now), signing(before, now))
+	findings := Differences(before, now)
 	if len(findings) == 0 {
 		return []explain.Finding{{Topic: explain.Change, Level: explain.Note, Text: fmt.Sprintf(
 			"nothing has changed since the walk of %s %s", question, age)}}
@@ -36,6 +36,20 @@ func Changes(before, now *Walk) []explain.Finding {
 		Topic: explain.Change, Level: explain.Note,
 		Text: fmt.Sprintf("the walk of %s before this one was %s", question, age),
 	})
+}
+
+// Differences is what is not what it was, and nothing at all where nothing is.
+// It is what [Changes] says with the framing taken off: the line naming when
+// the walk before this one was made, and the line saying there was no change.
+//
+// A watch needs the two told apart. It says nothing for a round that found
+// nothing, so it cannot use a comparison that always says something; and it is
+// looking at two walks it made itself, so there is no age to put on either.
+func Differences(before, now *Walk) []explain.Finding {
+	if before == nil || now == nil {
+		return nil
+	}
+	return slices.Concat(answer(before, now), cuts(before, now), signing(before, now))
 }
 
 // answer is what became of the answer itself: the thing the question was asked

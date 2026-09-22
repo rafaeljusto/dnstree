@@ -665,6 +665,14 @@ timeout = 3s</pre>
       <a href="https://github.com/rafaeljusto/dnstree/blob/main/dnstreerc.example">dnstreerc.example</a>
       carries every setting worth making, annotated and commented out.</p>
 
+      <h3 style="margin-top:2.2rem">Leave it running</h3>
+      <p class="section-lede"><code>--watch 30s</code> draws the tree once and then keeps
+      walking the same question, saying only what has changed since the walk before it. A
+      round that finds nothing changed says nothing: it is meant to sit in the corner of a
+      screen through a change window. With <code>--expect</code> it stops as soon as what was
+      asked for holds, which is how to wait for a change to arrive rather than to keep asking
+      whether it has.</p>
+
       <h3 style="margin-top:2.2rem">What it tells a script</h3>
       <p class="section-lede"><code>--expect</code> is how a script asks rather than reads:
       give it an address, a name, or one of <code>secure</code>, <code>bogus</code>,

@@ -172,19 +172,7 @@ func New(tb testing.TB, cfg Config) *Server {
 		server.Declared = declared
 	}
 
-	var zone []dns.RR
-	parser := dns.NewZoneParser(strings.NewReader(cfg.Zone), server.origin, "")
-	parser.SetDefaultTTL(3600)
-	for rr, err := range parser.RRs() {
-		if err != nil {
-			tb.Fatalf("fakens: parsing the %s zone: %v", server.origin, err)
-		}
-		if rr == nil {
-			break
-		}
-		zone = append(zone, rr)
-	}
-	server.zone.Store(&zone)
+	server.zone.Store(new(parse(tb, server.origin, cfg.Zone)))
 
 	host := cfg.Host
 	if host == "" {
@@ -231,6 +219,38 @@ func (s *Server) Nameserver() trace.Server {
 		return trace.Server{Name: s.name, IP: s.Declared}
 	}
 	return trace.Server{Name: s.name, IP: s.Addr.Addr(), Port: s.Addr.Port()}
+}
+
+// parse reads a zone in presentation format, against the origin it belongs to.
+func parse(tb testing.TB, origin, zone string) []dns.RR {
+	tb.Helper()
+
+	var records []dns.RR
+	parser := dns.NewZoneParser(strings.NewReader(zone), origin, "")
+	parser.SetDefaultTTL(3600)
+	for rr, err := range parser.RRs() {
+		if err != nil {
+			tb.Fatalf("fakens: parsing the %s zone: %v", origin, err)
+		}
+		if rr == nil {
+			break
+		}
+		records = append(records, rr)
+	}
+	return records
+}
+
+// Replace gives the server another zone to serve from the next query onwards,
+// which is how a test watches something change under a walk. The zone goes in
+// whole, so a handler part way through an answer finishes out of the zone it
+// started in and never sees half of each.
+//
+// What the old zone published on behalf of a signed child is lost with it, so
+// a hierarchy whose DS records were handed over at the start is not one to do
+// this to.
+func (s *Server) Replace(tb testing.TB, zone string) {
+	tb.Helper()
+	s.zone.Store(new(parse(tb, s.origin, zone)))
 }
 
 // records is the zone as it stands.

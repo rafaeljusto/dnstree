@@ -3,6 +3,7 @@ package tree
 import (
 	"bufio"
 	"io"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/explain"
 )
@@ -30,6 +31,25 @@ func Explain(w io.Writer, findings []explain.Finding, opts Options) {
 	_, _ = out.WriteString("\n")
 	for _, finding := range findings {
 		_, _ = out.WriteString(paint.dim(bullet) + paint.finding(finding) + "\n")
+	}
+	_ = out.Flush()
+}
+
+// Watched writes findings under a time rather than under a bullet, which is
+// what --watch leaves behind: a line for each thing that moved, and nothing at
+// all for the rounds where nothing did. The tree is drawn once, at the start,
+// and these accumulate under it.
+func Watched(w io.Writer, findings []explain.Finding, when time.Time, opts Options) {
+	if len(findings) == 0 {
+		return
+	}
+
+	paint := painter(colorEnabled(w, opts.Color))
+	stamp := when.Format(time.TimeOnly)
+
+	out := bufio.NewWriter(w)
+	for _, finding := range findings {
+		_, _ = out.WriteString(paint.dim(stamp) + " " + paint.finding(finding) + "\n")
 	}
 	_ = out.Flush()
 }

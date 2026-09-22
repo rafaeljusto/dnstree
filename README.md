@@ -104,6 +104,7 @@ dnstree [flags] NAME [TYPE]
 | `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot` or `web` |
 | `--web-addr`, `--no-browser` | where `--format web` serves the page, and whether a browser is opened at it |
 | `--live` | draw the tree as the walk makes it, hop by hop |
+| `--watch` | walk again this often, and say only what changed since the walk before |
 | `--explain` | say in sentences what the walk came to, under the tree |
 | `--diff` | say what has changed since the last walk of the same question |
 | `--expect` | require this of the walk, and exit 4 where it does not hold; repeat it |
@@ -657,6 +658,55 @@ prints, followed by one line saying how it went:
 > [!NOTE]
 > Off a terminal the flag does nothing, and it cannot be combined with
 > `--format json` or `--format dot`, both of which are written once, at the end.
+
+### Leaving it running
+
+`--live` watches one walk being made. `--watch` watches the same question over
+and over: it draws the tree once, then walks it again every interval and says
+only what has changed since the walk before it.
+
+```
+$ dnstree --watch 30s www.example.com A
+. (root)
+├── a.root-servers.net. 198.41.0.4  AS19836  241ms  NOERROR  referral → com.
+...
+✔ answered in 711ms · 3 queries · 3 servers
+```
+
+And then nothing, until something moves:
+
+> `14:22:07` the answer changed: 203.0.113.8 became 198.51.100.4
+
+A round that finds nothing changed says nothing at all. Silence is what it is
+for: it is meant to be left in the corner of a screen through a change window,
+and a heartbeat every thirty seconds would be something to learn to ignore.
+
+Each round is a whole walk from the root servers down, so the interval is worth
+choosing rather than making as small as possible. Anything under a second is
+refused.
+
+It watches what `--diff` watches, and for the same reason — the answer, the TTL
+on it, the nameservers of each zone on the way down, the zone cuts, and the
+chain of trust over them. With `--diff` the first round is held against the walk
+remembered from last time and remembers itself in its place; every round after
+that is held against the round before it and writes nothing.
+
+> [!TIP]
+> With `--expect` it stops as soon as what was asked for holds, which turns it
+> from a thing to glance at into a thing to wait on:
+>
+> ```
+> $ dnstree --watch 30s --expect 198.51.100.4 www.example.com A && deploy
+> ```
+
+Interrupting it ends it, and it exits with whatever the last walk it finished
+earned — so a wait for something that never arrived still exits 4, and a name
+that stopped resolving altogether still exits 2. A walk cut off part way through
+by the interrupt is not read as a finding about the name: the last one that
+finished on its own is what answers.
+
+`--format json`, `dot` and `web` are written once, at the end, so there is
+nothing for a watch to change; all three refuse it, as they refuse `--live`.
 
 ### Other formats
 
