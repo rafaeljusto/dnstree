@@ -666,12 +666,18 @@ timeout = 3s</pre>
       carries every setting worth making, annotated and commented out.</p>
 
       <h3 style="margin-top:2.2rem">What it tells a script</h3>
+      <p class="section-lede"><code>--expect</code> is how a script asks rather than reads:
+      give it an address, a name, or one of <code>secure</code>, <code>bogus</code>,
+      <code>nxdomain</code> and the rest, repeat it for everything that has to hold, and a
+      walk that does not meet it says so on stderr and exits 4. The walk's own verdict wins
+      where there is one, so a broken chain of trust still exits 3.</p>
       <table class="exits">
         <tbody>
           <tr><td>0</td><td>something answered</td></tr>
           <tr><td>1</td><td>the command line, or the question, could not be read</td></tr>
           <tr><td>2</td><td>the walk ended without an answer</td></tr>
           <tr><td>3</td><td>the chain of trust is broken</td></tr>
+          <tr><td>4</td><td>an expectation given with <code>--expect</code> was not met</td></tr>
         </tbody>
       </table>
     </section>

@@ -256,6 +256,27 @@ func TestRunExitCodes(t *testing.T) {
 			args: []string{"--root-hints", hints, "--port", "1", "--no-asn", "--no-compare", "--timeout", "200ms", "--retries", "0", ".", "NS"},
 			want: exitNoAnswer,
 		},
+		"an expectation that holds": {
+			args: []string{"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())), "--no-asn", "--no-compare",
+				"--expect", "a.root-servers.net.", ".", "NS"},
+			want: exitAnswer,
+		},
+		"an expectation that does not": {
+			args: []string{"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())), "--no-asn", "--no-compare",
+				"--expect", "b.root-servers.net.", ".", "NS"},
+			want: exitExpect,
+		},
+		// The walk's own verdict is the bigger fact, and a script reading 4 for
+		// a walk that answered nothing would go looking in the wrong place.
+		"a walk that answered nothing keeps its own verdict": {
+			args: []string{"--root-hints", hints, "--port", "1", "--no-asn", "--no-compare", "--timeout", "200ms", "--retries", "0",
+				"--expect", "a.root-servers.net.", ".", "NS"},
+			want: exitNoAnswer,
+		},
+		"an expectation nothing can be made of": {
+			args: []string{"--root-hints", hints, "--no-asn", "--no-compare", "--expect", "", ".", "NS"},
+			want: exitUsage,
+		},
 	}
 
 	for name, test := range tests {

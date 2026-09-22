@@ -442,6 +442,28 @@ func TTL(records []RR, qtype string) uint32 {
 	return shortest
 }
 
+// Trust is the step carrying the verdict the answer rests on: the one recorded
+// where the walk ended, or the last verdict it reached where it ended without
+// an answer. It is nil for a walk that followed no chain of trust.
+//
+// The step is returned rather than the verdict alone because a verdict names
+// the zone it is about, which is not the zone of the step it sits on: a cut is
+// judged from above, so a referral carries the verdict of the zone it points
+// at, and only the step has both.
+func (t *Trace) Trust() *Step {
+	if result := t.Result(); result != nil && result.DNSSEC != nil {
+		return result
+	}
+
+	var last *Step
+	for step := range t.Mainline() {
+		if step.DNSSEC != nil {
+			last = step
+		}
+	}
+	return last
+}
+
 // Filtered is a hop where somebody decided the answer rather than serving it,
 // or nil where nothing did. It is not a [Trace.Result]: a walk that ends here
 // has not been answered, it has been turned away, and the two are worth saying

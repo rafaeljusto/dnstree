@@ -203,7 +203,7 @@ func TestParseUsage(t *testing.T) {
 
 	for _, want := range []string{
 		"usage: dnstree", "--dnssec", "--format", "--web-addr", "--no-browser",
-		"--explain", "--diff", "--schema", "Exit codes",
+		"--explain", "--diff", "--expect", "--schema", "Exit codes",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got usage without %q:\n%s", want, out.String())

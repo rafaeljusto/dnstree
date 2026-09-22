@@ -335,20 +335,11 @@ func state(tr *trace.Trace, want trace.DNSSECState) *trace.Step {
 // final is the state the answer itself rests on: the one recorded where the
 // walk ended, or the last it reached when it ended without an answer.
 func final(tr *trace.Trace) (*trace.DNSSECStatus, string) {
-	if result := tr.Result(); result != nil && result.DNSSEC != nil {
-		return result.DNSSEC, zoneOf(result)
+	step := tr.Trust()
+	if step == nil {
+		return nil, ""
 	}
-
-	var (
-		status *trace.DNSSECStatus
-		zone   string
-	)
-	for step := range tr.Mainline() {
-		if step.DNSSEC != nil {
-			status, zone = step.DNSSEC, zoneOf(step)
-		}
-	}
-	return status, zone
+	return step.DNSSEC, zoneOf(step)
 }
 
 // zoneOf is the zone a verdict is about, which the walk recorded on the verdict

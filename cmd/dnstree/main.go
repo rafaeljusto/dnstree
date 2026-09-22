@@ -20,6 +20,7 @@ import (
 
 	"github.com/rafaeljusto/dnstree/internal/asn"
 	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/internal/expect"
 	"github.com/rafaeljusto/dnstree/internal/explain"
 	"github.com/rafaeljusto/dnstree/internal/history"
 	"github.com/rafaeljusto/dnstree/internal/recursive"
@@ -39,6 +40,7 @@ const (
 	exitUsage    = 1 // the command line, or the question, could not be read
 	exitNoAnswer = 2 // the walk ended without an answer
 	exitBogus    = 3 // the chain of trust is broken
+	exitExpect   = 4 // an expectation was not met
 )
 
 // asnGrace is how long the origin AS lookups may carry on once the walk is
@@ -139,7 +141,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, err)
 			return exitUsage
 		}
-		return verdict(tr)
+		return outcome(cfg, tr, stderr)
 	}
 
 	if err := render(stdout, cfg, tr); err != nil {
@@ -154,7 +156,32 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if findings := readings(cfg, tr, stderr); len(findings) > 0 {
 		tree.Explain(stdout, findings, treeOptions(cfg))
 	}
-	return verdict(tr)
+	return outcome(cfg, tr, stderr)
+}
+
+// outcome is what the run says to whoever started it: what the walk came to,
+// and then whether that was what was asked for.
+//
+// The walk's own verdict wins wherever there is one. A chain of trust that is
+// broken, or an answer that never came, is a bigger fact than an address that
+// is not the one somebody wanted, and a script reading 4 for either of those
+// would go looking in the wrong place. What went unmet goes to stderr, where
+// the reason for an exit code belongs: it is a verdict rather than a reading,
+// so it is said whether or not --explain asked for prose.
+func outcome(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) int {
+	code := verdict(tr)
+	if code != exitAnswer {
+		return code
+	}
+
+	unmet := expect.Unmet(tr, cfg.Expect)
+	for _, line := range unmet {
+		fmt.Fprintln(stderr, line)
+	}
+	if len(unmet) > 0 {
+		return exitExpect
+	}
+	return code
 }
 
 // readings is what is said under the tree: the sentences the trace says about

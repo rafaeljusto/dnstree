@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rafaeljusto/dnstree/internal/expect"
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/internal/render/web"
 	"github.com/rafaeljusto/dnstree/internal/transport"
@@ -46,6 +47,7 @@ path it took. TYPE defaults to A.
   --live                  draw the tree as the walk makes it
   --explain               say in sentences what the walk came to
   --diff                  say what has changed since the last walk remembered
+  --expect VALUE          require this of the walk, and exit 4 where it fails
   --color WHEN            auto, always or never (default auto)
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
@@ -93,6 +95,20 @@ a hop that echoes nothing ignored the subnet altogether. It is sent to every
 server on the way down, which is more than any of them needs to know about where
 the question came from, so it is off unless it is asked for.
 
+--expect says what the walk should have come to, and is how a script asks
+rather than reads. It takes one of the words that name how far the chain of
+trust got (secure, insecure, bogus, indeterminate), or what the walk came to
+(answer, cname, nodata, nxdomain), or else the rdata of a record that has to be
+among the answers, such as an address. Repeat it for every one that has to hold.
+Those words win where a value could be read either way, so a record whose rdata
+reads like one of them is asked for with a leading =, which expects rdata and
+nothing else.
+
+An expectation that fails is said on stderr and exits 4, and the walk's own
+verdict wins where there is one: a broken chain of trust or an answer that never
+came is a bigger fact than an address that is not the one somebody wanted, and a
+script that read 4 for either would go looking in the wrong place.
+
 --serial asks every nameserver of the zone the walk ends in for that zone's
 start of authority, and says so when they do not all serve the same copy of it.
 A walk stops at the first nameserver that answers, so a secondary left behind by
@@ -124,7 +140,8 @@ Exit codes:
   0 an answer
   1 a problem with the command
   2 nothing answered
-  3 the chain of trust is broken.
+  3 the chain of trust is broken
+  4 an expectation was not met.
 
 `
 
@@ -133,20 +150,25 @@ type Config struct {
 	Name string
 	Type string
 
-	Family     int    // 0, 4 or 6
-	Proto      string // udp, tcp, dot or doh
-	Fallback   bool
-	All        bool
-	DNSSEC     bool
-	CheckNS    bool
-	Serial     bool
-	NSID       bool
-	ASN        bool
-	Compare    bool
-	Format     string
-	Live       bool
-	Explain    bool
-	Diff       bool
+	Family   int    // 0, 4 or 6
+	Proto    string // udp, tcp, dot or doh
+	Fallback bool
+	All      bool
+	DNSSEC   bool
+	CheckNS  bool
+	Serial   bool
+	NSID     bool
+	ASN      bool
+	Compare  bool
+	Format   string
+	Live     bool
+	Explain  bool
+	Diff     bool
+
+	// Expect is what the run was told to require of the walk, in the order it
+	// was asked for. Every one of them has to hold.
+	Expect []expect.Expectation
+
 	Color      tree.ColorMode
 	Timeout    time.Duration
 	Retries    int
@@ -221,6 +243,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		timeout       time.Duration
 		port          uint
 		roots         rootList
+		wanted        expectList
 		resolverAddr  string
 	)
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
@@ -244,6 +267,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
 	flags.BoolVar(&cfg.Explain, "explain", false, "say in sentences what the walk came to")
 	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
+	flags.Var(&wanted, "expect", "require this of the walk")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
 	flags.DurationVar(&timeout, "timeout", transport.DefaultTimeout, "how long one query may take")
 	flags.IntVar(&cfg.Retries, "retries", 1, "how often to ask again after a silence")
@@ -348,6 +372,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %d is not a port", ErrUsage, port)
 	}
 	cfg.Port = uint16(port)
+	cfg.Expect = wanted.want
 	cfg.ASN = !noASN
 	cfg.Compare = !noCompare
 	cfg.Browser = !noBrowser
@@ -423,6 +448,28 @@ func clientSubnet(value string) (netip.Prefix, error) {
 type Root struct {
 	Name string
 	Addr netip.AddrPort
+}
+
+// expectList collects the --expect flags in the order they were given, reading
+// each one as it arrives so that a value nothing can be made of is reported
+// against the flag that carried it rather than at the end of the walk.
+type expectList struct{ want []expect.Expectation }
+
+func (l *expectList) String() string {
+	said := make([]string, 0, len(l.want))
+	for _, expectation := range l.want {
+		said = append(said, expectation.String())
+	}
+	return strings.Join(said, ",")
+}
+
+func (l *expectList) Set(text string) error {
+	expectation, err := expect.Parse(text)
+	if err != nil {
+		return err
+	}
+	l.want = append(l.want, expectation)
+	return nil
 }
 
 // rootList collects the --root flags in the order they were given. The flag

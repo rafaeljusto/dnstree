@@ -106,6 +106,7 @@ dnstree [flags] NAME [TYPE]
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--explain` | say in sentences what the walk came to, under the tree |
 | `--diff` | say what has changed since the last walk of the same question |
+| `--expect` | require this of the walk, and exit 4 where it does not hold; repeat it |
 | `--color` | `auto` (the default), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
@@ -202,6 +203,7 @@ own.
 | 1 | the command line, or the question, could not be read |
 | 2 | the walk ended without an answer |
 | 3 | the chain of trust is broken |
+| 4 | an expectation given with `--expect` was not met |
 
 ### DNSSEC
 
@@ -444,6 +446,54 @@ differs: 192.168.1.1 answers 10.4.2.9, the walk found 203.0.113.80
 Agreement is worth no room and gets none. `--no-compare` turns the whole thing
 off, which is also the only way to keep the name being resolved from reaching a
 resolver at all.
+
+### Asking rather than reading
+
+Everything above is for a person looking at a resolution. `--expect` is for a
+script that already knows what the answer should be and wants to be told when
+it is not:
+
+```
+$ dnstree --expect 203.0.113.8 www.example.com A
+...
+✔ answered in 759ms · resolver in 244ms · 3 queries · 3 servers
+expected 203.0.113.8, got 104.20.23.154 and 172.66.147.243
+
+$ echo $?
+4
+```
+
+It takes one of the words that name how far the chain of trust got — `secure`,
+`insecure`, `bogus`, `indeterminate` — or what the walk came to — `answer`,
+`cname`, `nodata`, `nxdomain` — or else the rdata of a record that has to be
+among the answers. Repeat it for each thing that has to hold:
+
+```
+$ dnstree --dnssec --expect secure --expect 104.20.23.154 www.example.com A
+...
+✔ answered in 2s · resolver in 243ms · 6 queries · 3 servers
+```
+
+Addresses are compared as addresses and names the way DNS compares names, so
+`2001:0db8::1` finds a record written `2001:db8::1` and the case of a name does
+not matter. An expectation about the chain of trust is met only by a walk that
+followed one: a run that forgot `--dnssec` checked nothing, and reading that as
+`secure` would be the tool claiming more than it did.
+
+> [!NOTE]
+> The words win where a value could be read either way. A zone that serves a
+> record whose rdata reads like one of them — a `TXT` of `secure`, say — is
+> asked for with a leading `=`: `--expect =secure` expects rdata and nothing
+> else.
+
+What went unmet is written to stderr, because it is the reason for the exit
+code rather than something to read alongside the tree, and it is said whether
+or not `--explain` was asked for.
+
+The walk's own verdict wins wherever there is one. A broken chain of trust
+still exits 3 and a walk that answered nothing still exits 2, even where an
+expectation also failed: those are the bigger facts, and a script reading 4 for
+either would go looking in the wrong place.
 
 ### Saying what happened
 
