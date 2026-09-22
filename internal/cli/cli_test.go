@@ -88,14 +88,24 @@ func TestParse(t *testing.T) {
 			args: []string{"--resolver", "192.0.2.1", "example.com"},
 			want: cli.Config{
 				Name: "example.com", Type: "A",
-				Resolver: netip.MustParseAddrPort("192.0.2.1:53"),
+				Resolvers: []netip.AddrPort{netip.MustParseAddrPort("192.0.2.1:53")},
+			},
+		},
+		"several of them, in the order they were named": {
+			args: []string{"--resolver", "192.0.2.1", "--resolver", "192.0.2.2:5353", "example.com"},
+			want: cli.Config{
+				Name: "example.com", Type: "A",
+				Resolvers: []netip.AddrPort{
+					netip.MustParseAddrPort("192.0.2.1:53"),
+					netip.MustParseAddrPort("192.0.2.2:5353"),
+				},
 			},
 		},
 		"the older name for it": {
 			args: []string{"--asn-resolver", "192.0.2.1", "example.com"},
 			want: cli.Config{
 				Name: "example.com", Type: "A",
-				Resolver: netip.MustParseAddrPort("192.0.2.1:53"),
+				Resolvers: []netip.AddrPort{netip.MustParseAddrPort("192.0.2.1:53")},
 			},
 		},
 		"no question put to a resolver": {

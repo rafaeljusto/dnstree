@@ -197,8 +197,10 @@ func caption(tr *trace.Trace) string {
 	if question := strings.TrimSpace(tr.Question.Name + " " + tr.Question.Type); question != "" {
 		caption.WriteString(" " + question)
 	}
-	if line := resolver(tr.Resolver); line != "" {
-		caption.WriteString("\n" + line)
+	for _, answer := range tr.Resolvers {
+		if line := resolver(answer); line != "" {
+			caption.WriteString("\n" + line)
+		}
 	}
 	for _, warning := range tr.Warnings {
 		caption.WriteString("\nwarning: " + warning)

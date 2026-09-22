@@ -114,7 +114,7 @@ dnstree [flags] NAME [TYPE]
 | `--port` | the port nameservers are asked on (53) |
 | `--root-hints`, `--trust-anchors` | start somewhere other than the built-in root |
 | `--root` | one server to start from, instead of a hints file; repeat it for more |
-| `--resolver` | the recursive server to use, instead of the host's own |
+| `--resolver` | a recursive server to use, instead of the host's own; repeat it to ask several |
 | `--tls-ca`, `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
 | `--config`, `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
@@ -189,7 +189,9 @@ question put to an ordinary resolution and held against the walk's own answer �
 while `--no-asn` and `--no-compare` skip either of those altogether. Asking for
 both leaves `--resolver` nothing to answer, which is refused rather than
 quietly ignored. `--asn-resolver` is the older name for `--resolver` and still
-works. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your
+works. `--resolver` may be repeated, and one of them on the command line
+replaces every one the file of defaults chose rather than adding to them, the
+way `--root` does. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your
 own.
 
 > [!CAUTION]
@@ -447,6 +449,45 @@ differs: 192.168.1.1 answers 10.4.2.9, the walk found 203.0.113.80
 Agreement is worth no room and gets none. `--no-compare` turns the whole thing
 off, which is also the only way to keep the name being resolved from reaching a
 resolver at all.
+
+### Asking from several places at once
+
+Repeat `--resolver` and the question goes to all of them at the same moment.
+Two resolvers that answer differently are two views of one name, and which of
+them somebody gets depends on nothing but which resolver they happen to use:
+
+```
+$ dnstree --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 9.9.9.9 --explain akamai.com A
+...
+differs: 1.1.1.1 answers 2.19.176.208, 2.19.176.211, the walk found 2.18.27.18, 2.18.27.35
+differs: 9.9.9.9 answers 2.16.145.4, 2.16.145.8, the walk found 2.18.27.18, 2.18.27.35
+✔ answered in 1.4s · resolvers in 282ms-312ms (2 of 3 differ) · 6 queries · 5 servers
+
+· akamai.com. A is 2.18.27.18 and 2.18.27.35, answered by a5-66.akam.net. for akamai.com.
+· a cache may hold this answer for 20 seconds, and the delegation to akamai.com. for 2 days
+· 1.1.1.1 and 9.9.9.9 answered this question differently, which a name whose answer is tailored to where it is asked from does honestly, and nothing else should
+```
+
+Each one that disagreed is named on a line of its own, since two resolvers can
+disagree with the walk for two different reasons. The summary says how far apart
+they were and how many of them differed; where they all agree it says only the
+range, because agreement is what the reader is expecting.
+
+What each of them has left on its copy is read too, which is what says whether
+an answer has reached everybody yet: a resolver that had to go and fetch the
+answer hands back the zone's lifetime entire, and one still serving an older
+answer says how long it will go on doing so.
+
+> [!TIP]
+> This pairs with `--subnet`, which asks every one of them the question as
+> though it came from somebody else's network. Between them they are the two
+> halves of "does this name look the same from where my users are".
+
+The origin AS lookups go to the first `--resolver` named: they need somewhere to
+ask rather than a poll. There is deliberately no shorthand for "the public
+resolvers" — that would put a list of somebody else's addresses in the binary
+and send the name being looked up to all of them. A set worth having every day
+belongs in the file of defaults, which may carry a `resolver` line for each.
 
 ### Asking rather than reading
 

@@ -20,11 +20,20 @@ func traceOf(rcode string, ours []string, answer *trace.Resolver) *trace.Trace {
 		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
 			Zone: "test.", Kind: trace.KindAnswer, Rcode: rcode, Records: records,
 		}}},
-		Resolver: answer,
+		Resolvers: resolvers(answer),
 	}
 }
 
 // answerOf is what the resolver said, in the same shape.
+// resolvers is the one answer as a list, and no list at all where there is no
+// answer to put in one.
+func resolvers(answer *trace.Resolver) []*trace.Resolver {
+	if answer == nil {
+		return nil
+	}
+	return []*trace.Resolver{answer}
+}
+
 func answerOf(rcode string, theirs ...string) *trace.Resolver {
 	records := make([]trace.RR, 0, len(theirs))
 	for _, data := range theirs {
@@ -92,8 +101,8 @@ func TestCompare(t *testing.T) {
 			recursive.Compare(tt.tr)
 
 			got := trace.Match("")
-			if tt.tr.Resolver != nil {
-				got = tt.tr.Resolver.Match
+			if len(tt.tr.Resolvers) > 0 && tt.tr.Resolvers[0] != nil {
+				got = tt.tr.Resolvers[0].Match
 			}
 			if got != tt.match {
 				t.Errorf("got %q, want %q", got, tt.match)
@@ -107,14 +116,14 @@ func TestCompare(t *testing.T) {
 // is not evidence of anything.
 func TestCompareWithoutResult(t *testing.T) {
 	tr := &trace.Trace{
-		Question: trace.Question{Name: "www.test.", Type: "A", Class: "IN"},
-		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
-		Resolver: answerOf("NOERROR", "192.0.2.10"),
+		Question:  trace.Question{Name: "www.test.", Type: "A", Class: "IN"},
+		Root:      &trace.Step{Zone: ".", Kind: trace.KindZone},
+		Resolvers: []*trace.Resolver{answerOf("NOERROR", "192.0.2.10")},
 	}
 
 	recursive.Compare(tr)
-	if tr.Resolver.Match != "" {
-		t.Errorf("got %q, want no comparison", tr.Resolver.Match)
+	if tr.Resolvers[0].Match != "" {
+		t.Errorf("got %q, want no comparison", tr.Resolvers[0].Match)
 	}
 }
 
@@ -132,7 +141,27 @@ func TestCompareAcrossAnAlias(t *testing.T) {
 	})
 
 	recursive.Compare(tr)
-	if tr.Resolver.Match != trace.MatchSame {
-		t.Errorf("got %q, want the alias chain to agree", tr.Resolver.Match)
+	if tr.Resolvers[0].Match != trace.MatchSame {
+		t.Errorf("got %q, want the alias chain to agree", tr.Resolvers[0].Match)
+	}
+}
+
+// TestCompareJudgesEachOnItsOwn covers the point of asking several: they are
+// several places the question was put from, and one of them disagreeing with
+// the walk says nothing at all about the others.
+func TestCompareJudgesEachOnItsOwn(t *testing.T) {
+	tr := traceOf("NOERROR", []string{"192.0.2.10"}, nil)
+	tr.Resolvers = []*trace.Resolver{
+		answerOf("NOERROR", "192.0.2.10"),
+		answerOf("NOERROR", "10.4.2.9"),
+		{Err: "i/o timeout"},
+	}
+
+	recursive.Compare(tr)
+
+	for i, want := range []trace.Match{trace.MatchSame, trace.MatchDiffers, ""} {
+		if got := tr.Resolvers[i].Match; got != want {
+			t.Errorf("got %q for the %d resolver, want %q", got, i, want)
+		}
 	}
 }

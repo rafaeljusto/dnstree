@@ -118,7 +118,10 @@
 # no-compare = true
 
 # The recursive server to use for both, instead of the host's own: the origin
-# AS lookups, and the question timed against an ordinary resolution.
+# AS lookups, and the question timed against an ordinary resolution. Write a
+# line for each one the question should go to, and it goes to all of them at
+# once; the origin AS lookups use the first. One --resolver on the command line
+# replaces every one of them.
 # resolver = 9.9.9.9
 
 

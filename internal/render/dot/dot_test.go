@@ -97,11 +97,11 @@ func resolution() *trace.Trace {
 		Question: trace.Question{Name: "www.example.com.", Type: "A", Class: "IN"},
 		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{root}},
 		Elapsed:  41*time.Millisecond + 500*time.Microsecond,
-		Resolver: &trace.Resolver{
+		Resolvers: []*trace.Resolver{{
 			Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
 			Elapsed: 23 * time.Millisecond,
 			Rcode:   "NOERROR",
-		},
+		}},
 		Warnings: []string{"the delegation to example.com. lists a nameserver the zone does not"},
 	}
 }

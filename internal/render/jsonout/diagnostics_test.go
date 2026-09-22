@@ -100,15 +100,19 @@ func TestRenderResolverComparison(t *testing.T) {
 	tr := &trace.Trace{
 		Question: trace.Question{Name: "www.test.", Type: "A", Class: "IN"},
 		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
-		Resolver: &trace.Resolver{
+		Resolvers: []*trace.Resolver{{
 			Server:  trace.Server{IP: netip.MustParseAddr("192.168.1.1"), Port: 53},
 			Rcode:   "NOERROR",
 			Records: []trace.RR{{Name: "www.test.", TTL: 60, Type: "A", Data: "10.4.2.9"}},
 			Match:   trace.MatchDiffers,
-		},
+		}},
 	}
 
-	resolver, _ := render(t, tr)["resolver"].(map[string]any)
+	resolvers, _ := render(t, tr)["resolvers"].([]any)
+	if len(resolvers) != 1 {
+		t.Fatalf("got %d resolvers, want the one that was asked", len(resolvers))
+	}
+	resolver, _ := resolvers[0].(map[string]any)
 	if resolver["match"] != "differs" {
 		t.Errorf("got %+v, want the comparison carried", resolver["match"])
 	}

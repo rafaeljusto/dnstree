@@ -9,7 +9,7 @@
     "schema_version": {
       "description": "The version of this document's shape. It is written as a single value rather than a lower bound, because this schema describes that one version: a document of a later version has had a field change meaning or go away, and is not a document this schema can be read against.",
       "type": "integer",
-      "const": 2
+      "const": 3
     },
     "question": { "$ref": "#/$defs/question" },
     "elapsed_ms": {
@@ -17,7 +17,11 @@
       "type": "number",
       "minimum": 0
     },
-    "resolver": { "$ref": "#/$defs/resolver" },
+    "resolvers": {
+      "description": "The same question put to recursive servers, in the order the run named them. Several of them is the question asked from several places at once: two that answer differently are two views of one name, and which of them a client gets depends only on which resolver it uses. A server that could not be asked at all is left out rather than carried empty.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/resolver" }
+    },
     "root": {
       "description": "The zone the walk started from. It carries no query of its own: its children are the servers that were asked. Absent when nothing was walked.",
       "$ref": "#/$defs/step"

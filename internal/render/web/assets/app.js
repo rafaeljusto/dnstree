@@ -602,14 +602,23 @@ const queries = hops.filter((hop) => asked(hop.step)).length;
 const servers = new Set(
   hops.filter((hop) => asked(hop.step)).map((hop) => hop.step.server?.ip).filter(Boolean),
 ).size;
-const resolver = walk.resolver;
+// One resolver reads as one; several read as how many of them disagreed, since
+// the reason to ask several is whether they agree rather than what each took.
+const resolvers = walk.resolvers ?? [];
+const differing = resolvers.filter((r) => r.match === "differs").length;
 document.getElementById("stats").append(...[
   el("span", { class: "stat" }, "walked in ", el("b", { text: took(walk.elapsed_ms) })),
   el("span", { class: "stat" }, el("b", { text: String(queries) }), " queries"),
   el("span", { class: "stat" }, el("b", { text: String(servers) }), " servers"),
-  resolver ? el("span", { class: `stat ${resolver.match === "differs" ? "is-tone tone-warn" : ""}` },
-    "a resolver in ", el("b", { text: took(resolver.elapsed_ms) }),
-    resolver.match === "differs" ? " · answers differently" : "") : null,
+  resolvers.length === 1
+    ? el("span", { class: `stat ${differing ? "is-tone tone-warn" : ""}` },
+      "a resolver in ", el("b", { text: took(resolvers[0].elapsed_ms) }),
+      differing ? " · answers differently" : "")
+    : resolvers.length
+      ? el("span", { class: `stat ${differing ? "is-tone tone-warn" : ""}` },
+        el("b", { text: String(resolvers.length) }), " resolvers",
+        differing ? ` · ${differing} answer differently` : " · all agree")
+      : null,
   hops.some((hop) => hop.step.dnssec)
     ? el("span", { class: `stat is-tone tone-${trustOf(chainState(hops)).tone}` }, el("b", { text: chainState(hops) }), " chain")
     : null,

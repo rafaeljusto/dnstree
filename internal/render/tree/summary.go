@@ -1,8 +1,10 @@
 package tree
 
 import (
+	"fmt"
 	"io"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,7 +46,7 @@ func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 	}
 
 	fields := []string{verdict + " in " + clock(elapsed)}
-	if timing := resolverField(tr.Resolver); timing != "" {
+	if timing := resolverField(tr.Resolvers); timing != "" {
 		fields = append(fields, timing)
 	}
 	fields = append(fields, counts...)
@@ -59,7 +61,57 @@ func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 // resolverField is what a recursive server made of the same question, empty
 // when none was asked. A server that would not answer still says something
 // worth the room: the comparison was tried and there is none.
-func resolverField(answer *trace.Resolver) string {
+func resolverField(answers []*trace.Resolver) string {
+	switch len(answers) {
+	case 0:
+		return ""
+	case 1:
+		return oneResolver(answers[0])
+	}
+
+	// Several of them were asked to be held against each other rather than to
+	// be timed one by one, so the field says how far apart they were and how
+	// many of them disagreed.
+	var (
+		elapsed        []time.Duration
+		differ, silent int
+	)
+	for _, answer := range answers {
+		if answer.Err != "" {
+			silent++
+			continue
+		}
+		elapsed = append(elapsed, answer.Elapsed)
+		if answer.Match == trace.MatchDiffers {
+			differ++
+		}
+	}
+	if len(elapsed) == 0 {
+		return plural(len(answers), "resolver", "resolvers") + " did not answer"
+	}
+
+	fastest, slowest := slices.Min(elapsed), slices.Max(elapsed)
+	field := "resolvers in " + clock(fastest)
+	if slowest != fastest {
+		field += "-" + clock(slowest)
+	}
+
+	var aside []string
+	if differ > 0 {
+		aside = append(aside, fmt.Sprintf("%d of %d differ", differ, len(answers)))
+	}
+	if silent > 0 {
+		aside = append(aside, fmt.Sprintf("%d did not answer", silent))
+	}
+	if len(aside) > 0 {
+		field += " (" + strings.Join(aside, ", ") + ")"
+	}
+	return field
+}
+
+// oneResolver is the field a single recursive server earns, which is the one
+// every run that asks for the comparison at all has had.
+func oneResolver(answer *trace.Resolver) string {
 	switch {
 	case answer == nil:
 		return ""

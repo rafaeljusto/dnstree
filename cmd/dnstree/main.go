@@ -15,6 +15,8 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"slices"
+	"sync"
 	"syscall"
 	"time"
 
@@ -195,7 +197,7 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		lookups.Annotate(grace, tr)
 	}
 	if timed != nil {
-		tr.Resolver = <-timed
+		tr.Resolvers = <-timed
 		recursive.Compare(tr)
 	}
 	return tr, nil
@@ -422,37 +424,53 @@ func clientTLS(cfg *cli.Config) (*tls.Config, error) {
 // compare puts the same question to a recursive server, and answers with the
 // channel the timing arrives on. Nothing comes of a run that asked for no
 // comparison, or of a host that will not say which server it resolves through.
-func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan *trace.Resolver {
+func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*trace.Resolver {
 	if !cfg.Compare {
 		return nil
 	}
-	server := cfg.Resolver
-	if !server.IsValid() {
-		server = recursive.System()
+	servers := cfg.Resolvers
+	if len(servers) == 0 {
+		if system := recursive.System(); system.IsValid() {
+			servers = []netip.AddrPort{system}
+		}
 	}
-	if !server.IsValid() {
+	if len(servers) == 0 {
 		return nil
 	}
 
 	question := trace.Question{Name: cfg.Name, Type: cfg.Type, Class: "IN"}
 	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
 
-	timed := make(chan *trace.Resolver, 1)
+	timed := make(chan []*trace.Resolver, 1)
 	go func() {
 		defer close(timed)
-		answer, err := recursive.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
 
-		if err != nil {
-			if log != nil {
-				log.Debug("the resolver could not be asked", "server", server, "error", err)
-			}
-			return
+		// They are asked together and kept in the order they were named, so
+		// that the same command draws the same line twice running.
+		answers := make([]*trace.Resolver, len(servers))
+		var wait sync.WaitGroup
+		for i, server := range servers {
+			wait.Go(func() {
+				answer, err := recursive.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
+				if err != nil {
+					if log != nil {
+						log.Debug("the resolver could not be asked", "server", server, "error", err)
+					}
+					return
+				}
+				if log != nil {
+					log.Debug("asked a resolver the same question",
+						"server", server, "took", answer.Elapsed, "rcode", answer.Rcode, "error", answer.Err)
+				}
+				answers[i] = answer
+			})
 		}
-		if log != nil {
-			log.Debug("asked a resolver the same question",
-				"server", server, "took", answer.Elapsed, "rcode", answer.Rcode, "error", answer.Err)
-		}
-		timed <- answer
+		wait.Wait()
+
+		// A server that could not be asked at all leaves no room of its own:
+		// what there is to say about it was said on stderr with --debug, and a
+		// gap in the line would be read as a server that answered nothing.
+		timed <- slices.DeleteFunc(answers, func(answer *trace.Resolver) bool { return answer == nil })
 	}()
 	return timed
 }
@@ -460,13 +478,14 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan *tra
 // asnLookup is where the origin AS lookups go. A nil lookup leaves asn.New to
 // use the host's own resolver, which is what the Cymru zones normally need.
 func asnLookup(cfg *cli.Config) asn.Lookup {
-	if !cfg.Resolver.IsValid() {
+	if len(cfg.Resolvers) == 0 {
 		return nil
 	}
 
 	// A resolver of its own, dialling the one server, so that the lookups can
-	// be pointed somewhere the host knows nothing about.
-	server := cfg.Resolver.String()
+	// be pointed somewhere the host knows nothing about. The first of them is
+	// the one: the lookups need somewhere to ask, not a poll.
+	server := cfg.Resolvers[0].String()
 	resolver := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {

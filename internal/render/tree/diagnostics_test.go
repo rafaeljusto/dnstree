@@ -138,12 +138,12 @@ func differing(ours, theirs []string, rcode string) *trace.Trace {
 	}
 
 	tr := oneHop(&trace.Step{Kind: trace.KindAnswer, Rcode: "NOERROR", Records: records(ours)})
-	tr.Resolver = &trace.Resolver{
+	tr.Resolvers = []*trace.Resolver{{
 		Server:  trace.Server{IP: netip.MustParseAddr("192.168.1.1"), Port: 53},
 		Rcode:   rcode,
 		Records: records(theirs),
 		Match:   trace.MatchDiffers,
-	}
+	}}
 	return tr
 }
 
@@ -171,7 +171,7 @@ func TestRenderDifferentRcode(t *testing.T) {
 // reader expects, and a line saying so would be a line in the way.
 func TestRenderAgreementIsQuiet(t *testing.T) {
 	tr := differing([]string{"192.0.2.10"}, []string{"192.0.2.10"}, "NOERROR")
-	tr.Resolver.Match = trace.MatchSame
+	tr.Resolvers[0].Match = trace.MatchSame
 
 	if out := draw(t, tr); strings.Contains(out, "answers") {
 		t.Errorf("got %q, want nothing said about a resolver that agrees", out)

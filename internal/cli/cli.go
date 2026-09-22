@@ -59,7 +59,7 @@ path it took. TYPE defaults to A.
   --root-hints FILE       where the walk starts, instead of the built-in hints
   --root [NAME@]ADDR      one server to start from, instead of a hints file
   --trust-anchors FILE    the DS records to trust, instead of the built-in ones
-  --resolver ADDR         the recursive server to use, not the host's own
+  --resolver ADDR         a recursive server to use, not the host's own; repeat it
   --tls-ca FILE           verify --dot and --doh against these roots
   --tls-insecure          do not verify --dot and --doh at all
   --config FILE           take the defaults from FILE, instead of the usual one
@@ -77,6 +77,15 @@ certificate. --resolver points everything that needs a recursive server at one
 of its own: the origin AS lookups, and the question dnstree times against an
 ordinary resolution to say what the walk cost over it. --asn-resolver is the
 older name for it, and still means the same thing.
+
+Repeat --resolver to put the question to every one of them at once, which is
+how to ask from several places at the same moment: two resolvers answering
+differently are two views of one name, and which of them somebody gets depends
+only on which resolver they use. The summary says how far apart they were and
+how many disagreed, and each one that did is named under the tree. The origin AS
+lookups go to the first of them, since they need somewhere to ask rather than a
+poll. One --resolver on the command line replaces every one the file of defaults
+chose, rather than adding to them.
 
 --format web draws nothing in the terminal. It serves the finished walk as a
 page instead, on this machine and on whatever port is free, and opens a browser
@@ -205,9 +214,10 @@ type Config struct {
 	// the hints entirely, so the two cannot both be set.
 	Roots []Root
 
-	// Resolver is the recursive server the origin AS lookups and the timed
-	// comparison go to, empty for the host's own.
-	Resolver netip.AddrPort
+	// Resolvers are the recursive servers the timed comparison goes to, in the
+	// order they were named, empty for the host's own. The origin AS lookups
+	// use the first of them: they need one server to ask, not a poll.
+	Resolvers []netip.AddrPort
 
 	// TLSCA and TLSInsecure loosen the verification the encrypted transports
 	// do, which is what it takes to reach a server holding a test certificate.
@@ -264,7 +274,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		port          uint
 		roots         rootList
 		wanted        expectList
-		resolverAddr  string
+		resolvers     resolverList
 	)
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
 	flags.BoolVar(&six, "6", false, "ask only IPv6 servers")
@@ -299,8 +309,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&cfg.RootHints, "root-hints", "", "where the walk starts")
 	flags.Var(&roots, "root", "one server to start from")
 	flags.StringVar(&cfg.TrustAnchors, "trust-anchors", "", "the DS records to trust")
-	flags.StringVar(&resolverAddr, "resolver", "", "the recursive server to use")
-	flags.StringVar(&resolverAddr, "asn-resolver", "", "the older name for --resolver")
+	flags.Var(&resolvers, "resolver", "a recursive server to use")
+	flags.Var(&resolvers, "asn-resolver", "the older name for --resolver")
 	flags.StringVar(&cfg.TLSCA, "tls-ca", "", "verify the encrypted transports against these roots")
 	flags.BoolVar(&cfg.TLSInsecure, "tls-insecure", false, "do not verify the encrypted transports")
 	flags.StringVar(&configPath, "config", "", "take the defaults from this file")
@@ -426,13 +436,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Roots = roots.servers; len(cfg.Roots) > 0 && cfg.RootHints != "" {
 		return nil, fmt.Errorf("%w: --root and --root-hints both say where the walk starts", ErrUsage)
 	}
-	if resolverAddr != "" {
-		if !cfg.ASN && !cfg.Compare {
-			return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
-		}
-		if cfg.Resolver, err = address(resolverAddr, transport.PortDNS); err != nil {
-			return nil, fmt.Errorf("%w: --resolver %w", ErrUsage, err)
-		}
+	if cfg.Resolvers = resolvers.servers; len(cfg.Resolvers) > 0 && !cfg.ASN && !cfg.Compare {
+		return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
 	}
 	if (cfg.TLSCA != "" || cfg.TLSInsecure) && cfg.Proto != "dot" && cfg.Proto != "doh" {
 		return nil, fmt.Errorf("%w: only --dot and --doh use TLS", ErrUsage)
@@ -501,6 +506,28 @@ func (l *expectList) Set(text string) error {
 		return err
 	}
 	l.want = append(l.want, expectation)
+	return nil
+}
+
+// resolverList collects the --resolver flags in the order they were given. More
+// than one asks the same question from more than one place at once, which is
+// what says whether an answer has reached everybody yet.
+type resolverList struct{ servers []netip.AddrPort }
+
+func (l *resolverList) String() string {
+	named := make([]string, 0, len(l.servers))
+	for _, server := range l.servers {
+		named = append(named, server.String())
+	}
+	return strings.Join(named, ",")
+}
+
+func (l *resolverList) Set(text string) error {
+	server, err := address(text, transport.PortDNS)
+	if err != nil {
+		return err
+	}
+	l.servers = append(l.servers, server)
 	return nil
 }
 

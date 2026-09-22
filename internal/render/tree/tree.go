@@ -113,7 +113,7 @@ func (r *renderer) render(tr *trace.Trace) {
 		r.write(r.label(tr.Root) + "\n")
 		r.children(tr.Root, "")
 	}
-	if line := r.difference(tr); line != "" {
+	for _, line := range r.differences(tr) {
 		r.write(line + "\n")
 	}
 	for _, warning := range tr.Warnings {
@@ -449,27 +449,39 @@ func (r *renderer) extended(errors []trace.ExtendedError) string {
 // from will honestly answer them differently; so will a name whose TTL turned
 // over between them. It is what the difference might instead be — a resolver
 // answering out of a policy rather than out of the zone — that earns the line.
-func (r *renderer) difference(tr *trace.Trace) string {
-	if tr.Resolver == nil || tr.Resolver.Match != trace.MatchDiffers {
-		return ""
-	}
+func (r *renderer) differences(tr *trace.Trace) []string {
 	result := tr.Result()
 	if result == nil {
-		return ""
+		return nil
 	}
 
+	// One line each: several resolvers are several places the question was
+	// asked from, and two of them disagreeing with the walk for two different
+	// reasons is two things to read rather than one.
+	var lines []string
+	for _, answer := range tr.Resolvers {
+		if answer.Match == trace.MatchDiffers {
+			lines = append(lines, r.difference(result, answer, tr.Question.Type))
+		}
+	}
+	return lines
+}
+
+// difference is the one line for one resolver that did not answer as the walk
+// did.
+func (r *renderer) difference(result *trace.Step, answer *trace.Resolver, qtype string) string {
 	who := "the resolver"
-	if tr.Resolver.Server.IP.IsValid() {
-		who = tr.Resolver.Server.IP.String()
+	if answer.Server.IP.IsValid() {
+		who = answer.Server.IP.String()
 	}
 
 	var text string
-	ours := trace.Answers(result.Records, tr.Question.Type)
-	theirs := trace.Answers(tr.Resolver.Records, tr.Question.Type)
+	ours := trace.Answers(result.Records, qtype)
+	theirs := trace.Answers(answer.Records, qtype)
 	switch {
-	case result.Rcode != tr.Resolver.Rcode:
+	case result.Rcode != answer.Rcode:
 		text = fmt.Sprintf("%s answers %s where the walk found %s",
-			who, tr.Resolver.Rcode, result.Rcode)
+			who, answer.Rcode, result.Rcode)
 	default:
 		text = fmt.Sprintf("%s answers %s, the walk found %s",
 			who, list(theirs), list(ours))

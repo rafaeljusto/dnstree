@@ -21,11 +21,17 @@ type Trace struct {
 
 	Elapsed time.Duration
 
-	// Resolver is the same question put to a recursive server, when the run
-	// asked for the comparison. A walk from the root is deliberately the slow
-	// way round — it keeps no cache and takes every step itself — so the time
-	// it took only means something next to the time the ordinary path takes.
-	Resolver *Resolver
+	// Resolvers is the same question put to recursive servers, in the order the
+	// run named them, when it asked for the comparison. A walk from the root is
+	// deliberately the slow way round — it keeps no cache and takes every step
+	// itself — so the time it took only means something next to the time the
+	// ordinary path takes.
+	//
+	// More than one of them is how a question is asked from more than one
+	// place at once: two resolvers that answer differently are two views of
+	// the same name, and which of them a client gets depends only on which it
+	// happens to use.
+	Resolvers []*Resolver
 
 	// Warnings are what the resolver could not do, in the order it found out.
 	Warnings []string

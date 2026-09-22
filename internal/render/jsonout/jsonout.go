@@ -15,7 +15,7 @@ import (
 // Version 2 added the extended errors of RFC 8914, the echoed client subnet,
 // the decoded service parameters of an HTTPS or SVCB record, and what the
 // resolver answered beside how long it took.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // Render writes the trace to w as JSON.
 func Render(w io.Writer, tr *trace.Trace) error {
@@ -23,7 +23,9 @@ func Render(w io.Writer, tr *trace.Trace) error {
 	if tr != nil {
 		document.Question = question{Name: tr.Question.Name, Type: tr.Question.Type, Class: tr.Question.Class}
 		document.ElapsedMS = milliseconds(tr.Elapsed)
-		document.Resolver = convertResolver(tr.Resolver)
+		for _, answer := range tr.Resolvers {
+			document.Resolvers = append(document.Resolvers, convertResolver(answer))
+		}
 		document.Root = convert(tr.Root)
 		document.Warnings = tr.Warnings
 	}
@@ -34,12 +36,12 @@ func Render(w io.Writer, tr *trace.Trace) error {
 }
 
 type document struct {
-	SchemaVersion int       `json:"schema_version"`
-	Question      question  `json:"question"`
-	ElapsedMS     float64   `json:"elapsed_ms"`
-	Resolver      *resolver `json:"resolver,omitempty"`
-	Root          *step     `json:"root,omitempty"`
-	Warnings      []string  `json:"warnings,omitempty"`
+	SchemaVersion int         `json:"schema_version"`
+	Question      question    `json:"question"`
+	ElapsedMS     float64     `json:"elapsed_ms"`
+	Resolvers     []*resolver `json:"resolvers,omitempty"`
+	Root          *step       `json:"root,omitempty"`
+	Warnings      []string    `json:"warnings,omitempty"`
 }
 
 // resolver is the same question put to a recursive server, for whatever reads

@@ -95,19 +95,31 @@ func Ask(ctx context.Context, carrier transport.Transport, server netip.AddrPort
 // not resolving, but answering out of a policy, a split horizon or a filter.
 // The tool reports the difference and leaves that reading to the reader.
 func Compare(tr *trace.Trace) {
-	if tr == nil || tr.Resolver == nil || tr.Resolver.Err != "" {
+	if tr == nil {
 		return
 	}
 	result := tr.Result()
 	if result == nil {
 		return // nothing of our own to set it against
 	}
+	for _, answer := range tr.Resolvers {
+		compare(tr, result, answer)
+	}
+}
+
+// compare is one resolver's answer held against the walk's. Each of them is
+// judged on its own: several resolvers are several places to have asked from,
+// and one of them disagreeing says nothing about the others.
+func compare(tr *trace.Trace, result *trace.Step, answer *trace.Resolver) {
+	if answer == nil || answer.Err != "" {
+		return
+	}
 
 	// A resolver that answered REFUSED or SERVFAIL did not resolve anything,
 	// so there is no answer of its own to hold against the walk's. The rcode
 	// is already on the summary line and says the whole of it; calling that a
 	// difference would be reading a broken resolver as a disagreeing one.
-	switch tr.Resolver.Rcode {
+	switch answer.Rcode {
 	case "NOERROR", "NXDOMAIN":
 	default:
 		return
@@ -115,9 +127,9 @@ func Compare(tr *trace.Trace) {
 
 	// A different rcode is a difference whatever the records say, and it is the
 	// loud one: the name is there for one of them and not for the other.
-	if result.Rcode != "" && result.Rcode != tr.Resolver.Rcode {
+	if result.Rcode != "" && result.Rcode != answer.Rcode {
 
-		tr.Resolver.Match = trace.MatchDiffers
+		answer.Match = trace.MatchDiffers
 		return
 	}
 
@@ -125,15 +137,15 @@ func Compare(tr *trace.Trace) {
 	// by order: a nameserver is free to rotate an RRset between two questions,
 	// and an alias chain reaches the same records by a different name.
 	ours := trace.Answers(result.Records, tr.Question.Type)
-	theirs := trace.Answers(tr.Resolver.Records, tr.Question.Type)
+	theirs := trace.Answers(answer.Records, tr.Question.Type)
 	if len(ours) == 0 && len(theirs) == 0 {
 		return
 	}
 	if slices.Equal(ours, theirs) {
-		tr.Resolver.Match = trace.MatchSame
+		answer.Match = trace.MatchSame
 		return
 	}
-	tr.Resolver.Match = trace.MatchDiffers
+	answer.Match = trace.MatchDiffers
 }
 
 // records flattens an answer section the way the walk does, minus the

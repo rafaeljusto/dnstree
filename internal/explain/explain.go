@@ -199,9 +199,7 @@ func cache(tr *trace.Trace) []Finding {
 	if finding, ok := lifetimes(tr); ok {
 		findings = append(findings, finding)
 	}
-	if finding, ok := leftover(tr); ok {
-		findings = append(findings, finding)
-	}
+	findings = append(findings, leftover(tr)...)
 	return findings
 }
 
@@ -258,20 +256,27 @@ func held(result *trace.Step, qtype string) (uint32, string) {
 // the zone's lifetime entire, which says nothing the line above it has not; one
 // that hands back less is answering from a cache, and how much less is how long
 // it will go on doing so.
-func leftover(tr *trace.Trace) (Finding, bool) {
+func leftover(tr *trace.Trace) []Finding {
 	result := tr.Result()
-	if tr.Resolver == nil || result == nil {
-		return Finding{}, false
+	if result == nil {
+		return nil
+	}
+	zone := trace.TTL(result.Records, tr.Question.Type)
+	if zone == 0 {
+		return nil
 	}
 
-	zone := trace.TTL(result.Records, tr.Question.Type)
-	cached := trace.TTL(tr.Resolver.Records, tr.Question.Type)
-	if zone == 0 || cached == 0 || cached >= zone {
-		return Finding{}, false
+	var findings []Finding
+	for _, answer := range tr.Resolvers {
+		cached := trace.TTL(answer.Records, tr.Question.Type)
+		if cached == 0 || cached >= zone {
+			continue
+		}
+		findings = append(findings, Finding{Topic: Cache, Level: Note, Text: fmt.Sprintf(
+			"%s is answering this from its cache, with %s left on the copy it is serving",
+			answer.Server.IP, spell(cached))})
 	}
-	return Finding{Topic: Cache, Level: Note, Text: fmt.Sprintf(
-		"%s is answering this from its cache, with %s left on the copy it is serving",
-		tr.Resolver.Server.IP, spell(cached))}, true
+	return findings
 }
 
 // trust is what the chain of trust came to, said only where one was followed.
@@ -520,11 +525,19 @@ func servers(tr *trace.Trace) []Finding {
 // reader is expecting, and the summary already says the walk was timed against
 // an ordinary resolution.
 func comparison(tr *trace.Trace) (Finding, bool) {
-	if tr.Resolver == nil || tr.Resolver.Match != trace.MatchDiffers {
+	var differing []string
+	for _, answer := range tr.Resolvers {
+		if answer.Match == trace.MatchDiffers {
+			differing = add(differing, at2(answer.Server))
+		}
+	}
+	if len(differing) == 0 {
 		return Finding{}, false
 	}
-	return Finding{Topic: Resolver, Level: Warn, Text: "a recursive resolver answered this question differently, " +
-		"which a name whose answer is tailored to where it is asked from does honestly, and nothing else should"}, true
+
+	return Finding{Topic: Resolver, Level: Warn,
+		Text: list(differing) + " answered this question differently, " +
+			"which a name whose answer is tailored to where it is asked from does honestly, and nothing else should"}, true
 }
 
 // aliases is how many times the walk followed an alias before it answered.
@@ -536,6 +549,18 @@ func aliases(tr *trace.Trace) int {
 		}
 	}
 	return count
+}
+
+// at2 is a server as a reader would name it, for the ones that are an address
+// and nothing else.
+func at2(server trace.Server) string {
+	switch {
+	case server.Name != "":
+		return server.Name
+	case server.IP.IsValid():
+		return server.IP.String()
+	}
+	return "a resolver"
 }
 
 // at is the server a step went to, as a reader would name it.

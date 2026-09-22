@@ -168,15 +168,15 @@ func TestFindings(t *testing.T) {
 		"a resolver that answered differently is worth a look": {
 			trace: func() *trace.Trace {
 				tr := walk(answer())
-				tr.Resolver = &trace.Resolver{Match: trace.MatchDiffers}
+				tr.Resolvers = []*trace.Resolver{{Match: trace.MatchDiffers}}
 				return tr
 			}(),
-			want: []string{"a recursive resolver answered this question differently"},
+			want: []string{"a resolver answered this question differently"},
 		},
 		"a resolver that agreed is worth no room": {
 			trace: func() *trace.Trace {
 				tr := walk(answer())
-				tr.Resolver = &trace.Resolver{Match: trace.MatchSame}
+				tr.Resolvers = []*trace.Resolver{{Match: trace.MatchSame}}
 				return tr
 			}(),
 			avoid: []string{"recursive resolver"},
@@ -247,7 +247,7 @@ func TestFindingsOrder(t *testing.T) {
 		Delegation: &trace.Delegation{Zone: "test.", NS: []string{"ns.test."}},
 		Children:   []*trace.Step{hop(trace.KindTimeout, "dead.test."), answer},
 	})
-	tr.Resolver = &trace.Resolver{Match: trace.MatchDiffers}
+	tr.Resolvers = []*trace.Resolver{{Match: trace.MatchDiffers}}
 
 	var topics []explain.Topic
 	for _, finding := range explain.Findings(tr) {
@@ -469,10 +469,10 @@ func TestCache(t *testing.T) {
 		"a resolver serving from its cache says how much of it is left": {
 			trace: func() *trace.Trace {
 				tr := walk(answered(300))
-				tr.Resolver = &trace.Resolver{
+				tr.Resolvers = []*trace.Resolver{{
 					Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
 					Records: []trace.RR{{Name: "www.test.", TTL: 213, Type: "A", Data: "192.0.2.1"}},
-				}
+				}}
 				return tr
 			}(),
 			want: []string{"192.0.2.53 is answering this from its cache, with 3 minutes 33 seconds left"},
@@ -480,10 +480,10 @@ func TestCache(t *testing.T) {
 		"a resolver that had to go and fetch it says nothing the zone has not": {
 			trace: func() *trace.Trace {
 				tr := walk(answered(300))
-				tr.Resolver = &trace.Resolver{
+				tr.Resolvers = []*trace.Resolver{{
 					Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
 					Records: []trace.RR{{Name: "www.test.", TTL: 300, Type: "A", Data: "192.0.2.1"}},
-				}
+				}}
 				return tr
 			}(),
 			avoid: []string{"from its cache"},
@@ -535,5 +535,42 @@ func TestCacheLifetimesAreSpelledOut(t *testing.T) {
 				t.Errorf("got %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+// TestSeveralResolvers covers the question asked from several places at once.
+// Each of them is its own view of the name, so the ones that answered
+// differently are named and the ones that agreed take no room.
+func TestSeveralResolvers(t *testing.T) {
+	resolver := func(ip string, ttl uint32, match trace.Match) *trace.Resolver {
+		return &trace.Resolver{
+			Server:  trace.Server{IP: netip.MustParseAddr(ip), Port: 53},
+			Rcode:   "NOERROR",
+			Match:   match,
+			Records: []trace.RR{{Name: "www.test.", TTL: ttl, Type: "A", Data: "192.0.2.1"}},
+		}
+	}
+
+	tr := walk(answered(300))
+	tr.Resolvers = []*trace.Resolver{
+		resolver("192.0.2.53", 300, trace.MatchSame),
+		resolver("192.0.2.54", 120, trace.MatchDiffers),
+		resolver("192.0.2.55", 90, trace.MatchDiffers),
+	}
+
+	got := said(tr)
+	for _, want := range []string{
+		"192.0.2.54 and 192.0.2.55 answered this question differently",
+		"192.0.2.54 is answering this from its cache, with 2 minutes left",
+		"192.0.2.55 is answering this from its cache, with 1 minute 30 seconds left",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("got %q, want it to say %q", got, want)
+		}
+	}
+	// It fetched the answer rather than serving one it had, so there is nothing
+	// left on it to report, and it agreed, so it is not named as differing.
+	if strings.Contains(got, "192.0.2.53") {
+		t.Errorf("got %q, want nothing about the resolver that agreed and had nothing cached", got)
 	}
 }

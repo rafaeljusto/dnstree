@@ -66,7 +66,9 @@ func TestSummaryResolver(t *testing.T) {
 			tr := walk(1)
 			tr.Root.Children[0].Kind = trace.KindAnswer
 			tr.Elapsed = 1500 * time.Millisecond
-			tr.Resolver = test.resolver
+			if test.resolver != nil {
+				tr.Resolvers = []*trace.Resolver{test.resolver}
+			}
 
 			var buf bytes.Buffer
 			Summary(&buf, tr, Options{Color: ColorNever})
@@ -88,7 +90,7 @@ func TestSummaryASCII(t *testing.T) {
 	tr := walk(1)
 	tr.Root.Children[0].Kind = trace.KindAnswer
 	tr.Elapsed = time.Second
-	tr.Resolver = &trace.Resolver{Elapsed: 5 * time.Millisecond, Rcode: "NOERROR"}
+	tr.Resolvers = []*trace.Resolver{{Elapsed: 5 * time.Millisecond, Rcode: "NOERROR"}}
 
 	var buf bytes.Buffer
 	Summary(&buf, tr, Options{Charset: ASCII, Color: ColorNever})
@@ -102,5 +104,68 @@ func TestSummaryASCII(t *testing.T) {
 			t.Errorf("got %q, want nothing but ASCII in it", got)
 			break
 		}
+	}
+}
+
+// TestSummaryResolvers covers the line when the question was put to several
+// places at once. What is worth the room then is not what each of them took but
+// how far apart they were and how many of them disagreed.
+func TestSummaryResolvers(t *testing.T) {
+	answered := func(elapsed time.Duration, match trace.Match) *trace.Resolver {
+		return &trace.Resolver{Elapsed: elapsed, Rcode: "NOERROR", Match: match}
+	}
+
+	tests := map[string]struct {
+		resolvers []*trace.Resolver
+		want      string
+		avoid     string
+	}{
+		"all of them agreed, and the range is the whole of it": {
+			resolvers: []*trace.Resolver{
+				answered(12*time.Millisecond, trace.MatchSame),
+				answered(41*time.Millisecond, trace.MatchSame),
+			},
+			want:  "resolvers in 12ms-41ms",
+			avoid: "differ",
+		},
+		"the ones that disagreed are counted against the ones that were asked": {
+			resolvers: []*trace.Resolver{
+				answered(12*time.Millisecond, trace.MatchSame),
+				answered(30*time.Millisecond, trace.MatchDiffers),
+				answered(41*time.Millisecond, trace.MatchDiffers),
+			},
+			want: "resolvers in 12ms-41ms (2 of 3 differ)",
+		},
+		"one that said nothing is counted rather than left out": {
+			resolvers: []*trace.Resolver{
+				answered(12*time.Millisecond, trace.MatchSame),
+				{Err: "i/o timeout"},
+			},
+			want: "resolvers in 12ms (1 did not answer)",
+		},
+		"none of them answering is still worth the room": {
+			resolvers: []*trace.Resolver{{Err: "i/o timeout"}, {Err: "i/o timeout"}},
+			want:      "2 resolvers did not answer",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr := walk(1)
+			tr.Root.Children[0].Kind = trace.KindAnswer
+			tr.Elapsed = 1500 * time.Millisecond
+			tr.Resolvers = test.resolvers
+
+			var buf bytes.Buffer
+			Summary(&buf, tr, Options{Color: ColorNever})
+
+			got := buf.String()
+			if !strings.Contains(got, test.want) {
+				t.Errorf("got %q, want it to carry %q", got, test.want)
+			}
+			if test.avoid != "" && strings.Contains(got, test.avoid) {
+				t.Errorf("got %q, want it not to say %q", got, test.avoid)
+			}
+		})
 	}
 }

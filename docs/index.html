@@ -665,6 +665,13 @@ timeout = 3s</pre>
       <a href="https://github.com/rafaeljusto/dnstree/blob/main/dnstreerc.example">dnstreerc.example</a>
       carries every setting worth making, annotated and commented out.</p>
 
+      <h3 style="margin-top:2.2rem">Ask from several places at once</h3>
+      <p class="section-lede">Repeat <code>--resolver</code> and the question goes to all of
+      them at the same moment. Two that answer differently are two views of one name, and
+      which of them somebody gets depends on nothing but which resolver they use; the summary
+      says how far apart they were and how many disagreed. With <code>--subnet</code> beside
+      it, that is most of "does this name look the same from where my users are".</p>
+
       <h3 style="margin-top:2.2rem">Leave it running</h3>
       <p class="section-lede"><code>--watch 30s</code> draws the tree once and then keeps
       walking the same question, saying only what has changed since the walk before it. A
