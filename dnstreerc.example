@@ -77,8 +77,8 @@
 
 # What to draw
 
-# tree, ascii, emoji, json or dot. ascii emits nothing above codepoint 127,
-# for pasting somewhere that cannot carry box drawing.
+# tree, ascii, emoji, json, dot or web. ascii emits nothing above codepoint
+# 127, for pasting somewhere that cannot carry box drawing.
 # format = tree
 
 # web draws nothing in the terminal. It serves the finished walk as a page on
@@ -89,9 +89,9 @@
 # web-addr = 127.0.0.1:0
 # no-browser = true
 
-# Draw the tree as the walk makes it. Asking for json or dot on the command
-# line drops this line rather than failing on it, since both are written once
-# at the end.
+# Draw the tree as the walk makes it. Asking for json, dot or web on the
+# command line drops this line rather than failing on it, since all three are
+# written once at the end.
 # live = true
 
 # Say in sentences what the walk came to, under the tree. Asking for json or
@@ -101,15 +101,16 @@
 
 # Say what has changed since the last walk of the same question, and remember
 # this one in its place. It is the one thing here that writes to the disk: one
-# file per question under $XDG_CACHE_HOME/dnstree, naming what was looked up
-# and when. Asking for json or dot on the command line drops this line too.
+# file per question under $DNSTREE_CACHE, or $XDG_CACHE_HOME/dnstree, naming
+# what was looked up and when. Asking for json or dot on the command line
+# drops this line too.
 # diff = true
 
 # auto, always or never. auto colours a terminal and nothing else.
 # color = auto
 
-# Skip the origin AS lookups. They are the one thing a walk asks a resolver
-# for, which is what to weigh where nothing may leave the host.
+# Skip the origin AS lookups. They go to a resolver rather than to the zone's
+# own servers, which is what to weigh where nothing may leave the host.
 # no-asn = true
 
 # Do not put the same question to a recursive server. The timing that comes

@@ -4,7 +4,7 @@ What a release ships beyond the archives: a Debian, an RPM and an Alpine
 package per Linux architecture, and a Homebrew formula.
 
 ```bash
-make dist VERSION=v0.1.2   # everything, into dist/
+make dist VERSION=v1.2.0   # everything, into dist/
 ```
 
 `dist` runs five stages in order, each reading the one before it:
@@ -68,7 +68,7 @@ Homebrew user runs is byte for byte what every other channel ships.
 There is no tap. The formula is a release asset, installed from a file:
 
 ```bash
-curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v0.1.2/dnstree.rb
+curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v1.2.0/dnstree.rb
 brew install --formula ./dnstree.rb
 ```
 

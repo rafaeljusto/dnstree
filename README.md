@@ -60,18 +60,18 @@ page: `man dnstree`. `checksums.txt` covers every file in the release.
 <details>
 <summary>Installing a downloaded package</summary>
 
-The release notes give the command for each; taking the packages of `v1.1.1`
+The release notes give the command for each; taking the packages of `v1.2.0`
 as the example:
 
 ```
 # Debian, Ubuntu
-sudo dpkg -i dnstree_1.1.1_amd64.deb
+sudo dpkg -i dnstree_1.2.0_amd64.deb
 
 # Fedora, RHEL
-sudo rpm -i dnstree-1.1.1-1.x86_64.rpm
+sudo rpm -i dnstree-1.2.0-1.x86_64.rpm
 
 # Alpine
-sudo apk add --allow-untrusted dnstree_1.1.1_x86_64.apk
+sudo apk add --allow-untrusted dnstree_1.2.0_x86_64.apk
 
 # Homebrew
 brew install --formula ./dnstree.rb
@@ -140,8 +140,8 @@ and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
-`no-config` and `version`: those three ask something of the run rather than set
-a default for it.
+`no-config`, `version` and `schema`: those four ask something of the run rather
+than set a default for it.
 
 > [!NOTE]
 > A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be
@@ -153,10 +153,12 @@ above and `--dnssec=false` turns a flag it set back off. Flags that answer one
 question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
-for `--tls-ca` and `--tls-insecure`. `--format json` and `--format dot` drop a
-`live` the file set, since both are written once at the end, and so does
-`--format web`; a format that serves no page drops a `web-addr` it set. `--config FILE`
-reads somewhere else, and `--no-config` reads nowhere.
+for `--tls-ca` and `--tls-insecure`. `--format json`, `--format dot` and
+`--format web` drop a `live` the file set, since all three are written once at
+the end, and `json` and `dot` drop an `explain` and a `diff` as well, being read
+by a program that has the whole trace already. A format that serves no page
+drops a `web-addr` and a `no-browser` it set. `--config FILE` reads somewhere
+else, and `--no-config` reads nowhere.
 
 `root` is the one line worth repeating: a file may carry as many as the walk
 should start from, in the order they are written. One `--root` on the command
@@ -345,6 +347,44 @@ network and not the machine.
 > The subnet is sent to every server on the way down, which is more than the
 > root servers need to know about where you are, so it is never sent unless it
 > is asked for.
+
+### Whether the parent and the child agree
+
+The delegation a walk follows is the parent's word for who serves the zone. The
+zone keeps its own NS RRset, and nothing above it ever reads that one, so the
+two drift apart quietly: a nameserver retired in the zone and left in the
+registry answers nothing, and one added to the zone and never registered is
+never asked. `--check-ns` puts the question to the zone that answered and holds
+the two lists against each other:
+
+```
+$ dnstree --check-ns --no-asn www.example.com A
+...
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  222ms  NOERROR  AA
+│   │   │   ├── www.example.com. 300 A 172.66.147.243
+│   │   │   ├── www.example.com. 300 A 104.20.23.154
+│   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  224ms  NOERROR  AA  (parent/child NS check)
+...
+✔ answered in 936ms · resolver in 245ms · 4 queries · 3 servers
+```
+
+The check rides in as a hop of its own, marked for what it is, so the query it
+cost is visible in the tree rather than hidden in the count. Two lists that
+match are worth no room and get none. Where they differ, the walk says so above
+the summary, in whichever direction it found:
+
+> test. delegates to ns3.test., which the zone itself does not list
+
+> test. lists ns4.test., which the delegation does not carry
+
+Neither is fatal — the name still resolves, which is exactly why nobody notices
+— and both are a fault to take to whoever holds the other half. A zone that
+answers the question with no NS records of its own is reported too, since a zone
+that cannot name its own nameservers is a stranger thing than a list that has
+drifted.
+
+It costs one query, asked of the server that answered the question, and it is
+off unless asked for.
 
 ### Whether they all have the same zone
 
@@ -698,7 +738,8 @@ prints, followed by one line saying how it went:
 
 > [!NOTE]
 > Off a terminal the flag does nothing, and it cannot be combined with
-> `--format json` or `--format dot`, both of which are written once, at the end.
+> `--format json`, `--format dot` or `--format web`, all three of which are
+> written once, at the end.
 
 ### Leaving it running
 
