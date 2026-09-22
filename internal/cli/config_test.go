@@ -105,6 +105,11 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--format", "json", "example.com"},
 			want: cli.Config{Format: "json"},
 		},
+		"and outlives the file's watch, which it gives nothing to change": {
+			file: "watch = 30s\nformat = emoji\n",
+			args: []string{"--format", "json", "example.com"},
+			want: cli.Config{Format: "json"},
+		},
 		"the type is still read from the command line": {
 			file: "format = emoji\n",
 			args: []string{"example.com", "mx"},
@@ -135,6 +140,11 @@ func TestParseDefaults(t *testing.T) {
 		},
 		"a page cannot be drawn live either": {
 			file: "live\nformat = tree\n",
+			args: []string{"--format", "web", "example.com"},
+			want: cli.Config{Format: "web", WebAddr: "127.0.0.1:0"},
+		},
+		"a page cannot be watched changing either": {
+			file: "watch = 30s\nformat = tree\n",
 			args: []string{"--format", "web", "example.com"},
 			want: cli.Config{Format: "web", WebAddr: "127.0.0.1:0"},
 		},

@@ -189,17 +189,18 @@ func override(flags *flag.FlagSet, fileArgs, args []string) []string {
 		}
 	}
 
-	// A format written once, at the end, cannot be drawn live, and one read by
-	// a program has no use for prose. Asked for either, the file's --live and
-	// --explain are about the other formats: they are dropped rather than held
-	// against the run. The same goes the other way round for the flags only a
-	// served page takes.
+	// A format written once, at the end, can be neither drawn live nor watched
+	// changing, and one read by a program has no use for prose. Asked for
+	// either, the file's --live, --watch and --explain are about the other
+	// formats: they are dropped rather than held against the run. The same goes
+	// the other way round for the flags only a served page takes.
 	switch format := given["format"]; format {
 	case "":
 	case "json", "dot":
-		drop["live"], drop["explain"], drop["diff"] = true, true, true
+		drop["live"], drop["watch"] = true, true
+		drop["explain"], drop["diff"] = true, true
 	case "web":
-		drop["live"] = true
+		drop["live"], drop["watch"] = true, true
 	default:
 		drop["web-addr"], drop["no-browser"] = true, true
 	}

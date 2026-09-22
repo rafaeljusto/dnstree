@@ -154,11 +154,12 @@ question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
 for `--tls-ca` and `--tls-insecure`. `--format json`, `--format dot` and
-`--format web` drop a `live` the file set, since all three are written once at
-the end, and `json` and `dot` drop an `explain` and a `diff` as well, being read
-by a program that has the whole trace already. A format that serves no page
-drops a `web-addr` and a `no-browser` it set. `--config FILE` reads somewhere
-else, and `--no-config` reads nowhere.
+`--format web` drop a `live` and a `watch` the file set, since all three are
+written once at the end and leave neither anything to draw nor anything to
+change; `json` and `dot` drop an `explain` and a `diff` as well, being read by a
+program that has the whole trace already. A format that serves no page drops a
+`web-addr` and a `no-browser` it set. `--config FILE` reads somewhere else, and
+`--no-config` reads nowhere.
 
 `root` is the one line worth repeating: a file may carry as many as the walk
 should start from, in the order they are written. One `--root` on the command
