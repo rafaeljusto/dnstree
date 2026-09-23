@@ -210,12 +210,9 @@ func (c *Chain) nsec3DeniesName(nsec3s []*dns.NSEC3, authority []dns.RR, qname s
 	}
 
 	// RFC 5155 section 8.4 asks for the gap holding the name one label below the
-	// encloser, and for the gap holding the wildcard. It does not ask after the
-	// opt-out flag here, and deliberately: an opt-out zone leaves unsigned
-	// delegations out of its chain, so a name error from one says only that the
-	// name is not in the signed part of the zone. That is the bargain opt-out
-	// makes, not a proof this walk can improve on.
-	if _, err := c.nsec3Covering(nsec3s, authority, nextCloser); err != nil {
+	// encloser, and for the gap holding the wildcard.
+	covering, err := c.nsec3Covering(nsec3s, authority, nextCloser)
+	if err != nil {
 		return err
 	}
 
@@ -227,6 +224,14 @@ func (c *Chain) nsec3DeniesName(nsec3s []*dns.NSEC3, authority []dns.RR, qname s
 	}
 	if _, err := c.nsec3Covering(nsec3s, authority, wildcard); err != nil {
 		return fmt.Errorf("no NSEC3 denies the wildcard %s", wildcard)
+	}
+
+	// An opt-out range leaves unsigned delegations out of the chain, so the
+	// name may sit under one the zone never listed. That proves the name is
+	// not in the signed part of the zone, and nothing more: RFC 5155 section
+	// 9.2.
+	if covering.Flags&optOut != 0 {
+		return optOutError{nextCloser}
 	}
 	return nil
 }
@@ -246,8 +251,17 @@ func (c *Chain) nsec3DeniesType(nsec3s []*dns.NSEC3, authority []dns.RR, qname s
 		return deniesType(nsec3.TypeBitMap, qname, qtype, "NSEC3")
 	}
 
-	// A wildcard answered with nothing of this type: RFC 5155 section 8.7.
 	encloser, nextCloser, found := closestEncloser(nsec3s, qname, c.zoneName())
+
+	// No DS where no NSEC3 names the delegation: an opt-out range covers it,
+	// and the delegation is unsigned. RFC 5155 section 8.6.
+	if qtype == dns.TypeDS && found && nextCloser != "" {
+		if covering, err := c.nsec3Covering(nsec3s, authority, nextCloser); err == nil && covering.Flags&optOut != 0 {
+			return optOutError{nextCloser}
+		}
+	}
+
+	// A wildcard answered with nothing of this type: RFC 5155 section 8.7.
 	if found && nextCloser != "" {
 		if _, err := c.nsec3Covering(nsec3s, authority, nextCloser); err == nil {
 			wildcard := wildcardAt(encloser)

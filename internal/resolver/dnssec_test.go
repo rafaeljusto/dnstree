@@ -192,7 +192,7 @@ func TestDNSSECBroken(t *testing.T) {
 		"the key set did not sign itself": {
 			example: fakens.Behaviour{BadKeySignature: true},
 			state:   trace.Bogus,
-			reason:  "not signed by the key the DS points at",
+			reason:  "not signed by a key the DS points at",
 		},
 		"the answer is not signed by the keys": {
 			example: fakens.Behaviour{BadSignature: true},

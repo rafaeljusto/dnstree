@@ -424,7 +424,8 @@ footer a:hover{color:var(--ink)}
         An unsigned zone turns the chain grey from that point down; nothing below it can
         be secure again. Denial of existence is proved rather than taken on trust: NSEC and
         NSEC3 are read, opt-out included, so an answer with nothing in it is checked like
-        any other.
+        any other. A denial resting on an opt-out range reads insecure, since the range
+        may hide an unsigned delegation.
       </p>
     </section>
 

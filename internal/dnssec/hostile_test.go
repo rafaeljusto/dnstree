@@ -1,6 +1,8 @@
 package dnssec_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,5 +173,136 @@ func TestParentNSEC3IsNoClosestEncloser(t *testing.T) {
 	status := chain.Verify(nil, authority, dns.RcodeNameError, "www.sub.example.", dns.TypeA)
 	if status.State == trace.Secure {
 		t.Errorf("got %s (%s), want a delegation refused as the closest encloser", status.State, status.Reason)
+	}
+}
+
+// TestUnimplementedAlgorithmIsIndeterminate covers a zone signed with an
+// algorithm this build cannot verify. The signature did not fail, it went
+// unchecked, and bogus has to keep meaning a signature that failed.
+func TestUnimplementedAlgorithmIsIndeterminate(t *testing.T) {
+	root := newZone(t, ".")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+		t.Fatalf("got %+v entering the root, want it secure", status)
+	}
+
+	key := &dns.DNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET, TTL: 3600}}
+	key.Flags, key.Protocol, key.Algorithm = 257, 3, 200
+	key.PublicKey = "AwEAAbWkWQ3LgGHvnKjDq0U3ZuaO5w=="
+	signature := record(t, fmt.Sprintf(
+		"example. 3600 IN RRSIG DNSKEY 200 1 3600 20300101000000 20200101000000 %d example. AAECAwQFBgcICQ==", key.KeyTag()))
+	ds := key.ToDS(dns.SHA256)
+	authority := []dns.RR{ds, root.sign(t, []dns.RR{ds}, time.Now().Add(time.Hour))}
+
+	status := chain.Enter("example.", authority, []dns.RR{key, signature})
+	if status.State != trace.Indeterminate {
+		t.Errorf("got %s (%s), want indeterminate", status.State, status.Reason)
+	}
+}
+
+// TestStandbyKeyListedFirst covers a DS set naming a key that is published but
+// not yet signing, ahead of the one that is. That is how every KSK rollover
+// starts, the root's included, so every key the DS points at has to be tried.
+func TestStandbyKeyListedFirst(t *testing.T) {
+	root := newZone(t, ".")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+		t.Fatalf("got %+v entering the root, want it secure", status)
+	}
+
+	active, standby := newZone(t, "example."), newZone(t, "example.")
+	dsset := []dns.RR{standby.ds(), active.ds()}
+	authority := append(append([]dns.RR{}, dsset...), root.sign(t, dsset, time.Now().Add(time.Hour)))
+	keyset := []dns.RR{standby.key, active.key}
+	dnskeys := append(append([]dns.RR{}, keyset...), active.sign(t, keyset, time.Now().Add(time.Hour)))
+
+	status := chain.Enter("example.", authority, dnskeys)
+	if status.State != trace.Secure {
+		t.Fatalf("got %s (%s), want secure", status.State, status.Reason)
+	}
+	if len(status.KeyTags) != 1 || status.KeyTags[0] != active.key.KeyTag() {
+		t.Errorf("got key tags %v, want the key that signed, %d", status.KeyTags, active.key.KeyTag())
+	}
+}
+
+// TestDNAMESynthesis covers the CNAME a DNAME makes, which nobody signs. The
+// signed DNAME vouches for it, but only for the CNAME it would make itself.
+func TestDNAMESynthesis(t *testing.T) {
+	tests := map[string]struct {
+		target string
+		signed bool
+		want   trace.DNSSECState
+	}{
+		"the CNAME is what the DNAME makes": {"www.new.example.", true, trace.Secure},
+		"the CNAME points somewhere else":   {"www.elsewhere.test.", true, trace.Bogus},
+		"the DNAME is not signed either":    {"www.new.example.", false, trace.Bogus},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			chain, z := secured(t)
+			dname := record(t, "old.example. 3600 IN DNAME new.example.")
+			answer := []dns.RR{dname}
+			if test.signed {
+				answer = append(answer, z.sign(t, []dns.RR{dname}, time.Now().Add(time.Hour)))
+			}
+			answer = append(answer, record(t, "www.old.example. 3600 IN CNAME "+test.target))
+
+			status := chain.Verify(answer, nil, dns.RcodeSuccess, "www.old.example.", dns.TypeA)
+			if status.State != test.want {
+				t.Errorf("got %s (%s), want %s", status.State, status.Reason, test.want)
+			}
+		})
+	}
+}
+
+// TestOptOutDenialIsInsecure covers the denials that rest on an opt-out range.
+// The range leaves unsigned delegations out of the chain, so all it proves is
+// that the name is outside the signed part of the zone: RFC 5155 sections 8.6
+// and 9.2.
+func TestOptOutDenialIsInsecure(t *testing.T) {
+	tests := map[string]struct {
+		rcode uint16
+		qname string
+		qtype uint16
+	}{
+		"a name error":                    {dns.RcodeNameError, "www.example.", dns.TypeA},
+		"no DS at an unlisted delegation": {dns.RcodeSuccess, "www.example.", dns.TypeDS},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			chain, z := secured(t)
+			apex, next, wild := hashOf(t, "example."), hashOf(t, "www.example."), hashOf(t, "*.example.")
+			var authority []dns.RR
+			authority = append(authority, signedBy(t, z, z.nsec3(t, apex, step(apex, +1), 1, []uint16{dns.TypeSOA, dns.TypeNS}))...)
+			authority = append(authority, signedBy(t, z, z.nsec3(t, step(next, -1), step(next, +1), 1, nil))...)
+			authority = append(authority, signedBy(t, z, z.nsec3(t, step(wild, -1), step(wild, +1), 1, nil))...)
+
+			status := chain.Verify(nil, authority, test.rcode, test.qname, test.qtype)
+			if status.State != trace.Insecure {
+				t.Errorf("got %s (%s), want insecure", status.State, status.Reason)
+			}
+		})
+	}
+}
+
+// TestTooManyNSEC3 covers a response stuffed with NSEC3 records at the
+// iteration cap, for a name as long as a name gets. Each record is hashed
+// against each label, so the count is capped before any hashing starts.
+func TestTooManyNSEC3(t *testing.T) {
+	chain, z := secured(t)
+	qname := strings.Repeat("a.", 120) + "example."
+
+	var authority []dns.RR
+	for i := range 900 {
+		hash := make([]byte, 20)
+		hash[18], hash[19] = byte(i>>8), byte(i)
+		nsec3 := z.nsec3(t, hash, step(hash, +1), 0, nil)
+		nsec3.Iterations = 100
+		authority = append(authority, nsec3)
+	}
+
+	status := chain.Verify(nil, authority, dns.RcodeNameError, qname, dns.TypeA)
+	if status.State != trace.Bogus || !strings.Contains(status.Reason, "more than any proof needs") {
+		t.Errorf("got %s (%s), want bogus for the count alone", status.State, status.Reason)
 	}
 }

@@ -256,7 +256,9 @@ Denial of existence is proved. NSEC and NSEC3 are read, opt-out included, so an
 answer with nothing in it is checked like any other: an NXDOMAIN has to show the
 gap the name falls in and the gap the wildcard would have answered from, a
 NODATA has to name the types the name does hold, and an answer a wildcard was
-stretched over has to show there was nothing closer to answer with.
+stretched over has to show there was nothing closer to answer with. A denial
+that rests on an opt-out range reads `[insecure]`: the range may be hiding an
+unsigned delegation, so it proves only that the name is not signed.
 
 A registry that serves its own domains from the machines of its ccTLD answers
 for a child zone with no referral to it, so the cut is invisible from the walk.

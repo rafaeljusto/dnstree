@@ -57,10 +57,20 @@ func TestNXDomainIsProved(t *testing.T) {
 		if answer == nil || answer.Kind != trace.KindNXDomain {
 			t.Fatalf("got %+v, want NXDOMAIN: %s", answer, format(steps(tr)))
 		}
-		if answer.DNSSEC == nil || answer.DNSSEC.State != trace.Secure {
-			t.Fatalf("got %+v, want the absence proved", answer.DNSSEC)
+		if want := nameErrorVerdict(denial); answer.DNSSEC == nil || answer.DNSSEC.State != want {
+			t.Fatalf("got %+v, want %s", answer.DNSSEC, want)
 		}
 	})
+}
+
+// nameErrorVerdict is what a sound NXDOMAIN is worth. An opt-out range may hide
+// an unsigned delegation holding the name, so it proves only that the name is
+// not signed.
+func nameErrorVerdict(denial fakens.Denial) trace.DNSSECState {
+	if denial == fakens.DenialNSEC3OptOut {
+		return trace.Insecure
+	}
+	return trace.Secure
 }
 
 // TestNoDataIsProved covers a name that is there with nothing of the type asked
@@ -166,10 +176,14 @@ func TestDeniedNameThatIsThere(t *testing.T) {
 // and calls a sound zone bogus.
 func TestHiddenCutDeniesAcrossIt(t *testing.T) {
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
-		for what, question := range map[string][2]string{
-			"a name it does not hold":  {"nothing.hosted.com", "A"},
-			"a type the name has none": {"www.hosted.com", "MX"},
+		for what, test := range map[string]struct {
+			question [2]string
+			want     trace.DNSSECState
+		}{
+			"a name it does not hold":  {[2]string{"nothing.hosted.com", "A"}, nameErrorVerdict(denial)},
+			"a type the name has none": {[2]string{"www.hosted.com", "MX"}, trace.Secure},
 		} {
+			question := test.question
 			t.Run(what, func(t *testing.T) {
 				h, cfg := signedAs(t, denial, fakens.Behaviour{})
 				// The same declared address as ns.com., so the walk never learns
@@ -187,9 +201,9 @@ func TestHiddenCutDeniesAcrossIt(t *testing.T) {
 				if answer == nil || answer.DNSSEC == nil {
 					t.Fatalf("got %+v, want a verdict: %s", answer, format(steps(tr)))
 				}
-				if answer.DNSSEC.State != trace.Secure {
-					t.Fatalf("got %+v, want the denial checked against the child's keys: %s",
-						answer.DNSSEC, format(steps(tr)))
+				if answer.DNSSEC.State != test.want {
+					t.Fatalf("got %+v, want %s from the child's keys: %s",
+						answer.DNSSEC, test.want, format(steps(tr)))
 				}
 			})
 		}

@@ -34,6 +34,12 @@ const optOut = 1
 // unreasonable.
 const maxNSEC3Iterations = 100
 
+// maxNSEC3Records is more than any proof needs: three make the longest of
+// them. Every record is hashed against every label of the name, so a response
+// stuffed with them is a way to make a validator grind, and the query timeout
+// does not stop hashing that has already begun.
+const maxNSEC3Records = 16
+
 // provesNoDS reports whether authority carries the parent's signed word that
 // zone has no DS record. A nil error means the insecure delegation is proven.
 func (c *Chain) provesNoDS(authority []dns.RR, zone string) error {
@@ -230,6 +236,9 @@ func (c *Chain) nsec3sOf(authority []dns.RR) ([]*dns.NSEC3, error) {
 		default:
 			records = append(records, nsec3)
 		}
+	}
+	if len(records) > maxNSEC3Records {
+		return nil, fmt.Errorf("%d NSEC3 records is more than any proof needs", len(records))
 	}
 	if len(records) > 0 {
 		return records, nil

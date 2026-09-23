@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,6 +92,17 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		return c.settleAs(&trace.DNSSECStatus{}, trace.Insecure, "the parent published no DS", nil)
 	}
 
+	// A DS for an algorithm this build cannot verify is one it cannot follow.
+	// With none left the zone is out of reach, not broken: RFC 4035 5.2.
+	usable := slices.DeleteFunc(slices.Clone(delegated), func(ds *dns.DS) bool { return !implemented[ds.Algorithm] })
+	if len(usable) == 0 {
+		return c.settleAs(&trace.DNSSECStatus{
+			Algorithm: algorithm(delegated[0].Algorithm),
+			Digest:    digest(delegated[0].DigestType),
+		}, trace.Indeterminate, fmt.Sprintf("the DS uses %s, which is not supported here",
+			algorithm(delegated[0].Algorithm)), nil)
+	}
+
 	status := &trace.DNSSECStatus{
 		Algorithm: algorithm(delegated[0].Algorithm),
 		Digest:    digest(delegated[0].DigestType),
@@ -117,7 +129,7 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		return c.settleAs(status, trace.Indeterminate, "the DNSKEY set could not be fetched", nil)
 	}
 
-	key, err := matchDS(delegated, keys)
+	pointed, err := matchDS(usable, keys)
 	if err != nil {
 		state := trace.Bogus
 		if unsupported(err) {
@@ -126,12 +138,16 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		return c.settleAs(status, state, err.Error(), nil)
 	}
 
-	// The key the DS points at has to be the one that signed the whole set.
-	if _, err := c.verify(asRRs(keys), signatures, []*dns.DNSKEY{key}); err != nil {
-		return c.settleAs(status, trace.Bogus, "the DNSKEY set is not signed by the key the DS points at", nil)
+	// One of the keys the DS points at has to have signed the whole set. A DS
+	// for a standby key is published before that key signs anything, so each
+	// one is tried.
+	signature, err := c.verify(asRRs(keys), signatures, pointed)
+	if err != nil {
+		return c.settleAs(status, trace.Bogus, "the DNSKEY set is not signed by a key the DS points at", nil)
 	}
 
-	status.KeyTags = []uint16{key.KeyTag()}
+	status.Algorithm = algorithm(signature.Algorithm)
+	status.KeyTags = []uint16{signature.KeyTag}
 	return c.settleAs(status, trace.Secure, "", keys)
 }
 
@@ -167,6 +183,11 @@ func (c *Chain) verifyAnswer(answer, authority []dns.RR, rcode uint16, qname str
 		return c.verifyDenial(authority, rcode, qname, qtype)
 	}
 	if len(signatures) == 0 {
+		if cname, ok := rrset[0].(*dns.CNAME); ok {
+			if dname := dnameFor(answer, qname); dname != nil {
+				return c.verifySynthesis(answer, authority, rcode, cname, dname, qname)
+			}
+		}
 		return &trace.DNSSECStatus{State: trace.Bogus, Reason: "the answer carries no signature"}
 	}
 
@@ -203,6 +224,45 @@ func (c *Chain) verifyAnswer(answer, authority []dns.RR, rcode uint16, qname str
 	return status
 }
 
+// verifySynthesis checks a CNAME a DNAME made, which nobody signs: RFC 6672
+// section 5.3.1. The DNAME is what the zone signed, so it is the DNAME that is
+// verified, and the CNAME has to be exactly what the DNAME makes of qname.
+func (c *Chain) verifySynthesis(answer, authority []dns.RR, rcode uint16, cname *dns.CNAME, dname *dns.DNAME, qname string) *trace.DNSSECStatus {
+	owner := dname.Hdr.Name
+	if want := substitute(qname, owner, dname.Target); !dns.EqualName(cname.Target, want) {
+		return &trace.DNSSECStatus{State: trace.Bogus,
+			Reason: fmt.Sprintf("the DNAME of %s makes %s of the name, not %s", owner, want, cname.Target)}
+	}
+
+	status := c.verifyAnswer(answer, authority, rcode, owner, dns.TypeDNAME)
+	if status.State == trace.Secure {
+		status.Reason = "synthesised from the DNAME of " + dnsutil.Fqdn(owner)
+	}
+	return status
+}
+
+// dnameFor is the DNAME in answer that redirects qname, if there is one: owned
+// by an ancestor of it, never by the name itself.
+func dnameFor(answer []dns.RR, qname string) *dns.DNAME {
+	for _, rr := range answer {
+		if dname, ok := rr.(*dns.DNAME); ok && !dns.EqualName(dname.Hdr.Name, qname) &&
+			dnsutil.IsBelow(dname.Hdr.Name, qname) {
+			return dname
+		}
+	}
+	return nil
+}
+
+// substitute swaps the owner of a DNAME at the end of name for its target.
+func substitute(name, owner, target string) string {
+	name, owner, target = dnsutil.Canonical(name), dnsutil.Canonical(owner), dnsutil.Canonical(target)
+	prefix := strings.TrimSuffix(name, owner)
+	if target == "." {
+		return prefix
+	}
+	return prefix + target
+}
+
 // verifyDenial checks an answer that carried no records. A signed zone signs
 // the gaps in itself, so an empty answer from one is as checkable as a full
 // one: either the name is not there, or it is and the type is not.
@@ -210,6 +270,10 @@ func (c *Chain) verifyDenial(authority []dns.RR, rcode uint16, qname string, qty
 	proved, what := c.provesNoType(authority, qname, qtype), "has no "+dnsutil.TypeToString(qtype)
 	if rcode == dns.RcodeNameError {
 		proved, what = c.provesNoName(authority, qname), "does not exist"
+	}
+	if optedOut(proved) {
+		return &trace.DNSSECStatus{State: trace.Insecure,
+			Reason: "the zone proved only that " + qname + " is not signed: " + proved.Error()}
 	}
 	if proved != nil {
 		state := trace.Bogus
@@ -278,9 +342,20 @@ func (c *Chain) settleAs(status *trace.DNSSECStatus, state trace.DNSSECState, re
 	return status
 }
 
-// matchDS finds the key a DS points at, by digesting the key the same way.
-func matchDS(delegated []*dns.DS, keys []*dns.DNSKEY) (*dns.DNSKEY, error) {
-	var unknown []uint8
+// implemented are the algorithms the codec's RRSIG.Verify can check. Any other
+// comes back as dns.ErrAlg, which is not a signature that failed.
+var implemented = map[uint8]bool{
+	dns.RSASHA1: true, dns.RSASHA1NSEC3SHA1: true, dns.RSASHA256: true, dns.RSASHA512: true,
+	dns.ECDSAP256SHA256: true, dns.ECDSAP384SHA384: true, dns.ED25519: true, dns.MLDSA44: true,
+}
+
+// matchDS finds the keys the DS records point at, by digesting each key the
+// same way.
+func matchDS(delegated []*dns.DS, keys []*dns.DNSKEY) ([]*dns.DNSKEY, error) {
+	var (
+		matched []*dns.DNSKEY
+		unknown []uint8
+	)
 	for _, ds := range delegated {
 		for _, key := range keys {
 			if key.KeyTag() != ds.KeyTag || key.Algorithm != ds.Algorithm {
@@ -291,10 +366,13 @@ func matchDS(delegated []*dns.DS, keys []*dns.DNSKEY) (*dns.DNSKEY, error) {
 				unknown = append(unknown, ds.DigestType)
 				continue
 			}
-			if strings.EqualFold(digested.Digest, ds.Digest) {
-				return key, nil
+			if strings.EqualFold(digested.Digest, ds.Digest) && !slices.Contains(matched, key) {
+				matched = append(matched, key)
 			}
 		}
+	}
+	if len(matched) > 0 {
+		return matched, nil
 	}
 	if len(unknown) > 0 {
 		return nil, unsupportedError{fmt.Sprintf("digest type %d is not supported here", unknown[0])}
@@ -311,6 +389,19 @@ func (e unsupportedError) Error() string { return e.reason }
 func unsupported(err error) bool {
 	var unsupported unsupportedError
 	return errors.As(err, &unsupported)
+}
+
+// optOutError is a denial that rests on an opt-out range: signed, but saying
+// only that the name is outside the signed part of the zone.
+type optOutError struct{ name string }
+
+func (e optOutError) Error() string {
+	return "an opt-out range covers " + e.name + ", which may be an unsigned delegation"
+}
+
+func optedOut(err error) bool {
+	var optOut optOutError
+	return errors.As(err, &optOut)
 }
 
 // dsSignatures are the signatures over the DS RRset of zone, which the parent
