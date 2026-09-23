@@ -1,5 +1,5 @@
-codeberg.org/miekg/dns v0.6.109 h1:B2lA6b6n/FuUTdECFU9HCunwxLRaR71d+UFV5EP44gg=
-codeberg.org/miekg/dns v0.6.109/go.mod h1:vbidSyLJl5JcDUL2LrXCUjRYSFa5tJweseQox0GOrTk=
+codeberg.org/miekg/dns v0.6.114 h1:SODo7jw1wVHHferv/NZMmW98iPpjpNcAEmT4Nh38aMY=
+codeberg.org/miekg/dns v0.6.114/go.mod h1:vbidSyLJl5JcDUL2LrXCUjRYSFa5tJweseQox0GOrTk=
 golang.org/x/crypto v0.57.0 h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
 golang.org/x/crypto v0.57.0/go.mod h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
 golang.org/x/net v0.59.0 h1:5zfYln+w5XCxwrnMMJPufRgNoXEaGxl0wo5GqPXyues=

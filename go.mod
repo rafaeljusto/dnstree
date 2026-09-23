@@ -3,7 +3,7 @@ module github.com/rafaeljusto/dnstree
 go 1.27.0
 
 require (
-	codeberg.org/miekg/dns v0.6.109
+	codeberg.org/miekg/dns v0.6.114
 	golang.org/x/sys v0.48.0
 )
 
