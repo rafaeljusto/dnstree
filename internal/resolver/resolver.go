@@ -352,6 +352,12 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname
 	if cut == "" || dns.EqualName(cut, zone) || !dnsutil.IsBelow(zone, cut) {
 		return
 	}
+	// The signer is the server's word. A cut the name is not under is not one
+	// this answer crossed, and entering it would trade the zone's keys for
+	// those of any insecure delegation the server cared to name.
+	if !dnsutil.IsBelow(cut, qname) {
+		return
+	}
 	if err := r.counters.query(); err != nil {
 		chain.Unchecked(cut, "the budget ran out before the DS of "+cut+" could be fetched")
 		return

@@ -58,19 +58,11 @@ func (c *Chain) provesNoDS(authority []dns.RR, zone string) error {
 
 	// RFC 5155 8.9: an NSEC3 matching the delegation, or one covering it with
 	// the opt-out flag set.
-	unproven := fmt.Errorf("the parent published no proof that it has no DS")
-	for _, rr := range authority {
-		nsec3, ok := rr.(*dns.NSEC3)
-		if !ok {
-			continue
-		}
-		if nsec3.Hash != 1 {
-			return unsupportedError{fmt.Sprintf("NSEC3 hash algorithm %d is not supported here", nsec3.Hash)}
-		}
-		if nsec3.Iterations > maxNSEC3Iterations {
-			return unsupportedError{fmt.Sprintf("the NSEC3 asks for %d iterations, more than the %d worth hashing",
-				nsec3.Iterations, maxNSEC3Iterations)}
-		}
+	nsec3s, err := c.nsec3sOf(authority)
+	if err != nil {
+		return err
+	}
+	for _, nsec3 := range nsec3s {
 		// The owner is the hash of some name inside the parent, so the parent
 		// is what the record has to be signed by; the codec ties a signature
 		// to the key's own zone, and signedBy ties it to these keys.
@@ -96,7 +88,7 @@ func (c *Chain) provesNoDS(authority []dns.RR, zone string) error {
 			return nil // opt-out: the parent never said whether this one is signed
 		}
 	}
-	return unproven
+	return fmt.Errorf("the parent published no proof that it has no DS")
 }
 
 // provesNoDSBitmap reads the one thing the proof is for. A bitmap carrying DS
@@ -184,13 +176,24 @@ func hasType(bitmap []uint16, rrtype uint16) bool {
 	return slices.Contains(bitmap, rrtype)
 }
 
+// fromTheParent is a denial record made on the parent side of a zone cut. It
+// speaks for the DS at its owner and for nothing else there: RFC 6840 section
+// 4.1.
+func fromTheParent(bitmap []uint16) bool {
+	return hasType(bitmap, dns.TypeNS) && !hasType(bitmap, dns.TypeSOA)
+}
+
+// silentBelow is a denial record that says nothing about the names under its
+// owner, because they belong to another zone or are redirected by a DNAME.
+func silentBelow(bitmap []uint16) bool {
+	return fromTheParent(bitmap) || hasType(bitmap, dns.TypeDNAME)
+}
+
 // Below here is the machinery the existence proofs share: what an NSEC or an
 // NSEC3 says about one name, and the name arithmetic RFC 5155 section 8 is
 // written in.
 
-// nsecsOf and nsec3sOf are the denial records of a section. A hash nothing here
-// computes, or an iteration count not worth grinding through, stops the reading
-// rather than failing it.
+// nsecsOf and nsec3sOf are the denial records of a section.
 func nsecsOf(authority []dns.RR) []*dns.NSEC {
 	var records []*dns.NSEC
 	for _, rr := range authority {
@@ -201,23 +204,47 @@ func nsecsOf(authority []dns.RR) []*dns.NSEC {
 	return records
 }
 
-func nsec3sOf(authority []dns.RR) ([]*dns.NSEC3, error) {
-	var records []*dns.NSEC3
+// A hash nothing here computes, or an iteration count not worth grinding
+// through, is ignored rather than trusted (RFC 5155 section 8.1): anyone can
+// write one. Only when nothing else is left, and the zone signed what it could
+// not be read, is the proof uncheckable rather than missing (RFC 9276 section
+// 3.2).
+func (c *Chain) nsec3sOf(authority []dns.RR) ([]*dns.NSEC3, error) {
+	var (
+		records []*dns.NSEC3
+		skipped []unsupportedNSEC3
+	)
 	for _, rr := range authority {
 		nsec3, ok := rr.(*dns.NSEC3)
 		if !ok {
 			continue
 		}
-		if nsec3.Hash != 1 {
-			return nil, unsupportedError{fmt.Sprintf("NSEC3 hash algorithm %d is not supported here", nsec3.Hash)}
+		switch {
+		case nsec3.Hash != 1:
+			skipped = append(skipped, unsupportedNSEC3{nsec3,
+				fmt.Sprintf("NSEC3 hash algorithm %d is not supported here", nsec3.Hash)})
+		case nsec3.Iterations > maxNSEC3Iterations:
+			skipped = append(skipped, unsupportedNSEC3{nsec3,
+				fmt.Sprintf("the NSEC3 asks for %d iterations, more than the %d worth hashing",
+					nsec3.Iterations, maxNSEC3Iterations)})
+		default:
+			records = append(records, nsec3)
 		}
-		if nsec3.Iterations > maxNSEC3Iterations {
-			return nil, unsupportedError{fmt.Sprintf("the NSEC3 asks for %d iterations, more than the %d worth hashing",
-				nsec3.Iterations, maxNSEC3Iterations)}
-		}
-		records = append(records, nsec3)
 	}
-	return records, nil
+	if len(records) > 0 {
+		return records, nil
+	}
+	for _, s := range skipped {
+		if c.signedBy(authority, s.record.Hdr.Name, dns.TypeNSEC3) == nil {
+			return nil, unsupportedError{s.reason}
+		}
+	}
+	return nil, nil
+}
+
+type unsupportedNSEC3 struct {
+	record *dns.NSEC3
+	reason string
 }
 
 // nsecMatches and nsecCovers are the two things an NSEC can say: this name is
@@ -229,6 +256,11 @@ func nsecMatches(nsec *dns.NSEC, name string) bool {
 
 func nsecCovers(nsec *dns.NSEC, name string) bool {
 	owner, next := nsec.Hdr.Name, nsec.NextDomain
+	// A delegation sorts right before the names below it, which the parent
+	// neither holds nor denies.
+	if silentBelow(nsec.TypeBitMap) && dnsutil.IsBelow(owner, name) {
+		return false
+	}
 	if dns.CompareName(owner, next) >= 0 {
 		return dns.CompareName(owner, name) < 0 || dns.CompareName(name, next) < 0
 	}
@@ -278,6 +310,9 @@ func closestEncloser(nsec3s []*dns.NSEC3, qname, zone string) (encloser, nextClo
 		for _, nsec3 := range nsec3s {
 			if !nsec3Matches(nsec3, candidate) {
 				continue
+			}
+			if n < deepest && silentBelow(nsec3.TypeBitMap) {
+				continue // RFC 5155 8.3: a cut is never the closest encloser
 			}
 			if n < deepest {
 				nextCloser = ancestorOf(qname, n+1)

@@ -29,7 +29,7 @@ func (c *Chain) provesNoName(authority []dns.RR, qname string) error {
 	if nsecs := nsecsOf(authority); len(nsecs) > 0 {
 		return c.nsecDeniesName(nsecs, authority, qname)
 	}
-	nsec3s, err := nsec3sOf(authority)
+	nsec3s, err := c.nsec3sOf(authority)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (c *Chain) provesNoType(authority []dns.RR, qname string, qtype uint16) err
 	if nsecs := nsecsOf(authority); len(nsecs) > 0 {
 		return c.nsecDeniesType(nsecs, authority, qname, qtype)
 	}
-	nsec3s, err := nsec3sOf(authority)
+	nsec3s, err := c.nsec3sOf(authority)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func (c *Chain) provesNoCloserMatch(authority []dns.RR, qname string, labels uin
 		return fmt.Errorf("nothing denies %s, so the wildcard was stretched over it", nextCloser)
 	}
 
-	nsec3s, err := nsec3sOf(authority)
+	nsec3s, err := c.nsec3sOf(authority)
 	if err != nil {
 		return err
 	}
@@ -93,10 +93,14 @@ func (c *Chain) provesNoCloserMatch(authority []dns.RR, qname string, labels uin
 		if !nsec3Covers(nsec3, nextCloser) {
 			continue
 		}
+		// Signed first: an opt-out range is only an excuse if the zone made it.
+		if err := c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3); err != nil {
+			return err
+		}
 		if nsec3.Flags&optOut != 0 {
 			return unsupportedError{"the wildcard rests on an opt-out range, which proves nothing about " + nextCloser}
 		}
-		return c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3)
+		return nil
 	}
 	return fmt.Errorf("nothing denies %s, so the wildcard was stretched over it", nextCloser)
 }
@@ -147,6 +151,9 @@ func (c *Chain) nsecDeniesType(nsecs []*dns.NSEC, authority []dns.RR, qname stri
 		}
 		if err := c.signedBy(authority, nsec.Hdr.Name, dns.TypeNSEC); err != nil {
 			return err
+		}
+		if qtype != dns.TypeDS && fromTheParent(nsec.TypeBitMap) {
+			return fmt.Errorf("the NSEC of %s comes from the parent, which speaks only for its DS", qname)
 		}
 		return deniesType(nsec.TypeBitMap, qname, qtype, "NSEC")
 	}
@@ -232,6 +239,9 @@ func (c *Chain) nsec3DeniesType(nsec3s []*dns.NSEC3, authority []dns.RR, qname s
 		}
 		if err := c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3); err != nil {
 			return err
+		}
+		if qtype != dns.TypeDS && fromTheParent(nsec3.TypeBitMap) {
+			return fmt.Errorf("the NSEC3 of %s comes from the parent, which speaks only for its DS", qname)
 		}
 		return deniesType(nsec3.TypeBitMap, qname, qtype, "NSEC3")
 	}

@@ -390,3 +390,101 @@ func TestUnprovenInsecureDelegation(t *testing.T) {
 		t.Fatalf("got insecure (%s), want an unproven claim refused", answer.DNSSEC.Reason)
 	}
 }
+
+// TestForgedSignerCannotChooseTheCut covers a forged answer whose signature
+// names an insecure delegation elsewhere in the zone. The DS of that delegation
+// is genuinely denied, so a walk that let the signer pick the cut would verify
+// the forgery as insecure and exit nought.
+func TestForgedSignerCannotChooseTheCut(t *testing.T) {
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: true})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.com.", Origin: "com.", Declared: "192.0.2.2", DNSSEC: true,
+		Zone: comZone + "unsigned IN NS ns.unsigned\nns.unsigned IN A 192.0.2.9\n"})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3", DNSSEC: true})
+	h := harness{hierarchy, root}
+
+	forged := mustRR(t, "www.example.com. 3600 IN A 192.0.2.66")
+	junk := mustRR(t, "www.example.com. 3600 IN RRSIG A 13 3 3600 20300101000000 20200101000000 1 unsigned.com. AAAA")
+	cfg := resolver.Config{DNSSEC: true, Anchors: root.Anchors(t)}
+	cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(req, resp *dns.Msg) {
+		// The com. referral to example.com. becomes an answer of its own.
+		if qname, _ := dnsutil.Question(req); qname != "www.example.com." || resp.Authoritative || !delegates(resp, "example.com.") {
+			return
+		}
+		resp.Authoritative = true
+		resp.Answer, resp.Ns, resp.Extra = []dns.RR{forged, junk}, nil, nil
+	}}
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	answer := tr.Result()
+	if answer == nil || answer.DNSSEC == nil || answer.DNSSEC.State != trace.Bogus {
+		t.Fatalf("got %+v, want the forged answer bogus: %s", answer, format(steps(tr)))
+	}
+}
+
+// TestUnusableNSEC3IsNotAnExcuse covers a stripped DS replaced by one unsigned
+// NSEC3 nothing here can hash. Unknown hashes are ignored, not trusted (RFC
+// 5155 section 8.1), so what is left is a parent that proved nothing.
+func TestUnusableNSEC3IsNotAnExcuse(t *testing.T) {
+	for name, text := range map[string]string{
+		"an unknown hash algorithm":        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.com. 3600 IN NSEC3 2 0 0 - BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB NS",
+		"more iterations than worth doing": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.com. 3600 IN NSEC3 1 0 101 - BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB NS",
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+			junk := mustRR(t, text)
+			forged := mustRR(t, "www.example.com. 3600 IN A 192.0.2.66")
+			cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(_, resp *dns.Msg) {
+				switch {
+				case delegates(resp, "example.com."):
+					kept := resp.Ns[:0:0]
+					for _, rr := range resp.Ns {
+						switch rr.(type) {
+						case *dns.DS, *dns.RRSIG:
+							continue
+						}
+						kept = append(kept, rr)
+					}
+					kept = append(kept, junk)
+					resp.Ns = kept
+				case resp.Authoritative && len(resp.Answer) > 0 && dns.EqualName(resp.Answer[0].Header().Name, "www.example.com."):
+					resp.Answer = []dns.RR{forged}
+				}
+			}}
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			answer := tr.Result()
+			if answer == nil || answer.DNSSEC == nil || answer.DNSSEC.State != trace.Bogus {
+				t.Fatalf("got %+v, want the forged answer bogus: %s", answer.DNSSEC, format(steps(tr)))
+			}
+		})
+	}
+}
+
+// delegates reports whether resp is a referral to zone.
+func delegates(resp *dns.Msg, zone string) bool {
+	for _, rr := range resp.Ns {
+		if dns.RRToType(rr) == dns.TypeNS && dns.EqualName(rr.Header().Name, zone) {
+			return true
+		}
+	}
+	return false
+}
+
+func mustRR(tb testing.TB, text string) dns.RR {
+	tb.Helper()
+	rr, err := dns.New(text)
+	if err != nil {
+		tb.Fatalf("%s: %v", text, err)
+	}
+	return rr
+}

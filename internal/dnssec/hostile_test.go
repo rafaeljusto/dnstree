@@ -91,3 +91,85 @@ func TestVerifyNamesTheKeyThatSigned(t *testing.T) {
 			status.KeyTags, root.key.KeyTag())
 	}
 }
+
+// TestUnusableNSEC3ProvesNothing covers a spoofed NXDOMAIN whose only denial is
+// an unsigned NSEC3 nothing here can hash. Such a record is ignored, not taken
+// as a reason to stop checking (RFC 5155 section 8.1), so the NXDOMAIN is left
+// with no proof at all.
+func TestUnusableNSEC3ProvesNothing(t *testing.T) {
+	for name, text := range map[string]string{
+		"an unknown hash algorithm":        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.example. 3600 IN NSEC3 2 0 0 - BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"more iterations than worth doing": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.example. 3600 IN NSEC3 1 0 101 - BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+	} {
+		t.Run(name, func(t *testing.T) {
+			chain, _ := secured(t)
+			status := chain.Verify(nil, []dns.RR{record(t, text)}, dns.RcodeNameError, "www.example.", dns.TypeA)
+			if status.State != trace.Bogus {
+				t.Errorf("got %s (%s), want bogus", status.State, status.Reason)
+			}
+		})
+	}
+}
+
+// TestUnsignedOptOutIsNoExcuse covers a wildcard answer stretched over a name,
+// excused by an opt-out NSEC3 the zone never signed.
+func TestUnsignedOptOutIsNoExcuse(t *testing.T) {
+	chain, z := secured(t)
+	answer := wildcardAnswer(t, z, "*.example.", "www.example.")
+	hash := hashOf(t, "www.example.")
+	optout := z.nsec3(t, step(hash, -1), step(hash, +1), 1, nil)
+
+	status := chain.Verify(answer, []dns.RR{optout}, dns.RcodeSuccess, "www.example.", dns.TypeTXT)
+	if status.State != trace.Bogus {
+		t.Errorf("got %s (%s), want bogus", status.State, status.Reason)
+	}
+}
+
+// TestParentDenialSpeaksOnlyForTheDS covers the NSEC a parent signs at a
+// delegation, replayed for names it knows nothing about: RFC 6840 section 4.1.
+// The names below the cut are the child's, and so is every type at the cut but
+// the DS.
+func TestParentDenialSpeaksOnlyForTheDS(t *testing.T) {
+	tests := map[string]struct {
+		rcode  uint16
+		qname  string
+		qtype  uint16
+		secure bool
+	}{
+		"a name below the cut is not denied":    {dns.RcodeNameError, "www.sub.example.", dns.TypeA, false},
+		"a type at the cut is not denied":       {dns.RcodeSuccess, "sub.example.", dns.TypeA, false},
+		"the DS at the cut is the parent's own": {dns.RcodeSuccess, "sub.example.", dns.TypeDS, true},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			chain, z := secured(t)
+			authority := z.nsec(t, "sub.example.", "zzz.example.", dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC)
+			// The apex gap holds every wildcard, so only the cut is in question.
+			authority = append(authority, z.nsec(t, "example.", "sub.example.", dns.TypeSOA, dns.TypeRRSIG, dns.TypeNSEC)...)
+
+			status := chain.Verify(nil, authority, test.rcode, test.qname, test.qtype)
+			if (status.State == trace.Secure) != test.secure {
+				t.Errorf("got %s (%s), want secure=%v", status.State, status.Reason, test.secure)
+			}
+		})
+	}
+}
+
+// TestParentNSEC3IsNoClosestEncloser is the same replay with NSEC3: the record
+// matching the delegation cannot be the closest encloser of a name below it.
+func TestParentNSEC3IsNoClosestEncloser(t *testing.T) {
+	chain, z := secured(t)
+
+	cut := z.nsec3(t, hashOf(t, "sub.example."), step(hashOf(t, "sub.example."), +1), 0,
+		[]uint16{dns.TypeNS, dns.TypeRRSIG})
+	authority := signedBy(t, z, cut)
+	for _, name := range []string{"www.sub.example.", "*.sub.example."} {
+		hash := hashOf(t, name)
+		authority = append(authority, signedBy(t, z, z.nsec3(t, step(hash, -1), step(hash, +1), 0, nil))...)
+	}
+
+	status := chain.Verify(nil, authority, dns.RcodeNameError, "www.sub.example.", dns.TypeA)
+	if status.State == trace.Secure {
+		t.Errorf("got %s (%s), want a delegation refused as the closest encloser", status.State, status.Reason)
+	}
+}
