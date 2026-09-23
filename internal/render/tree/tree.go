@@ -208,6 +208,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if step.RTT > 0 {
 		fields = append(fields, r.paint.dim(r.pace(step.RTT)+r.duration(step.RTT)))
 	}
+	if size := r.size(step); size != "" {
+		fields = append(fields, size)
+	}
 	if rcode := r.paint.rcode(step.Rcode); rcode != "" {
 		fields = append(fields, rcode)
 	}
@@ -411,6 +414,18 @@ func (r *renderer) recordLabel(record trace.RR) string {
 // subnet is what the server made of the client subnet it was sent. The scope
 // is the part of the prefix that shaped this answer, so a zero scope is a
 // server saying it answers the same for everybody.
+// size is how big the answer was, and it is drawn only for the hops where that
+// is worth a line's room: the ones that had almost none left. Every other
+// answer arrived with space behind it, and a byte count beside each of them
+// would be a column to learn to ignore. The whole of it reaches --format json,
+// where something reading a trace can hold every hop against the limit itself.
+func (r *renderer) size(step *trace.Step) string {
+	if !step.Tight() {
+		return ""
+	}
+	return r.paint.paint(fmt.Sprintf("%d of %d bytes", step.Size, step.Limit), yellow)
+}
+
 func (r *renderer) subnet(subnet *trace.Subnet) string {
 	if subnet == nil {
 		return ""

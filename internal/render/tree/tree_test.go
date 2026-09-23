@@ -82,8 +82,12 @@ func kinds() *trace.Trace {
 	children := []*trace.Step{
 		{Zone: "com.", Server: server("ns1.com.", "192.0.2.2", 0), Rcode: "SERVFAIL", Kind: trace.KindError, RTT: 4 * time.Millisecond,
 			Notes: []string{"retried without EDNS0", "truncated over udp"}},
-		{Zone: "com.", Server: server("ns2.com.", "192.0.2.3", 0), Rcode: "NXDOMAIN", Flags: trace.Flags{AA: true}, Kind: trace.KindNXDomain, RTT: 4 * time.Millisecond},
-		{Zone: "com.", Server: server("ns3.com.", "192.0.2.4", 0), Rcode: "NOERROR", Flags: trace.Flags{AA: true}, Kind: trace.KindNoData, RTT: 1250 * time.Microsecond},
+		// An answer with room behind it says nothing about its size, and one
+		// with almost none left says so where the reader is looking.
+		{Zone: "com.", Server: server("ns2.com.", "192.0.2.3", 0), Rcode: "NXDOMAIN", Flags: trace.Flags{AA: true}, Kind: trace.KindNXDomain, RTT: 4 * time.Millisecond,
+			Size: 214, Limit: 1232},
+		{Zone: "com.", Server: server("ns3.com.", "192.0.2.4", 0), Rcode: "NOERROR", Flags: trace.Flags{AA: true}, Kind: trace.KindNoData, RTT: 1250 * time.Microsecond,
+			Size: 1200, Limit: 1232},
 		{
 			Zone: "com.", Server: server("ns4.com.", "192.0.2.5", 0), Rcode: "NOERROR",
 			Flags: trace.Flags{AA: true, TC: true, AD: true, DO: true}, Kind: trace.KindCNAME, RTT: 340 * time.Microsecond,

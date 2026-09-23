@@ -3,7 +3,7 @@
 `-- b.root-servers.net. 170.247.170.2  6ms  NOERROR  referral -> com.  [insecure ECDSAP256SHA256/SHA256]
     |-- ns1.com. 192.0.2.2  4ms  SERVFAIL  error  (retried without EDNS0; truncated over udp)
     |-- ns2.com. 192.0.2.3  4ms  NXDOMAIN  AA
-    |-- ns3.com. 192.0.2.4  1.3ms  NOERROR  AA  no data
+    |-- ns3.com. 192.0.2.4  1.3ms  1200 of 1232 bytes  NOERROR  AA  no data
     |-- ns4.com. 192.0.2.5  340us  NOERROR  AA TC AD DO  [bogus ED25519: signature does not verify]
     |   |-- alias.example.com. 300 CNAME target.example.net.
     |   `-- . (root)  (resolving ns.outside.net.)

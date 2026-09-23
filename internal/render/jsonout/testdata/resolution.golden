@@ -30,6 +30,8 @@
         },
         "proto": "udp",
         "rtt_ms": 12,
+        "size_bytes": 745,
+        "limit_bytes": 1232,
         "rcode": "NOERROR",
         "nsid": "fra2",
         "delegation": {
@@ -71,6 +73,7 @@
             },
             "proto": "tcp",
             "rtt_ms": 18,
+            "size_bytes": 1840,
             "rcode": "NOERROR",
             "notes": [
               "truncated over udp"
@@ -119,6 +122,9 @@
                 },
                 "proto": "udp",
                 "rtt_ms": 9.4,
+                "size_bytes": 1187,
+                "limit_bytes": 1232,
+                "tight": true,
                 "rcode": "NOERROR",
                 "flags": {
                   "aa": true,

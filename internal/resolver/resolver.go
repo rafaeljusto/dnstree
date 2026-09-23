@@ -609,6 +609,15 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		}
 	}
 
+	// What arrived, and what it had to fit in. The limit is the transport's
+	// rather than the question's, so it belongs to whichever attempt the hop
+	// kept: an answer refetched over TCP was bounded by nothing, whatever the
+	// datagram that failed before it advertised.
+	step.Size = len(resp.Data)
+	if step.Proto == transport.ProtoUDP {
+		step.Limit = int(cmp.Or(udpSize, dns.MinMsgSize))
+	}
+
 	// What is left of a truncated message is not what the server holds, and
 	// reading it as one would turn a dropped section into a statement about
 	// the zone: a missing answer into NODATA, a missing NS set into a lame

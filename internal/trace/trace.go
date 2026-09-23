@@ -171,6 +171,19 @@ type Step struct {
 	// The class is the resolution's own and is not repeated here.
 	Asked Question
 	RTT   time.Duration
+
+	// Size is the answer as it arrived, in bytes on the wire: what dig reports
+	// as MSG SIZE. Zero where nothing answered.
+	Size int
+
+	// Limit is the most that answer could have been without being truncated:
+	// the EDNS0 buffer the query advertised, or the 512 bytes a query carrying
+	// no EDNS0 is answered within. It is zero over TCP, DoT and DoH, where a
+	// single answer is not bounded this way, and it is what makes Size worth
+	// reading: bytes alone say nothing about how close the server came to
+	// running out of room.
+	Limit int
+
 	Rcode string
 	Flags Flags
 	Kind  StepKind
@@ -217,6 +230,24 @@ type Step struct {
 
 	Children []*Step
 	Err      string
+}
+
+// tightMargin is how little room left counts as none: about what one more
+// address record takes once the name is compressed. A referral with this much
+// of its buffer left cannot take another nameserver without being cut.
+const tightMargin = 64
+
+// Tight reports whether the answer very nearly did not fit. One more record —
+// an address added to the zone, a signature that grew with a key roll — and the
+// answer is truncated, which costs every resolver asking for it a second round
+// trip over TCP, and costs the ones that cannot reach the server over TCP the
+// answer altogether.
+//
+// It is the reason to record a size at all, and it is read off the hop rather
+// than worked out by whoever draws it, so the tree, the sentences and the JSON
+// cannot come to disagree about which hops are close to the edge.
+func (s *Step) Tight() bool {
+	return s.Limit > 0 && s.Size > 0 && s.Size >= s.Limit-tightMargin
 }
 
 // SOA is as much of a zone's start of authority as it is read for: how long a

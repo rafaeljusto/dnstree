@@ -466,6 +466,46 @@ hex it arrived as, and an identifier longer than a line has room for is cut.
 A server that publishes none says nothing, which is most of them below the
 root, and its hop reads as it would without the flag.
 
+### How much room an answer had
+
+Every hop records how big the answer was and how big it was allowed to be: the
+bytes that arrived, against the EDNS0 buffer the query advertised — 512 for a
+query that carried none, and nothing at all over TCP, DoT and DoH, where a
+single answer is not bounded that way.
+
+Nearly always that is worth no room on the line and gets none. A hop that has
+all but filled its datagram is drawn, because it is the one thing in a walk
+that is about to break and has not broken yet:
+
+```
+$ dnstree --dnssec --no-asn www.example.com A
+. (root)  [secure RSASHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  244ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  718ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
+│   ├── l.gtld-servers.net. 192.41.162.30  242ms  NOERROR  DO  referral → example.com.  [secure ECDSAP256SHA256/SHA256]
+...
+```
+
+That is the real root, answering a signed referral with 57 bytes to spare. One
+more record in it — an address added, a key rolled — and the answer stops
+fitting. Every resolver that asks then pays a second round trip to fetch it over
+TCP, and the ones that cannot reach the server over TCP get no answer at all.
+Nothing is wrong with it today, which is why nothing else reports it.
+
+The hop below it is the same thing after it has happened: the keys of the root
+did not fit, and `(truncated over udp)` is the second round trip being paid.
+
+> [!NOTE]
+> `--dnssec` is what makes the figure the one that matters. The same referral
+> asked for without it comes back 335 bytes lighter, with room to spare, because
+> none of the signatures are in it — and a resolver that validates does ask for
+> them. A walk that did not says so, rather than leave the reader a margin that
+> is not theirs.
+
+Both sizes reach `--format json` as `size_bytes` and `limit_bytes`, with a
+`tight` flag on the hops that have no room left, so a script need not carry the
+margin itself.
+
 ### Against your resolver
 
 Every walk also puts the question to a recursive resolver — the host's own, or

@@ -498,13 +498,18 @@ func four(addr netip.Addr) bool {
 // answer in the end: a resolution that succeeded over a dead nameserver is one
 // outage away from failing.
 func servers(tr *trace.Trace) []Finding {
-	var silent, lame []string
+	var silent, lame, tight []string
+	unsigned := true
 	for step := range tr.Steps() {
 		switch step.Kind {
 		case trace.KindTimeout:
 			silent = add(silent, at(step))
 		case trace.KindLame:
 			lame = add(lame, at(step))
+		}
+		if step.Tight() {
+			tight = add(tight, fmt.Sprintf("%s with %d of %d bytes", at(step), step.Size, step.Limit))
+			unsigned = unsigned && !step.Flags.DO
 		}
 	}
 
@@ -517,6 +522,18 @@ func servers(tr *trace.Trace) []Finding {
 		findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: fmt.Sprintf(
 			"%s answered without authority for the zone asked about, usually a delegation left pointing at a server that no longer serves it: %s",
 			plural(len(lame), "server", "servers"), list(lame))})
+	}
+	if len(tight) > 0 {
+		text := fmt.Sprintf(
+			"%s answered with almost nothing left of the datagram the answer had to fit in — %s — so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it",
+			plural(len(tight), "server", "servers"), list(tight))
+		if unsigned {
+			// The walk saw what it asked for. A resolver that validates asks
+			// for the signatures too and is answered with more than this, so
+			// the room left is at most what is reported here and may be none.
+			text += ", and this walk asked for no signatures: a resolver that does gets more than this"
+		}
+		findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: text})
 	}
 	return findings
 }

@@ -533,3 +533,126 @@ func TestEveryHopSaysWhatItAsked(t *testing.T) {
 		}
 	}
 }
+
+// TestHopsCarryWhatArrived covers the size of every answer and the room it had
+// to arrive in. Bytes alone say nothing; bytes against the buffer the query
+// advertised say whether a server is one record away from truncating.
+func TestHopsCarryWhatArrived(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{})
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	var answered int
+	for step := range tr.Steps() {
+		// A server that was listed and never queried received nothing, and
+		// neither did a node standing for a zone.
+		if step.Kind == trace.KindSkipped || step.Kind == trace.KindZone || !step.Server.IP.IsValid() {
+			if step.Size != 0 || step.Limit != 0 {
+				t.Errorf("got %d bytes in %d on a hop that received nothing: %s %s",
+					step.Size, step.Limit, step.Zone, step.Kind)
+			}
+			continue
+		}
+		answered++
+
+		if step.Size < headerSize {
+			t.Errorf("got %d bytes from %s, want at least the %d of a header", step.Size, step.Server.IP, headerSize)
+		}
+		if step.Limit != int(transport.DefaultUDPSize) {
+			t.Errorf("got a limit of %d over udp, want the %d the query advertised", step.Limit, transport.DefaultUDPSize)
+		}
+		if step.Size > step.Limit {
+			t.Errorf("got %d bytes in a %d buffer from %s, which cannot have arrived whole",
+				step.Size, step.Limit, step.Server.IP)
+		}
+		if step.Tight() {
+			t.Errorf("got %s reading as tight at %d of %d bytes, want room to spare",
+				step.Server.IP, step.Size, step.Limit)
+		}
+	}
+	if answered == 0 {
+		t.Fatal("got no answered hops, want the walk this reads")
+	}
+}
+
+// TestAnswerOverTCPIsBoundedByNothing covers the limit belonging to the attempt
+// the hop kept rather than to the question. An answer refetched over TCP had no
+// datagram to fit in, whatever the one that failed before it advertised, and
+// reporting the buffer there would call every large answer tight.
+func TestAnswerOverTCPIsBoundedByNothing(t *testing.T) {
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Zone: serviceRootZone, Declared: "192.0.2.1",
+	})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.test.", Origin: "test.", Zone: serviceZone, Declared: "192.0.2.5",
+		Behaviour: fakens.Behaviour{TruncateUDP: true},
+	})
+	h := harness{hierarchy, root}
+
+	tr, err := newResolver(t, h, resolver.Config{TCP: h.carry(transport.NewTCP(fast))}).
+		Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	answer := tr.Result()
+	if answer == nil || answer.Proto != transport.ProtoTCP {
+		t.Fatalf("got %+v, want the answer TCP brought back", answer)
+	}
+	if answer.Size < headerSize {
+		t.Errorf("got %d bytes over tcp, want the answer that did not fit in a datagram", answer.Size)
+	}
+	if answer.Limit != 0 {
+		t.Errorf("got a limit of %d over tcp, want none: nothing bounds one answer there", answer.Limit)
+	}
+	if answer.Tight() {
+		t.Error("got an answer over tcp reading as tight, want a hop nothing cut short")
+	}
+}
+
+// TestAnswerThatBarelyFitsReadsAsTight is the case the whole field is for: an
+// answer that arrived whole and had almost no room left. Nothing is wrong with
+// it today, and one more record makes it a second round trip for everybody.
+func TestAnswerThatBarelyFitsReadsAsTight(t *testing.T) {
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Zone: serviceRootZone, Declared: "192.0.2.1",
+	})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.test.", Origin: "test.", Zone: serviceZone + bulky, Declared: "192.0.2.5",
+	})
+	h := harness{hierarchy, root}
+
+	tr, err := newResolver(t, h, resolver.Config{}).Resolve(t.Context(), "bulky.test", "TXT")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	answer := tr.Result()
+	if answer == nil || answer.Kind != trace.KindAnswer {
+		t.Fatalf("got %+v, want the answer that just fits: %s", answer, format(steps(tr)))
+	}
+	if answer.Flags.TC {
+		t.Fatalf("got a truncated answer at %d of %d bytes, want one that arrived whole",
+			answer.Size, answer.Limit)
+	}
+	if !answer.Tight() {
+		t.Errorf("got %d of %d bytes reading as room to spare, want it read as tight",
+			answer.Size, answer.Limit)
+	}
+}
+
+// headerSize is the least a DNS message can be, which is what says a recorded
+// size is a message rather than a zero somebody forgot to fill in.
+const headerSize = 12
+
+// bulky is one record sized to very nearly fill the 1232 byte buffer the walk
+// advertises: enough strings to leave less room behind them than another record
+// would need. The arithmetic is the point of the test, so it is written out
+// rather than left to a helper.
+var bulky = "\nbulky IN TXT " + strings.Repeat(`"`+strings.Repeat("x", 255)+`" `, 4) +
+	`"` + strings.Repeat("x", 100) + `"` + "\n"

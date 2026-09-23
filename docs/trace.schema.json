@@ -95,6 +95,20 @@
           "type": "number",
           "minimum": 0
         },
+        "size_bytes": {
+          "description": "The answer as it arrived, in bytes on the wire, which is what dig reports as MSG SIZE. Absent where nothing answered.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit_bytes": {
+          "description": "The most that answer could have been without being truncated: the EDNS0 buffer the query advertised, or the 512 bytes a query carrying no EDNS0 is answered within. Absent over tcp, dot and doh, where a single answer is not bounded this way. A size_bytes near it is a server with no room left: one more record and every resolver asking pays a second round trip over TCP.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "tight": {
+          "description": "Set where size_bytes leaves almost nothing of limit_bytes, meaning one more record in the zone truncates the answer. It is the reading of the two sizes, carried so that nothing reading a trace has to hold the margin itself.",
+          "type": "boolean"
+        },
         "rcode": { "type": "string" },
         "flags": { "$ref": "#/$defs/flags" },
         "records": {

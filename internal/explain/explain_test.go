@@ -98,6 +98,33 @@ func TestFindings(t *testing.T) {
 			trace: walk(hop(trace.KindTimeout, "ns.test.")),
 			want:  []string{"nothing answered for www.test. A", "stopped at test.", "1 server did not answer in time: ns.test."},
 		},
+		"a server with no room left in the datagram is worth saying before it truncates": {
+			trace: walk(func() *trace.Step {
+				step := answer()
+				step.Size, step.Limit, step.Flags.DO = 1200, 1232, true
+				return step
+			}()),
+			want: []string{"1 server answered with almost nothing left", "ns.test. with 1200 of 1232 bytes", "second round trip over TCP"},
+			// The walk asked for signatures, so it saw what a validating
+			// resolver sees and has nothing to add about it.
+			avoid: []string{"asked for no signatures"},
+		},
+		"a walk that asked for no signatures says the room left is at most what it measured": {
+			trace: walk(func() *trace.Step {
+				step := answer()
+				step.Size, step.Limit = 1200, 1232
+				return step
+			}()),
+			want: []string{"almost nothing left", "asked for no signatures: a resolver that does gets more than this"},
+		},
+		"an answer with room to spare is worth no sentence": {
+			trace: walk(func() *trace.Step {
+				step := answer()
+				step.Size, step.Limit = 700, 1232
+				return step
+			}()),
+			avoid: []string{"bytes", "round trip"},
+		},
 		"a lame server is named once, not twice": {
 			trace: walk(hop(trace.KindLame, "ns.test.")),
 			want:  []string{"stopped at test.", "answered without authority", "ns.test."},

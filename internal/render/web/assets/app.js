@@ -139,6 +139,10 @@ function chipsFor(step) {
   }
   if (step.rcode && step.rcode !== "NOERROR") chips.push(chip(step.rcode, "warn"));
   if (step.rtt_ms) chips.push(chip(took(step.rtt_ms), step.rtt_ms > 500 ? "warn" : "quiet", "round trip"));
+  if (step.tight) {
+    chips.push(chip(`${step.size_bytes} of ${step.limit_bytes} bytes`, "warn",
+      "almost no room left: one more record and this answer is truncated"));
+  }
   if (step.server?.asn) {
     const as = step.server.asn;
     chips.push(chip(`AS${as.number}`, "quiet", [as.prefix, as.country_code, as.registry].filter(Boolean).join(" · ")));
@@ -479,6 +483,7 @@ class DnsInspector extends HTMLElement {
       ["server", [step.server?.ip, step.server?.port && `:${step.server.port}`].filter(Boolean).join("")],
       ["over", step.proto],
       ["took", took(step.rtt_ms)],
+      ["size", step.size_bytes && `${step.size_bytes} bytes${step.limit_bytes ? ` of ${step.limit_bytes}` : ""}`],
       ["rcode", step.rcode],
       ["flags", flagsOf(step.flags).join(" ")],
       ["subnet", step.subnet && `${step.subnet.prefix} scope /${step.subnet.scope}`],

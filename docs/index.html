@@ -357,6 +357,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--check-ns</code> asks the zone the walk ends in for its own NS records and holds them against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed: a nameserver the parent still delegates to, or one the zone lists that nobody is told about, is named either way.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">no room left</span>
+          <h3>An answer that barely fits</h3>
+          <p>Every hop records how many bytes came back and how many it could have carried. A datagram nearly full is a zone one record away from truncating, which costs every resolver asking a second round trip over TCP — and costs the ones that cannot reach the server over TCP the answer altogether. The size is drawn only where the room has run out; the whole of it is in <code>--format json</code>.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-ok">bounded</span>
           <h3>A walk that always ends</h3>
           <p>Queries, zone cuts, aliases and nameserver lookups each have a budget, so a hostile delegation wastes time and nothing more.</p>

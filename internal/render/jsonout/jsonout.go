@@ -97,6 +97,9 @@ type step struct {
 	Asked      *asked          `json:"asked,omitempty"`
 	Proto      string          `json:"proto,omitempty"`
 	RTTMS      float64         `json:"rtt_ms,omitempty"`
+	SizeBytes  int             `json:"size_bytes,omitempty"`
+	LimitBytes int             `json:"limit_bytes,omitempty"`
+	Tight      bool            `json:"tight,omitempty"`
 	Rcode      string          `json:"rcode,omitempty"`
 	Flags      *flags          `json:"flags,omitempty"`
 	Records    []record        `json:"records,omitempty"`
@@ -190,6 +193,9 @@ func convert(from *trace.Step) *step {
 		Asked:      convertAsked(from.Asked),
 		Proto:      from.Proto,
 		RTTMS:      milliseconds(from.RTT),
+		SizeBytes:  from.Size,
+		LimitBytes: from.Limit,
+		Tight:      from.Tight(),
 		Rcode:      from.Rcode,
 		Flags:      convertFlags(from.Flags),
 		Notes:      from.Notes,
