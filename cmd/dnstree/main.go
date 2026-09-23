@@ -70,7 +70,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	if cfg.Version {
-		fmt.Fprintln(stdout, "dnstree "+version)
+		cli.WriteVersion(stdout, version, treeOptions(cfg).Charset, cfg.Color)
 		return exitAnswer
 	}
 	if cfg.Schema {

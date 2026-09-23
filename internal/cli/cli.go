@@ -342,6 +342,20 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if err := flags.Parse(args); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
 	}
+	switch mode := tree.ColorMode(color); mode {
+	case tree.ColorAuto, tree.ColorAlways, tree.ColorNever:
+		cfg.Color = mode
+	default:
+		return nil, fmt.Errorf("%w: %q is not a colour setting", ErrUsage, color)
+	}
+
+	switch format {
+	case "tree", "ascii", "emoji", "json", "dot", "web":
+		cfg.Format = format
+	default:
+		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
+	}
+
 	if cfg.Version || cfg.Schema {
 		return &cfg, nil
 	}
@@ -371,12 +385,6 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Proto, err = proto(udp, tcp, dot, doh); err != nil {
 		return nil, err
 	}
-	switch format {
-	case "tree", "ascii", "emoji", "json", "dot", "web":
-		cfg.Format = format
-	default:
-		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
-	}
 	if cfg.Live && (cfg.Format == "json" || cfg.Format == "dot" || cfg.Format == "web") {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so it cannot be drawn live",
 			ErrUsage, cfg.Format)
@@ -396,13 +404,6 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
 			ErrUsage, cfg.Format)
 	}
-	switch mode := tree.ColorMode(color); mode {
-	case tree.ColorAuto, tree.ColorAlways, tree.ColorNever:
-		cfg.Color = mode
-	default:
-		return nil, fmt.Errorf("%w: %q is not a colour setting", ErrUsage, color)
-	}
-
 	if timeout <= 0 {
 		return nil, fmt.Errorf("%w: a timeout of %s leaves no time to answer", ErrUsage, timeout)
 	}
