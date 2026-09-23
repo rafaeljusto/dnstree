@@ -587,7 +587,10 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	}
 	if err != nil {
 		step.Kind, step.Err = trace.KindError, err.Error()
-		if transport.IsTimeout(err) {
+		switch {
+		case errors.Is(err, context.Canceled):
+			step.Err = "interrupted before the server answered" // the user's doing, not the server's
+		case transport.IsTimeout(err):
 			step.Kind = trace.KindTimeout
 		}
 		return &hop{step: step}

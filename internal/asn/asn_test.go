@@ -305,3 +305,24 @@ func TestAnnotateSaysWhenItGaveUp(t *testing.T) {
 		t.Fatalf("got warnings %q, want one saying they did not answer in time", tr.Warnings)
 	}
 }
+
+// TestRoundsDoNotShareAWait covers --watch, where one resolver serves every
+// run. A run that gives up on its stragglers must not leave anything waiting
+// that the next run's lookups can trip over: with a shared WaitGroup, that is
+// a data race and then a panic.
+func TestRoundsDoNotShareAWait(t *testing.T) {
+	r := asn.New(func(context.Context, string) ([]string, error) {
+		time.Sleep(time.Millisecond)
+		return []string{"15169 | 8.8.8.0/24 | US | arin | 1992-12-01"}, nil
+	}, nil)
+
+	for round := range 500 {
+		addr := netip.AddrFrom4([4]byte{10, byte(round >> 8), byte(round), 1})
+		tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
+			{Zone: ".", Kind: trace.KindAnswer, Server: trace.Server{IP: addr}},
+		}}}
+		ctx, cancel := context.WithTimeout(t.Context(), 900*time.Microsecond)
+		r.Annotate(ctx, tr)
+		cancel()
+	}
+}

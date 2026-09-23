@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -61,6 +62,8 @@ func (d *DoH) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort,
 	dialer := &net.Dialer{Timeout: timeout}
 	client := &http.Client{
 		Timeout: timeout,
+		// A redirect would send the query somewhere the delegation never named.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		Transport: &http.Transport{
 			TLSClientConfig:   d.tlsConfig(host, dnshttp.NextProtos),
 			ForceAttemptHTTP2: true,
@@ -84,10 +87,18 @@ func (d *DoH) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort,
 		return nil, time.Since(start), fmt.Errorf("doh %s: %d %s", server,
 			response.StatusCode, http.StatusText(response.StatusCode))
 	}
+	if media, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type")); media != dnshttp.MimeType {
+		return nil, time.Since(start), fmt.Errorf("doh %s: the reply is %q, not a DNS message", server, media)
+	}
 	resp, err := dnshttp.Response(response)
 	rtt := time.Since(start)
 	if err != nil {
 		return nil, rtt, fmt.Errorf("doh %s: %w", server, err)
 	}
-	return resp, rtt, nil
+	// The ID is zero both ways here, so the question is all that ties the
+	// reply to the query.
+	if err := answers(req, resp); err != nil {
+		return nil, rtt, fmt.Errorf("doh %s: %w", server, err)
+	}
+	return inClass(resp), rtt, nil
 }

@@ -38,10 +38,12 @@ type Resolver struct {
 	lookup Lookup
 	log    *slog.Logger
 	limit  chan struct{}
-	wait   sync.WaitGroup
 
+	// started is closed, per address, when its lookup ends. A WaitGroup would
+	// be shared by every run of --watch, and a wait given up on in one would
+	// still be waiting when the next adds to it.
 	mu      sync.Mutex
-	started map[netip.Addr]bool
+	started map[netip.Addr]chan struct{}
 	cached  map[netip.Addr]*trace.ASNInfo
 	failure error
 }
@@ -59,7 +61,7 @@ func New(lookup Lookup, log *slog.Logger) *Resolver {
 		lookup:  lookup,
 		log:     log,
 		limit:   make(chan struct{}, maxParallel),
-		started: make(map[netip.Addr]bool),
+		started: make(map[netip.Addr]chan struct{}),
 		cached:  make(map[netip.Addr]*trace.ASNInfo),
 	}
 }
@@ -75,14 +77,16 @@ func (r *Resolver) Start(ctx context.Context, addr netip.Addr) {
 	}
 
 	r.mu.Lock()
-	if r.started[addr] {
+	if _, ok := r.started[addr]; ok {
 		r.mu.Unlock()
 		return
 	}
-	r.started[addr] = true
+	done := make(chan struct{})
+	r.started[addr] = done
 	r.mu.Unlock()
 
-	r.wait.Go(func() {
+	go func() {
+		defer close(done)
 		r.limit <- struct{}{}
 		defer func() { <-r.limit }()
 
@@ -103,7 +107,7 @@ func (r *Resolver) Start(ctx context.Context, addr netip.Addr) {
 				r.failure = err
 			}
 		}
-	})
+	}()
 }
 
 // Annotate fills in the origin AS of every server a trace actually asked, and
@@ -117,29 +121,33 @@ func (r *Resolver) Annotate(ctx context.Context, tr *trace.Trace) {
 		return
 	}
 
-	asked := 0
+	// Only the lookups of this trace are waited on: under --watch the same
+	// resolver carries the stragglers of every run before it.
+	var pending []chan struct{}
 	for step := range tr.Steps() {
 		if queried(step) {
 			r.Start(ctx, step.Server.IP)
-			asked++
+			r.mu.Lock()
+			if done, ok := r.started[step.Server.IP.Unmap()]; ok {
+				pending = append(pending, done)
+			}
+			r.mu.Unlock()
 		}
 	}
-	if asked == 0 {
+	if len(pending) == 0 {
 		return
 	}
 
-	done := make(chan struct{})
-	go func() {
-		r.wait.Wait()
-		close(done)
-	}()
-
 	waited := time.Now()
 	var abandoned bool
-	select {
-	case <-done:
-	case <-ctx.Done():
-		abandoned = true // the stragglers are not worth the wait
+wait:
+	for _, done := range pending {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			abandoned = true // the stragglers are not worth the wait
+			break wait
+		}
 	}
 	r.log.Debug("waited for the origin AS lookups",
 		"took", time.Since(waited), "abandoned", abandoned)

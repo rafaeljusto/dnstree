@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
 	"codeberg.org/miekg/dns"
+	"codeberg.org/miekg/dns/dnsutil"
 
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
@@ -272,24 +274,126 @@ func exchange(ctx context.Context, proto string, cfg Config, tlsConfig *tls.Conf
 	if err != nil {
 		return nil, 0, err
 	}
-	client := &dns.Client{Transport: &dns.Transport{
-		Dialer:       &net.Dialer{Timeout: timeout},
-		ReadTimeout:  timeout,
-		WriteTimeout: timeout,
-		TLSConfig:    tlsConfig,
-	}}
-
-	// Pack into a fresh buffer: the client hands the request's buffer over to
-	// the response, so a reused request would scribble over an earlier answer.
-	req.Data = nil
 
 	start := time.Now()
-	resp, _, err := client.Exchange(ctx, req, network(proto, server.Addr()), server.String())
+	resp, err := roundTrip(ctx, proto, timeout, tlsConfig, req, server)
 	rtt := time.Since(start)
 	if err != nil {
+		// A read cut short because the run was cancelled is the run's doing,
+		// not a server that went quiet.
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		return nil, rtt, fmt.Errorf("%s %s: %w", proto, server, err)
 	}
 	return resp, rtt, nil
+}
+
+// roundTrip sends req and reads its reply. The connection is closed the moment
+// ctx is done: the codec sets a read deadline of its own, so closing is the one
+// thing sure to interrupt a read already waiting.
+func roundTrip(ctx context.Context, proto string, timeout time.Duration, tlsConfig *tls.Config, req *dns.Msg, server netip.AddrPort) (*dns.Msg, error) {
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(ctx, network(proto, server.Addr()), server.String())
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+
+	// Pack into a fresh buffer: the codec hands the request's buffer over to
+	// the response, so a reused request would scribble over an earlier answer.
+	req.Data = nil
+	if err := req.Pack(); err != nil {
+		return nil, err
+	}
+
+	if proto == ProtoUDP {
+		return readDatagrams(conn, timeout, req)
+	}
+
+	if tlsConfig != nil {
+		conn = tls.Client(conn, tlsConfig)
+	}
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	client := &dns.Client{Transport: &dns.Transport{ReadTimeout: timeout, WriteTimeout: timeout}}
+	resp, _, err := client.ExchangeWithConn(ctx, req, conn)
+	if err != nil {
+		return nil, err
+	}
+	if err := answers(req, resp); err != nil {
+		return nil, err
+	}
+	return inClass(resp), nil
+}
+
+// readDatagrams waits for the reply to req, and only that. Anyone who can
+// guess the port can send a datagram, so one that answers some other query is
+// dropped and the wait goes on: taking it as the reply would hand a spoofer
+// the hop for the price of one packet, and the real answer would never be
+// read. RFC 5452 section 9.1.
+func readDatagrams(conn net.Conn, timeout time.Duration, req *dns.Msg) (*dns.Msg, error) {
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	if _, err := conn.Write(req.Data); err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, dns.MaxMsgSize)
+	var ignored error
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			if ignored != nil && IsTimeout(err) {
+				return nil, fmt.Errorf("%w, after %w", err, ignored)
+			}
+			return nil, err
+		}
+		resp := &dns.Msg{Data: append([]byte(nil), buf[:n]...)}
+		switch {
+		case resp.Unpack() != nil:
+			ignored = errors.New("a datagram that did not read as DNS")
+		case !resp.Response || resp.ID != req.ID:
+			ignored = errors.New("a datagram for another query")
+		default:
+			if err := answers(req, resp); err != nil {
+				ignored = err
+				continue
+			}
+			return inClass(resp), nil
+		}
+	}
+}
+
+// answers reports whether resp is a reply to the question req asked. The ID
+// is not enough on its own, and over DoH there is none. A reply that carries
+// no question and nothing else, the way some servers answer FORMERR, has
+// nothing in it to mislead with.
+func answers(req, resp *dns.Msg) error {
+	if len(resp.Question) == 0 && len(resp.Answer) == 0 && len(resp.Ns) == 0 && len(resp.Extra) == 0 {
+		return nil
+	}
+	if len(req.Question) != 1 || len(resp.Question) != 1 {
+		return errors.New("the reply does not carry the one question asked")
+	}
+	asked, got := req.Question[0], resp.Question[0]
+	if !dns.EqualName(asked.Header().Name, got.Header().Name) ||
+		dns.RRToType(asked) != dns.RRToType(got) || asked.Header().Class != got.Header().Class {
+		return fmt.Errorf("the reply is to %s %s, not the question asked",
+			got.Header().Name, dnsutil.TypeToString(dns.RRToType(got)))
+	}
+	return nil
+}
+
+// inClass drops every record that is not of the Internet class, which is the
+// only one asked about. Nothing downstream looks at the class, so a record of
+// another one would otherwise pass for an answer.
+func inClass(resp *dns.Msg) *dns.Msg {
+	keep := func(rr dns.RR) bool { return rr.Header().Class != dns.ClassINET }
+	resp.Answer = slices.DeleteFunc(resp.Answer, keep)
+	resp.Ns = slices.DeleteFunc(resp.Ns, keep)
+	resp.Extra = slices.DeleteFunc(resp.Extra, keep)
+	return resp
 }
 
 // queryTimeout is what is left of the per-query budget once the run wide

@@ -488,3 +488,28 @@ func mustRR(tb testing.TB, text string) dns.RR {
 	}
 	return rr
 }
+
+// TestInterruptedIsNotATimeout covers Ctrl-C while a server is still quiet.
+// The hop is cut short and says so, instead of waiting out the timeout and
+// then blaming the server for it.
+func TestInterruptedIsNotATimeout(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{Drop: true})
+	cfg.Transport = h.carry(transport.NewUDP(transport.Config{Timeout: 5 * time.Second}))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(100*time.Millisecond, cancel)
+	tr, _ := newResolver(t, h, cfg).Resolve(ctx, "www.test", "A")
+	if tr == nil {
+		t.Fatal("got no trace, want one drawn up to the interruption")
+	}
+
+	for step := range tr.Steps() {
+		if step.Kind == trace.KindTimeout {
+			t.Errorf("got a timeout at %s, want the interruption named", step.Server.Name)
+		}
+		if step.Kind == trace.KindError && step.Err == "interrupted before the server answered" {
+			return
+		}
+	}
+	t.Errorf("no hop says it was interrupted: %s", format(steps(tr)))
+}
