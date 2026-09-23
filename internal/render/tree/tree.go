@@ -91,7 +91,7 @@ func Render(w io.Writer, tr *trace.Trace, opts Options) error {
 
 	renderer := &renderer{
 		glyphs:    set,
-		paint:     painter(colorEnabled(w, opts.Color)),
+		paint:     painter(ColorEnabled(w, opts.Color)),
 		highlight: opts.Highlight,
 		out:       bufio.NewWriter(w),
 	}

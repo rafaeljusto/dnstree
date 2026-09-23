@@ -20,7 +20,7 @@ func Summary(w io.Writer, tr *trace.Trace, opts Options) {
 		return
 	}
 	queries, servers := spent(tr)
-	writeSummary(w, tr, painter(colorEnabled(w, opts.Color)), separator(opts.Charset),
+	writeSummary(w, tr, painter(ColorEnabled(w, opts.Color)), separator(opts.Charset),
 		opts.Charset, tr.Elapsed, counts(queries, servers))
 }
 

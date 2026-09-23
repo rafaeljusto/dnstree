@@ -117,7 +117,7 @@ func NewLive(w io.Writer, opts Options) *Live {
 	// Colour is decided here, against the terminal, because the frames
 	// themselves are rendered into a buffer that would never ask for it.
 	color := ColorNever
-	if colorEnabled(w, opts.Color) {
+	if ColorEnabled(w, opts.Color) {
 		color = ColorAlways
 	}
 	opts.Color = color

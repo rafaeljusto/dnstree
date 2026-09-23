@@ -74,8 +74,10 @@ func (p painter) rrtype(rrtype string) string {
 	}
 }
 
-// colorEnabled decides once, for the whole rendering, whether w wants escapes.
-func colorEnabled(w io.Writer, mode ColorMode) bool {
+// ColorEnabled decides once, for the whole rendering, whether w wants escapes.
+// It is exported because the version banner asks the same question before it
+// draws, and the answer has to be the one every rendering gives.
+func ColorEnabled(w io.Writer, mode ColorMode) bool {
 	switch mode {
 	case ColorAlways:
 		return true

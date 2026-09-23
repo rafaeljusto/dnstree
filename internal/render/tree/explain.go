@@ -21,7 +21,7 @@ func Explain(w io.Writer, findings []explain.Finding, opts Options) {
 		return
 	}
 
-	paint := painter(colorEnabled(w, opts.Color))
+	paint := painter(ColorEnabled(w, opts.Color))
 	bullet := "· "
 	if opts.Charset == ASCII {
 		bullet = "- "
@@ -44,7 +44,7 @@ func Watched(w io.Writer, findings []explain.Finding, when time.Time, opts Optio
 		return
 	}
 
-	paint := painter(colorEnabled(w, opts.Color))
+	paint := painter(ColorEnabled(w, opts.Color))
 	stamp := when.Format(time.TimeOnly)
 
 	out := bufio.NewWriter(w)
