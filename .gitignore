@@ -1,3 +1,6 @@
 /dnstree
 /dist/
 /build/
+
+# Hide macOS Desktop Services Store (folder preferences)
+.DS_Store
