@@ -8,6 +8,15 @@
 <meta property="og:title" content="dnstree">
 <meta property="og:description" content="Iterative DNS resolution drawn as a tree: every referral from the root down, with latency, origin AS and DNSSEC state on each hop.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://rafaeljusto.github.io/dnstree/">
+<meta property="og:image" content="https://rafaeljusto.github.io/dnstree/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="dnstree resolving www.example.com from the root servers, each referral with its latency, origin AS and DNSSEC state.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -62,8 +71,8 @@ p{max-width:var(--text)}
   display:flex; align-items:center; justify-content:space-between; gap:1rem;
   padding-block:1.4rem; border-bottom:1px solid var(--line);
 }
-.brand{display:flex; align-items:baseline; gap:.55rem; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:1.05rem; letter-spacing:-.02em}
-.brand .caret{color:var(--accent)}
+.brand{display:flex; align-items:center; gap:.5rem; font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:1.05rem; letter-spacing:-.02em}
+.brand .brandmark{width:1.6rem; height:1.6rem; flex:none; color:var(--accent)}
 .masthead nav{display:flex; gap:1.4rem; font-size:.9rem}
 .masthead nav a{color:var(--muted); text-decoration:none}
 .masthead nav a:hover{color:var(--ink)}
@@ -238,7 +247,21 @@ footer a:hover{color:var(--ink)}
 <div class="wrap">
 
   <header class="masthead">
-    <div class="brand"><span class="caret">›</span> dnstree</div>
+    <div class="brand">
+      <svg class="brandmark" viewBox="0 0 64 64" aria-hidden="true">
+        <g transform="translate(0.25,-1.125)" fill="none" stroke-linecap="round">
+          <path fill="currentColor" d="M27.5 58 C29 49 29.4 42 29.5 36 L34.5 36 C34.6 42 35 49 36.5 58 Z"/>
+          <path stroke="currentColor" stroke-width="5" d="M32 38 L32 21"/>
+          <path stroke="currentColor" stroke-width="3.5" d="M32 22 L24.5 10"/>
+          <path stroke="currentColor" stroke-width="3.5" d="M32 22 L39.5 10"/>
+          <path stroke="currentColor" stroke-width="4.5" d="M31 36 L19 20"/>
+          <path stroke="currentColor" stroke-width="3" d="M26.5 30 L12.5 24"/>
+          <path stroke="currentColor" stroke-width="4.5" d="M33 34 L45 18"/>
+          <path stroke="currentColor" stroke-width="3" d="M37 28 L51 24"/>
+        </g>
+      </svg>
+      dnstree
+    </div>
     <nav>
       <a href="#hop">Read a hop</a>
       <a href="#dnssec" data-optional>DNSSEC</a>

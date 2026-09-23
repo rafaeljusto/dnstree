@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="t">
+  <title id="t">dnstree</title>
+  <g transform="translate(0.25,-1.125)" fill="none" stroke-linecap="round">
+    <path class="f" fill="#72B4D3" d="M27.5 58 C29 49 29.4 42 29.5 36 L34.5 36 C34.6 42 35 49 36.5 58 Z"/>
+    <path class="s" stroke="#72B4D3" stroke-width="5" d="M32 38 L32 21"/>
+    <path class="s" stroke="#72B4D3" stroke-width="3.5" d="M32 22 L24.5 10"/>
+    <path class="s" stroke="#72B4D3" stroke-width="3.5" d="M32 22 L39.5 10"/>
+    <path class="s" stroke="#72B4D3" stroke-width="4.5" d="M31 36 L19 20"/>
+    <path class="s" stroke="#72B4D3" stroke-width="3" d="M26.5 30 L12.5 24"/>
+    <path class="s" stroke="#72B4D3" stroke-width="4.5" d="M33 34 L45 18"/>
+    <path class="s" stroke="#72B4D3" stroke-width="3" d="M37 28 L51 24"/>
+  </g>
+</svg>
