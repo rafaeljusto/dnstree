@@ -3,6 +3,7 @@
 package trace
 
 import (
+	"fmt"
 	"iter"
 	"net/netip"
 	"slices"
@@ -87,9 +88,13 @@ type ExtendedError struct {
 	// whatever the server wrote beside it are what a reader has.
 	Reason string
 
-	// Text is EXTRA-TEXT, whatever the server chose to add in words.
+	// Text is EXTRA-TEXT, whatever the server chose to add in words, as it
+	// arrived. String is what makes it fit to draw.
 	Text string
 }
+
+// MaxExtraText is how much of an EXTRA-TEXT is drawn.
+const MaxExtraText = 64
 
 // Withheld reports whether the code says somebody decided this answer rather
 // than served it. These are what a filtering resolver, a captive network or a
@@ -111,9 +116,32 @@ func (e ExtendedError) String() string {
 		label = e.Reason + " (" + label + ")"
 	}
 	if e.Text != "" {
-		label += ": " + e.Text
+		label += ": " + printable(e.Text, MaxExtraText)
 	}
 	return label
+}
+
+// printable escapes every byte outside printable ASCII the way record data is
+// escaped, \DDD, and clips what is left. The text is the server's alone, and
+// drawn raw it could move the cursor over lines already written, break a line
+// of a tree in two, or put a byte above 127 in --format ascii.
+func printable(text string, limit int) string {
+	var b strings.Builder
+	for i := 0; i < len(text); i++ {
+		if b.Len() >= limit {
+			b.WriteString("...")
+			break
+		}
+		switch c := text[i]; {
+		case c < ' ' || c > '~':
+			fmt.Fprintf(&b, "\\%03d", c)
+		case c == '\\':
+			b.WriteString(`\\`)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // Subnet is the client subnet of RFC 7871 as a server handed it back. A server

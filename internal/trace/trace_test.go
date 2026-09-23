@@ -1,6 +1,7 @@
 package trace_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/internal/trace"
@@ -88,6 +89,31 @@ func TestTight(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if got := test.step.Tight(); got != test.want {
 				t.Errorf("got %v for %d of %d bytes, want %v", got, test.step.Size, test.step.Limit, test.want)
+			}
+		})
+	}
+}
+
+// TestExtendedErrorIsDrawable covers EXTRA-TEXT, the one field of a reply a
+// server writes in words of its own choosing. Drawn raw it could move the
+// cursor, split a line or break --format ascii.
+func TestExtendedErrorIsDrawable(t *testing.T) {
+	tests := map[string]struct {
+		text string
+		want string
+	}{
+		"plain words stay as they are":  {"on the list", "Blocked (15): on the list"},
+		"escapes cannot reach a screen": {"x\x1b[2K\r\n[secure]", `Blocked (15): x\027[2K\013\010[secure]`},
+		"bytes above 127 are escaped":   {"café", `Blocked (15): caf\195\169`},
+		"a backslash is escaped too":    {`a\b`, `Blocked (15): a\\b`},
+		"a long text is clipped": {strings.Repeat("a", trace.MaxExtraText+10),
+			"Blocked (15): " + strings.Repeat("a", trace.MaxExtraText) + "..."},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			ede := trace.ExtendedError{Code: 15, Reason: "Blocked", Text: test.text}
+			if got := ede.String(); got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
 			}
 		})
 	}

@@ -78,8 +78,11 @@ func (d *DoH) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort,
 	}
 	defer response.Body.Close()
 
+	// The status line's own words are the server's to choose, and they end up
+	// drawn; the code is all the reader needs.
 	if response.StatusCode != http.StatusOK {
-		return nil, time.Since(start), fmt.Errorf("doh %s: %s", server, response.Status)
+		return nil, time.Since(start), fmt.Errorf("doh %s: %d %s", server,
+			response.StatusCode, http.StatusText(response.StatusCode))
 	}
 	resp, err := dnshttp.Response(response)
 	rtt := time.Since(start)

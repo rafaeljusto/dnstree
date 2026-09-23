@@ -150,6 +150,8 @@ func TestTruncate(t *testing.T) {
 		"an emoji takes two":      {line: "🌍 ab", cells: 3, want: "🌍…"},
 		"a joined emoji is two":   {line: "🛰️ ab", cells: 5, want: "🛰️ ab"},
 		"nowhere to cut":          {line: "example.com.", cells: 0, want: "…"},
+		"a joiner gives no room back": {line: strings.Repeat("A\u200d", 8), cells: 4,
+			want: strings.Repeat("A\u200d", 3) + "…"},
 	}
 
 	for name, test := range tests {

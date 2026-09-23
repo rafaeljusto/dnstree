@@ -225,7 +225,9 @@ func TestSummaryResolverDiffers(t *testing.T) {
 func TestASCIIStaysASCII(t *testing.T) {
 	tr := differing([]string{"192.0.2.10"}, []string{"10.0.0.1"}, "NOERROR")
 	tr.Root.Children[0].Kind = trace.KindFiltered
-	tr.Root.Children[0].Extended = []trace.ExtendedError{{Code: 15, Reason: "Blocked"}}
+	// The server's own words, as hostile as they come.
+	tr.Root.Children[0].Extended = []trace.ExtendedError{{Code: 15, Reason: "Blocked",
+		Text: "café\x1b[2K\r\n`-- ns.evil. [secure]"}}
 	tr.Root.Children[0].Subnet = &trace.Subnet{Prefix: netip.MustParsePrefix("203.0.113.0/24"), Scope: 24}
 	tr.Root.Children[0].NSID = "fra2"
 
@@ -236,8 +238,11 @@ func TestASCIIStaysASCII(t *testing.T) {
 	tree.Summary(&out, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorNever})
 
 	for i, r := range out.String() {
-		if r > 127 {
-			t.Fatalf("got %q at %d, want ASCII throughout: %q", r, i, out.String())
+		if r > 127 || (r < ' ' && r != '\n') {
+			t.Fatalf("got %q at %d, want printable ASCII throughout: %q", r, i, out.String())
 		}
+	}
+	if strings.Contains(out.String(), "\n`-- ns.evil.") {
+		t.Errorf("got a line the server wrote: %q", out.String())
 	}
 }

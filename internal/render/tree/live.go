@@ -521,8 +521,11 @@ func escape(s string) int {
 // frame, guessing it narrower wraps the line and breaks the next redraw.
 func cellWidth(r, previous rune) int {
 	switch {
-	case r == 0x200d: // a joiner welds the glyphs either side of it into one
-		return -2
+	case r == 0x200d:
+		// A joiner may weld the glyphs either side of it into one, or may not:
+		// that is the terminal's call. Counting both is the safe side, and a
+		// width that went down would let text as long as it likes through.
+		return 0
 	case r == 0xfe0f: // and this draws the one before it as an emoji
 		if wide(previous) {
 			return 0
