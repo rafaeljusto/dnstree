@@ -113,6 +113,7 @@ ns.target  IN A    192.0.2.6
 ns    IN A    192.0.2.3
 alias IN CNAME www.target.com.
 loop  IN CNAME other.target.com.
+cased IN CNAME back.target.com.
 `
 	const targetZone = `
 @     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
@@ -120,6 +121,7 @@ loop  IN CNAME other.target.com.
 ns    IN A    192.0.2.6
 www   IN A    192.0.2.60
 other IN CNAME loop.example.com.
+back  IN CNAME CASED.Example.COM.
 `
 
 	newHierarchy := func(tb testing.TB) harness {
@@ -195,6 +197,20 @@ other IN CNAME loop.example.com.
 		}
 		if got := len(steps(tr)); got > 12 {
 			t.Errorf("got %d steps, want the loop cut short: %s", got, format(steps(tr)))
+		}
+	})
+
+	// A name is the same name in any case, so the loop is caught where it
+	// closes rather than a lap later.
+	t.Run("loop spelled in another case", func(t *testing.T) {
+		h := newHierarchy(t)
+		tr, err := newResolver(t, h, resolver.Config{}).Resolve(t.Context(), "cased.example.com", "A")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+
+		if len(tr.Warnings) != 1 || !strings.HasSuffix(strings.ToLower(tr.Warnings[0]), "comes back to cased.example.com.") {
+			t.Fatalf("got warnings %q, want the loop caught at cased.example.com.", tr.Warnings)
 		}
 	})
 }

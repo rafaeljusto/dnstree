@@ -198,7 +198,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	run := &run{
 		cfg:      r.cfg,
 		counters: newCounters(r.cfg.Budget),
-		chased:   map[string]bool{qname: true},
+		chased:   map[string]bool{dnsutil.Canonical(qname): true},
 		trace: &trace.Trace{
 			Question: trace.Question{Name: qname, Type: qtype, Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -763,14 +763,16 @@ func (r *run) chaseCNAME(ctx context.Context, step *trace.Step, qname string, qt
 		r.warnf("%s is an alias for a name the answer did not carry", qname)
 		return step
 	}
-	if r.chased[target] {
+	// Names are compared the way DNS compares them: B.x and b.x are one name,
+	// and a loop spelled in both would otherwise run until the budget ended it.
+	if r.chased[dnsutil.Canonical(target)] {
 		r.warnf("the alias chain for %s comes back to %s", qname, target)
 		return step
 	}
 	if err := r.counters.cname(); err != nil {
 		return r.fail(step, step.Zone, err.Error())
 	}
-	r.chased[target] = true
+	r.chased[dnsutil.Canonical(target)] = true
 
 	root := &trace.Step{Zone: ".", Kind: trace.KindZone, Notes: []string{"resolving " + target}}
 	r.attach(step, root)

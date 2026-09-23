@@ -186,7 +186,21 @@ func Save(dir string, walk *Walk) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, file(walk.Question.Name, walk.Question.Type)), append(data, '\n'), 0o600)
+	// Written aside and renamed into place: a reader never sees half a file,
+	// and a link planted at the name is replaced rather than written through.
+	temp, err := os.CreateTemp(dir, ".walk-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	if _, err := temp.Write(append(data, '\n')); err != nil {
+		_ = temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), filepath.Join(dir, file(walk.Question.Name, walk.Question.Type)))
 }
 
 func sameQuestion(remembered Question, asked trace.Question) bool {

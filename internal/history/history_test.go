@@ -105,6 +105,50 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
+// TestSaveReplacesALink covers a link planted where the walk is kept, in a
+// cache directory somebody else can write to. The walk replaces the link and
+// the file it pointed at is left alone: nothing reaches the disk outside the
+// cache. No half-written file is left behind either.
+func TestSaveReplacesALink(t *testing.T) {
+	dir, outside := t.TempDir(), filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(outside, []byte("untouched"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "probe"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	walk := history.Of(resolution(), seen)
+	if err := history.Save(dir, walk); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	entries, _ := os.ReadDir(dir)
+	var kept string
+	for _, entry := range entries {
+		if entry.Name() != "probe" {
+			kept = filepath.Join(dir, entry.Name())
+		}
+	}
+	if err := os.Remove(kept); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, kept); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+
+	if err := history.Save(dir, walk); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if data, _ := os.ReadFile(outside); string(data) != "untouched" {
+		t.Errorf("got %q in the file the link pointed at, want it untouched", data)
+	}
+	if info, err := os.Lstat(kept); err != nil || !info.Mode().IsRegular() {
+		t.Errorf("got %v, %v, want the link replaced by the walk", info, err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 2 {
+		t.Errorf("got %d entries, want the walk and nothing half-written", len(entries))
+	}
+}
+
 // TestLoadIgnores covers every way a cache can be no use. None of them is an
 // error: a walk with nothing to compare against is a walk that says so.
 func TestLoadIgnores(t *testing.T) {
