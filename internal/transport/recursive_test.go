@@ -1,4 +1,4 @@
-package recursive_test
+package transport_test
 
 import (
 	"net/netip"
@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/recursive"
 	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
 	"github.com/rafaeljusto/dnstree/internal/trace"
 	"github.com/rafaeljusto/dnstree/internal/transport"
 )
 
-const zone = `
+const recursiveZone = `
 @     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @     IN NS   ns
 ns    IN A    127.0.0.1
@@ -21,10 +20,10 @@ www   IN A    192.0.2.10
 `
 
 func TestAsk(t *testing.T) {
-	server := fakens.New(t, fakens.Config{Origin: "test.", Zone: zone})
+	server := fakens.New(t, fakens.Config{Origin: "test.", Zone: recursiveZone})
 	carrier := transport.NewUDP(transport.Config{})
 
-	answer, err := recursive.Ask(t.Context(), carrier, server.Addr,
+	answer, err := transport.Ask(t.Context(), carrier, server.Addr,
 		trace.Question{Name: "www.test", Type: "A", Class: "IN"}, false, netip.Prefix{})
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
@@ -50,7 +49,7 @@ func TestAskSilent(t *testing.T) {
 	carrier := transport.NewUDP(transport.Config{Timeout: 200 * time.Millisecond})
 
 	// Port 1 is reserved and nothing answers there.
-	answer, err := recursive.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:1"),
+	answer, err := transport.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:1"),
 		trace.Question{Name: "www.test", Type: "A", Class: "IN"}, false, netip.Prefix{})
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
@@ -62,7 +61,7 @@ func TestAskSilent(t *testing.T) {
 
 func TestAskUnknownType(t *testing.T) {
 	carrier := transport.NewUDP(transport.Config{})
-	if _, err := recursive.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:53"),
+	if _, err := transport.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:53"),
 		trace.Question{Name: "www.test", Type: "NONSENSE", Class: "IN"}, false, netip.Prefix{}); err == nil {
 		t.Error("got no error, want a question that cannot be asked")
 	}
@@ -89,13 +88,13 @@ func TestSystemFrom(t *testing.T) {
 			if err := os.WriteFile(path, []byte(test.file), 0o600); err != nil {
 				t.Fatalf("writing the file: %v", err)
 			}
-			if got := recursive.SystemFrom(path); got != test.want {
+			if got := transport.SystemFrom(path); got != test.want {
 				t.Errorf("got %v, want %v", got, test.want)
 			}
 		})
 	}
 
-	if got := recursive.SystemFrom(filepath.Join(t.TempDir(), "missing")); got.IsValid() {
+	if got := transport.SystemFrom(filepath.Join(t.TempDir(), "missing")); got.IsValid() {
 		t.Errorf("got %v, want nothing from a host that keeps no such file", got)
 	}
 }

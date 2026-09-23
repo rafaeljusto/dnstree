@@ -430,7 +430,7 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 	}
 	servers := cfg.Resolvers
 	if len(servers) == 0 {
-		if system := recursive.System(); system.IsValid() {
+		if system := transport.System(); system.IsValid() {
 			servers = []netip.AddrPort{system}
 		}
 	}
@@ -451,7 +451,7 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		var wait sync.WaitGroup
 		for i, server := range servers {
 			wait.Go(func() {
-				answer, err := recursive.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
+				answer, err := transport.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
 				if err != nil {
 					if log != nil {
 						log.Debug("the resolver could not be asked", "server", server, "error", err)
