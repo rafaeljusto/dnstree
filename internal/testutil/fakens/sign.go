@@ -17,9 +17,8 @@ import (
 type signer struct {
 	zone string
 
-	// mu serializes signing: the library caches a key's tag on the key and
-	// canonicalises the records it signs, so two handlers signing at once would
-	// be writing to the same records.
+	// mu serializes signing, because the library caches a key's tag on the key.
+	// The records are another matter: see sign.
 	mu sync.Mutex
 
 	ksk     *dns.DNSKEY
@@ -96,10 +95,18 @@ func (s *signer) signRRset(rrset []dns.RR) dns.RR {
 	return s.sign(rrset, s.zsk, s.zskPriv, s.bad)
 }
 
-// sign expects the signer to be locked already.
+// sign expects the signer to be locked already. The library writes to the
+// records it signs: it lowercases their names, resets their TTLs and, for a
+// wildcard, swaps the owner for a moment. They are the zone's own records,
+// which other handlers are packing into replies with no lock held, so it is
+// handed copies.
 func (s *signer) sign(rrset []dns.RR, key *dns.DNSKEY, private crypto.Signer, spoil bool) dns.RR {
+	copies := make([]dns.RR, len(rrset))
+	for i, rr := range rrset {
+		copies[i] = rr.Clone()
+	}
 	signature := dns.NewRRSIG(s.zone, key.Algorithm, key.KeyTag())
-	if err := signature.Sign(private, rrset, &dns.SignOption{}); err != nil {
+	if err := signature.Sign(private, copies, &dns.SignOption{}); err != nil {
 		return nil
 	}
 	if spoil {

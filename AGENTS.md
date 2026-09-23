@@ -52,6 +52,7 @@ tagging by hand skips both the calculation and the changelog.
 - Only `transport`, `resolver` and `dnssec` — plus `fakens`, which has to speak
   the wire format — may import the DNS codec. Keeping it out of the trace, the
   renderers and the AS lookups is what makes them testable without a network.
+  `internal/layering` fails on any other import of it.
 - `cmd/dnstree` wires things together and owns nothing.
 - One dependency, on purpose. Adding a second needs an argument.
 
@@ -145,9 +146,10 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
 - Table tests are keyed by a sentence that says what the case is, not by index.
-- `fakens` replaces its zone whole through an `atomic.Pointer` and serialises
-  signing behind a mutex, because handlers run concurrently and the library
-  writes to the records it signs. New state in there needs the same care.
+- `fakens` replaces its zone whole through an `atomic.Pointer`, serialises
+  signing behind a mutex and signs copies of the zone's records, because
+  handlers run concurrently and the library writes to the records it signs.
+  New state in there needs the same care.
 
 ## Keeping the surface in sync
 

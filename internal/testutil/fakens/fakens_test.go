@@ -1,6 +1,7 @@
 package fakens_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -159,4 +160,43 @@ func exchange(tb testing.TB, server *fakens.Server, name string, qtype uint16) *
 		tb.Fatalf("Exchange: %v", err)
 	}
 	return resp
+}
+
+// TestConcurrentSignedReplies covers handlers signing the same records at once,
+// which --all and the serial checks do. The library writes to what it signs,
+// so a server that handed it the zone's own records raced every handler
+// packing them into a reply; the race detector saw it rarely, and a torn name
+// once took a whole test run down.
+func TestConcurrentSignedReplies(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: leafZone + "sub IN NS ns.sub\nns.sub IN A 192.0.2.9\n", DNSSEC: true})
+	carrier := transport.NewUDP(transport.Config{Timeout: 2 * time.Second})
+
+	questions := []struct {
+		name  string
+		qtype uint16
+	}{
+		{"www.example.com.", dns.TypeA},     // an answer
+		{"example.com.", dns.TypeDNSKEY},    // the key set
+		{"nothing.example.com.", dns.TypeA}, // a name error
+		{"www.example.com.", dns.TypeMX},    // no data
+		{"www.sub.example.com.", dns.TypeA}, // a referral
+	}
+	var wait sync.WaitGroup
+	for i := range 16 {
+		question := questions[i%len(questions)]
+		wait.Go(func() {
+			for range 40 {
+				req, err := transport.NewQuery(question.name, question.qtype, transport.DefaultUDPSize, true)
+				if err != nil {
+					t.Errorf("NewQuery: %v", err)
+					return
+				}
+				if _, _, err := carrier.Exchange(t.Context(), req, server.Addr, ""); err != nil {
+					t.Errorf("%s %d: %v", question.name, question.qtype, err)
+					return
+				}
+			}
+		})
+	}
+	wait.Wait()
 }
