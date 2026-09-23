@@ -25,7 +25,7 @@ var _ Transport = (*DoH)(nil)
 func NewDoH(cfg Config) *DoH { return &DoH{Config: cfg} }
 
 // Proto implements [Transport].
-func (d *DoH) Proto() string { return "doh" }
+func (d *DoH) Proto() string { return ProtoDoH }
 
 // Port implements [Transport].
 func (d *DoH) Port() uint16 { return d.port(PortDoH) }

@@ -20,7 +20,7 @@ var _ Transport = (*UDP)(nil)
 func NewUDP(cfg Config) *UDP { return &UDP{Config: cfg} }
 
 // Proto implements [Transport].
-func (u *UDP) Proto() string { return "udp" }
+func (u *UDP) Proto() string { return ProtoUDP }
 
 // Port implements [Transport].
 func (u *UDP) Port() uint16 { return u.port(PortDNS) }

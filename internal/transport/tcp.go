@@ -20,7 +20,7 @@ var _ Transport = (*TCP)(nil)
 func NewTCP(cfg Config) *TCP { return &TCP{Config: cfg} }
 
 // Proto implements [Transport].
-func (t *TCP) Proto() string { return "tcp" }
+func (t *TCP) Proto() string { return ProtoTCP }
 
 // Port implements [Transport].
 func (t *TCP) Port() uint16 { return t.port(PortDNS) }

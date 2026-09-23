@@ -21,7 +21,7 @@ var _ Transport = (*DoT)(nil)
 func NewDoT(cfg Config) *DoT { return &DoT{Config: cfg} }
 
 // Proto implements [Transport].
-func (d *DoT) Proto() string { return "dot" }
+func (d *DoT) Proto() string { return ProtoDoT }
 
 // Port implements [Transport].
 func (d *DoT) Port() uint16 { return d.port(PortDoT) }

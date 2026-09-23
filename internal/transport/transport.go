@@ -25,6 +25,16 @@ const (
 	PortDoH = 443
 )
 
+// How each transport names itself in the trace. They are what a hop is read
+// back by — whether an answer was bounded by a datagram, for one — so they are
+// named once rather than spelled out wherever they are compared.
+const (
+	ProtoUDP = "udp"
+	ProtoTCP = "tcp"
+	ProtoDoT = "dot"
+	ProtoDoH = "doh"
+)
+
 const (
 	// DefaultTimeout bounds a single query.
 	DefaultTimeout = 2 * time.Second
