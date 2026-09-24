@@ -1,12 +1,12 @@
 <!--
 Describe the big picture of your changes here to communicate to the maintainers why we should accept this pull request.
 
-This text will be included in the changelog. If applicable, include links to documentation or pieces of code.
-If your change includes breaking changes please add a code block documenting the breaking change:
+Only the title reaches the changelog; this text is for the reviewer. If applicable, include links to documentation or
+pieces of code. If your change includes breaking changes please add a code block documenting the breaking change:
 
 ```
-BREAKING CHANGE: This patch changes the behavior of the flag `foo` to do bar. To keep the existing
-behavior please do baz.
+BREAKING CHANGE: This patch changes the behaviour of the flag `foo` to do bar. To keep the existing
+behaviour please do baz.
 ```
 -->
 
@@ -20,7 +20,7 @@ If this pull request
 3. implements a new feature, link the issue containing the design document in the format of `#1234`;
 4. improves the documentation, no issue reference is required.
 
-You can discuss changes with maintainers in the Github Discussions in this repository.
+You can discuss changes with maintainers in the GitHub Discussions in this repository.
 -->
 
 ## Checklist

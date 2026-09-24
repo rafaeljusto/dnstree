@@ -13,6 +13,9 @@ go run ./cmd/next-version -changelog=f   # write the release notes to a file
 go run ./cmd/next-version -check-title="feat: Draw a trace as a tree"
 ```
 
+`-to`, `-output` and `-summary` default to `HEAD`, `$GITHUB_OUTPUT` and
+`$GITHUB_STEP_SUMMARY`.
+
 ## How a change is classified
 
 Every commit since the tag is read by the prefix of its subject. Merges are
@@ -36,17 +39,8 @@ whoever upgrades is the point, not the word in front of it.
 
 ## Before 1.0
 
-While the major version is zero the project has promised nothing, so every
-level shifts down one: a breaking change moves the minor, and a feature moves
-only the patch.
-
-| From | Change | To |
-| --- | --- | --- |
-| v0.1.0 | `fix:` | v0.1.1 |
-| v0.1.0 | `feat:` | v0.1.1 |
-| v0.1.0 | `feat!:` | v0.2.0 |
-
-Tagging v1.0.0 ends that, and the usual arithmetic takes over.
+Below v1.0.0 every level shifted down one: a breaking change moved the minor,
+and a feature only the patch.
 
 ## Unclassified changes
 
@@ -73,7 +67,7 @@ the heading already says it.
 
 The release workflow writes that text twice: onto the annotated tag, so
 `git show v0.1.2` says what shipped without going near a network, and into the
-release body, followed by a compare link. It replaces GitHub's own generated
+release body, followed by the install section and a compare link. It replaces GitHub's own generated
 notes, which list what arrived through a pull request and so say nothing at all
 about a commit pushed straight to `main`.
 

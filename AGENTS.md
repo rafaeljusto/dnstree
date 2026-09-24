@@ -12,7 +12,8 @@ pull requests and the commit prefixes that decide the version.
 make check   # build, go vet, golangci-lint, go test -race ./..., govulncheck
 ```
 
-That is what CI runs. Two things it does not:
+That is what CI runs, less hadolint (`make lint-docker`) and the packaging dry
+run (`make dist`). Two things it does not run:
 
 - `make live` goes out to the real root servers. It is never part of `check`;
   CI runs it weekly, because the embedded hints and trust anchors go stale
@@ -42,7 +43,7 @@ and is not a dependency of the module.
 The maintainer reviews and signs every commit. Write the message, print it, and
 stop — no `git commit`, `git push` or `git tag`. Releases are cut by a workflow
 that reads the commit subjects since the last tag and works out the version;
-tagging by hand skips both the calculation and the changelog.
+tagging by hand skips the calculation, and the tag carries no changelog.
 
 ## Layering
 
@@ -54,7 +55,8 @@ tagging by hand skips both the calculation and the changelog.
   renderers and the AS lookups is what makes them testable without a network.
   `internal/layering` fails on any other import of it.
 - `cmd/dnstree` wires things together and owns nothing.
-- One dependency, on purpose. Adding a second needs an argument.
+- Two dependencies, on purpose: the DNS codec, and `golang.org/x/sys` for the
+  terminal size. Adding a third needs an argument.
 
 ## Invariants
 
@@ -99,7 +101,7 @@ Each of these has been a bug, or would be a silent regression.
   in `groups` in `internal/cli/config.go`, so naming one on the command line
   replaces what the file chose instead of colliding with it.
 - **Exit codes are a contract**: 0 an answer, 1 the command line, 2 no answer,
-  3 a broken chain of trust. Scripts read them; do not repurpose one.
+  3 a broken chain of trust, 4 an `--expect` that did not hold. Scripts read them; do not repurpose one.
 - **`--format ascii` emits nothing above codepoint 127** — a test asserts it,
   because the format exists for pasting into documents.
 - **`schema_version` in the JSON output** is bumped whenever a field changes
@@ -151,7 +153,7 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
 - The engine is tested offline against in-process authoritative servers
   (`internal/testutil/fakens`), signed hierarchies included. `fakens.Behaviour`
   has a knob for each way a server misbehaves — silence, REFUSED, lameness,
-  truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue and five ways to
+  truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue and six ways to
   break a chain of trust. A change to the way a delegation is followed belongs
   with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.

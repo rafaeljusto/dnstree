@@ -25,10 +25,8 @@ As a potential contributor, your changes and ideas are welcome at any hour of
 the day or night, on weekdays, weekends, and holidays. Please do not ever
 hesitate to ask a question or send a pull request.
 
-If you are unsure, just ask or submit the issue or pull request anyways. You
-won't be yelled at for giving it your best effort. The worst that can happen is
-that you'll be politely asked to change something. We appreciate any sort of
-contributions and don't want a wall of rules to get in the way of that.
+If you are unsure, ask, or open the issue or pull request anyway: the worst that
+can happen is a polite request to change something.
 
 That said, if you want to ensure that a pull request is likely to be merged,
 talk to us! You can find out our thoughts and ensure that your contribution
@@ -60,7 +58,7 @@ to help out:
 
 - **Give us a star.** It may not seem like much, but it really makes a
   difference. This is something that everyone can do to help out dnstree.
-  Github stars help the project gain visibility and stand out.
+  GitHub stars help the project gain visibility and stand out.
 
 - **Report what you found in the wild.** dnstree exists to make broken
   delegations visible. If it drew something you did not expect, or stayed quiet
@@ -106,7 +104,8 @@ request, go through this checklist:
 2. [Rebase](http://git-scm.com/book/en/Git-Branching-Rebasing) your local
    changes against the `main` branch.
 3. Run `make check`. It builds, lints, runs the whole suite under `-race` and
-   checks the dependencies for known vulnerabilities — the same things CI runs.
+   checks the dependencies for known vulnerabilities — what CI runs, less
+   hadolint and the packaging dry run.
 4. Give the pull request title a descriptive prefix. See below: the pull
    request lands as one squashed commit under that title, and the release
    version is worked out from it.
@@ -130,10 +129,11 @@ Pull requests eligible for review
 
 Some other important notes when contributing:
 
-- **Keep the dependency list short.** dnstree has exactly one dependency,
+- **Keep the dependency list short.** dnstree has two dependencies:
   `codeberg.org/miekg/dns`, because the standard library has no DNS wire-format
-  codec. Everything else is standard library, and a pull request adding a
-  dependency needs to argue for it.
+  codec, and `golang.org/x/sys`, for the terminal size. Everything else is
+  standard library, and a pull request adding a dependency needs to argue for
+  it.
 - **Only three packages may import the DNS codec**: `transport`, `resolver` and
   `dnssec`, plus the fake nameserver that has to speak the wire format. The
   trace model, the renderers and the ASN lookups work on plain Go types, which
@@ -151,7 +151,7 @@ plain subject ships under a patch tag.
 
 | Subject | Bump |
 | --- | --- |
-| `feat:` | minor |
+| `feat:`, `feature:` | minor |
 | `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `style:`, `revert:` | patch |
 | any prefix with `!` (`feat!:`), or a `BREAKING CHANGE:` footer | major |
 
@@ -164,16 +164,15 @@ helped while the work was in progress. You can check a title yourself:
 go run ./cmd/next-version -check-title="feat: Draw a trace as a tree"
 ```
 
-See [cmd/next-version](cmd/next-version/) for the details, including what
-changes while the major version is still zero.
+See [cmd/next-version](cmd/next-version/) for the details.
 
 ### Testing
 
 The engine is tested offline against in-process authoritative servers
 (`internal/testutil/fakens`), signed hierarchies included. If you are fixing the
 way a delegation is followed, the fix belongs with a scenario that reproduces it
-on purpose — there is a knob for lame servers, truncation, missing glue, broken
-signatures and more.
+on purpose — there is a knob for lame servers, truncation, out-of-bailiwick
+glue, broken signatures and more.
 
 ```bash
 make check   # what CI runs

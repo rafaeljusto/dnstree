@@ -16,8 +16,9 @@ finding even when nothing crashes.
   on the path, every server a referral names, and anyone who can spoof or
   rewrite a UDP answer. They control every byte after the question.
 - **The user runs the CLI** and reads its output in a terminal, a browser
-  (`--web`), a JSON consumer or a Graphviz file. Record data is attacker text.
-- **Scripts trust the exit codes** (0/1/2/3). A wrong one is a security bug:
+  (`--format web`), a JSON consumer or a Graphviz file. Record data is
+  attacker text.
+- **Scripts trust the exit codes** (0–4). A wrong one is a security bug:
   `secure` or `insecure` where `bogus` belongs is a validation bypass.
 - `internal/testutil/fakens` is test code. Its bugs are Low at most, unless
   they hide a real bug by making a test pass for the wrong reason.
