@@ -1,6 +1,6 @@
 ---
 name: dnstree-audit
-description: Security and bug audit of dnstree — hostile DNS responses, resolver termination, DNSSEC validation integrity, resource leaks, races, and output injection — reported as verified findings with severity, location, a reproducing scenario and a fix. Use when asked to audit, security review, bug hunt or threat-model the repository or one of its packages. Takes an optional scope (a package path or an area name: wire, resolver, dnssec, transport, output, disk, concurrency).
+description: Security and bug audit of dnstree — hostile DNS responses, resolver termination, DNSSEC validation integrity, resource leaks, races, and output injection — reported as verified findings with severity, location, a reproducing scenario and a fix. Use when asked to audit, security review, bug hunt or threat-model the repository or one of its packages. Takes an optional scope (a package path, an area name: wire, resolver, dnssec, transport, output, disk, concurrency, or `full` to ignore the coverage ledger and redo everything).
 ---
 
 # dnstree audit
@@ -31,12 +31,35 @@ finding even when nothing crashes.
   reads as zero), unchecked type assertions on `dns.RR`, indexing `[0]` into
   sections, labels or rdata slices that can be empty, `nil` OPT, and trusting
   counts, owners or classes the library does not check.
+- The codec does not escape names (see AGENTS.md). Any other belief about what
+  it does is checked with a pack and unpack round trip before a finding, a
+  fix or a comment rests on it.
 - Only `transport`, `resolver`, `dnssec` and `fakens` may import the codec. An
   import anywhere else is a layering finding.
 - Budgets live in `internal/resolver/budget.go`. Find every loop or recursion
   that follows data from a response and check that it spends from a budget.
 - Look at the `hostile_test.go` files and `fakens.Behaviour` before reporting:
   if a scenario is already tested and passes, it isn't a finding.
+
+## Start from the last audit
+
+[`coverage.md`](coverage.md) is the ledger: the commit the last audit ran at,
+the findings still open, and what was checked and found sound. Read it first.
+
+1. **The commits since then come first.** `git log <commit>..HEAD`, and read
+   every diff in full. A fix for an earlier finding is the likeliest place for
+   the next one: try the same attack one step to the side — the same record
+   forged another way, the same text through another sink, the check moved
+   ahead of the one it depended on.
+2. **Then the open findings**: is each still reproducible, or fixed for real?
+3. **Then the areas below**, skipping a sound item whose files no commit since
+   has touched.
+
+With no scope, that is the whole audit. `full` ignores the ledger and works
+through every area. Without a ledger, audit everything.
+
+The audit is done when a run finds nothing Critical or High and nothing has
+changed since. Say so plainly; the next run then only has commits to look at.
 
 ## Areas
 
@@ -60,10 +83,12 @@ Work through them in this order unless the scope names one.
    signer name versus zone, labels field versus owner (wildcard expansion),
    key tag collisions (several keys with one tag must all be tried),
    DS digest types, and the algorithm set (unknown means `indeterminate`, not
-   `bogus`, and not `secure` either). NSEC/NSEC3 denial: canonical ordering,
-   wrap-around at the zone apex, opt-out, NSEC3 iteration caps (RFC 9276, which
-   is also a CPU-exhaustion vector), closest encloser, type bitmaps, and the
-   insecure-delegation proof. Any path where a missing record is taken as proof
+   `bogus`, and not `secure` either — but only for a record whose signature was
+   checked first). NSEC/NSEC3 denial: canonical ordering, wrap-around at the
+   zone apex, opt-out, NSEC3 iteration caps (RFC 9276, which is also a
+   CPU-exhaustion vector), closest encloser, type bitmaps, and the
+   insecure-delegation proof, which for opt-out needs the closest encloser
+   proof too (RFC 5155 8.9), not just a span covering the delegation. Any path where a missing record is taken as proof
    of something breaks an invariant.
 4. **transport: resources and cancellation.** Conns closed on every path,
    deadlines set from `ctx`, DoH response bodies bounded (`io.LimitReader`) and
@@ -104,7 +129,9 @@ stall a resolution.
 - After you touch concurrent code or fakens, run `go test -race -count=2 ./...`.
   Both races this repository has had only showed up on the second run.
 - Don't use `make live` or the real internet to build a PoC.
-- Don't fix anything unless asked. Don't commit.
+- Don't fix anything unless asked. Don't commit. The ledger is the one file an
+  audit writes.
+- A fix for a finding goes through the `dnstree-review` skill before it lands.
 
 ## Severity
 
@@ -122,7 +149,12 @@ stall a resolution.
 
 ## Report
 
-Open with a table ordered by severity: severity, one-line title, location.
+No findings is a complete result. When nothing reproduces, say so in one line
+with the commit, give the checked-and-sound list, and stop. Don't lower the bar,
+stretch a severity or promote an Unverified suspicion to fill the table.
+
+Otherwise open with a table ordered by severity: severity, one-line title,
+location.
 Then one block per finding:
 
 - **Severity**: Critical / High / Medium / Low / Informational (plus
@@ -138,6 +170,11 @@ Then one block per finding:
 - **Remediation**: the fix as a Go diff, using the stdlib and the existing
   dependency. No new dependencies. Point to the test that should stay.
 
-End with what you checked and found sound, one line each, so the next audit
-knows what was already covered. Keep it plain. Don't pad it with generic
-advice that isn't tied to a line of this code.
+End with what you checked and found sound, one line each. Keep it plain. Don't
+pad it with generic advice that isn't tied to a line of this code.
+
+Then rewrite [`coverage.md`](coverage.md) in the same shape it has: the commit
+audited, the date and scope, the open findings (one line each, with location),
+and the sound list. A finding that has been fixed leaves the ledger once the
+reproducing test has been kept in the tree. A sound item whose files changed
+is re-checked before it stays.

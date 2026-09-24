@@ -104,6 +104,12 @@ page is generated, so don't ask for it.
 - Correctness first: nil and empty sections from a hostile server, errors
   dropped, contexts not passed down, goroutines that can outlive the run.
   For a deeper security pass, the `dnstree-audit` skill covers it.
+- A fix for an audit finding is reviewed against the invariant, not the test
+  that reproduced it. Try the attack one step to the side: the same record
+  forged another way, the same text through another sink, a check that now
+  runs before the one it depended on. Both regressions audit fixes have
+  shipped here were that. A comment that states what the codec does needs a
+  round-trip test behind it.
 - `.github/workflows` changes: no `${{ }}` of PR-controlled text in `run:`, no
   `pull_request_target` checking out the head, pinned permissions.
 

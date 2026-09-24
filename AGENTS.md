@@ -75,7 +75,9 @@ Each of these has been a bug, or would be a silent regression.
   anywhere else is a data race against the live drawing.
 - **DNSSEC never claims more than it checked.** An algorithm this build does not
   know, or a denial of existence it cannot compute, is `indeterminate` — never
-  `bogus`. Bogus is exit code 3 and has to keep meaning something.
+  `bogus`. Bogus is exit code 3 and has to keep meaning something. Only a
+  record the zone above has signed can earn `indeterminate`: an unsigned DS is
+  anyone's, whatever algorithm it names, and is `bogus`.
 - **What a zone does not say is checked like what it does.** An insecure
   delegation, an NXDOMAIN, a NODATA and a wildcard all rest on a proof the zone
   signed, never on an absence: an absence is what anyone able to drop records
@@ -132,6 +134,13 @@ EDNS0 buffer is `Msg.UDPSize`, record data lives in the `rdata` subpackage, and
 the name helpers are in `dnsutil`. A handler is given a message with only the
 header and the question unpacked — call `Unpack()` before reading anything else,
 or the EDNS0 fields read as zero.
+
+Names come back as the raw octets the server sent, unescaped: owners and every
+name inside rdata (NS, CNAME, MX, SOA, SVCB targets). Text rdata — TXT, CAA,
+HINFO, NAPTR, URI, SVCB values — comes back escaped. A name has to be escaped
+before it is drawn, but not before it is queried or checked against TLS, which
+need the octets themselves. Check any other belief about what the codec does
+with a pack and unpack round trip before building on it.
 
 Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
 `slog.DiscardHandler`, `new(expr)`, `strings.Lines` and `strings.SplitSeq`.
