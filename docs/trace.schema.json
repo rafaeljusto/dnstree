@@ -325,7 +325,7 @@
           "type": "string"
         },
         "text": {
-          "description": "EXTRA-TEXT, whatever the server chose to add in words. It is the server's own copy and nothing here constrains it.",
+          "description": "EXTRA-TEXT, whatever the server chose to add in words, whole. Every byte outside printable ASCII, and the backslash, is escaped as \\DDD or \\\\.",
           "type": "string"
         },
         "withheld": {

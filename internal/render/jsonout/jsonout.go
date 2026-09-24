@@ -252,10 +252,13 @@ func convertRecords(from []trace.RR) []record {
 func convertExtended(from []trace.ExtendedError) []extendedError {
 	var extended []extendedError
 	for _, ede := range from {
+		// Escaped as String escapes it, and whole: \DDD is at most four bytes
+		// for each one, so the limit is never reached.
+		text := trace.Printable(ede.Text, 4*len(ede.Text))
 		extended = append(extended, extendedError{
 			Code:     ede.Code,
 			Reason:   ede.Reason,
-			Text:     ede.Text,
+			Text:     text,
 			Withheld: ede.Withheld(),
 		})
 	}

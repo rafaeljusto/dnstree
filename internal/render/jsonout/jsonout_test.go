@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,22 +171,58 @@ func TestRenderNothing(t *testing.T) {
 }
 
 // TestRenderEscapesNames covers the fields a script reads with jq -r. data is
-// escaped by the codec already; names and ALPN ids are not, and written as
-// they arrived they would put a server's escapes on the reader's screen.
+// escaped by the codec already; names, ALPN ids and EXTRA-TEXT are not, and
+// written as they arrived they would put a server's escapes on the reader's
+// screen.
 func TestRenderEscapesNames(t *testing.T) {
 	const forged = "x\x1b[2J.example."
 	tr := &trace.Trace{Root: &trace.Step{Kind: trace.KindZone, Children: []*trace.Step{{
 		Zone: forged, Kind: trace.KindAnswer, Server: trace.Server{Name: forged},
 		Records: []trace.RR{{Name: forged, Type: "HTTPS", Data: `1 . alpn="\027[2J"`,
 			Service: &trace.Service{Priority: 1, Target: forged, ALPN: []string{"\x1b[2J"}}}},
-	}}}}
+		Extended: []trace.ExtendedError{{Code: 18, Reason: "Prohibited", Text: "ok\x1b[1A\x1b[2Kforged line"}},
+	}}}, Resolvers: []*trace.Resolver{{
+		Extended: []trace.ExtendedError{{Code: 18, Text: "\x1b[2J"}},
+	}}}
 
 	var got bytes.Buffer
 	if err := jsonout.Render(&got, tr); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	if bytes.Contains(got.Bytes(), []byte(`\u001b`)) {
-		t.Errorf("got %s, want every name and ALPN id escaped the way data is", got.String())
+		t.Errorf("got %s, want every name, ALPN id and EXTRA-TEXT escaped the way data is", got.String())
+	}
+}
+
+// TestRenderKeepsExtraTextWhole covers EXTRA-TEXT longer than the tree draws.
+// The document is the server's copy, escaped rather than clipped.
+func TestRenderKeepsExtraTextWhole(t *testing.T) {
+	text := strings.Repeat("\x1b", trace.MaxExtraText) + `\`
+	tr := &trace.Trace{Root: &trace.Step{Kind: trace.KindZone, Children: []*trace.Step{{
+		Zone: "example.", Kind: trace.KindError, Rcode: "REFUSED",
+		Extended: []trace.ExtendedError{{Code: 18, Text: text}},
+	}}}}
+
+	var got bytes.Buffer
+	if err := jsonout.Render(&got, tr); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	var document struct {
+		Root struct {
+			Children []struct {
+				Extended []struct {
+					Text string `json:"text"`
+				} `json:"extended"`
+			} `json:"children"`
+		} `json:"root"`
+	}
+	if err := json.Unmarshal(got.Bytes(), &document); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	want := strings.Repeat(`\027`, trace.MaxExtraText) + `\\`
+	if children := document.Root.Children; len(children) != 1 || len(children[0].Extended) != 1 ||
+		children[0].Extended[0].Text != want {
+		t.Errorf("got %s, want text %q", got.String(), want)
 	}
 }
 
