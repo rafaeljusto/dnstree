@@ -228,7 +228,7 @@ func parse(tb testing.TB, origin, zone string) []dns.RR {
 	var records []dns.RR
 	parser := dns.NewZoneParser(strings.NewReader(zone), origin, "")
 	parser.SetDefaultTTL(3600)
-	for rr, err := range parser.RRs() {
+	for rr, err := range parser.All() {
 		if err != nil {
 			tb.Fatalf("fakens: parsing the %s zone: %v", origin, err)
 		}
