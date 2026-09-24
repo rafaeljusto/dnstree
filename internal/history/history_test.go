@@ -172,6 +172,24 @@ func TestLoadIgnores(t *testing.T) {
 			walk.Question.Name = "elsewhere.test."
 			write(tb, dir, question(), marshal(tb, walk))
 		},
+		// Every name and rdata a walk keeps comes escaped from the codec, so a
+		// control byte in the file was put there by somebody other than a walk,
+		// and the findings would draw it on the terminal.
+		"a file with a control byte in the answer": func(tb testing.TB, dir string) {
+			walk := history.Of(resolution(), seen)
+			walk.Answer = []string{"\x1b[2J\x1b[Hforged"}
+			write(tb, dir, question(), marshal(tb, walk))
+		},
+		"a file with a control byte in a zone": func(tb testing.TB, dir string) {
+			walk := history.Of(resolution(), seen)
+			walk.Zones[1].Name = "\x1b[31mevil."
+			write(tb, dir, question(), marshal(tb, walk))
+		},
+		"a file with a byte above 127 in a nameserver": func(tb testing.TB, dir string) {
+			walk := history.Of(resolution(), seen)
+			walk.Zones[1].NS = []string{"ns.caf\u00e9.test."}
+			write(tb, dir, question(), marshal(tb, walk))
+		},
 	}
 
 	for name, setup := range tests {

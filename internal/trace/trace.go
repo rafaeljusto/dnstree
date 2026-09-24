@@ -116,16 +116,19 @@ func (e ExtendedError) String() string {
 		label = e.Reason + " (" + label + ")"
 	}
 	if e.Text != "" {
-		label += ": " + printable(e.Text, MaxExtraText)
+		label += ": " + Printable(e.Text, MaxExtraText)
 	}
 	return label
 }
 
-// printable escapes every byte outside printable ASCII the way record data is
+// MaxErr is how much of an error is kept on a step.
+const MaxErr = 512
+
+// Printable escapes every byte outside printable ASCII the way record data is
 // escaped, \DDD, and clips what is left. The text is the server's alone, and
 // drawn raw it could move the cursor over lines already written, break a line
 // of a tree in two, or put a byte above 127 in --format ascii.
-func printable(text string, limit int) string {
+func Printable(text string, limit int) string {
 	var b strings.Builder
 	for i := 0; i < len(text); i++ {
 		if b.Len() >= limit {

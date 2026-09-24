@@ -171,10 +171,23 @@ func Load(dir string, question trace.Question) *Walk {
 	if err := json.Unmarshal(data, &walk); err != nil || walk.Version != Version {
 		return nil
 	}
-	if !sameQuestion(walk.Question, question) {
+	if !sameQuestion(walk.Question, question) || !walk.plain() {
 		return nil
 	}
 	return &walk
+}
+
+// plain reports whether everything the findings would draw from the file is
+// printable ASCII. A walk only keeps what the codec escaped, so anything else
+// was written by somebody else, and drawn raw it could move the cursor.
+func (w *Walk) plain() bool {
+	texts := append([]string{w.Kind}, w.Answer...)
+	for _, zone := range w.Zones {
+		texts = append(append(texts, zone.Name, zone.DNSSEC), zone.NS...)
+	}
+	return !slices.ContainsFunc(texts, func(s string) bool {
+		return strings.ContainsFunc(s, func(r rune) bool { return r < ' ' || r > '~' })
+	})
 }
 
 // Save remembers this walk as the one the next will be held against.

@@ -70,6 +70,55 @@ func TestStrayKeyInTheKeySet(t *testing.T) {
 	}
 }
 
+// quoting is a transport whose error quotes what the server chose, the way a
+// failed TLS handshake quotes the names on the server's certificate.
+type quoting struct {
+	inner  transport.Transport
+	server string
+	quote  string
+}
+
+func (q quoting) Proto() string { return q.inner.Proto() }
+func (q quoting) Port() uint16  { return q.inner.Port() }
+
+func (q quoting) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, name string) (*dns.Msg, time.Duration, error) {
+	if dns.EqualName(name, q.server) {
+		return nil, 0, errors.New("x509: certificate is valid for " + q.quote + ", not " + name)
+	}
+	return q.inner.Exchange(ctx, req, server, name)
+}
+
+// TestErrorTextIsEscaped covers a server putting terminal escapes into the
+// error its failure is reported with. Every renderer draws the error as the
+// trace holds it, so it has to be plain by the time it gets there.
+func TestErrorTextIsEscaped(t *testing.T) {
+	h, _ := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+	cfg := resolver.Config{Transport: quoting{
+		inner:  h.carry(transport.NewUDP(fast)),
+		server: "ns.example.com.",
+		quote:  "\x1b[2J\x1b[Hns.example.com. [secure]\x1b[0m",
+	}}
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	var failed bool
+	for step := range tr.Steps() {
+		if step.Kind != trace.KindError {
+			continue
+		}
+		failed = true
+		if i := strings.IndexFunc(step.Err, func(r rune) bool { return r < ' ' || r > '~' }); i >= 0 {
+			t.Errorf("got error %q, want it without the byte at %d", step.Err, i)
+		}
+	}
+	if !failed {
+		t.Fatalf("got no error step, want the failure recorded: %s", format(steps(tr)))
+	}
+}
+
 // refusing stands in for a server that will not take the TCP retry.
 type refusing struct{ port uint16 }
 

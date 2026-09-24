@@ -586,7 +586,8 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		}
 	}
 	if err != nil {
-		step.Kind, step.Err = trace.KindError, err.Error()
+		// An error can quote the server, a TLS one the names on its certificate.
+		step.Kind, step.Err = trace.KindError, trace.Printable(err.Error(), trace.MaxErr)
 		switch {
 		case errors.Is(err, context.Canceled):
 			step.Err = "interrupted before the server answered" // the user's doing, not the server's
