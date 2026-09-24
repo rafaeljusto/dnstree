@@ -154,6 +154,41 @@ func TestCancelInterruptsTheRead(t *testing.T) {
 	}
 }
 
+// TestCancelInterruptsTheHandshake is the same over DoT, against a server that
+// accepts the connection and never answers the handshake. The connection is
+// wrapped for TLS after the cancellation is armed, which is where the two once
+// raced.
+func TestCancelInterruptsTheHandshake(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	started := time.Now()
+	_, _, err = transport.NewDoT(transport.Config{Timeout: 5 * time.Second}).
+		Exchange(ctx, dns.NewMsg("www.example.com.", dns.TypeA),
+			netip.MustParseAddrPort(listener.Addr().String()), "ns.example.com.")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("got %v, want the cancellation", err)
+	}
+	if took := time.Since(started); took > 2*time.Second {
+		t.Errorf("took %s, want the handshake interrupted", took)
+	}
+}
+
 // TestDoHReplyMustBeTheReply covers what a DoH server can send besides the
 // reply: a page, a redirect, or a reply to another question. The ID is zero
 // both ways over HTTPS, so none of it can be caught any other way.

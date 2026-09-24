@@ -294,13 +294,16 @@ func exchange(ctx context.Context, proto string, cfg Config, tlsConfig *tls.Conf
 // thing sure to interrupt a read already waiting.
 func roundTrip(ctx context.Context, proto string, timeout time.Duration, tlsConfig *tls.Config, req *dns.Msg, server netip.AddrPort) (*dns.Msg, error) {
 	dialer := &net.Dialer{Timeout: timeout}
-	conn, err := dialer.DialContext(ctx, network(proto, server.Addr()), server.String())
+	raw, err := dialer.DialContext(ctx, network(proto, server.Addr()), server.String())
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer raw.Close()
+	// The socket, never the TLS session wrapped around it later: closing it
+	// ends both, and the callback reads nothing the exchange goes on to write.
+	stop := context.AfterFunc(ctx, func() { _ = raw.Close() })
 	defer stop()
+	conn := raw
 
 	// Pack into a fresh buffer: the codec hands the request's buffer over to
 	// the response, so a reused request would scribble over an earlier answer.
@@ -314,7 +317,7 @@ func roundTrip(ctx context.Context, proto string, timeout time.Duration, tlsConf
 	}
 
 	if tlsConfig != nil {
-		conn = tls.Client(conn, tlsConfig)
+		conn = tls.Client(raw, tlsConfig)
 	}
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	client := &dns.Client{Transport: &dns.Transport{ReadTimeout: timeout, WriteTimeout: timeout}}
