@@ -136,9 +136,21 @@ func (c *Chain) signedBy(authority []dns.RR, owner string, rrtype uint16) error 
 	if len(signatures) == 0 {
 		return fmt.Errorf("the %s of %s carries no signature", dnsutil.TypeToString(rrtype), owner)
 	}
-	if _, err := c.verify(rrset, signatures, c.keys); err != nil {
+	signature, err := c.verify(rrset, signatures, c.keys)
+	if err != nil {
 		return fmt.Errorf("the %s of %s is not signed by the keys of the zone: %w",
 			dnsutil.TypeToString(rrtype), owner, err)
+	}
+	// A signature covering fewer labels than the owner was made over a
+	// wildcard, and the codec verifies it under any name below that wildcard.
+	// A denial speaks only for the name it was signed for: RFC 4035 5.3.4.
+	labels := dnsutil.Labels(owner)
+	if strings.HasPrefix(dnsutil.Canonical(owner), "*.") {
+		labels--
+	}
+	if int(signature.Labels) < labels {
+		return fmt.Errorf("the %s of %s was signed for a wildcard, not for that name",
+			dnsutil.TypeToString(rrtype), owner)
 	}
 	return nil
 }
@@ -219,11 +231,17 @@ func (c *Chain) nsec3sOf(authority []dns.RR) ([]*dns.NSEC3, error) {
 	var (
 		records []*dns.NSEC3
 		skipped []unsupportedNSEC3
+		seen    int
 	)
 	for _, rr := range authority {
 		nsec3, ok := rr.(*dns.NSEC3)
 		if !ok {
 			continue
+		}
+		// Counted before anything is read: a record skipped below is still
+		// checked for a signature, which costs as much as one that is used.
+		if seen++; seen > maxNSEC3Records {
+			return nil, fmt.Errorf("the section carries more than %d NSEC3 records, more than any proof needs", maxNSEC3Records)
 		}
 		switch {
 		case nsec3.Hash != 1:
@@ -236,9 +254,6 @@ func (c *Chain) nsec3sOf(authority []dns.RR) ([]*dns.NSEC3, error) {
 		default:
 			records = append(records, nsec3)
 		}
-	}
-	if len(records) > maxNSEC3Records {
-		return nil, fmt.Errorf("%d NSEC3 records is more than any proof needs", len(records))
 	}
 	if len(records) > 0 {
 		return records, nil
@@ -309,10 +324,10 @@ func wildcardAt(encloser string) string {
 	return "*." + dnsutil.Fqdn(encloser)
 }
 
-// closestEncloser is the deepest ancestor of qname an NSEC3 says exists, and
-// the name one label below it: the pair every NSEC3 proof of absence is built
-// on. RFC 5155 section 8.3.
-func closestEncloser(nsec3s []*dns.NSEC3, qname, zone string) (encloser, nextCloser string, found bool) {
+// closestEncloser is the deepest ancestor of qname a signed NSEC3 says exists,
+// and the name one label below it: the pair every NSEC3 proof of absence is
+// built on. RFC 5155 section 8.3.
+func (c *Chain) closestEncloser(nsec3s []*dns.NSEC3, authority []dns.RR, qname, zone string) (encloser, nextCloser string, found bool) {
 	deepest, apex := dnsutil.Labels(qname), dnsutil.Labels(zone)
 	for n := deepest; n >= apex; n-- {
 		candidate := ancestorOf(qname, n)
@@ -322,6 +337,9 @@ func closestEncloser(nsec3s []*dns.NSEC3, qname, zone string) (encloser, nextClo
 			}
 			if n < deepest && silentBelow(nsec3.TypeBitMap) {
 				continue // RFC 5155 8.3: a cut is never the closest encloser
+			}
+			if c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3) != nil {
+				continue // an unsigned match would move the encloser anywhere
 			}
 			if n < deepest {
 				nextCloser = ancestorOf(qname, n+1)

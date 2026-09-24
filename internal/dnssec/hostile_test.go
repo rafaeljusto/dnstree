@@ -306,3 +306,114 @@ func TestTooManyNSEC3(t *testing.T) {
 		t.Errorf("got %s (%s), want bogus for the count alone", status.State, status.Reason)
 	}
 }
+
+// relabelled is the zone's signed NSEC for its wildcard, moved onto another
+// owner and not signed again. The signature covers one label fewer than the
+// owner has, so the codec rebuilds the wildcard and the maths still holds.
+func relabelled(tb testing.TB, z *zone, owner string) []dns.RR {
+	tb.Helper()
+
+	rrs := z.nsec(tb, "*.example.", "mail.example.", dns.TypeTXT, dns.TypeRRSIG, dns.TypeNSEC)
+	rrs[0].Header().Name, rrs[1].Header().Name = owner, owner
+	return rrs
+}
+
+// TestWildcardDenialCannotBeMoved covers a replay of the NSEC a zone signs for
+// its wildcard, under a name the zone signed no denial for: RFC 4035 section
+// 5.3.4. The record is the zone's, the owner is the attacker's.
+func TestWildcardDenialCannotBeMoved(t *testing.T) {
+	for name, tc := range map[string]struct {
+		answer func(*zone) []dns.RR
+		owner  string
+		qname  string
+		qtype  uint16
+		rcode  uint16
+	}{
+		"a NODATA for a name that exists": {
+			owner: "www.example.", qname: "www.example.", qtype: dns.TypeA, rcode: dns.RcodeSuccess,
+		},
+		"an NXDOMAIN for a name inside the span": {
+			owner: "!.example.", qname: "foo.example.", qtype: dns.TypeA, rcode: dns.RcodeNameError,
+		},
+		"a wildcard stretched over a name inside the span": {
+			answer: func(z *zone) []dns.RR { return wildcardAnswer(t, z, "*.example.", "foo.example.") },
+			owner:  "!.example.", qname: "foo.example.", qtype: dns.TypeTXT, rcode: dns.RcodeSuccess,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			chain, z := secured(t)
+			var answer []dns.RR
+			if tc.answer != nil {
+				answer = tc.answer(z)
+			}
+			status := chain.Verify(answer, relabelled(t, z, tc.owner), tc.rcode, tc.qname, tc.qtype)
+			if status.State != trace.Bogus {
+				t.Errorf("got %s (%s), want bogus", status.State, status.Reason)
+			}
+		})
+	}
+}
+
+// TestWildcardDenialAtItsOwnName is the same record where it belongs: a
+// wildcard answering for a name, without the type asked for.
+func TestWildcardDenialAtItsOwnName(t *testing.T) {
+	chain, z := secured(t)
+
+	authority := z.nsec(t, "*.example.", "mail.example.", dns.TypeA, dns.TypeRRSIG, dns.TypeNSEC)
+
+	status := chain.Verify(nil, authority, dns.RcodeSuccess, "foo.example.", dns.TypeTXT)
+	if status.State != trace.Secure {
+		t.Errorf("got %s (%s), want the wildcard's own denial accepted", status.State, status.Reason)
+	}
+}
+
+// TestUnsignedClosestEncloser covers an NSEC3 nobody signed, naming an
+// ancestor that does not exist. Taken at its word it moves the closest
+// encloser below the wildcard that answers for the name, and the zone's own
+// signed gaps then deny everything the proof still asks about.
+func TestUnsignedClosestEncloser(t *testing.T) {
+	chain, z := secured(t)
+
+	covering := func(name string) []dns.RR {
+		hash := hashOf(t, name)
+		return signedBy(t, z, z.nsec3(t, step(hash, -1), step(hash, +1), 0, nil))
+	}
+	fake := hashOf(t, "b.example.")
+	authority := []dns.RR{z.nsec3(t, fake, step(fake, +1), 0, []uint16{dns.TypeTXT})}
+	authority = append(authority, covering("a.b.example.")...)
+	authority = append(authority, covering("*.b.example.")...)
+
+	status := chain.Verify(nil, authority, dns.RcodeNameError, "a.b.example.", dns.TypeA)
+	if status.State != trace.Bogus {
+		t.Errorf("got %s (%s), want an unsigned closest encloser refused", status.State, status.Reason)
+	}
+}
+
+// TestUnusableNSEC3AreCounted covers a response stuffed with NSEC3 records this
+// build will not read, sharing an owner and each carrying a signature by the
+// zone's key over something else. Checking them one by one packs the whole set
+// against every signature, so they count against the cap like any other.
+func TestUnusableNSEC3AreCounted(t *testing.T) {
+	chain, z := secured(t)
+	owner := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.example."
+
+	var authority []dns.RR
+	for i := range 40 {
+		hash := make([]byte, 20)
+		hash[19] = byte(i)
+		nsec3 := z.nsec3(t, hash, step(hash, +1), 0, nil)
+		nsec3.Hdr.Name, nsec3.Iterations = owner, 101
+		signature := z.sign(t, []dns.RR{record(t, `x.example. 3600 IN TXT "x"`)}, time.Now().Add(time.Hour))
+		rrsig, ok := signature.(*dns.RRSIG)
+		if !ok {
+			t.Fatalf("signing did not produce an RRSIG")
+		}
+		rrsig.Hdr.Name, rrsig.TypeCovered = owner, dns.TypeNSEC3
+		authority = append(authority, nsec3, rrsig)
+	}
+
+	status := chain.Verify(nil, authority, dns.RcodeNameError, "www.example.", dns.TypeA)
+	if status.State != trace.Bogus || !strings.Contains(status.Reason, "more than any proof needs") {
+		t.Errorf("got %s (%s), want bogus for the count alone", status.State, status.Reason)
+	}
+}

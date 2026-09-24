@@ -201,7 +201,7 @@ func (c *Chain) nsecDeniesType(nsecs []*dns.NSEC, authority []dns.RR, qname stri
 // builds out of three records: the closest encloser, the name one label below
 // it, and the wildcard that would have answered.
 func (c *Chain) nsec3DeniesName(nsec3s []*dns.NSEC3, authority []dns.RR, qname string) error {
-	encloser, nextCloser, found := closestEncloser(nsec3s, qname, c.zoneName())
+	encloser, nextCloser, found := c.closestEncloser(nsec3s, authority, qname, c.zoneName())
 	if !found {
 		return fmt.Errorf("no NSEC3 names an ancestor of %s", qname)
 	}
@@ -251,7 +251,7 @@ func (c *Chain) nsec3DeniesType(nsec3s []*dns.NSEC3, authority []dns.RR, qname s
 		return deniesType(nsec3.TypeBitMap, qname, qtype, "NSEC3")
 	}
 
-	encloser, nextCloser, found := closestEncloser(nsec3s, qname, c.zoneName())
+	encloser, nextCloser, found := c.closestEncloser(nsec3s, authority, qname, c.zoneName())
 
 	// No DS where no NSEC3 names the delegation: an opt-out range covers it,
 	// and the delegation is unsigned. RFC 5155 section 8.6.
