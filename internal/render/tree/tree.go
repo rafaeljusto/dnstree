@@ -90,13 +90,14 @@ func Render(w io.Writer, tr *trace.Trace, opts Options) error {
 	}
 
 	renderer := &renderer{
-		glyphs:    set,
-		paint:     painter(ColorEnabled(w, opts.Color)),
-		highlight: opts.Highlight,
-		out:       bufio.NewWriter(w),
+		glyphs: set,
+		paint:  painter(ColorEnabled(w, opts.Color)),
+		out:    bufio.NewWriter(w),
 	}
 	if tr != nil {
-		renderer.render(tr)
+		shown := tr.Shown()
+		renderer.highlight = twin(tr.Root, shown.Root, opts.Highlight)
+		renderer.render(shown)
 	}
 	return renderer.out.Flush()
 }
@@ -171,6 +172,23 @@ func (r *renderer) continuation(last bool) string {
 		return r.glyphs.blank
 	}
 	return r.glyphs.vertical
+}
+
+// twin is the step of a copy that stands where want stands in the original.
+// The copy is drawn, and the hop to point at was picked out of the original.
+func twin(original, copied, want *trace.Step) *trace.Step {
+	if original == nil || copied == nil || want == nil {
+		return nil
+	}
+	if original == want {
+		return copied
+	}
+	for i, child := range original.Children {
+		if found := twin(child, copied.Children[i], want); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 // label draws a node, which is either a hop or the zone a walk starts from.

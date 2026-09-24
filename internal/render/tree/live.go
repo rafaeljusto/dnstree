@@ -243,7 +243,7 @@ func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 	if elapsed == 0 {
 		elapsed = time.Since(l.start)
 	}
-	writeSummary(w, tr, painter(l.opts.Color == ColorAlways), l.sep,
+	writeSummary(w, tr.Shown(), painter(l.opts.Color == ColorAlways), l.sep,
 		l.opts.Charset, elapsed, l.counts())
 }
 
@@ -356,7 +356,7 @@ func (l *Live) tailLines() []string {
 	var lines []string
 	for _, query := range waiting[:min(len(waiting), maxPending)] {
 		lines = append(lines, pendingIndent+paint.dim(fmt.Sprintf("%s asking %s  %s  %s",
-			spinner, describe(query.server), query.zone, clock(time.Since(query.since)))))
+			spinner, describe(query.server), trace.Shown(query.zone), clock(time.Since(query.since)))))
 	}
 	if more := len(waiting) - maxPending; more > 0 {
 		lines = append(lines, pendingIndent+paint.dim(fmt.Sprintf("  and %d more in flight", more)))
@@ -398,6 +398,7 @@ func (l *Live) crumbs(tr *trace.Trace) string {
 		if step.Delegation != nil {
 			zone = step.Delegation.Zone
 		}
+		zone = trace.Shown(zone)
 		if zone != "" && (len(zones) == 0 || zones[len(zones)-1] != zone) {
 			zones = append(zones, zone)
 		}
@@ -441,6 +442,7 @@ func queried(step *trace.Step) bool { return step.Kind != trace.KindSkipped }
 
 // describe is who a query went to, unpainted: a footer is dim all through.
 func describe(server trace.Server) string {
+	server.Name = trace.Shown(server.Name)
 	switch {
 	case server.Name != "" && server.IP.IsValid():
 		return server.Name + " " + server.IP.String()

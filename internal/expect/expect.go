@@ -77,7 +77,9 @@ func Unmet(tr *trace.Trace, want []Expectation) []string {
 	var unmet []string
 	for _, expectation := range want {
 		if got, ok := expectation.met(tr); !ok {
-			unmet = append(unmet, fmt.Sprintf("expected %s, got %s", expectation.want, got))
+			// What was found is held against the octets, and said escaped: an
+			// NS or a CNAME is a name the server wrote.
+			unmet = append(unmet, fmt.Sprintf("expected %s, got %s", expectation.want, trace.Shown(got)))
 		}
 	}
 	return unmet

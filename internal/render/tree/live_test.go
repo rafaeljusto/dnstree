@@ -240,6 +240,27 @@ func TestLiveAsking(t *testing.T) {
 	}
 }
 
+// TestLiveNamesAreEscaped covers the names a server hands out, which reach the
+// tail and the crumbs without going through a tree. A frame is escapes of its
+// own, so what matters is that none of the server's gets through.
+func TestLiveNamesAreEscaped(t *testing.T) {
+	const forged = "ns\x1b[3A\x1b[2K.example."
+	var buf bytes.Buffer
+	live := newLive(&buf, Options{Color: ColorNever})
+
+	live.Asking(forged, trace.Server{Name: forged, IP: netip.MustParseAddr("192.0.2.1"), Port: 53})
+	tr := walk(1)
+	tr.Root.Children[0].Delegation.Zone = forged
+	live.draw(tr)
+
+	if frame := buf.String(); strings.Contains(frame, "\x1b[3A") {
+		t.Errorf("got %q, want the server's escape kept off the screen", frame)
+	}
+	if got := live.crumbs(tr); strings.Contains(got, "\x1b") {
+		t.Errorf("got crumbs %q, want them escaped", got)
+	}
+}
+
 // TestLiveAskingMany is --all: more queries in flight than there is room to
 // name, which are counted instead so that the tail stays a tail.
 func TestLiveAskingMany(t *testing.T) {

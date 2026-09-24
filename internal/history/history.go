@@ -78,6 +78,7 @@ type Question struct {
 
 // Of is what this walk will be remembered by.
 func Of(tr *trace.Trace, now time.Time) *Walk {
+	tr = tr.Shown()
 	walk := &Walk{
 		Version: Version,
 		Question: Question{
@@ -178,7 +179,7 @@ func Load(dir string, question trace.Question) *Walk {
 }
 
 // plain reports whether everything the findings would draw from the file is
-// printable ASCII. A walk only keeps what the codec escaped, so anything else
+// printable ASCII. Of keeps only what trace.Shown escaped, so anything else
 // was written by somebody else, and drawn raw it could move the cursor.
 func (w *Walk) plain() bool {
 	texts := append([]string{w.Kind}, w.Answer...)

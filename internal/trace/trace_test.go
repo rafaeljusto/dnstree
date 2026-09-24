@@ -118,3 +118,78 @@ func TestExtendedErrorIsDrawable(t *testing.T) {
 		})
 	}
 }
+
+// TestShown covers names, which the codec hands over as the octets the server
+// sent rather than escaped as text rdata is.
+func TestShown(t *testing.T) {
+	tests := map[string]struct {
+		text string
+		want string
+	}{
+		"a plain name stays as it is":           {"www.example.com.", "www.example.com."},
+		"an escape cannot reach a screen":       {"x\x1b[1A\r.example.", `x\027[1A\013.example.`},
+		"bytes above 127 are escaped":           {"café.example.", `caf\195\169.example.`},
+		"rdata the codec escaped is left alone": {`"\027[2J"`, `"\027[2J"`},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := trace.Shown(test.text); got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+// TestTraceShown covers the copy the renderers draw: every string that came
+// off the wire escaped, and the walk's own trace left holding the octets it
+// queries with.
+func TestTraceShown(t *testing.T) {
+	const raw = "ns\x1b[2K.example."
+	step := &trace.Step{
+		Zone:       raw,
+		Server:     trace.Server{Name: raw, ASN: &trace.ASNInfo{Registry: raw}},
+		Asked:      trace.Question{Name: raw},
+		Records:    []trace.RR{{Name: raw, Data: raw, Service: &trace.Service{Target: raw, ALPN: []string{raw}}}},
+		Notes:      []string{raw},
+		Delegation: &trace.Delegation{Zone: raw, NS: []string{raw}, GlueLess: []string{raw}, OutOfBailiwick: []string{raw}},
+		DNSSEC:     &trace.DNSSECStatus{Zone: raw, Reason: raw},
+	}
+	tr := &trace.Trace{
+		Question:  trace.Question{Name: raw},
+		Root:      &trace.Step{Kind: trace.KindZone, Children: []*trace.Step{step}},
+		Warnings:  []string{raw},
+		Resolvers: []*trace.Resolver{{Server: trace.Server{Name: raw}, Err: raw, Records: []trace.RR{{Name: raw}}}},
+	}
+
+	shown := tr.Shown()
+	got := shown.Root.Children[0]
+	for field, value := range map[string]string{
+		"question":         shown.Question.Name,
+		"zone":             got.Zone,
+		"server":           got.Server.Name,
+		"registry":         got.Server.ASN.Registry,
+		"asked":            got.Asked.Name,
+		"owner":            got.Records[0].Name,
+		"data":             got.Records[0].Data,
+		"target":           got.Records[0].Service.Target,
+		"alpn":             got.Records[0].Service.ALPN[0],
+		"note":             got.Notes[0],
+		"delegation":       got.Delegation.Zone,
+		"ns":               got.Delegation.NS[0],
+		"glueless":         got.Delegation.GlueLess[0],
+		"out of bailiwick": got.Delegation.OutOfBailiwick[0],
+		"dnssec zone":      got.DNSSEC.Zone,
+		"reason":           got.DNSSEC.Reason,
+		"warning":          shown.Warnings[0],
+		"resolver":         shown.Resolvers[0].Server.Name,
+		"resolver error":   shown.Resolvers[0].Err,
+		"resolver owner":   shown.Resolvers[0].Records[0].Name,
+	} {
+		if strings.Contains(value, "\x1b") {
+			t.Errorf("%s drawn raw: %q", field, value)
+		}
+	}
+	if step.Delegation.NS[0] != raw || step.Server.Name != raw || step.Records[0].Service.ALPN[0] != raw {
+		t.Errorf("the walk's own trace was escaped too: %+v", step)
+	}
+}

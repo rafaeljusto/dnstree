@@ -17,7 +17,7 @@ import (
 // reaches it.
 func Render(w io.Writer, tr *trace.Trace) error {
 	graph := &graph{out: bufio.NewWriter(w)}
-	graph.render(tr)
+	graph.render(tr.Shown())
 	return graph.out.Flush()
 }
 

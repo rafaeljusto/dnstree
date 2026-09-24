@@ -73,7 +73,8 @@ func Ask(ctx context.Context, carrier Transport, server netip.AddrPort,
 		Elapsed: rtt,
 	}
 	if err != nil {
-		answer.Err = err.Error()
+		// An error can quote what the server sent, as the walk's own steps do.
+		answer.Err = trace.Printable(err.Error(), trace.MaxErr)
 	} else {
 		answer.Rcode = dnsutil.RcodeToString(resp.Rcode)
 		answer.Records = recursiveRecords(resp.Answer)

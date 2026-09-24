@@ -139,7 +139,8 @@ Names come back as the raw octets the server sent, unescaped: owners and every
 name inside rdata (NS, CNAME, MX, SOA, SVCB targets). Text rdata — TXT, CAA,
 HINFO, NAPTR, URI, SVCB values — comes back escaped. A name has to be escaped
 before it is drawn, but not before it is queried or checked against TLS, which
-need the octets themselves. Check any other belief about what the codec does
+need the octets themselves: the trace keeps the octets, and every renderer
+draws the copy `Trace.Shown` makes of it. Check any other belief about what the codec does
 with a pack and unpack round trip before building on it.
 
 Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,

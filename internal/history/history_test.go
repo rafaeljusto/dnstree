@@ -105,6 +105,22 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
+// TestSaveAndLoadAHostileName covers a delegation naming a server with an
+// escape in it. The codec leaves names as the octets that arrived, and a file
+// written with them raw is one the next run refuses as somebody else's.
+func TestSaveAndLoadAHostileName(t *testing.T) {
+	dir := t.TempDir()
+	tr := resolution()
+	tr.Root.Children[0].Delegation.NS = []string{"a.ns.test.", "b\x1b[2K.ns.test."}
+
+	if err := history.Save(dir, history.Of(tr, seen)); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if history.Load(dir, tr.Question) == nil {
+		t.Fatal("got nothing back, want the walk this run wrote")
+	}
+}
+
 // TestSaveReplacesALink covers a link planted where the walk is kept, in a
 // cache directory somebody else can write to. The walk replaces the link and
 // the file it pointed at is left alone: nothing reaches the disk outside the

@@ -169,6 +169,26 @@ func TestRenderNothing(t *testing.T) {
 	}
 }
 
+// TestRenderEscapesNames covers the fields a script reads with jq -r. data is
+// escaped by the codec already; names and ALPN ids are not, and written as
+// they arrived they would put a server's escapes on the reader's screen.
+func TestRenderEscapesNames(t *testing.T) {
+	const forged = "x\x1b[2J.example."
+	tr := &trace.Trace{Root: &trace.Step{Kind: trace.KindZone, Children: []*trace.Step{{
+		Zone: forged, Kind: trace.KindAnswer, Server: trace.Server{Name: forged},
+		Records: []trace.RR{{Name: forged, Type: "HTTPS", Data: `1 . alpn="\027[2J"`,
+			Service: &trace.Service{Priority: 1, Target: forged, ALPN: []string{"\x1b[2J"}}}},
+	}}}}
+
+	var got bytes.Buffer
+	if err := jsonout.Render(&got, tr); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if bytes.Contains(got.Bytes(), []byte(`\u001b`)) {
+		t.Errorf("got %s, want every name and ALPN id escaped the way data is", got.String())
+	}
+}
+
 func compare(tb testing.TB, name, got string) {
 	tb.Helper()
 

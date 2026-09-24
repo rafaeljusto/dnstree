@@ -21,6 +21,7 @@ const SchemaVersion = 3
 func Render(w io.Writer, tr *trace.Trace) error {
 	document := document{SchemaVersion: SchemaVersion}
 	if tr != nil {
+		tr = tr.Shown()
 		document.Question = question{Name: tr.Question.Name, Type: tr.Question.Type, Class: tr.Question.Class}
 		document.ElapsedMS = milliseconds(tr.Elapsed)
 		for _, answer := range tr.Resolvers {

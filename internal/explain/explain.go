@@ -93,6 +93,7 @@ func Findings(tr *trace.Trace) []Finding {
 	if tr == nil || tr.Root == nil {
 		return nil
 	}
+	tr = tr.Shown()
 
 	findings := []Finding{outcome(tr)}
 	findings = append(findings, cache(tr)...)

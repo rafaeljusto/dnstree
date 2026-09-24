@@ -230,6 +230,14 @@ func TestASCIIStaysASCII(t *testing.T) {
 		Text: "café\x1b[2K\r\n`-- ns.evil. [secure]"}}
 	tr.Root.Children[0].Subnet = &trace.Subnet{Prefix: netip.MustParsePrefix("203.0.113.0/24"), Scope: 24}
 	tr.Root.Children[0].NSID = "fra2"
+	// Names, which the codec does not escape the way it escapes text rdata.
+	const forged = "x\x1b[1A\x1b[2K\r\n`-- ns.evil. [secure]\x1b[8m.example."
+	tr.Root.Children[0].Server.Name = forged
+	tr.Root.Children[0].Records = append(tr.Root.Children[0].Records,
+		trace.RR{Name: forged, TTL: 60, Type: "CNAME", Data: forged})
+	tr.Root.Children = append(tr.Root.Children, &trace.Step{Zone: forged, Kind: trace.KindReferral,
+		Server: trace.Server{Name: forged}, Delegation: &trace.Delegation{Zone: forged, NS: []string{forged}}})
+	tr.Warnings = append(tr.Warnings, "example. delegates to "+forged+" inside the zone, with no glue to reach them")
 
 	var out bytes.Buffer
 	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorNever}); err != nil {

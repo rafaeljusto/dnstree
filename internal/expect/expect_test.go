@@ -75,6 +75,11 @@ func TestUnmet(t *testing.T) {
 			expect: []string{"2001:0db8:0:0:0:0:0:1"},
 			trace:  walk("AAAA", answered("AAAA", "2001:db8::1")),
 		},
+		"a name the server wrote is read back escaped": {
+			expect: []string{"ns.test."},
+			trace:  walk("NS", answered("NS", "ns\x1b[2K.test.")),
+			want:   []string{`expected ns.test., got ns\027[2K.test.`},
+		},
 		"a name is compared the way DNS compares names": {
 			expect: []string{"10 mail.TEST."},
 			trace:  walk("MX", answered("MX", "10 MAIL.test.")),
