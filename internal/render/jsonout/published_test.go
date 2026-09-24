@@ -36,10 +36,10 @@ func TestPublishedSchema(t *testing.T) {
 
 	published, err := os.ReadFile(publishedPath)
 	if err != nil {
-		t.Fatalf("%v (run go test ./internal/render/... -update to write it)", err)
+		t.Fatalf("%v (run make goldens to write it)", err)
 	}
 	if !bytes.Equal(published, printed.Bytes()) {
-		t.Errorf("%s is not the schema --schema prints, run go test ./internal/render/... -update",
+		t.Errorf("%s is not the schema --schema prints, run make goldens",
 			publishedPath)
 	}
 }

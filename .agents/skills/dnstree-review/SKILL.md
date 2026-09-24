@@ -120,10 +120,10 @@ When the code is trusted, or the user has agreed:
 ```bash
 make check                      # what CI runs
 go test -race -count=2 ./...    # when concurrency or fakens changed
-go test ./internal/render/... -update && git diff --stat   # goldens stay put?
+make goldens && git diff --stat # goldens stay put?
 ```
 
-Use a separate worktree. Revert anything `-update` rewrote. Don't run
+Use a separate worktree. Revert anything `make goldens` rewrote. Don't run
 `make live`.
 
 ## Report

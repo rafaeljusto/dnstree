@@ -53,7 +53,7 @@ MAN_DATE ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +'%Y-%m-%d')
 # read, and the man page. Only finished artefacts reach dist.
 BUILD := build
 
-.PHONY: all build install test race lint lint-docker vuln check live dist man \
+.PHONY: all build install test race lint lint-docker vuln check live goldens dist man \
 	archives packages formula checksums image image-push clean roothints demos
 
 # The stages of dist read each other's output, so they run one after another
@@ -94,6 +94,13 @@ check: build lint race vuln
 # Goes out to the real root servers, so it is never part of check.
 live:
 	$(GO) test -tags live -count=1 ./...
+
+# Rewrites the renderer goldens, and docs/trace.schema.json with them. go test
+# refuses a flag a package does not define, and only the packages with goldens
+# define -update, so those are the ones asked.
+goldens:
+	$(GO) test $$(grep -l 'flag.Bool("update"' internal/render/*/*_test.go | \
+		xargs -n1 dirname | sort -u | sed 's|^|./|') -update
 
 # dist builds a whole release: an archive per platform, a native package per
 # Linux architecture, the Homebrew formula, and the checksums over all of them.

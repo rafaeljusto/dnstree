@@ -21,7 +21,7 @@ That is what CI runs. Two things it does not:
   in `internal/testutil/fakens`. Both data races this repository has had only
   showed up on the second run.
 
-Renderer goldens are rewritten with `go test ./internal/render/... -update`.
+Renderer goldens are rewritten with `make goldens`.
 Read the diff before keeping it: those files are the user-visible output. The
 same command writes `docs/trace.schema.json`, the copy of the JSON Schema the
 pages workflow serves: that workflow uploads what is committed and builds
