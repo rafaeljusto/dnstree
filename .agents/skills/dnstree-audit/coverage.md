@@ -2,34 +2,13 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `ccfb897`
+- **Commit**: `f556f8c`
 - **Date**: 2026-09-24
-- **Scope**: full, areas 1–7 plus asn, recursive, cli and cmd
+- **Scope**: the seven commits since `ccfb897`, and the open findings
 
 ## Open findings
 
-- **Critical**: a DS with an unknown algorithm and no signature reads
-  `indeterminate`, not `bogus`, because the algorithm filter runs before the
-  parent's signature is checked. `internal/dnssec/dnssec.go:95`
-- **Critical**: an opt-out NSEC3 covering the delegation proves it insecure
-  without the closest encloser proof (RFC 5155 8.9), so a referral that names a
-  cut below a signed zone escapes it. `internal/dnssec/denial.go:88`. fakens
-  sends no closest encloser NSEC3 in its referral denials (`fakens.go:426`), so
-  `TestProvenInsecureDelegation` and `TestNoDSProvenByOptOut` pass on a proof
-  that is too weak.
-- **High**: names reach the renderers as raw octets, `--format ascii`
-  included. `internal/resolver/resolver.go:1086`,
-  `internal/transport/recursive.go:94`, the sinks in `internal/render/tree`,
-  `internal/explain` and `warnf`.
-- **Medium**: `wide` misses CJK Ext B+ and U+1F0xx–1F2xx, so the live cut lets
-  a line wrap. `internal/render/tree/live.go:545`
-- **Low**: history refuses the file its own walk wrote and says "first walk".
-  `internal/history/history.go:174`
-- **Low**: A/AAAA glue with empty rdata becomes an invalid address.
-  `internal/resolver/classify.go:137`
-- **Low**: raw bytes in JSON-only fields: `service.alpn` (reproduced), the ASN
-  fields and `Resolver.Err` (unverified). `internal/resolver/resolver.go:1112`,
-  `internal/asn/asn.go:293`, `internal/transport/recursive.go:74`
+None.
 
 ## Checked and sound
 
@@ -58,8 +37,22 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   algorithms `indeterminate`.
 - A delegation cut or DNAME is never the closest encloser. `crossCut` only
   enters cuts above the qname.
-- `step.Err` and extended error text are escaped (`ccfb897`). DoT and UDP/TCP
-  close on cancel (`4f25f13`).
+- `step.Err` and extended error text in the tree and DOT are escaped
+  (`ccfb897`). DoT and UDP/TCP close on cancel (`4f25f13`).
+- Names are escaped by `Trace.Shown` in tree, live, summary, DOT, JSON, web,
+  explain, expect and history. SOA holds only numbers. `twin` keeps the
+  highlight on the copy.
+- An unsigned DS is bogus whatever its algorithm. Unsupported is read only
+  after the parent's signature (`bbd0238`).
+- An opt-out no-DS proof needs a signed closest encloser, and a cut is never
+  one. A forged covering record only makes it bogus (`3229088`).
+- `wide` covers U+1F000–1F2FF and CJK Ext B+. Overcounting is the safe side,
+  and `Shown` keeps attacker text ASCII before the cut.
+- Glue with empty rdata is dropped. Addresses from answers go through
+  `netip.ParseAddr`, which refuses them too.
+- History: `Of` writes the escaped copy, so its own file loads back.
+- EXTRA-TEXT in JSON is escaped whole by `convertExtended`
+  (`TestRenderEscapesNames`, `TestRenderKeepsExtraTextWhole`).
 - TCP and DoT honour the length prefix and ID. DoT's `ServerName` is the
   delegation's name.
 - DoH: 64 KiB body cap, status and content type checked, redirects refused,
