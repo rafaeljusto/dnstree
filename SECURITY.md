@@ -2,8 +2,7 @@
 
 ## Supported Versions
 
-We release patches for security vulnerabilities. Which versions are eligible for
-receiving such patches depends on the CVSS v3.0 Rating:
+Which releases get a security patch depends on the CVSS v3.0 score:
 
 | CVSS v3.0 | Supported Versions                        |
 | --------- | ----------------------------------------- |
@@ -14,9 +13,8 @@ receiving such patches depends on the CVSS v3.0 Rating:
 
 Please report (suspected) security vulnerabilities to
 **[cadastros@rafael.net.br](mailto:cadastros@rafael.net.br)**. You will receive a
-response from us within 48 hours. If the issue is confirmed, we will release a
-patch as soon as possible depending on complexity but historically within a few
-days.
+response within 48 hours. A confirmed issue is patched as soon as its
+complexity allows, historically within a few days.
 
 ## What dnstree does with what it is given
 

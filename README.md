@@ -63,18 +63,18 @@ page: `man dnstree`. `checksums.txt` covers every file in the release.
 <details>
 <summary>Installing a downloaded package</summary>
 
-The release notes give the command for each; taking the packages of `v1.2.0`
+The release notes give the command for each; taking the packages of `v1.4.0`
 as the example:
 
 ```
 # Debian, Ubuntu
-sudo dpkg -i dnstree_1.2.0_amd64.deb
+sudo dpkg -i dnstree_1.4.0_amd64.deb
 
 # Fedora, RHEL
-sudo rpm -i dnstree-1.2.0-1.x86_64.rpm
+sudo rpm -i dnstree-1.4.0-1.x86_64.rpm
 
 # Alpine
-sudo apk add --allow-untrusted dnstree_1.2.0_x86_64.apk
+sudo apk add --allow-untrusted dnstree_1.4.0_x86_64.apk
 
 # Homebrew
 brew install --formula ./dnstree.rb
@@ -111,11 +111,12 @@ dnstree [flags] NAME [TYPE]
 | `--explain` | say in sentences what the walk came to, under the tree |
 | `--diff` | say what has changed since the last walk of the same question |
 | `--expect` | require this of the walk, and exit 4 where it does not hold; repeat it |
-| `--color` | `auto` (the default), `always` or `never` |
+| `--color` | `auto` (the default: off where `NO_COLOR` is set or `TERM` is `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
 | `--port` | the port nameservers are asked on (53) |
-| `--root-hints`, `--trust-anchors` | start somewhere other than the built-in root |
+| `--root-hints` | where the walk starts, instead of the built-in hints |
+| `--trust-anchors` | the DS records to trust, instead of the built-in ones |
 | `--root` | one server to start from, instead of a hints file; repeat it for more |
 | `--resolver` | a recursive server to use, instead of the host's own; repeat it to ask several |
 | `--tls-ca`, `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
@@ -149,7 +150,7 @@ than set a default for it.
 > [!NOTE]
 > A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be
 > there, and a missing one is an error. The two conventional locations are
-> simply read if they exist.
+> read if they exist.
 
 The command line wins over the file, so `--format ascii` overrides the line
 above and `--dnssec=false` turns a flag it set back off. Flags that answer one
@@ -187,18 +188,22 @@ A root that carries no port is asked on `--port`, and so is everything reached
 by glue below it — glue carries addresses and never ports, so a hierarchy on
 one host wants its root on a port of its own and the rest on `--port`.
 `--root` and `--root-hints` say the same thing two ways, so only one of them
-may be given.
+may be given. `--trust-anchors` takes IANA's `root-anchors.xml` or DS records
+in presentation format.
 
-The metadata has its own way out: `--resolver ADDR` points everything that
-needs a recursive server at one of your own — the origin AS lookups, and the
-question put to an ordinary resolution and held against the walk's own answer —
-while `--no-asn` and `--no-compare` skip either of those altogether. Asking for
-both leaves `--resolver` nothing to answer, which is refused rather than
-quietly ignored. `--asn-resolver` is the older name for `--resolver` and still
-works. `--resolver` may be repeated, and one of them on the command line
-replaces every one the file of defaults chose rather than adding to them, the
-way `--root` does. For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your
-own.
+`--resolver ADDR` points everything that needs a recursive server at one of
+your own: the origin AS lookups and the timed comparison. `--no-asn` and
+`--no-compare` skip either; asking for both is refused, since it leaves
+`--resolver` nothing to do. `--asn-resolver` is its older name. One on the
+command line replaces every one the file chose. Without it, the comparison
+asks the first nameserver in `/etc/resolv.conf`; where there is none, as on
+Windows, nothing is compared until one is named.
+
+The origin AS lookups are TXT queries to Team Cymru's `origin.asn.cymru.com`
+zones, made through the host's resolver or the first `--resolver`; `--no-asn`
+turns them off.
+
+For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your own.
 
 > [!CAUTION]
 > `--tls-insecure` verifies nothing at all. It is there to reach a server
@@ -209,7 +214,7 @@ own.
 | Code | Meaning |
 | --- | --- |
 | 0 | something answered |
-| 1 | the command line, or the question, could not be read |
+| 1 | the command line, a file it names, or the address `--format web` serves on could not be used |
 | 2 | the walk ended without an answer |
 | 3 | the chain of trust is broken |
 | 4 | an expectation given with `--expect` was not met |
@@ -287,8 +292,7 @@ $ dnstree blocked.example.com A
 Without the code on the end that hop reads as a lame server — one with no
 business serving the zone, which is a fault to take to whoever runs it. With it,
 the server is working exactly as somebody configured it, and the fault, if there
-is one, is not the zone's. They are different findings and the tree now says
-which one it found. The same goes for an NXDOMAIN carrying `Blocked (15)`: the
+is one, is not the zone's. The same goes for an NXDOMAIN carrying `Blocked (15)`: the
 name is not missing, it is being denied, and a walk that ends that way reports
 `filtered` rather than `no answer`.
 
@@ -759,12 +763,13 @@ hop — here, half a second into a walk:
 
 ```
 . (root)
-├── a.root-servers.net. 198.41.0.4  250ms  NOERROR  referral → com.
-│   └─▸ l.gtld-servers.net. 192.41.162.30  260ms  NOERROR  referral → example.com.
+├── a.root-servers.net. 198.41.0.4  244ms  NOERROR  referral → com.
+│   └─▸ l.gtld-servers.net. 192.41.162.30  254ms  NOERROR  referral → example.com.
 ├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
 ├── b.root-servers.net. 170.247.170.2  (not queried)
-└── (and 23 more not queried)
-    ⠧ asking hera.ns.cloudflare.com. 108.162.192.162  example.com.  51ms
+├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── (and 22 more not queried)
+    ⠧ asking hera.ns.cloudflare.com. 108.162.192.162  example.com.  61ms
 
 ⠧  562ms · 3 queries · 3 servers · . → com. → example.com.
 ```
@@ -779,7 +784,7 @@ tree is written where they stood, which is exactly what a run without `--live`
 prints, followed by one line saying how it went:
 
 ```
-✔ answered in 747ms · 3 queries · 3 servers
+✔ answered in 718ms · resolver in 231ms · 3 queries · 3 servers
 ```
 
 > [!NOTE]
@@ -796,9 +801,9 @@ only what has changed since the walk before it.
 ```
 $ dnstree --watch 30s www.example.com A
 . (root)
-├── a.root-servers.net. 198.41.0.4  AS19836  241ms  NOERROR  referral → com.
+├── a.root-servers.net. 198.41.0.4  AS19836  248ms  NOERROR  referral → com.
 ...
-✔ answered in 711ms · 3 queries · 3 servers
+✔ answered in 711ms · resolver in 242ms · 3 queries · 3 servers
 ```
 
 And then nothing, until something moves:
