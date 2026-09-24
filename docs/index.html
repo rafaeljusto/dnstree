@@ -12,7 +12,7 @@
 <meta property="og:image" content="https://rafaeljusto.github.io/dnstree/social-card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="dnstree resolving www.example.com from the root servers, each referral with its latency, origin AS and DNSSEC state.">
+<meta property="og:image:alt" content="dnstree resolving www.example.com from the root servers, each referral with its latency and origin AS.">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="mark.svg" type="image/svg+xml">
@@ -128,12 +128,6 @@ pre{
 .dim{color:var(--term-dim)} .note{color:var(--term-ink)}
 .a{color:var(--rr-a)} .aaaa{color:var(--rr-aaaa)} .cname{color:var(--rr-cname)} .txt{color:var(--rr-txt)}
 .k{color:var(--term-accent)} .s{color:var(--rr-a)} .n{color:var(--rr-cname)}
-
-/* the load sequence: lines are visible by default and only animate when JS
-   turns it on, so nothing is ever parked invisible. */
-.playing .ln{opacity:0; animation:drawin .34s ease-out forwards}
-@keyframes drawin{from{opacity:0} to{opacity:1}}
-@media (prefers-reduced-motion:reduce){ .playing .ln{opacity:1; animation:none} }
 
 /* ── sections ─────────────────────────────────────────────────────────── */
 section{padding-block:3.4rem; border-top:1px solid var(--line)}
@@ -312,18 +306,20 @@ footer a:hover{color:var(--ink)}
       <div class="dissect">
         <div class="dissect-inner">
           <pre><span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS19836</span>  <span class="rtt">241ms</span>  <span class="ok">NOERROR</span>  <span class="note">referral → com.</span></pre>
-          <pre class="annot"><span class="guide" aria-hidden="true">│                   │           │        │      │</span>
-<span class="guide" aria-hidden="true">│                   │           │        │      └─ </span><b>what it said</b> — a referral one zone down
+          <pre class="annot"><span class="guide" aria-hidden="true">│                   │           │        │      │        │</span>
+<span class="guide" aria-hidden="true">│                   │           │        │      │        └─ </span><b>what that meant</b> — a referral one zone down
+<span class="guide" aria-hidden="true">│                   │           │        │      └─ </span><b>what it answered</b> — the response code
 <span class="guide" aria-hidden="true">│                   │           │        └─ </span><b>what it cost</b> — the whole hop, retries included
-<span class="guide" aria-hidden="true">│                   │           └─ </span><b>whose network</b> — origin AS, looked up after the walk
+<span class="guide" aria-hidden="true">│                   │           └─ </span><b>whose network</b> — origin AS, looked up as the walk reaches it
 <span class="guide" aria-hidden="true">│                   └─ </span><b>at which address</b> — glue, only from a server entitled to give it
 <span class="guide" aria-hidden="true">└─ </span><b>who was asked</b> — the name from the delegation</pre>
           <ul class="legend">
             <li><b>a.root-servers.net.</b> — who was asked, named by the delegation</li>
             <li><b>198.41.0.4</b> — glue, taken only from a server entitled to give it</li>
-            <li><b>AS19836</b> — whose network, looked up after the walk</li>
+            <li><b>AS19836</b> — whose network, looked up as the walk reaches it</li>
             <li><b>241ms</b> — what the hop cost, retries included</li>
-            <li><b>NOERROR · referral → com.</b> — what it said, and what that meant</li>
+            <li><b>NOERROR</b> — what it answered</li>
+            <li><b>referral → com.</b> — what that meant</li>
           </ul>
         </div>
       </div>
@@ -382,7 +378,7 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">no room left</span>
           <h3>An answer that barely fits</h3>
-          <p>Every hop records how many bytes came back and how many it could have carried. A datagram nearly full is a zone one record away from truncating, which costs every resolver asking a second round trip over TCP — and costs the ones that cannot reach the server over TCP the answer altogether. The size is drawn only where the room has run out; the whole of it is in <code>--format json</code>.</p>
+          <p>Every hop records the bytes that came back against the room the query allowed. A datagram nearly full is one record from truncating, which costs every resolver a retry over TCP. It is drawn only where the room has run out; the figures are in <code>--format json</code>.</p>
         </div>
         <div class="finding">
           <span class="tag tag-ok">bounded</span>
@@ -409,7 +405,7 @@ footer a:hover{color:var(--ink)}
 
       <ul class="states">
         <li class="state is-ok"><b>secure</b> — every link from the anchor down verified</li>
-        <li class="state is-warn"><b>insecure</b> — the parent published no DS</li>
+        <li class="state is-warn"><b>insecure</b> — the parent proved it has no DS</li>
         <li class="state is-bad"><b>bogus</b> — a DS with no matching key, or a signature that fails</li>
         <li class="state"><b>indeterminate</b> — an algorithm this build cannot check</li>
       </ul>
@@ -421,7 +417,7 @@ footer a:hover{color:var(--ink)}
         </video>
       </figure>
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
-        An unsigned zone turns the chain grey from that point down; nothing below it can
+        An unsigned zone reads insecure from that point down; nothing below it can
         be secure again. Denial of existence is proved rather than taken on trust: NSEC and
         NSEC3 are read, opt-out included, so an answer with nothing in it is checked like
         any other. A denial resting on an opt-out range reads insecure, since the range
@@ -433,9 +429,8 @@ footer a:hover{color:var(--ink)}
       <h2>Or have it say what happened</h2>
       <p class="section-lede">
         <code>--explain</code> writes the walk out in sentences under the tree: what it came
-        to, how long it goes on being served after it changes, what the chain of trust made
-        of it, what the zone's nameservers have in common, which servers made it harder, and
-        whether a recursive resolver agreed.
+        to, how long it stays cached, whether the chain of trust held, and whether a
+        resolver agreed.
       </p>
 
       <div class="term">
@@ -488,12 +483,11 @@ footer a:hover{color:var(--ink)}
       </div>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
-        It always says something: silence would read as nothing having changed when it may mean
-        nothing was remembered. Answers are compared as sets, so a nameserver rotating an RRset
-        is not a change, and a fact only one of the two walks kept is not one either. It is also
-        the only thing in dnstree that writes to the disk — one small file per question under
-        <code>$DNSTREE_CACHE</code>, or <code>$XDG_CACHE_HOME/dnstree</code>, naming what was
-        looked up and when, and safe to delete at any time. Without the flag nothing is read and nothing is kept.
+        It always says something, since silence could mean nothing was remembered. It is the
+        only thing in dnstree that writes to the disk: one small file per question, naming what
+        was looked up and when, under <code>$DNSTREE_CACHE</code>, or
+        <code>$XDG_CACHE_HOME/dnstree</code>, or <code>~/.cache/dnstree</code>. Without the flag
+        nothing is read and nothing is kept.
       </p>
     </section>
 
@@ -589,7 +583,8 @@ footer a:hover{color:var(--ink)}
 <pre>{
   <span class="k">"schema_version"</span>: <span class="n">3</span>,
   <span class="k">"question"</span>: { <span class="k">"name"</span>: <span class="s">"www.example.com."</span>, <span class="k">"type"</span>: <span class="s">"A"</span>, <span class="k">"class"</span>: <span class="s">"IN"</span> },
-  <span class="k">"elapsed_ms"</span>: <span class="n">41.5</span>,
+  <span class="k">"elapsed_ms"</span>: <span class="n">716.92</span>,
+  <span class="k">"resolvers"</span>: [ { <span class="k">"server"</span>: { <span class="k">"ip"</span>: <span class="s">"8.8.8.8"</span>, <span class="k">"port"</span>: <span class="n">53</span> }, <span class="k">"elapsed_ms"</span>: <span class="n">234.515</span>, <span class="k">"match"</span>: <span class="s">"same"</span>, … } ],
   <span class="k">"root"</span>: {
     <span class="k">"zone"</span>: <span class="s">"."</span>,
     <span class="k">"kind"</span>: <span class="s">"zone"</span>,
@@ -597,12 +592,18 @@ footer a:hover{color:var(--ink)}
       {
         <span class="k">"zone"</span>: <span class="s">"."</span>,
         <span class="k">"kind"</span>: <span class="s">"referral"</span>,
-        <span class="k">"server"</span>: { <span class="k">"name"</span>: <span class="s">"a.root-servers.net."</span>, <span class="k">"ip"</span>: <span class="s">"198.41.0.4"</span>, <span class="k">"port"</span>: <span class="n">53</span> },
+        <span class="k">"server"</span>: { <span class="k">"name"</span>: <span class="s">"a.root-servers.net."</span>, <span class="k">"ip"</span>: <span class="s">"198.41.0.4"</span>, <span class="k">"port"</span>: <span class="n">53</span>, <span class="k">"asn"</span>: { <span class="k">"number"</span>: <span class="n">19836</span>, … } },
+        <span class="k">"asked"</span>: { <span class="k">"name"</span>: <span class="s">"www.example.com."</span>, <span class="k">"type"</span>: <span class="s">"A"</span> },
         <span class="k">"proto"</span>: <span class="s">"udp"</span>,
-        <span class="k">"rtt_ms"</span>: <span class="n">12</span>,
+        <span class="k">"rtt_ms"</span>: <span class="n">249.08</span>,
+        <span class="k">"size_bytes"</span>: <span class="n">840</span>,
+        <span class="k">"limit_bytes"</span>: <span class="n">1232</span>,
         <span class="k">"rcode"</span>: <span class="s">"NOERROR"</span>,
-        <span class="k">"delegation"</span>: { <span class="k">"zone"</span>: <span class="s">"com."</span>, <span class="k">"ds_present"</span>: <span class="n">true</span> }
-      }
+        <span class="k">"flags"</span>: { <span class="k">"edns"</span>: <span class="n">true</span> },
+        <span class="k">"delegation"</span>: { <span class="k">"zone"</span>: <span class="s">"com."</span>, <span class="k">"ttl"</span>: <span class="n">172800</span>, <span class="k">"ns"</span>: [ <span class="s">"l.gtld-servers.net."</span>, … ], … },
+        <span class="k">"children"</span>: [ … ]
+      },
+      …
     ]
   }
 }</pre>
@@ -611,19 +612,40 @@ footer a:hover{color:var(--ink)}
           <div class="panel" role="tabpanel" id="panel-dot" aria-labelledby="tab-dot" hidden>
 <pre>digraph dnstree {
 	rankdir=LR;
-	label=<span class="s">"dnstree www.example.com. A"</span>;
+	node [shape=box, style=rounded, fontname=<span class="s">"monospace"</span>, fontsize=10];
+	edge [fontname=<span class="s">"monospace"</span>, fontsize=9];
+	label=<span class="s">"dnstree www.example.com. A\n8.8.8.8 answered in 234ms"</span>;
+	labelloc=t;
 
 	subgraph cluster_0 {
 		label=<span class="s">"."</span>;
-		n1 [label=<span class="s">"a.root-servers.net.\n198.41.0.4\nNOERROR referral"</span>];
+		style=dashed;
+		color=gray60;
+		n0 [label=<span class="s">"."</span>, shape=oval, color=gray40];
+		n1 [label=<span class="s">"a.root-servers.net.\n198.41.0.4\nAS19836\nNOERROR referral"</span>];
+		…
 	}
 
 	subgraph cluster_1 {
 		label=<span class="s">"com."</span>;
-		n3 [label=<span class="s">"a.gtld-servers.net.\n192.5.6.30\nNOERROR referral"</span>];
+		style=dashed;
+		color=gray60;
+		n2 [label=<span class="s">"l.gtld-servers.net.\n192.41.162.30\nAS19836\nNOERROR referral"</span>];
+		…
 	}
 
-	n1 -&gt; n3 [label=<span class="s">"18ms"</span>];
+	subgraph cluster_2 {
+		label=<span class="s">"example.com."</span>;
+		style=dashed;
+		color=gray60;
+		n3 [label=<span class="s">"hera.ns.cloudflare.com.\n108.162.192.162\nAS13335\nNOERROR answer\nwww.example.com. A 104.20.23.154\nwww.example.com. A 172.66.147.243"</span>, color=darkgreen];
+		…
+	}
+
+	n0 -&gt; n1 [label=<span class="s">"248ms"</span>];
+	n1 -&gt; n2 [label=<span class="s">"244ms"</span>];
+	n2 -&gt; n3 [label=<span class="s">"222ms"</span>];
+	…
 }</pre>
           </div>
 
@@ -636,15 +658,11 @@ footer a:hover{color:var(--ink)}
       </div>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
-        <code>--format web</code> draws nothing in the terminal. It serves the finished walk
-        as a page on this machine and opens a browser at it: the same tree with every hop
-        worth clicking on, beside what each server cost, who the addresses belong to grouped
-        by origin AS, and the chain of trust cut by cut. Nothing is fetched from anywhere —
-        the page is in the binary, and the walk behind it is served under
-        <code>/trace.json</code>, byte for byte what <code>--format json</code> writes. It
-        listens on <code>127.0.0.1</code> and a free port, and answers only a request that
-        reached it by address; <code>--web-addr</code> moves it and <code>--no-browser</code>
-        leaves the address to be opened by hand.
+        <code>--format web</code> serves the finished walk as a page on this machine and opens
+        a browser at it: every hop worth clicking on, what each server cost, the addresses by
+        origin AS and the chain of trust cut by cut. The page is in the binary and fetches
+        nothing. It listens on <code>127.0.0.1</code> and a free port; <code>--web-addr</code>
+        moves it.
       </p>
 
       <figure class="demo">
@@ -656,14 +674,10 @@ footer a:hover{color:var(--ink)}
       </figure>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
-        <code>--schema</code> prints the JSON Schema of that document and stops, so whatever
-        reads the output can be held against the shape of it — and told what a field means —
-        without reading the source. It describes the one version the binary it came out of
-        writes: <code>schema_version</code> is raised whenever a field changes meaning or goes
-        away, never for one that is merely added, so nothing in the schema forbids properties it
-        does not name. It is served from here too, at
-        <a href="trace.schema.json">trace.schema.json</a>, which is the address its
-        <code>$id</code> names.
+        <code>--schema</code> prints the JSON Schema of that document, so a program can check
+        the output without reading the source. <code>schema_version</code> is raised whenever a
+        field changes meaning or goes away. The schema is also served here, at
+        <a href="trace.schema.json">trace.schema.json</a>.
       </p>
     </section>
 
@@ -699,7 +713,7 @@ footer a:hover{color:var(--ink)}
       <table class="exits">
         <tbody>
           <tr><td>0</td><td>something answered</td></tr>
-          <tr><td>1</td><td>the command line, or the question, could not be read</td></tr>
+          <tr><td>1</td><td>the command line, a file it names, or the address to serve on could not be used</td></tr>
           <tr><td>2</td><td>the walk ended without an answer</td></tr>
           <tr><td>3</td><td>the chain of trust is broken</td></tr>
           <tr><td>4</td><td>an expectation given with <code>--expect</code> was not met</td></tr>
@@ -709,7 +723,7 @@ footer a:hover{color:var(--ink)}
 
     <section id="install">
       <h2>Get it</h2>
-      <p class="section-lede">One static binary, one dependency, no runtime to install.</p>
+      <p class="section-lede">One static binary, two dependencies, no runtime to install.</p>
 
       <!-- A row whose command names a version carries the template too: the
       markup ships the release that was current when the page was written, and
@@ -734,17 +748,17 @@ footer a:hover{color:var(--ink)}
         </div>
         <div class="cmd" data-versioned="curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree_{v}_amd64.deb &amp;&amp; sudo dpkg -i dnstree_{v}_amd64.deb">
           <span class="what">deb</span>
-          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.2.0/</span>dnstree_1.2.0_amd64.deb &amp;&amp; sudo dpkg -i dnstree_1.2.0_amd64.deb</code>
+          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.4.0/</span>dnstree_1.4.0_amd64.deb &amp;&amp; sudo dpkg -i dnstree_1.4.0_amd64.deb</code>
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd" data-versioned="sudo rpm -i https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree-{v}-1.x86_64.rpm">
           <span class="what">rpm</span>
-          <code>sudo rpm -i <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.2.0/</span>dnstree-1.2.0-1.x86_64.rpm</code>
+          <code>sudo rpm -i <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.4.0/</span>dnstree-1.4.0-1.x86_64.rpm</code>
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd" data-versioned="curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree_{v}_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_{v}_x86_64.apk">
           <span class="what">apk</span>
-          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.2.0/</span>dnstree_1.2.0_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_1.2.0_x86_64.apk</code>
+          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.4.0/</span>dnstree_1.4.0_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_1.4.0_x86_64.apk</code>
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd">
@@ -760,9 +774,9 @@ footer a:hover{color:var(--ink)}
       <code>checksums.txt</code> over every file.</p>
 
       <h3 style="margin-top:2.2rem">Set it once</h3>
-      <p class="section-lede">The flags you always type belong in
-      <code>~/.dnstreerc</code> — or <code>~/.config/dnstree/config</code>, or
-      whichever file <code>$DNSTREE_CONFIG</code> names. One long flag name per
+      <p class="section-lede">The flags you always type belong in the first of
+      <code>$DNSTREE_CONFIG</code>, <code>~/.config/dnstree/config</code> and
+      <code>~/.dnstreerc</code>. One long flag name per
       line, with the value it takes. The command line still wins over it, and
       <code>--no-config</code> ignores it altogether.</p>
 
@@ -789,7 +803,7 @@ timeout = 3s</pre>
 
   <footer>
     <div class="foot-row">
-      <div>MIT licensed · built with one dependency</div>
+      <div>MIT licensed · built with two dependencies</div>
       <div class="foot-links">
         <a href="https://github.com/rafaeljusto/dnstree">Repository</a>
         <a href="https://github.com/rafaeljusto/dnstree/blob/main/CONTRIBUTING.md">Contributing</a>
@@ -802,20 +816,6 @@ timeout = 3s</pre>
 </div>
 
 <script>
-// The hero draws itself the way a walk does: one hop after another. It runs
-// only when motion is welcome, and the lines are visible without it.
-(function () {
-  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var term = document.getElementById("hero-term");
-  if (reduced || !term) return;
-
-  var lines = term.querySelectorAll(".ln");
-  term.classList.add("playing");
-  lines.forEach(function (line, i) {
-    line.style.animationDelay = (60 + i * 90) + "ms";
-  });
-})();
-
 // The recordings carry autoplay in the markup so they still run without this,
 // but a page that autoplays four walks at once has played three of them to
 // nobody. Where motion is unwelcome they hold their first frame and grow the
