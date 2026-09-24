@@ -136,11 +136,16 @@ func referral(resp *dns.Msg, zone, qname string) *trace.Delegation {
 			if !dns.EqualName(rr.Header().Name, name) {
 				continue
 			}
+			// A record with no rdata unpacks as one with no address in it.
 			switch address := rr.(type) {
 			case *dns.A:
-				delegation.Glue[name] = append(delegation.Glue[name], address.Addr)
+				if address.Addr.IsValid() {
+					delegation.Glue[name] = append(delegation.Glue[name], address.Addr)
+				}
 			case *dns.AAAA:
-				delegation.Glue[name] = append(delegation.Glue[name], address.Addr)
+				if address.Addr.IsValid() {
+					delegation.Glue[name] = append(delegation.Glue[name], address.Addr)
+				}
 			}
 		}
 	}

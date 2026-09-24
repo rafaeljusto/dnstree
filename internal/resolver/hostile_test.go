@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -334,6 +335,38 @@ ns    IN A    192.0.2.8
 	}
 	if answer := tr.Result(); answer == nil || answer.Server.IP.String() != "192.0.2.8" {
 		t.Errorf("got %+v, want the answer still to come from the side-resolved server", answer)
+	}
+}
+
+// TestEmptyGlueIsNoAddress covers glue whose RDLENGTH is zero, which the codec
+// unpacks as a record with no address in it. Taken as glue it is a server
+// nobody can reach, a query spent on it and an AS lookup of nothing.
+func TestEmptyGlueIsNoAddress(t *testing.T) {
+	h := internet(t)
+	cfg := resolver.Config{Transport: tamper{h.carry(transport.NewUDP(fast)), func(_, resp *dns.Msg) {
+		if !delegates(resp, "example.com.") {
+			return
+		}
+		empty := &dns.A{Hdr: dns.Header{Name: "ns.example.com.", Class: dns.ClassINET, TTL: 3600}}
+		resp.Extra = append([]dns.RR{empty}, resp.Extra...)
+	}}}
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	for step := range tr.Steps() {
+		if step.Delegation == nil {
+			continue
+		}
+		for name, addrs := range step.Delegation.Glue {
+			if slices.ContainsFunc(addrs, func(addr netip.Addr) bool { return !addr.IsValid() }) {
+				t.Errorf("got glue %v for %s, want the empty record left out", addrs, name)
+			}
+		}
+	}
+	if answer := tr.Result(); answer == nil || answer.Kind != trace.KindAnswer {
+		t.Errorf("got %+v, want the walk to reach the answer on the real glue: %s", answer, format(steps(tr)))
 	}
 }
 
