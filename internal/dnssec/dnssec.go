@@ -92,17 +92,6 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		return c.settleAs(&trace.DNSSECStatus{}, trace.Insecure, "the parent published no DS", nil)
 	}
 
-	// A DS for an algorithm this build cannot verify is one it cannot follow.
-	// With none left the zone is out of reach, not broken: RFC 4035 5.2.
-	usable := slices.DeleteFunc(slices.Clone(delegated), func(ds *dns.DS) bool { return !implemented[ds.Algorithm] })
-	if len(usable) == 0 {
-		return c.settleAs(&trace.DNSSECStatus{
-			Algorithm: algorithm(delegated[0].Algorithm),
-			Digest:    digest(delegated[0].DigestType),
-		}, trace.Indeterminate, fmt.Sprintf("the DS uses %s, which is not supported here",
-			algorithm(delegated[0].Algorithm)), nil)
-	}
-
 	status := &trace.DNSSECStatus{
 		Algorithm: algorithm(delegated[0].Algorithm),
 		Digest:    digest(delegated[0].DigestType),
@@ -122,6 +111,15 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 		if _, err := c.verify(asRRs(delegated), signed, c.keys); err != nil {
 			return c.settleAs(status, trace.Bogus, "the DS is not signed by the keys of the parent", nil)
 		}
+	}
+
+	// A DS for an algorithm this build cannot verify is one it cannot follow.
+	// With none left the zone is out of reach, not broken: RFC 4035 5.2. Only
+	// once the parent has signed it, though: an unsigned DS is anyone's.
+	usable := slices.DeleteFunc(slices.Clone(delegated), func(ds *dns.DS) bool { return !implemented[ds.Algorithm] })
+	if len(usable) == 0 {
+		return c.settleAs(status, trace.Indeterminate, fmt.Sprintf("the DS uses %s, which is not supported here",
+			algorithm(delegated[0].Algorithm)), nil)
 	}
 
 	keys, signatures := split(dnskeys, zone)

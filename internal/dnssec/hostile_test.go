@@ -200,6 +200,24 @@ func TestUnimplementedAlgorithmIsIndeterminate(t *testing.T) {
 	}
 }
 
+// TestUnsignedUnimplementedDSIsBogus covers a referral rewritten to carry a DS
+// the attacker wrote, for an algorithm this build does not know and with no
+// signature. Unsupported is a verdict on what the parent said, and the parent
+// said nothing, so reading it as indeterminate would let a forged zone exit 0.
+func TestUnsignedUnimplementedDSIsBogus(t *testing.T) {
+	root, child := newZone(t, "."), newZone(t, "example.")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+		t.Fatalf("got %+v entering the root, want it secure", status)
+	}
+
+	forged := record(t, "example. 3600 IN DS 12345 253 2 "+strings.Repeat("00", 32))
+	status := chain.Enter("example.", []dns.RR{forged}, child.dnskeys(t))
+	if status.State != trace.Bogus {
+		t.Errorf("got %s (%s), want bogus", status.State, status.Reason)
+	}
+}
+
 // TestStandbyKeyListedFirst covers a DS set naming a key that is published but
 // not yet signing, ahead of the one that is. That is how every KSK rollover
 // starts, the root's included, so every key the DS points at has to be tried.
