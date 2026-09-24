@@ -127,15 +127,60 @@ func TestNoDSProvenByNSEC3(t *testing.T) {
 	}
 }
 
-// TestNoDSProvenByOptOut covers what com. and net. actually publish: an NSEC3
-// covering the delegation without naming it, with the opt-out flag set.
+// TestNoDSProvenByOptOut covers what com. and net. actually publish: the NSEC3
+// of the apex as the closest encloser, and an NSEC3 covering the delegation
+// without naming it, with the opt-out flag set.
 func TestNoDSProvenByOptOut(t *testing.T) {
 	status := entered(t, func(z *zone) []dns.RR {
-		hash := hashOf(t, "example.")
-		return signedBy(t, z, z.nsec3(t, step(hash, -1), step(hash, +1), 1, []uint16{dns.TypeNS}))
+		apex, hash := hashOf(t, "."), hashOf(t, "example.")
+		return append(
+			signedBy(t, z, z.nsec3(t, apex, step(apex, +1), 1, []uint16{dns.TypeNS, dns.TypeSOA})),
+			signedBy(t, z, z.nsec3(t, step(hash, -1), step(hash, +1), 1, []uint16{dns.TypeNS}))...)
 	})
 	if status.State != trace.Insecure {
 		t.Fatalf("got %+v, want an opt-out delegation to read insecure", status)
+	}
+}
+
+// TestOptOutNeedsTheClosestEncloser covers the span alone. Without the closest
+// encloser a referral can name a cut several labels down, below a signed
+// delegation, and a real opt-out span over its hash would take it off the
+// secure path. RFC 5155 section 8.9.
+func TestOptOutNeedsTheClosestEncloser(t *testing.T) {
+	root := newZone(t, ".")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+		t.Fatalf("got %+v entering the root, want it secure", status)
+	}
+
+	hash := hashOf(t, "www.example.")
+	span := signedBy(t, root, root.nsec3(t, step(hash, -1), step(hash, +1), 1, []uint16{dns.TypeNS}))
+	if status := chain.Enter("www.example.", span, nil); status.State == trace.Insecure {
+		t.Errorf("got %s (%s), want a span with no closest encloser refused", status.State, status.Reason)
+	}
+}
+
+// TestOptOutBelowASignedCut is the same claim with the proof filled in as far
+// as it goes: the closest encloser the parent can show is a delegation that
+// has a DS, and a cut is never the closest encloser.
+func TestOptOutBelowASignedCut(t *testing.T) {
+	root := newZone(t, ".")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+		t.Fatalf("got %+v entering the root, want it secure", status)
+	}
+
+	apex, cut, hash := hashOf(t, "."), hashOf(t, "example."), hashOf(t, "www.example.")
+	var authority []dns.RR
+	for _, nsec3 := range []*dns.NSEC3{
+		root.nsec3(t, apex, step(apex, +1), 1, []uint16{dns.TypeNS, dns.TypeSOA}),
+		root.nsec3(t, cut, step(cut, +1), 1, []uint16{dns.TypeNS, dns.TypeDS}),
+		root.nsec3(t, step(hash, -1), step(hash, +1), 1, []uint16{dns.TypeNS}),
+	} {
+		authority = append(authority, signedBy(t, root, nsec3)...)
+	}
+	if status := chain.Enter("www.example.", authority, nil); status.State == trace.Insecure {
+		t.Errorf("got %s (%s), want a signed cut refused as the closest encloser", status.State, status.Reason)
 	}
 }
 

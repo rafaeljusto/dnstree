@@ -62,8 +62,8 @@ func (c *Chain) provesNoDS(authority []dns.RR, zone string) error {
 		return provesNoDSBitmap(nsec.TypeBitMap, "NSEC")
 	}
 
-	// RFC 5155 8.9: an NSEC3 matching the delegation, or one covering it with
-	// the opt-out flag set.
+	// RFC 5155 8.9: an NSEC3 matching the delegation, or else a closest
+	// encloser proof whose span over the next closer name opts out.
 	nsec3s, err := c.nsec3sOf(authority)
 	if err != nil {
 		return err
@@ -72,29 +72,31 @@ func (c *Chain) provesNoDS(authority []dns.RR, zone string) error {
 		// The owner is the hash of some name inside the parent, so the parent
 		// is what the record has to be signed by; the codec ties a signature
 		// to the key's own zone, and signedBy ties it to these keys.
-		hashed := dnsutil.NSEC3Name(zone, nsec3.Salt, nsec3.Iterations)
-		if hashed == "" {
-			return fmt.Errorf("the name of the delegation could not be hashed")
-		}
-
-		switch owner := ownerHash(nsec3.Hdr.Name); {
-		case owner == "":
+		if !nsec3Matches(nsec3, zone) {
 			continue
-		case owner == hashed:
-			if err := c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3); err != nil {
-				return err
-			}
-			return provesNoDSBitmap(nsec3.TypeBitMap, "NSEC3")
-		case nsec3.Flags&optOut == 0:
-			continue // covers nothing it does not name
-		case covers(owner, nsec3.NextDomain, hashed):
-			if err := c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3); err != nil {
-				return err
-			}
-			return nil // opt-out: the parent never said whether this one is signed
 		}
+		if err := c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3); err != nil {
+			return err
+		}
+		return provesNoDSBitmap(nsec3.TypeBitMap, "NSEC3")
 	}
-	return fmt.Errorf("the parent published no proof that it has no DS")
+
+	// A span covering the delegation alone is not enough: a referral can name
+	// a cut several labels down, below a signed delegation the span knows
+	// nothing about. The closest encloser is what rules that out, since a cut
+	// is never one.
+	_, nextCloser, found := c.closestEncloser(nsec3s, authority, zone, c.zoneName())
+	if !found || nextCloser == "" {
+		return fmt.Errorf("the parent published no proof that it has no DS")
+	}
+	span, err := c.nsec3Covering(nsec3s, authority, nextCloser)
+	if err != nil {
+		return fmt.Errorf("the parent published no proof that it has no DS")
+	}
+	if span.Flags&optOut == 0 {
+		return fmt.Errorf("the NSEC3 over %s does not opt out, so it denies the delegation rather than its DS", nextCloser)
+	}
+	return nil // opt-out: the parent never said whether this one is signed
 }
 
 // provesNoDSBitmap reads the one thing the proof is for. A bitmap carrying DS

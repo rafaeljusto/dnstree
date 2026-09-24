@@ -96,7 +96,6 @@ func (s *Server) nsec3Denial(name string, absent bool) []dns.RR {
 				return []dns.RR{nsec3}
 			}
 		}
-		return covering(chain, s.hash(name))
 	}
 
 	// The closest encloser is the deepest ancestor of the name the chain names.
@@ -115,6 +114,11 @@ func (s *Server) nsec3Denial(name string, absent bool) []dns.RR {
 		if !slices.Contains(denial, rr) {
 			denial = append(denial, rr)
 		}
+	}
+	// A name that is there, in an opt-out span, needs only the closest
+	// encloser proof: RFC 5155 7.2.4 and 7.2.7.
+	if !absent {
+		return denial
 	}
 	for _, rr := range covering(chain, s.hash("*."+strings.TrimPrefix(encloser, "."))) {
 		if !slices.Contains(denial, rr) {
