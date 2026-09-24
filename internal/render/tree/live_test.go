@@ -142,14 +142,16 @@ func TestTruncate(t *testing.T) {
 		cells int
 		want  string
 	}{
-		"shorter than the screen": {line: "example.com.", cells: 20, want: "example.com."},
-		"exactly the screen":      {line: "example.com.", cells: 12, want: "example.com."},
-		"the ellipsis fits too":   {line: "example.com.", cells: 7, want: "exampl…"},
-		"colour is free":          {line: grey + "example.com." + reset, cells: 12, want: grey + "example.com." + reset},
-		"a cut closes the colour": {line: grey + "example.com." + reset, cells: 7, want: grey + "exampl…" + reset},
-		"an emoji takes two":      {line: "🌍 ab", cells: 3, want: "🌍…"},
-		"a joined emoji is two":   {line: "🛰️ ab", cells: 5, want: "🛰️ ab"},
-		"nowhere to cut":          {line: "example.com.", cells: 0, want: "…"},
+		"shorter than the screen":  {line: "example.com.", cells: 20, want: "example.com."},
+		"exactly the screen":       {line: "example.com.", cells: 12, want: "example.com."},
+		"the ellipsis fits too":    {line: "example.com.", cells: 7, want: "exampl…"},
+		"colour is free":           {line: grey + "example.com." + reset, cells: 12, want: grey + "example.com." + reset},
+		"a cut closes the colour":  {line: grey + "example.com." + reset, cells: 7, want: grey + "exampl…" + reset},
+		"an emoji takes two":       {line: "🌍 ab", cells: 3, want: "🌍…"},
+		"so does CJK past the BMP": {line: "\U00020000\U00020001ab", cells: 3, want: "\U00020000…"},
+		"and a flag's half":        {line: "\U0001F1FA\U0001F1F8ab", cells: 3, want: "\U0001F1FA…"},
+		"a joined emoji is two":    {line: "🛰️ ab", cells: 5, want: "🛰️ ab"},
+		"nowhere to cut":           {line: "example.com.", cells: 0, want: "…"},
 		"a joiner gives no room back": {line: strings.Repeat("A\u200d", 8), cells: 4,
 			want: strings.Repeat("A\u200d", 3) + "…"},
 	}

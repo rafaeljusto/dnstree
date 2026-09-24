@@ -558,6 +558,10 @@ func wide(r rune) bool {
 		return true
 	case r >= 0xfe30 && r <= 0xfe6f, r >= 0xff00 && r <= 0xff60:
 		return true
+	case r >= 0x1f000 && r <= 0x1f2ff: // mahjong, cards, enclosed, regional indicators
+		return true
+	case r >= 0x20000 && r <= 0x3fffd: // CJK extensions B onwards
+		return true
 	default:
 		return false
 	}
