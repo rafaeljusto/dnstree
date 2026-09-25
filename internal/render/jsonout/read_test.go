@@ -39,6 +39,10 @@ func TestReadRoundTrip(t *testing.T) {
 			}}},
 		},
 		"nothing walked at all": {Question: trace.Question{Name: "example.", Type: "A", Class: "IN"}},
+		"a time a float cannot hold exactly": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Elapsed:  1001 * time.Microsecond,
+		},
 	}
 
 	for name, tr := range tests {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -285,9 +286,10 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 }
 
 // duration is the way back from milliseconds, which were kept to the
-// microsecond.
+// microsecond. It rounds, since 1.001 is a hair under 1001 microseconds once it
+// is a float.
 func duration(ms float64) time.Duration {
-	return time.Duration(ms*1000) * time.Microsecond
+	return time.Duration(math.Round(ms*1000)) * time.Microsecond
 }
 
 // moment reads an RFC 3339 time, with or without a fraction of a second.
