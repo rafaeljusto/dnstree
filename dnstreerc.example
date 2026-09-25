@@ -1,7 +1,7 @@
 # dnstree reads a file like this one before the command line, and takes from
 # it whatever the command line does not say. It reads the first of
 # $DNSTREE_CONFIG, $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
-# where that is unset) and ~/.dnstreerc.
+# where that is unset, %AppData%\dnstree\config on Windows) and ~/.dnstreerc.
 #
 # One long flag name per line, with the value it takes. The dashes are
 # optional, "name value" works as well as "name = value", and a flag that
@@ -18,7 +18,8 @@
 #
 # Every setting below is commented out, written as "name = value" so that a
 # test can check each one still parses, and carrying its default where it has
-# one. Uncomment what you want.
+# one, or an example where only a change is worth writing. Uncomment what you
+# want.
 
 
 # What to follow
@@ -31,8 +32,8 @@
 # and the only way to see one server of a set disagree with the others.
 # all = true
 
-# Ask each zone for its own NS set and compare it with the one its parent
-# hands out. A mismatch is a real delegation fault that still resolves.
+# Ask the zone that answered for its own NS set and compare it with the one its
+# parent hands out. A mismatch is a real delegation fault that still resolves.
 # check-ns = true
 
 # Ask the zone for the CDS and CDNSKEY it publishes to ask its parent for a new
@@ -99,31 +100,32 @@
 
 # web draws nothing in the terminal. It serves the finished walk as a page on
 # this machine, opens a browser at it, and keeps serving until the command is
-# interrupted. The address it listens on is where a browser can reach it; a
-# machine with no browser to open wants the address printed instead.
+# interrupted. The address it listens on is where a browser can reach it;
+# no-browser leaves the printed address to be opened by hand.
 # format = web
 # web-addr = 127.0.0.1:0
 # no-browser = true
 
-# Draw the tree as the walk makes it. Asking for json, dot or web on the
-# command line drops this line rather than failing on it, since all three are
-# written once at the end.
+# Draw the tree as the walk makes it. Asking for json, dot, mermaid or web on
+# the command line drops this line rather than failing on it, since all four
+# are written once at the end.
 # live = true
 
-# Say in sentences what the walk came to, under the tree. Asking for json or
-# dot on the command line drops this line rather than failing on it, since
-# both are read by a program and carry the same facts in fields.
+# Say in sentences what the walk came to, under the tree. Asking for json, dot
+# or mermaid on the command line drops this line rather than failing on it,
+# since all three are read by a program and carry the same facts in fields.
 # explain = true
 
 # Say what has changed since the last walk of the same question, and remember
 # this one in its place. It is the one thing here that writes to the disk: one
 # file per question under $DNSTREE_CACHE, $XDG_CACHE_HOME/dnstree or
-# ~/.cache/dnstree, naming what was looked up and when. Asking for json or dot on the command line
-# drops this line too.
+# ~/.cache/dnstree, naming what was looked up and when. Asking for json, dot
+# or mermaid on the command line drops this line too.
 # diff = true
 
 # auto, always or never. auto colours a terminal and nothing else, and not
-# even that where NO_COLOR is set or TERM is dumb.
+# even that where NO_COLOR is set or TERM is unset or dumb.
+
 # color = auto
 
 # Skip the origin AS lookups. They are questions to Team Cymru, through a

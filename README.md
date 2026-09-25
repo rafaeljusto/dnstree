@@ -56,25 +56,25 @@ docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A
 
 Every [release](https://github.com/rafaeljusto/dnstree/releases) also carries a
 binary for macOS, Linux, FreeBSD and Windows, a Debian, RPM and Alpine package
-for amd64, arm64 and armhf, and a Homebrew formula. The packages install a man
+for amd64, arm64 and 32-bit arm, and a Homebrew formula. The packages install a man
 page: `man dnstree`. `checksums.txt` covers every file in the release.
 [`packaging/`](packaging/) says how they are built.
 
 <details>
 <summary>Installing a downloaded package</summary>
 
-The release notes give the command for each; taking the packages of `v1.4.0`
-as the example:
+The release notes give the command for each, with the version in place of
+`X.Y.Z`:
 
 ```
 # Debian, Ubuntu
-sudo dpkg -i dnstree_1.4.0_amd64.deb
+sudo dpkg -i dnstree_X.Y.Z_amd64.deb
 
 # Fedora, RHEL
-sudo rpm -i dnstree-1.4.0-1.x86_64.rpm
+sudo rpm -i dnstree-X.Y.Z-1.x86_64.rpm
 
 # Alpine
-sudo apk add --allow-untrusted dnstree_1.4.0_x86_64.apk
+sudo apk add --allow-untrusted dnstree_X.Y.Z_x86_64.apk
 
 # Homebrew
 brew install --formula ./dnstree.rb
@@ -99,7 +99,7 @@ dnstree [flags] NAME [TYPE]
 | `--fallback` | let plain DNS pick up a hop the transport could not |
 | `--all` | ask every nameserver of a zone, not just the first that answers |
 | `--dnssec` | ask for signatures and follow the chain of trust |
-| `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
+| `--check-ns` | ask the zone that answered for its own NS set, and compare it with the delegation |
 | `--check-ds` | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS |
 | `--serial` | ask every nameserver of the zone which copy of it they serve, and compare |
 | `--nsid` | ask each server which of itself answered, and draw it beside the address |
@@ -116,7 +116,7 @@ dnstree [flags] NAME [TYPE]
 | `--diff` | say what has changed since the last walk of the same question |
 | `--expect` | require this of the walk, and exit 4 where it does not hold; repeat it |
 | `--from` | draw a walk `--format json` saved, from a file or `-`, instead of making one |
-| `--color` | `auto` (the default: off where `NO_COLOR` is set or `TERM` is `dumb`), `always` or `never` |
+| `--color` | `auto` (the default: only on a terminal, and off where `NO_COLOR` is set or `TERM` is unset or `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
 | `--port` | the port nameservers are asked on (53) |
@@ -202,7 +202,7 @@ $ dnstree -x 8.8.8.8 --no-asn
 
 Flags you always type belong in a file instead. `dnstree` reads the first of
 `$DNSTREE_CONFIG`, `$XDG_CONFIG_HOME/dnstree/config` (`~/.config/dnstree/config`
-where that is unset) and `~/.dnstreerc`:
+where that is unset, `%AppData%\dnstree\config` on Windows) and `~/.dnstreerc`:
 
 ```
 # ~/.dnstreerc
@@ -293,6 +293,10 @@ For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your own.
 | 3 | the chain of trust is broken |
 | 4 | an expectation given with `--expect` was not met |
 
+The tree, the summary, `--explain` and the address `--format web` serves on go
+to stdout; errors, `--debug` and an unmet expectation go to stderr. `-h` prints
+the usage on stderr and exits 1.
+
 ### DNSSEC
 
 `--dnssec` follows the chain from the trust anchors down: the DS each parent
@@ -360,17 +364,16 @@ script to the same thing; see [Asking rather than reading](#asking-rather-than-r
 
 An rcode says what happened. The extended errors of RFC 8914 say why, and they
 are the only thing in a reply that tells an answer somebody kept back from an
-answer that was never there:
+answer that was never there. Drawn against the test servers, whose last one
+refuses with a reason:
 
 ```
 $ dnstree blocked.example.com A
 . (root)
-├── a.root-servers.net. 198.41.0.4  21ms  NOERROR  referral → com.
-│   ├── l.gtld-servers.net. 192.41.162.30  19ms  NOERROR  referral → example.com.
-│   │   └── ns1.example.com. 192.0.2.53  4ms  REFUSED  filtered  ede Prohibited (18): not from this network
-│   └── (and 25 more not queried)
-└── (and 25 more not queried)
-✘ filtered in 61ms · 3 queries · 3 servers
+└── a.root-servers.net. 192.0.2.1  690µs  NOERROR  referral → com.
+    └── ns.com. 192.0.2.2  430µs  NOERROR  referral → example.com.
+        └── ns1.example.com. 192.0.2.53  370µs  REFUSED  filtered  ede Prohibited (18): not from this network
+✘ filtered in 2ms · 3 queries · 3 servers
 ```
 
 Without the code on the end that hop reads as a lame server — one with no
@@ -723,8 +726,8 @@ did not fit, and `(truncated over udp)` is the second round trip being paid.
 > `--dnssec` is what makes the figure the one that matters. The same referral
 > asked for without it comes back 335 bytes lighter, with room to spare, because
 > none of the signatures are in it — and a resolver that validates does ask for
-> them. A walk that did not says so, rather than leave the reader a margin that
-> is not theirs.
+> them. `--explain` on a walk that did not says so, rather than leave the reader
+> a margin that is not theirs.
 
 Both sizes reach `--format json` as `size_bytes` and `limit_bytes`, with a
 `tight` flag on the hops that have no room left, so a script need not carry the
@@ -913,9 +916,8 @@ $ dnstree --dnssec --explain dnssec-failed.org
 · the chain of trust breaks at dnssec-failed.org.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name
 ```
 
-There is nothing in them that is not already in the tree. They are for the walk
-you did not draw yourself — a paste from somebody else, a run out of a script —
-and they leave the exit code alone.
+They are for the walk you did not draw yourself — a paste from somebody else, a
+run out of a script — and they leave the exit code alone.
 
 What the nameservers of a zone have in common is what it can lose the whole of
 at once, so that is read too — but only as far as the walk went. A walk asks one
@@ -938,8 +940,9 @@ question unanswered rather than half answered. The address families are read off
 the parent's glue instead, which is whole whether or not the servers were asked,
 so a zone with no IPv4 anywhere in its delegation is named without `--all`.
 
-`--format json` and `--format dot` refuse `--explain`: both are read by a
-program, which has the same facts in fields already.
+`--format json`, `--format dot` and `--format mermaid` refuse `--explain` and
+`--diff`: all three are read by a program, which has the same facts in fields
+already.
 
 ### What has changed since last time
 
@@ -980,9 +983,11 @@ that is not a zone that stopped being signed.
 > [!NOTE]
 > `--diff` is the only thing in `dnstree` that writes to the disk, and it writes
 > the names you looked up and when. One small file per question goes under
-> `$DNSTREE_CACHE`, or `$XDG_CACHE_HOME/dnstree`, or `~/.cache/dnstree` —
-> readable, and safe to delete at any time. Without the flag, nothing is read
-> and nothing is kept.
+> `$DNSTREE_CACHE`, or `$XDG_CACHE_HOME/dnstree`, or `~/.cache/dnstree`
+> (`%LocalAppData%\dnstree` on Windows) — readable, and safe to delete at any
+> time. Without the flag, nothing is read and nothing is kept. A cache that
+> cannot be read or written costs the comparison and says so in one line on
+> stderr; the walk still runs.
 
 ### Watching it happen
 
@@ -1022,8 +1027,8 @@ prints, followed by one line saying how it went:
 
 > [!NOTE]
 > Off a terminal the flag does nothing, and it cannot be combined with
-> `--format json`, `--format dot` or `--format web`, all three of which are
-> written once, at the end.
+> `--format json`, `dot`, `mermaid` or `web`, all four of which are written
+> once, at the end.
 
 ### Leaving it running
 
@@ -1071,8 +1076,9 @@ that stopped resolving altogether still exits 2. A walk cut off part way through
 by the interrupt is not read as a finding about the name: the last one that
 finished on its own is what answers.
 
-`--format json`, `dot` and `web` are written once, at the end, so there is
-nothing for a watch to change; all three refuse it, as they refuse `--live`.
+`--format json`, `dot`, `mermaid` and `web` are written once, at the end, so
+there is nothing for a watch to change; all four refuse it, as they refuse
+`--live`.
 
 ### Other formats
 
@@ -1146,7 +1152,7 @@ query, clustered by zone:
 dnstree --format dot www.example.com | dot -Tsvg > trace.svg
 ```
 
-![dnstree dot format example](docs/demo-dot.svg "dnstree dot format example")
+![Graphviz drawing of the walk to www.example.com, one box per query, clustered by zone](docs/demo-dot.svg)
 
 `--format mermaid` draws the same picture for the places that draw Mermaid
 rather than Graphviz: pasted into a fenced `mermaid` block, GitHub, GitLab and
@@ -1301,6 +1307,7 @@ make check        # build, lint, test -race, vuln
 make lint         # go vet and golangci-lint
 make lint-docker  # hadolint against the Dockerfile
 make vuln         # govulncheck against the vulnerability database
+make goldens      # rewrite the renderer goldens and docs/trace.schema.json; read the diff
 make live         # the smoke test that goes out to the real root servers
 make demos        # re-record the terminal demos in docs/ from tapes/
 make roothints    # refresh the embedded root hints and trust anchors
@@ -1314,8 +1321,8 @@ creates the tag, and publishes the archives alongside a multi-architecture
 image on `ghcr.io`. The same commits become the changelog, carried by both the
 annotated tag and the release notes. `dry_run` reports the version it
 would pick without tagging anything, and `bump` overrides it. See
-[cmd/next-version](cmd/next-version/) for how a subject earns a bump, and what
-changes while the major version is still zero.
+[cmd/next-version](cmd/next-version/) for how a subject earns a bump.
+
 
 The engine is tested offline against in-process authoritative servers
 (`internal/testutil/fakens`), signed hierarchies included, so every delegation

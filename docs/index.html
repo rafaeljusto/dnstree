@@ -480,9 +480,8 @@ footer a:hover{color:var(--ink)}
       </div>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
-        Every sentence is read off the trace the walk recorded, so the sentences and the
-        tree above them cannot come to disagree, and none of them claims more than the walk
-        checked: a chain this build could not check reads as unchecked, never as broken. It is
+        Every sentence is read off the walk the tree draws, so the two cannot disagree,
+        and a chain this build could not check reads as unchecked, never as broken. It is
         also why the nameservers of a zone are only weighed against each other where the walk
         asked all of them — <code>--all</code> does, and a set that is not all accounted for
         leaves the question unanswered rather than half answered.
@@ -592,33 +591,34 @@ footer a:hover{color:var(--ink)}
           </div>
 
           <div class="panel" role="tabpanel" id="panel-ascii" aria-labelledby="tab-ascii" hidden>
-<pre><span class="z">. (root)</span>
-|-- <span class="ns">a.root-servers.net.</span> <span class="ip">198.41.0.4</span>  <span class="asn">AS19836</span>  <span class="rtt">244ms</span>  <span class="ok">NOERROR</span>  referral -&gt; com.
-|   |-- <span class="ns">l.gtld-servers.net.</span> <span class="ip">192.41.162.30</span>  <span class="asn">AS19836</span>  <span class="rtt">245ms</span>  <span class="ok">NOERROR</span>  referral -&gt; example.com.
-|   |   |-- <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">108.162.192.162</span>  <span class="asn">AS13335</span>  <span class="rtt">224ms</span>  <span class="ok">NOERROR</span>  AA
-|   |   |   |-- www.example.com. <span class="dim">300</span> <span class="a">A</span> 172.66.147.243
-|   |   |   `-- www.example.com. <span class="dim">300</span> <span class="a">A</span> 104.20.23.154
-|   |   |-- <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">172.64.32.162</span>  <span class="dim">(not queried)</span>
-|   |   |-- <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">173.245.58.162</span>  <span class="dim">(not queried)</span>
-|   |   |-- <span class="ns">hera.ns.cloudflare.com.</span> <span class="ip">2606:4700:50::adf5:3aa2</span>  <span class="dim">(not queried)</span>
+<pre>. (root)
+|-- a.root-servers.net. 198.41.0.4  AS19836  244ms  NOERROR  referral -&gt; com.
+|   |-- l.gtld-servers.net. 192.41.162.30  AS19836  245ms  NOERROR  referral -&gt; example.com.
+|   |   |-- hera.ns.cloudflare.com. 108.162.192.162  AS13335  224ms  NOERROR  AA
+|   |   |   |-- www.example.com. 300 A 172.66.147.243
+|   |   |   `-- www.example.com. 300 A 104.20.23.154
+|   |   |-- hera.ns.cloudflare.com. 172.64.32.162  (not queried)
+|   |   |-- hera.ns.cloudflare.com. 173.245.58.162  (not queried)
+|   |   |-- hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
 |   |   `-- (and 8 more not queried)
-|   |-- <span class="ns">l.gtld-servers.net.</span> <span class="ip">2001:500:d937::30</span>  <span class="dim">(not queried)</span>
-|   |-- <span class="ns">j.gtld-servers.net.</span> <span class="ip">192.48.79.30</span>  <span class="dim">(not queried)</span>
-|   |-- <span class="ns">j.gtld-servers.net.</span> <span class="ip">2001:502:7094::30</span>  <span class="dim">(not queried)</span>
+|   |-- l.gtld-servers.net. 2001:500:d937::30  (not queried)
+|   |-- j.gtld-servers.net. 192.48.79.30  (not queried)
+|   |-- j.gtld-servers.net. 2001:502:7094::30  (not queried)
 |   `-- (and 22 more not queried)
-|-- <span class="ns">a.root-servers.net.</span> <span class="ip">2001:503:ba3e::2:30</span>  <span class="dim">(not queried)</span>
-|-- <span class="ns">b.root-servers.net.</span> <span class="ip">170.247.170.2</span>  <span class="dim">(not queried)</span>
-|-- <span class="ns">b.root-servers.net.</span> <span class="ip">2801:1b8:10::b</span>  <span class="dim">(not queried)</span>
+|-- a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+|-- b.root-servers.net. 170.247.170.2  (not queried)
+|-- b.root-servers.net. 2801:1b8:10::b  (not queried)
 `-- (and 22 more not queried)
-<span class="dim">answered in 714ms | resolver in 235ms | 3 queries | 3 servers</span></pre>
+answered in 714ms | resolver in 235ms | 3 queries | 3 servers</pre>
           </div>
 
           <div class="panel" role="tabpanel" id="panel-json" aria-labelledby="tab-json" hidden>
 <pre>{
   <span class="k">"schema_version"</span>: <span class="n">4</span>,
   <span class="k">"question"</span>: { <span class="k">"name"</span>: <span class="s">"www.example.com."</span>, <span class="k">"type"</span>: <span class="s">"A"</span>, <span class="k">"class"</span>: <span class="s">"IN"</span> },
-  <span class="k">"elapsed_ms"</span>: <span class="n">716.92</span>,
-  <span class="k">"resolvers"</span>: [ { <span class="k">"server"</span>: { <span class="k">"ip"</span>: <span class="s">"8.8.8.8"</span>, <span class="k">"port"</span>: <span class="n">53</span> }, <span class="k">"elapsed_ms"</span>: <span class="n">234.515</span>, <span class="k">"match"</span>: <span class="s">"same"</span>, … } ],
+  <span class="k">"elapsed_ms"</span>: <span class="n">745.333</span>,
+  <span class="k">"started"</span>: <span class="s">"2026-09-25T12:43:35.754956Z"</span>,
+  <span class="k">"resolvers"</span>: [ { <span class="k">"server"</span>: { <span class="k">"ip"</span>: <span class="s">"8.8.8.8"</span>, <span class="k">"port"</span>: <span class="n">53</span> }, <span class="k">"elapsed_ms"</span>: <span class="n">257.778</span>, <span class="k">"match"</span>: <span class="s">"same"</span>, … } ],
   <span class="k">"root"</span>: {
     <span class="k">"zone"</span>: <span class="s">"."</span>,
     <span class="k">"kind"</span>: <span class="s">"zone"</span>,
@@ -629,7 +629,7 @@ footer a:hover{color:var(--ink)}
         <span class="k">"server"</span>: { <span class="k">"name"</span>: <span class="s">"a.root-servers.net."</span>, <span class="k">"ip"</span>: <span class="s">"198.41.0.4"</span>, <span class="k">"port"</span>: <span class="n">53</span>, <span class="k">"asn"</span>: { <span class="k">"number"</span>: <span class="n">19836</span>, … } },
         <span class="k">"asked"</span>: { <span class="k">"name"</span>: <span class="s">"www.example.com."</span>, <span class="k">"type"</span>: <span class="s">"A"</span> },
         <span class="k">"proto"</span>: <span class="s">"udp"</span>,
-        <span class="k">"rtt_ms"</span>: <span class="n">249.08</span>,
+        <span class="k">"rtt_ms"</span>: <span class="n">257.226</span>,
         <span class="k">"size_bytes"</span>: <span class="n">840</span>,
         <span class="k">"limit_bytes"</span>: <span class="n">1232</span>,
         <span class="k">"rcode"</span>: <span class="s">"NOERROR"</span>,
@@ -836,12 +836,13 @@ flowchart LR
       <p class="section-lede" style="margin-top:1.2rem">The three package lines
       name the release that was current when the page was built, and the page
       refreshes them from GitHub when it can. Every release carries the same
-      packages for arm64 and armhf, each with a man page, and a
+      packages for arm64 and 32-bit arm, each with a man page, and a
       <code>checksums.txt</code> over every file.</p>
 
       <h3 style="margin-top:2.2rem">Set it once</h3>
       <p class="section-lede">The flags you always type belong in the first of
-      <code>$DNSTREE_CONFIG</code>, <code>~/.config/dnstree/config</code> and
+      <code>$DNSTREE_CONFIG</code>, <code>$XDG_CONFIG_HOME/dnstree/config</code>
+      (or <code>~/.config/dnstree/config</code>) and
       <code>~/.dnstreerc</code>. One long flag name per
       line, with the value it takes. The command line still wins over it, and
       <code>--no-config</code> ignores it altogether.</p>

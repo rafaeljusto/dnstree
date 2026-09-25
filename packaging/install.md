@@ -17,5 +17,5 @@ curl -LO @BASE@/dnstree.rb && brew install --formula ./dnstree.rb
 docker run --rm ghcr.io/rafaeljusto/dnstree:@VERSION@ www.example.com A
 ```
 
-arm64 and armhf packages are here too, alongside the archives for macOS,
+arm64 and 32-bit arm packages are here too, alongside the archives for macOS,
 Linux, FreeBSD and Windows. `checksums.txt` covers every file.
