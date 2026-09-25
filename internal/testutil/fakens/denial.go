@@ -220,6 +220,8 @@ func (s *Server) owners(withEmptyNonTerminals bool) ([]string, map[string][]uint
 	// chain carries its own link of it.
 	for name := range types {
 		types[name] = append(types[name], dns.TypeRRSIG, dns.TypeNSEC)
+		// The codec packs a bitmap only in order.
+		slices.Sort(types[name])
 	}
 
 	if withEmptyNonTerminals {

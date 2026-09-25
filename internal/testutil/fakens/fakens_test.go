@@ -200,3 +200,21 @@ func TestConcurrentSignedReplies(t *testing.T) {
 	}
 	wait.Wait()
 }
+
+// TestNSECBitmapWithCDS covers a zone whose apex holds types past the ones an
+// NSEC bitmap names in order by accident. The codec refuses to pack a bitmap
+// out of order, and a reply that cannot be packed is a server gone silent.
+func TestNSECBitmapWithCDS(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: leafZone, DNSSEC: true,
+		Denial: fakens.DenialNSEC, Behaviour: fakens.Behaviour{CDS: fakens.CDSNext}})
+	carrier := transport.NewUDP(transport.Config{Timeout: 2 * time.Second})
+
+	// The empty non-terminal is spanned by the apex NSEC.
+	req, err := transport.NewQuery("b.example.com.", dns.TypeA, transport.DefaultUDPSize, true)
+	if err != nil {
+		t.Fatalf("NewQuery: %v", err)
+	}
+	if _, _, err := carrier.Exchange(t.Context(), req, server.Addr, ""); err != nil {
+		t.Fatalf("got %v, want the apex NSEC sent", err)
+	}
+}
