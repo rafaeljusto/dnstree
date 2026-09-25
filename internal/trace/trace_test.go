@@ -3,6 +3,7 @@ package trace_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
@@ -191,5 +192,34 @@ func TestTraceShown(t *testing.T) {
 	}
 	if step.Delegation.NS[0] != raw || step.Server.Name != raw || step.Records[0].Service.ALPN[0] != raw {
 		t.Errorf("the walk's own trace was escaped too: %+v", step)
+	}
+}
+
+// TestExpiringLongLife covers a signature made to last longer than five times
+// what a Duration holds a fifth of. RRSIG times reach 68 years either side of
+// now, and one an hour into sixty years of life is nowhere near its end.
+func TestExpiringLongLife(t *testing.T) {
+	const year = 365 * 24 * time.Hour
+	started := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	tr := &trace.Trace{Started: started}
+
+	for name, test := range map[string]struct {
+		life, left time.Duration
+		stale      bool
+	}{
+		"an hour into sixty years is fresh":        {life: 60*year + time.Hour, left: 60 * year},
+		"a year left of sixty is stale":            {life: 60 * year, left: year, stale: true},
+		"an hour left of a day is stale":           {life: 24 * time.Hour, left: time.Hour, stale: true},
+		"a fifth of the life left is not yet late": {life: 5 * time.Hour, left: time.Hour},
+	} {
+		t.Run(name, func(t *testing.T) {
+			expiration := started.Add(test.left)
+			status := &trace.DNSSECStatus{Signatures: []trace.Lifetime{
+				{Inception: expiration.Add(-test.life), Expiration: expiration},
+			}}
+			if _, stale := tr.Expiring(status); stale != test.stale {
+				t.Errorf("got stale %v, want %v", stale, test.stale)
+			}
+		})
 	}
 }

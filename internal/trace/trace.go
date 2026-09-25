@@ -527,7 +527,9 @@ func (t *Trace) Expiring(status *DNSSECStatus) (time.Duration, bool) {
 	)
 	for _, signature := range status.Signatures {
 		remaining := signature.Expiration.Sub(t.Started)
-		if remaining*staleShare >= signature.Expiration.Sub(signature.Inception) {
+		// Divided rather than multiplied: RRSIG times reach 68 years out, and
+		// five times that overflows a Duration.
+		if remaining >= signature.Expiration.Sub(signature.Inception)/staleShare {
 			continue
 		}
 		if !stale || remaining < left {
