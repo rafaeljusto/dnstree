@@ -51,6 +51,10 @@
 # apart. It costs no query of its own.
 # nsid = true
 
+# Send each server a DNS cookie (RFC 7873), and say on each hop whether it
+# answered with one. It costs no query of its own.
+# cookie = true
+
 # Ask each zone for no more of the name than it needs, the way resolvers do by
 # default now (RFC 9156). It finds the server that denies a name for being
 # empty, which stops such a resolver dead. A query per label below the zone.

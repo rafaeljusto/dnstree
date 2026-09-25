@@ -246,6 +246,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if note := r.note(step); note != "" {
 		fields = append(fields, note)
 	}
+	if cookie := r.cookie(step.Cookie); cookie != "" {
+		fields = append(fields, cookie)
+	}
 	if extended := r.extended(step.Extended); extended != "" {
 		fields = append(fields, extended)
 	}
@@ -509,6 +512,24 @@ func (r *renderer) subnet(subnet *trace.Subnet) string {
 		return ""
 	}
 	return r.paint.dim(fmt.Sprintf("ecs scope /%d", subnet.Scope))
+}
+
+// cookie is how the server answered the DNS cookie it was sent. Answering
+// without one is allowed, so only a server that got it wrong is coloured.
+func (r *renderer) cookie(state trace.CookieState) string {
+	switch state {
+	case trace.CookieSupported:
+		return r.paint.dim("cookie")
+	case trace.CookieAbsent:
+		return r.paint.dim("no cookie")
+	case trace.CookieMismatch:
+		return r.paint.paint("cookie not ours", red)
+	case trace.CookieMalformed:
+		return r.paint.paint("cookie malformed", yellow)
+	case trace.CookieRejected:
+		return r.paint.paint("cookie rejected", red)
+	}
+	return ""
 }
 
 // extended is what the server said about its own answer, in the codes of RFC

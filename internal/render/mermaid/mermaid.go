@@ -174,6 +174,9 @@ func label(step *trace.Step) string {
 	if step.NSID != "" {
 		lines = append(lines, "@"+step.NSID)
 	}
+	if step.Cookie != "" {
+		lines = append(lines, "cookie "+string(step.Cookie))
+	}
 	for _, record := range step.Records {
 		lines = append(lines, record.Name+" "+record.Type+" "+record.Data)
 	}

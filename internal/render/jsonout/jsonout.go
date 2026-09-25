@@ -115,6 +115,7 @@ type step struct {
 	Subnet     *subnet         `json:"subnet,omitempty"`
 	SOA        *soa            `json:"soa,omitempty"`
 	NSID       string          `json:"nsid,omitempty"`
+	Cookie     string          `json:"cookie,omitempty"`
 	Aside      bool            `json:"aside,omitempty"`
 	Minimised  bool            `json:"minimised,omitempty"`
 	Delegation *delegation     `json:"delegation,omitempty"`
@@ -231,6 +232,7 @@ func convert(from *trace.Step) *step {
 		Subnet:     convertSubnet(from.Subnet),
 		SOA:        convertSOA(from.SOA),
 		NSID:       from.NSID,
+		Cookie:     string(from.Cookie),
 		Aside:      from.Aside,
 		Minimised:  from.Minimised,
 		Delegation: convertDelegation(from.Delegation),

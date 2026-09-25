@@ -35,6 +35,7 @@
         "limit_bytes": 1232,
         "rcode": "NOERROR",
         "nsid": "fra2",
+        "cookie": "supported",
         "delegation": {
           "zone": "com.",
           "ttl": 172800,

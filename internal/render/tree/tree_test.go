@@ -45,6 +45,7 @@ func resolution() *trace.Trace {
 		Rcode:      "NOERROR",
 		Kind:       trace.KindReferral,
 		Delegation: &trace.Delegation{Zone: "example.com.", DSPresent: true},
+		Cookie:     trace.CookieAbsent,
 		DNSSEC:     &trace.DNSSECStatus{State: trace.Secure},
 		Children:   []*trace.Step{answer, skipped},
 	}
@@ -64,6 +65,7 @@ func resolution() *trace.Trace {
 		Rcode:      "NOERROR",
 		Kind:       trace.KindReferral,
 		NSID:       "fra2",
+		Cookie:     trace.CookieSupported,
 		Delegation: &trace.Delegation{Zone: "com.", DSPresent: true},
 		DNSSEC:     &trace.DNSSECStatus{State: trace.Secure},
 		Children:   []*trace.Step{timeout, tld},

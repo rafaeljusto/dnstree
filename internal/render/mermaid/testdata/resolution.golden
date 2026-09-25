@@ -4,7 +4,7 @@ title: "dnstree www.example.com. A"
 flowchart LR
     subgraph z0 ["."]
         n0([". (root)"])
-        n1["a.root-servers.net.<br/>198.41.0.4<br/>NOERROR referral to com.<br/>[insecure]<br/>@fra2"]
+        n1["a.root-servers.net.<br/>198.41.0.4<br/>NOERROR referral to com.<br/>[insecure]<br/>@fra2<br/>cookie supported"]
     end
     subgraph z1 ["com."]
         n2["b.gtld-servers.net.<br/>192.33.14.30<br/>timeout<br/>udp 192.33.14.30:53: i/o timeout"]

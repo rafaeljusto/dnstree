@@ -190,6 +190,20 @@ const (
 	KindSkipped StepKind = "skipped" // known, never queried
 )
 
+// CookieState is how a server answered the DNS cookie a query carried (RFC
+// 7873). Answering without one is allowed; the rest say the server got it
+// wrong, or the answer was not the server's.
+type CookieState string
+
+// How a server can answer a cookie.
+const (
+	CookieSupported CookieState = "supported" // our client cookie back, and one of its own
+	CookieAbsent    CookieState = "absent"    // no cookie at all
+	CookieMismatch  CookieState = "mismatch"  // a client cookie other than the one sent
+	CookieMalformed CookieState = "malformed" // a length no cookie has
+	CookieRejected  CookieState = "rejected"  // BADCOOKIE, even to the cookie it handed out
+)
+
 // Step is one query and the queries it led to.
 type Step struct {
 	// Zone the queried server is believed to serve.
@@ -251,6 +265,10 @@ type Step struct {
 	// rather than to the server: one anycast address is many machines, and
 	// which of them answered is the whole of what this says.
 	NSID string
+
+	// Cookie is how the server handled the DNS cookie the query carried (RFC
+	// 7873), empty when the query carried none.
+	Cookie CookieState
 
 	// Minimised marks a hop that asked for less of the name than the walk was
 	// after, to find where the next zone cut is (RFC 9156). What it came back

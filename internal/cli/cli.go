@@ -41,6 +41,7 @@ path it took. TYPE defaults to A.
   --check-ds              ask the zone for its CDS and CDNSKEY and compare
   --serial                ask every nameserver of the zone which copy it serves
   --nsid                  ask each server which of itself answered (RFC 5001)
+  --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
@@ -195,6 +196,14 @@ rides along on queries that are being made anyway and costs none of its own. A
 server that publishes no identifier says nothing, and its hop reads as it would
 without the flag.
 
+--cookie sends every server a DNS cookie (RFC 7873) and says on each hop how it
+answered: cookie, no cookie, cookie not ours, cookie malformed or cookie
+rejected. A server that supports cookies is sent back the one it handed out, the
+way a resolver would, and one that answers BADCOOKIE is asked again with it,
+once. Each server gets a client cookie of its own, made fresh for the run. It
+rides along on queries over udp and tcp, which are the ones it protects, and
+costs none of its own.
+
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
 where that is unset), then ~/.dnstreerc. Each line of it is a long flag name and
@@ -226,6 +235,7 @@ type Config struct {
 	CheckDS  bool
 	Serial   bool
 	NSID     bool
+	Cookie   bool
 	Minimise bool
 	ASN      bool
 	Compare  bool
@@ -341,6 +351,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.CheckDS, "check-ds", false, "compare the zone's CDS and CDNSKEY with its DS")
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
+	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
@@ -553,7 +564,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "nsid": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "no-asn": true, "no-compare": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

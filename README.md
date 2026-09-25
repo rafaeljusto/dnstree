@@ -103,6 +103,7 @@ dnstree [flags] NAME [TYPE]
 | `--check-ds` | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS |
 | `--serial` | ask every nameserver of the zone which copy of it they serve, and compare |
 | `--nsid` | ask each server which of itself answered, and draw it beside the address |
+| `--cookie` | send each server a DNS cookie (RFC 7873), and say how it answered |
 | `--qmin` | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
@@ -609,6 +610,45 @@ names into them, and those are drawn as names; anything else is drawn as the
 hex it arrived as, and an identifier longer than a line has room for is cut.
 A server that publishes none says nothing, which is most of them below the
 root, and its hop reads as it would without the flag.
+
+### Which servers support DNS cookies
+
+Most DNS travels over UDP, where anyone can send a packet claiming to be from
+anywhere. A DNS cookie (RFC 7873) is the cheap fix: the client sends a random
+value, the server answers with it and a value of its own, and an answer that
+does not carry the client's value is not an answer to that client. `--cookie`
+sends one to every server and says on each hop how it answered:
+
+```
+$ dnstree --cookie --no-asn --no-compare --explain www.isc.org A
+. (root)
+├── a.root-servers.net. 198.41.0.4  247ms  NOERROR  referral → org.  no cookie
+│   ├── a2.org.afilias-nst.info. 199.249.112.1  233ms  NOERROR  referral → isc.org.  no cookie
+│   │   ├── ns1.isc.org. 149.20.2.26  366ms  NOERROR  AA  cookie
+│   │   │   ├── www.isc.org. 300 A 151.101.3.42
+...
+✔ answered in 849ms · 3 queries · 3 servers
+
+· www.isc.org. A is 151.101.131.42, 151.101.195.42, 151.101.3.42 and 1 more, answered by ns1.isc.org. for isc.org.
+· a cache may hold this answer for 5 minutes, and the delegation to isc.org. for 1 hour
+· 2 servers answered without a dns cookie, which is allowed and leaves nothing to tell a forged answer from a real one: a.root-servers.net. and a2.org.afilias-nst.info.
+```
+
+| On the hop | What the server did |
+| --- | --- |
+| `cookie` | sent our client cookie back with one of its own |
+| `no cookie` | sent none back, which is allowed |
+| `cookie not ours` | sent back a client cookie other than the one sent: broken, or the answer is not the server's, and the walk warns |
+| `cookie malformed` | sent a cookie of a length no cookie has |
+| `cookie rejected` | answered `BADCOOKIE` even to the cookie it handed out itself |
+
+The walk behaves as a client that supports cookies: a server is sent back the
+cookie it handed out, and one that answers `BADCOOKIE` is asked again with the
+cookie that came with it, once. Each server gets a client cookie of its own,
+made fresh for the run, so no two of them can follow the walk between them
+(RFC 9018). Cookies go on queries over UDP and TCP; over DoT and DoH the
+handshake already proves the address, so nothing is sent and nothing is said.
+A cookie never changes the exit code.
 
 ### Asking only what each zone needs
 

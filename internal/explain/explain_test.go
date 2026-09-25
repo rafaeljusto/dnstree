@@ -153,6 +153,30 @@ func TestFindings(t *testing.T) {
 			),
 			want: []string{"5 servers did not answer in time", "a.test., b.test., c.test. and 2 more"},
 		},
+		"a server without cookies is named, and one with them is not": {
+			trace: walk(func() *trace.Step {
+				root := hop(trace.KindReferral, "a.root.")
+				root.Cookie = trace.CookieSupported
+				leaf := answer()
+				leaf.Cookie = trace.CookieAbsent
+				root.Children = []*trace.Step{leaf}
+				return root
+			}()),
+			want:  []string{"1 server answered without a dns cookie, which is allowed", ": ns.test."},
+			avoid: []string{"a.root."},
+		},
+		"a cookie that was not ours says the answer may not be the server's": {
+			trace: walk(func() *trace.Step {
+				step := answer()
+				step.Cookie = trace.CookieMismatch
+				return step
+			}()),
+			want: []string{"client cookie other than the one sent", "may not be the server's own: ns.test."},
+		},
+		"a walk that sent no cookies says nothing about them": {
+			trace: walk(answer()),
+			avoid: []string{"cookie"},
+		},
 		"a budget that ran out is the reason the walk stopped": {
 			trace: walk(&trace.Step{Zone: "test.", Kind: trace.KindError, Err: "the query budget of 64 ran out"}),
 			want:  []string{"stopped at test.", "the query budget of 64 ran out"},

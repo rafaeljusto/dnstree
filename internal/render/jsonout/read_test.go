@@ -117,6 +117,11 @@ func TestReadRefuses(t *testing.T) {
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure", "signal": {"state": "granted"}}}}`,
 			want: `"granted"`,
 		},
+		"a way to answer a cookie nothing here knows": {
+			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "cookie": "crumbled"}]}}`,
+			want: `"crumbled"`,
+		},
 		"an address that is not one": {
 			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "server": {"ip": "not-an-ip"}}]}}`,

@@ -101,6 +101,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, trust(tr)...)
 	findings = append(findings, spread(tr)...)
 	findings = append(findings, servers(tr)...)
+	findings = append(findings, cookies(tr)...)
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
 	}
@@ -576,6 +577,36 @@ func servers(tr *trace.Trace) []Finding {
 			text += ", and this walk asked for no signatures: a resolver that does gets more than this"
 		}
 		findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: text})
+	}
+	return findings
+}
+
+// cookies names the servers that answered the DNS cookie they were sent
+// without one, or wrongly. One address can be many machines, so a server may
+// be named under more than one of them.
+func cookies(tr *trace.Trace) []Finding {
+	said := map[trace.CookieState][]string{}
+	for step := range tr.Steps() {
+		if step.Cookie != "" {
+			said[step.Cookie] = add(said[step.Cookie], at(step))
+		}
+	}
+
+	var findings []Finding
+	for _, about := range []struct {
+		state trace.CookieState
+		level Level
+		text  string
+	}{
+		{trace.CookieMismatch, Warn, "answered with a client cookie other than the one sent, so the answer may not be the server's own"},
+		{trace.CookieRejected, Warn, "answered BADCOOKIE even to the server cookie handed out, and no query carrying a cookie got an answer"},
+		{trace.CookieMalformed, Warn, "answered with a dns cookie of a length no cookie has"},
+		{trace.CookieAbsent, Note, "answered without a dns cookie, which is allowed and leaves nothing to tell a forged answer from a real one"},
+	} {
+		if servers := said[about.state]; len(servers) > 0 {
+			findings = append(findings, Finding{Topic: Servers, Level: about.level, Text: fmt.Sprintf(
+				"%s %s: %s", plural(len(servers), "server", "servers"), about.text, list(servers))})
+		}
 	}
 	return findings
 }

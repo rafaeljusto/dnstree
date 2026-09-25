@@ -21,7 +21,18 @@ const KINDS = {
   error:    { icon: "error",    tone: "bad",   says: "could not be asked" },
   skipped:  { icon: "skipped",  tone: "quiet", says: "known, never queried" },
 };
+
 const kindOf = (kind) => KINDS[kind] ?? { icon: "unknown", tone: "quiet", says: kind };
+
+// COOKIES are how a server can answer the DNS cookie it was sent (RFC 7873).
+const COOKIES = {
+  supported: { text: "cookie",           tone: "quiet", says: "answered our client cookie with one of its own" },
+  absent:    { text: "no cookie",        tone: "quiet", says: "answered without a cookie, which is allowed" },
+  mismatch:  { text: "cookie not ours",  tone: "bad",   says: "answered with a client cookie other than the one sent" },
+  malformed: { text: "cookie malformed", tone: "warn",  says: "answered with a cookie of a length no cookie has" },
+  rejected:  { text: "cookie rejected",  tone: "bad",   says: "answered BADCOOKIE even to the cookie it handed out" },
+};
+const cookieOf = (state) => COOKIES[state] ?? { text: `cookie ${state}`, tone: "quiet", says: state };
 
 const TRUST = {
   secure:        { icon: "secure",   tone: "ok" },
@@ -122,6 +133,7 @@ function haystack(step) {
   return [
     step.zone, step.kind, step.server?.name, step.server?.ip, step.rcode, step.proto,
     step.server?.asn && `AS${step.server.asn.number}`, step.delegation?.zone, step.nsid,
+    step.cookie && cookieOf(step.cookie).text,
     step.dnssec?.state, step.error, ...(step.notes ?? []),
     ...(step.records ?? []).flatMap((rr) => [rr.name, rr.type, rr.data]),
   ].filter(Boolean).join(" ").toLowerCase();
@@ -151,6 +163,10 @@ function chipsFor(step) {
   if (flags.length) chips.push(chip(flags.join(" "), "quiet", "the header bits that are set"));
   if (step.subnet) chips.push(chip(`ecs /${step.subnet.scope}`, "quiet", `answered for ${step.subnet.prefix}`));
   if (step.nsid) chips.push(chip(`@${step.nsid}`, "quiet", "the instance behind this address, as it names itself"));
+  if (step.cookie) {
+    const cookie = cookieOf(step.cookie);
+    chips.push(chip(cookie.text, cookie.tone, cookie.says));
+  }
   if (step.dnssec) {
     const trust = trustOf(step.dnssec.state);
     chips.push(el("span", { class: `chip tone-${trust.tone}`, title: step.dnssec.reason || "the chain of trust at this cut" },
@@ -489,6 +505,7 @@ class DnsInspector extends HTMLElement {
       ["flags", flagsOf(step.flags).join(" ")],
       ["subnet", step.subnet && `${step.subnet.prefix} scope /${step.subnet.scope}`],
       ["instance", step.nsid],
+      ["cookie", step.cookie && cookieOf(step.cookie).says],
       ["origin", as && `AS${as.number} ${as.prefix ?? ""}`.trim()],
       ["registry", as && [as.country_code, as.registry, as.allocated].filter(Boolean).join(" · ")],
       ["error", step.error],

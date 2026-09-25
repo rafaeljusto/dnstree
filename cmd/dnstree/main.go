@@ -371,6 +371,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		CheckDS:   cfg.CheckDS,
 		Serial:    cfg.Serial,
 		NSID:      cfg.NSID,
+		Cookie:    cfg.Cookie,
 		Minimise:  cfg.Minimise,
 		Subnet:    cfg.Subnet,
 		Retries:   cfg.Retries,

@@ -333,6 +333,15 @@ footer a:hover{color:var(--ink)}
       </p>
 
       <p class="section-lede" style="margin-top:1.4rem">
+        <code>--cookie</code> sends every server a DNS cookie (RFC&nbsp;7873) and says how
+        it answered: <code>cookie</code> where it sent ours back with one of its own,
+        <code>no cookie</code> where it sent none, and <code>cookie not ours</code>,
+        <code>cookie malformed</code> or <code>cookie rejected</code> where it got it wrong.
+        A cookie is what lets a client tell a forged answer from a real one, and it rides
+        along on queries that are being made anyway.
+      </p>
+
+      <p class="section-lede" style="margin-top:1.4rem">
         How the question travels is a separate matter from what it asks.
         <code>--tcp</code>, <code>--dot</code> and <code>--doh</code> carry every hop over
         TCP, or encrypted over TLS or HTTPS, all the way down from the root servers — and

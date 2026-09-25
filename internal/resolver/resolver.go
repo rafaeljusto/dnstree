@@ -6,6 +6,7 @@ package resolver
 import (
 	"cmp"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -125,6 +126,12 @@ type Config struct {
 	// reply that tells them apart. It costs no query of its own.
 	NSID bool
 
+	// Cookie sends a DNS cookie to every server (RFC 7873) and records how it
+	// answered. Like a client that supports them, the walk sends each server
+	// back the cookie it handed out. It costs no query of its own, except a
+	// second try at a server that answers BADCOOKIE.
+	Cookie bool
+
 	// Subnet rides along on every query as the client subnet of RFC 7871, so
 	// that a server which tailors its answers is asked the question somebody
 	// inside that prefix would be asking. The zero value sends none, which is
@@ -217,6 +224,12 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		},
 	}
 
+	if r.cfg.Cookie {
+		run.secret = make([]byte, 16)
+		_, _ = rand.Read(run.secret) // never fails, as of Go 1.24
+		run.cookies = map[netip.Addr]string{}
+	}
+
 	run.trace.Started = time.Now()
 	run.walk(ctx, qname, rrtype, run.trace.Root, 0)
 	run.trace.Elapsed = time.Since(run.trace.Started)
@@ -240,7 +253,13 @@ type run struct {
 	// cannot bite its own tail.
 	chased map[string]bool
 
-	// mu guards the warnings, which the fanout writes to from several goroutines.
+	// secret is what the client cookies of this run are derived from, and
+	// cookies the server cookies handed out so far, by address.
+	secret  []byte
+	cookies map[netip.Addr]string
+
+	// mu guards the warnings and the cookies, which the fanout writes to from
+	// several goroutines.
 	mu sync.Mutex
 }
 
@@ -679,7 +698,8 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	}
 
 	udpSize := r.cfg.UDPSize
-	resp, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize, port)
+	carrier := r.cfg.Transport
+	resp, err := r.exchange(ctx, step, carrier, qname, qtype, udpSize, port)
 
 	// A server that does not speak the transport asked for is the ordinary case
 	// for DoT and DoH, so plain DNS can be allowed to pick the hop up.
@@ -688,6 +708,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 			step.Notes = append(step.Notes, step.Proto+" did not get through, asked over "+r.cfg.Fallback.Proto())
 			step.Proto = r.cfg.Fallback.Proto()
 			step.Server.Port = cmp.Or(port, r.cfg.Fallback.Port())
+			carrier = r.cfg.Fallback
 			resp, err = retry, nil
 		}
 	}
@@ -709,6 +730,19 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		if retry, err := r.exchange(ctx, step, r.cfg.Transport, qname, qtype, udpSize, port); err == nil {
 			resp = retry
 			step.Notes = append(step.Notes, "retried without EDNS0")
+		}
+	}
+
+	// A server that insists on a cookie of its own hands one out with
+	// BADCOOKIE, and is asked again with it (RFC 7873 section 5.3). Once: a
+	// server that turns down its own cookie has nothing more to say.
+	var cookieRetried bool
+	if resp.Rcode == dns.RcodeBadCookie && r.cookie(step.Server.IP) != "" {
+		if state, _ := transport.EchoedCookie(resp, r.clientCookie(step.Server.IP)); state == trace.CookieSupported {
+			if retry, err := r.exchange(ctx, step, carrier, qname, qtype, udpSize, port); err == nil {
+				resp, cookieRetried = retry, true
+				step.Notes = append(step.Notes, "asked again with the server's cookie")
+			}
 		}
 	}
 
@@ -756,6 +790,16 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	step.Extended = transport.Extended(resp)
 	step.Subnet = transport.EchoedSubnet(resp)
 	step.NSID = transport.EchoedNSID(resp)
+	if r.cfg.Cookie && udpSize > 0 && transport.CarriesCookie(step.Proto) {
+		step.Cookie, _ = transport.EchoedCookie(resp, r.clientCookie(step.Server.IP))
+		switch {
+		case step.Cookie == trace.CookieSupported && resp.Rcode == dns.RcodeBadCookie && cookieRetried:
+			step.Cookie = trace.CookieRejected
+		case step.Cookie == trace.CookieMismatch:
+			r.warnf("%s answered with a client cookie other than the one sent, so the answer may not be its own",
+				step.Server.IP)
+		}
+	}
 	step.Flags = trace.Flags{
 		AA:   resp.Authoritative,
 		TC:   resp.Truncated,
@@ -789,6 +833,10 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 		if r.cfg.NSID {
 			transport.WithNSID(req)
 		}
+		cookie := r.cfg.Cookie && transport.CarriesCookie(carrier.Proto())
+		if cookie {
+			transport.WithCookie(req, r.clientCookie(server.Addr()), r.cookie(server.Addr()))
+		}
 
 		var (
 			resp *dns.Msg
@@ -796,6 +844,9 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 		)
 		resp, rtt, err = carrier.Exchange(ctx, req, server, step.Server.Name)
 		step.RTT += rtt
+		if cookie && err == nil {
+			r.remember(server.Addr(), resp)
+		}
 
 		r.cfg.Log.Debug("asked a nameserver",
 			"zone", step.Zone, "server", server, "proto", carrier.Proto(),
@@ -806,6 +857,30 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 		}
 		step.Notes = append(step.Notes, "asked again after a silence")
 	}
+}
+
+// clientCookie is the client half of the cookie a server is sent.
+func (r *run) clientCookie(server netip.Addr) string {
+	return transport.ClientCookie(r.secret, server)
+}
+
+// cookie is the server cookie a server handed out, empty before it has.
+func (r *run) cookie(server netip.Addr) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.cookies[server]
+}
+
+// remember keeps the server cookie a reply handed out, so that the server is
+// sent it next time. Only a reply to our own client cookie can hand one out.
+func (r *run) remember(server netip.Addr, resp *dns.Msg) {
+	state, cookie := transport.EchoedCookie(resp, r.clientCookie(server))
+	if state != trace.CookieSupported {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cookies[server] = cookie
 }
 
 // nextServers is where the walk goes after a referral: the glue when there is

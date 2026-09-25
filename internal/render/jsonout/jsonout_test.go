@@ -102,6 +102,7 @@ func resolution() *trace.Trace {
 		Rcode:      "NOERROR",
 		Kind:       trace.KindReferral,
 		NSID:       "fra2",
+		Cookie:     trace.CookieSupported,
 		Delegation: &trace.Delegation{Zone: "com.", TTL: 172800, NS: []string{"a.gtld-servers.net."}, DSPresent: true},
 		DNSSEC:     &trace.DNSSECStatus{State: trace.Insecure, Reason: "the parent published no DS"},
 		Children:   []*trace.Step{timeout, tld},

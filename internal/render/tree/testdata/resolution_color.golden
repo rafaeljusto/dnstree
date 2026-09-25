@@ -1,7 +1,7 @@
 [90m. (root)[0m
-└── [1ma.root-servers.net.[0m [90m198.41.0.4[0m  [90m@fra2[0m  [90mAS397197[0m  [90m12ms[0m  [32mNOERROR[0m  referral → com.  [32m[secure][0m
+└── [1ma.root-servers.net.[0m [90m198.41.0.4[0m  [90m@fra2[0m  [90mAS397197[0m  [90m12ms[0m  [32mNOERROR[0m  referral → com.  [90mcookie[0m  [32m[secure][0m
     ├── [1mb.gtld-servers.net.[0m [90m192.33.14.30[0m  [90m2s[0m  [31mtimeout[0m
-    └── [1ma.gtld-servers.net.[0m [90m192.5.6.30[0m  [90mAS26415[0m  [90m18ms[0m  [32mNOERROR[0m  referral → example.com.  [32m[secure][0m
+    └── [1ma.gtld-servers.net.[0m [90m192.5.6.30[0m  [90mAS26415[0m  [90m18ms[0m  [32mNOERROR[0m  referral → example.com.  [90mno cookie[0m  [32m[secure][0m
         ├── [1ma.iana-servers.net.[0m [90m199.43.135.53[0m  [90mAS10745[0m  [90m9ms[0m  [32mNOERROR[0m  AA DO  [32m[secure][0m
         │   └── www.example.com. [90m3600[0m [32mA[0m 93.184.216.34
         └── [1mb.iana-servers.net.[0m [90m199.43.133.53[0m  [90m(not queried)[0m

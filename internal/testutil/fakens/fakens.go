@@ -6,7 +6,9 @@
 package fakens
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -87,7 +89,24 @@ type Behaviour struct {
 	// encoded. A server with none published answers a query that asks with
 	// nothing, which is the other case worth testing.
 	NSID string
+
+	// Cookies is how the server answers a DNS cookie (RFC 7873). The zero
+	// value ignores it, the way a server that does not support them does.
+	Cookies Cookies
 }
+
+// Cookies is how a server answers a DNS cookie.
+type Cookies int
+
+// The ways a server can answer a cookie.
+const (
+	CookieIgnore      Cookies = iota
+	CookieSupport             // the client cookie back, with one of its own
+	CookieRequire             // BADCOOKIE until it is sent the cookie it handed out
+	CookieRefuse              // BADCOOKIE even to the cookie it handed out
+	CookieWrongClient         // a client cookie other than the one it was sent
+	CookieMalformed           // the client cookie back, and no cookie of its own
+)
 
 // CDS is what a zone asks its parent to publish.
 type CDS int
@@ -151,6 +170,7 @@ type Query struct {
 	Proto   string // udp or tcp
 	UDPSize uint16 // zero when the query carried no EDNS0
 	DO      bool
+	Cookie  string // the cookie the query carried, hex encoded
 }
 
 // Server is a fake authoritative nameserver on loopback, listening on the same
@@ -361,6 +381,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		Proto:   dnsutil.Network(w),
 		UDPSize: req.UDPSize,
 		DO:      req.Security,
+		Cookie:  sentCookie(req),
 	})
 	s.mu.Unlock()
 
@@ -380,6 +401,8 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	s.echo(reply, req)
 
 	switch {
+	case s.cookie(reply, req):
+		reply.Rcode = dns.RcodeBadCookie
 	case s.behaviour.FormErrEDNS && req.UDPSize > 0:
 		reply.Rcode = dns.RcodeFormatError
 		reply.UDPSize = 0
@@ -428,6 +451,45 @@ func (s *Server) echo(reply, req *dns.Msg) {
 			})
 		}
 	}
+}
+
+// cookie answers the cookie a query carried, and reports whether the answer
+// is BADCOOKIE instead of the one asked for.
+func (s *Server) cookie(reply, req *dns.Msg) (refused bool) {
+	raw, err := hex.DecodeString(sentCookie(req))
+	if s.behaviour.Cookies == CookieIgnore || err != nil || len(raw) < 8 {
+		return false
+	}
+
+	client := raw[:8]
+	sum := sha256.Sum256(append([]byte(s.name), client...))
+	own := sum[:8]
+	answer := append(bytes.Clone(client), own...)
+	switch s.behaviour.Cookies {
+	case CookieWrongClient:
+		answer[0] ^= 0xff
+	case CookieMalformed:
+		answer = client
+	}
+	reply.Pseudo = append(reply.Pseudo, &dns.COOKIE{Cookie: hex.EncodeToString(answer)})
+
+	switch s.behaviour.Cookies {
+	case CookieRequire:
+		return !bytes.Equal(raw[8:], own)
+	case CookieRefuse:
+		return true
+	}
+	return false
+}
+
+// sentCookie is the cookie a query carried, empty when it carried none.
+func sentCookie(req *dns.Msg) string {
+	for _, rr := range req.Pseudo {
+		if cookie, ok := rr.(*dns.COOKIE); ok {
+			return cookie.Cookie
+		}
+	}
+	return ""
 }
 
 // asks reports whether the query carried an EDNS0 option of this type. A server

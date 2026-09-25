@@ -83,6 +83,7 @@ func readStep(from *step) (*trace.Step, error) {
 		Notes:     from.Notes,
 		Extended:  readExtended(from.Extended),
 		NSID:      from.NSID,
+		Cookie:    trace.CookieState(from.Cookie),
 		Aside:     from.Aside,
 		Minimised: from.Minimised,
 		Err:       from.Error,
@@ -95,6 +96,11 @@ func readStep(from *step) (*trace.Step, error) {
 	}
 	if from.SOA != nil {
 		to.SOA = &trace.SOA{Serial: from.SOA.Serial, TTL: from.SOA.TTL, Minimum: from.SOA.Minimum}
+	}
+	switch to.Cookie {
+	case "", trace.CookieSupported, trace.CookieAbsent, trace.CookieMismatch, trace.CookieMalformed, trace.CookieRejected:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not a way to answer a cookie", from.Cookie)
 	}
 
 	var err error
