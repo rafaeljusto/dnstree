@@ -1,6 +1,7 @@
 package trace_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -192,6 +193,94 @@ func TestTraceShown(t *testing.T) {
 	}
 	if step.Delegation.NS[0] != raw || step.Server.Name != raw || step.Records[0].Service.ALPN[0] != raw {
 		t.Errorf("the walk's own trace was escaped too: %+v", step)
+	}
+}
+
+// TestTraceShownEveryField fills every string in a trace with an escape. A
+// trace read back with --from carries whatever its file says, even in the
+// fields a walk fills with this build's own words, so Shown has to reach them
+// all; a field added later without it fails here.
+func TestTraceShownEveryField(t *testing.T) {
+	const raw = "x\x1b[2K"
+	tr := &trace.Trace{}
+	fill(reflect.ValueOf(tr).Elem(), raw, 3)
+
+	var leaks []string
+	walk(reflect.ValueOf(tr.Shown()).Elem(), "trace", func(path, value string) {
+		if strings.Contains(value, "\x1b") {
+			leaks = append(leaks, path)
+		}
+	})
+	if len(leaks) > 0 {
+		t.Errorf("drawn raw: %s", strings.Join(leaks, ", "))
+	}
+}
+
+// drawnElsewhere are the strings kept as octets on purpose and escaped where
+// they are drawn.
+var drawnElsewhere = map[string]bool{"ExtendedError.Text": true}
+
+// fill sets every plain string reachable from v to text, one element deep in
+// slices and maps, and depth pointers down, since a step holds steps.
+func fill(v reflect.Value, text string, depth int) {
+	switch v.Kind() {
+	case reflect.String:
+		if v.Type() == reflect.TypeFor[string]() {
+			v.SetString(text)
+		}
+	case reflect.Pointer:
+		if v.Type().Elem().Kind() == reflect.Struct && v.Type().Elem().PkgPath() == reflect.TypeFor[trace.Trace]().PkgPath() {
+			if depth == 0 {
+				return
+			}
+			v.Set(reflect.New(v.Type().Elem()))
+			fill(v.Elem(), text, depth-1)
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if !drawnElsewhere[v.Type().Name()+"."+v.Type().Field(i).Name] && v.Field(i).CanSet() {
+				fill(v.Field(i), text, depth)
+			}
+		}
+	case reflect.Slice:
+		v.Set(reflect.MakeSlice(v.Type(), 1, 1))
+		fill(v.Index(0), text, depth)
+	case reflect.Map:
+		if v.Type().Key().Kind() == reflect.String {
+			v.Set(reflect.MakeMap(v.Type()))
+			value := reflect.New(v.Type().Elem()).Elem()
+			fill(value, text, depth)
+			v.SetMapIndex(reflect.ValueOf(text).Convert(v.Type().Key()), value)
+		}
+	}
+}
+
+// walk calls see with every plain string reachable from v and where it is.
+func walk(v reflect.Value, path string, see func(path, value string)) {
+	switch v.Kind() {
+	case reflect.String:
+		if v.Type() == reflect.TypeFor[string]() {
+			see(path, v.String())
+		}
+	case reflect.Pointer:
+		if !v.IsNil() {
+			walk(v.Elem(), path, see)
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if !drawnElsewhere[v.Type().Name()+"."+v.Type().Field(i).Name] {
+				walk(v.Field(i), path+"."+v.Type().Field(i).Name, see)
+			}
+		}
+	case reflect.Slice:
+		for i := range v.Len() {
+			walk(v.Index(i), path+"[]", see)
+		}
+	case reflect.Map:
+		for _, key := range v.MapKeys() {
+			walk(key, path+"{key}", see)
+			walk(v.MapIndex(key), path+"{}", see)
+		}
 	}
 }
 

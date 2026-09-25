@@ -27,9 +27,17 @@ var ErrVersion = errors.New("jsonout: the document is of another schema version"
 // knows, and anything that is not is refused rather than guessed at.
 func Read(r io.Reader) (*trace.Trace, error) {
 	var doc document
-	decoder := json.NewDecoder(r)
-	if err := decoder.Decode(&doc); err != nil {
+	limited := &io.LimitedReader{R: r, N: maxDocument + 1}
+	decoder := json.NewDecoder(limited)
+	err := decoder.Decode(&doc)
+	if limited.N == 0 {
+		return nil, fmt.Errorf("jsonout: not a trace: it is larger than %d MiB", maxDocument>>20)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("jsonout: not a trace: %w", err)
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return nil, errors.New("jsonout: not a trace: something follows it after it ends")
 	}
 	if doc.SchemaVersion != SchemaVersion {
 		return nil, fmt.Errorf("%w: it is version %d, and this build reads %d",
@@ -41,7 +49,6 @@ func Read(r io.Reader) (*trace.Trace, error) {
 		Elapsed:  duration(doc.ElapsedMS),
 		Warnings: doc.Warnings,
 	}
-	var err error
 	if tr.Started, err = moment(doc.Started); err != nil {
 		return nil, fmt.Errorf("jsonout: started: %w", err)
 	}
@@ -52,15 +59,26 @@ func Read(r io.Reader) (*trace.Trace, error) {
 		}
 		tr.Resolvers = append(tr.Resolvers, answer)
 	}
-	if tr.Root, err = readStep(doc.Root); err != nil {
+	if tr.Root, err = readStep(doc.Root, 0); err != nil {
 		return nil, err
 	}
 	return tr, nil
 }
 
-func readStep(from *step) (*trace.Step, error) {
+// A trace is far smaller and shallower than these, whatever the budgets were
+// raised to. Past them a file only costs memory, and drawing a deep one costs
+// its depth again on every line.
+const (
+	maxDocument = 64 << 20
+	maxNesting  = 1024
+)
+
+func readStep(from *step, depth int) (*trace.Step, error) {
 	if from == nil {
 		return nil, nil
+	}
+	if depth > maxNesting {
+		return nil, fmt.Errorf("jsonout: steps nested deeper than %d, which no walk goes", maxNesting)
 	}
 
 	kind := trace.StepKind(from.Kind)
@@ -117,7 +135,7 @@ func readStep(from *step) (*trace.Step, error) {
 		return nil, err
 	}
 	for _, child := range from.Children {
-		read, err := readStep(child)
+		read, err := readStep(child, depth+1)
 		if err != nil {
 			return nil, err
 		}

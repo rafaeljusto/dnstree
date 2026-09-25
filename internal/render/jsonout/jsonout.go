@@ -14,8 +14,9 @@ import (
 // something reading this output can tell whether it still understands it.
 // Version 2 added the extended errors of RFC 8914, the echoed client subnet,
 // the decoded service parameters of an HTTPS or SVCB record, and what the
-// resolver answered beside how long it took.
-const SchemaVersion = 3
+// resolver answered beside how long it took. Version 4 escapes the text of an
+// extended error, which version 3 wrote as the octets the server sent.
+const SchemaVersion = 4
 
 // Render writes the trace to w as JSON.
 func Render(w io.Writer, tr *trace.Trace) error {

@@ -811,11 +811,62 @@ func TestRunFrom(t *testing.T) {
 	}
 }
 
+// TestRunFromHostile reads a file written to forge output, with escapes in the
+// fields a walk fills with this build's own words. Whoever hands over a saved
+// walk chooses every byte of it, so no format may draw one raw.
+func TestRunFromHostile(t *testing.T) {
+	const hostile = `{"schema_version": 4,
+		"question": {"name": "x.", "type": "A\n---\nflowchart LR\n\u001b]0;pwned\u0007", "class": "IN\u001b[8m"},
+		"started": "2026-09-24T12:00:00Z", "elapsed_ms": 1,
+		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer",
+			"rcode": "NOERROR\u001b[2K\u001b[1A\r", "proto": "udp\u001b[41m",
+			"asked": {"name": "x.", "type": "A\u001b[7m", "class": "IN"},
+			"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53},
+			"records": [{"name": "x.", "ttl": 60, "type": "A\u001b[8m", "data": "192.0.2.1"}],
+			"extended": [{"code": 15, "reason": "Blocked\u001b[5m\u00e9"}],
+			"dnssec": {"state": "secure", "algorithm": "ED25519\u001b[41m", "digest": "ab\u001b[0m",
+				"signal": {"state": "pending", "reason": "x\u001b[7m"}}}]}}`
+
+	for _, args := range [][]string{
+		{"--color", "never", "--explain"},
+		{"--color", "always"},
+		{"--format", "ascii", "--explain"},
+		{"--format", "json"},
+		{"--format", "dot"},
+		{"--format", "mermaid"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			previous := stdin
+			t.Cleanup(func() { stdin = previous })
+			stdin = strings.NewReader(hostile)
+
+			var stdout, stderr bytes.Buffer
+			if code := run(t.Context(), append([]string{"--from", "-"}, args...), &stdout, &stderr); code != exitAnswer {
+				t.Fatalf("got exit %d, want %d: %s", code, exitAnswer, stderr.String())
+			}
+			out := stdout.String()
+			if args[0] == "--color" && args[1] == "always" {
+				// Only the palette's own colours may stay; the file's are not in it.
+				out = regexp.MustCompile("\x1b\\[(0|1|3[1-5]|90)m").ReplaceAllString(out, "")
+			}
+			if strings.ContainsAny(out, "\x1b\x07\r") || strings.Contains(out, `\u001b`) {
+				t.Errorf("got an escape through:\n%q", out)
+			}
+			if args[1] == "ascii" && strings.ContainsFunc(out, func(r rune) bool { return r > 127 }) {
+				t.Errorf("got a rune above 127 in --format ascii:\n%q", out)
+			}
+			if args[1] == "mermaid" && strings.Count(out, "\nflowchart LR\n") != 1 {
+				t.Errorf("got the front matter broken out of:\n%s", out)
+			}
+		})
+	}
+}
+
 // TestRunFromStdin reads the saved walk from the standard input.
 func TestRunFromStdin(t *testing.T) {
 	previous := stdin
 	t.Cleanup(func() { stdin = previous })
-	stdin = strings.NewReader(`{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+	stdin = strings.NewReader(`{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "rcode": "NXDOMAIN",
 		"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53}}]}}`)
 

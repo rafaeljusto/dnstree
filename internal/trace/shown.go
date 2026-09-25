@@ -3,6 +3,7 @@ package trace
 import (
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -27,13 +28,15 @@ func Shown(text string) string {
 
 // Shown is a copy of the trace with every string that came off the wire made
 // safe to draw. The walk keeps the octets, since they are what it queries and
-// what TLS is checked against; what is written out for a reader is this.
+// what TLS is checked against; what is written out for a reader is this. A
+// trace read back with --from says whatever its file does, so the fields a
+// walk fills with this build's own words are escaped too.
 func (t *Trace) Shown() *Trace {
 	if t == nil {
 		return nil
 	}
 	shown := *t
-	shown.Question.Name = Shown(t.Question.Name)
+	shown.Question = t.Question.Shown()
 	shown.Root = t.Root.Shown()
 	shown.Warnings = shownAll(t.Warnings)
 	shown.Resolvers = nil
@@ -44,8 +47,9 @@ func (t *Trace) Shown() *Trace {
 		}
 		r := *resolver
 		r.Server = r.Server.Shown()
-		r.Err = Shown(r.Err)
+		r.Rcode, r.Err = Shown(r.Rcode), Shown(r.Err)
 		r.Records = shownRecords(r.Records)
+		r.Extended = shownExtended(r.Extended)
 		shown.Resolvers = append(shown.Resolvers, &r)
 	}
 	return &shown
@@ -59,8 +63,10 @@ func (s *Step) Shown() *Step {
 	shown := *s
 	shown.Zone = Shown(s.Zone)
 	shown.Server = s.Server.Shown()
-	shown.Asked.Name = Shown(s.Asked.Name)
+	shown.Proto, shown.Rcode = Shown(s.Proto), Shown(s.Rcode)
+	shown.Asked = s.Asked.Shown()
 	shown.Records = shownRecords(s.Records)
+	shown.Extended = shownExtended(s.Extended)
 	shown.Notes = shownAll(s.Notes)
 	shown.NSID = Shown(s.NSID)
 	shown.Err = Shown(s.Err)
@@ -82,6 +88,12 @@ func (s *Step) Shown() *Step {
 		d := *s.DNSSEC
 		d.Zone = Shown(d.Zone)
 		d.Reason = Shown(d.Reason)
+		d.Algorithm, d.Digest = Shown(d.Algorithm), Shown(d.Digest)
+		if d.Signal != nil {
+			signal := *d.Signal
+			signal.Reason = Shown(signal.Reason)
+			d.Signal = &signal
+		}
 		shown.DNSSEC = &d
 	}
 	shown.Children = nil
@@ -89,6 +101,12 @@ func (s *Step) Shown() *Step {
 		shown.Children = append(shown.Children, child.Shown())
 	}
 	return &shown
+}
+
+// Shown is the question safe to draw.
+func (q Question) Shown() Question {
+	q.Name, q.Type, q.Class = Shown(q.Name), Shown(q.Type), Shown(q.Class)
+	return q
 }
 
 // Shown is the server with its name, and what the AS lookup said of it, safe
@@ -112,7 +130,7 @@ func shownRecords(records []RR) []RR {
 	}
 	shown := make([]RR, len(records))
 	for i, rr := range records {
-		rr.Name, rr.Data = Shown(rr.Name), Shown(rr.Data)
+		rr.Name, rr.Type, rr.Data = Shown(rr.Name), Shown(rr.Type), Shown(rr.Data)
 		if rr.Service != nil {
 			service := *rr.Service
 			service.Target = Shown(service.Target)
@@ -120,6 +138,19 @@ func shownRecords(records []RR) []RR {
 			rr.Service = &service
 		}
 		shown[i] = rr
+	}
+	return shown
+}
+
+// shownExtended escapes the reason. The text is kept as the server sent it and
+// escaped where it is drawn.
+func shownExtended(extended []ExtendedError) []ExtendedError {
+	if extended == nil {
+		return nil
+	}
+	shown := slices.Clone(extended)
+	for i := range shown {
+		shown[i].Reason = Shown(shown[i].Reason)
 	}
 	return shown
 }

@@ -3,6 +3,7 @@ package jsonout_test
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net/netip"
 	"strings"
 	"testing"
@@ -102,30 +103,44 @@ func TestReadRefuses(t *testing.T) {
 			want:     "version 2",
 			version:  true,
 		},
+		"a document from before EXTRA-TEXT was escaped": {
+			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1}`,
+			want:     "version 3",
+			version:  true,
+		},
 		"a kind of step nothing here knows": {
-			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "victory"}]}}`,
 			want: `"victory"`,
 		},
 		"a chain of trust in a state nothing here knows": {
-			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "trusted"}}}`,
 			want: `"trusted"`,
 		},
 		"a request of the parent in a state nothing here knows": {
-			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure", "signal": {"state": "granted"}}}}`,
 			want: `"granted"`,
 		},
 		"a way to answer a cookie nothing here knows": {
-			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "cookie": "crumbled"}]}}`,
 			want: `"crumbled"`,
 		},
 		"an address that is not one": {
-			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "server": {"ip": "not-an-ip"}}]}}`,
 			want: "not-an-ip",
+		},
+		"a walk nested deeper than any walk goes": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1, "root": ` +
+				strings.Repeat(`{"zone": ".", "kind": "zone", "children": [`, 1100) + strings.Repeat(`]}`, 1100) + `}`,
+			want: "deeper",
+		},
+		"something after the trace": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} {"more": 1}`,
+			want:     "after",
 		},
 	}
 
@@ -140,4 +155,26 @@ func TestReadRefuses(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReadRefusesTheEndless covers a standard input that does not stop. Read
+// gives up past what any trace comes to rather than holding all of it.
+func TestReadRefusesTheEndless(t *testing.T) {
+	endless := io.MultiReader(
+		strings.NewReader(`{"schema_version": 4, "warnings": ["`),
+		io.LimitReader(repeat('a'), 80<<20),
+	)
+	if _, err := jsonout.Read(endless); err == nil || !strings.Contains(err.Error(), "larger") {
+		t.Fatalf("got %v, want an input larger than any trace refused", err)
+	}
+}
+
+// repeat is a reader of one byte, forever.
+type repeat byte
+
+func (b repeat) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = byte(b)
+	}
+	return len(p), nil
 }

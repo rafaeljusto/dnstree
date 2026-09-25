@@ -48,7 +48,8 @@ type Options struct {
 	// Version is the build the page says it came from.
 	Version string
 
-	// Now is when the walk was made, taken from the clock when it is zero.
+	// Now is when the walk was made, for a trace that does not say. The clock
+	// is read when both are zero.
 	Now time.Time
 }
 

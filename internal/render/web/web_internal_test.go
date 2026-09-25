@@ -52,6 +52,29 @@ func walked() *trace.Trace {
 	}
 }
 
+// TestBuildDatesTheWalk covers a walk drawn again from a file: the page says
+// when the walk was made, not when it was served.
+func TestBuildDatesTheWalk(t *testing.T) {
+	tr := walked()
+	tr.Started = time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+
+	page, _, err := build(tr, nil, Options{Now: time.Date(2026, 9, 21, 10, 30, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	var document struct {
+		Page struct {
+			Generated string `json:"generated"`
+		} `json:"page"`
+	}
+	if err := json.Unmarshal(page, &document); err != nil {
+		t.Fatalf("the page is not JSON: %v", err)
+	}
+	if want := tr.Started.Format(time.RFC3339); document.Page.Generated != want {
+		t.Errorf("got %q, want the walk dated %s", document.Page.Generated, want)
+	}
+}
+
 func TestBuild(t *testing.T) {
 	findings := []explain.Finding{
 		{Topic: explain.Outcome, Level: explain.Note, Text: "www.example.com A is 93.184.216.34"},

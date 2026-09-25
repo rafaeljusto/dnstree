@@ -46,7 +46,11 @@ func build(tr *trace.Trace, findings []explain.Finding, opts Options) (page, tra
 		return nil, nil, fmt.Errorf("web: the trace cannot be written: %w", err)
 	}
 
+	// A walk drawn again from a file is dated by when it was made.
 	when := opts.Now
+	if tr != nil && !tr.Started.IsZero() {
+		when = tr.Started
+	}
 	if when.IsZero() {
 		when = time.Now()
 	}

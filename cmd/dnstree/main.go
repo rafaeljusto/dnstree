@@ -135,7 +135,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			Addr:    cfg.WebAddr,
 			Browser: cfg.Browser,
 			Version: version,
-			Now:     time.Now(),
 		}
 		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, stderr), options); err != nil {
 			fmt.Fprintln(stderr, err)
