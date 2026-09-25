@@ -346,7 +346,8 @@ func checkTitle(w io.Writer, title string) error {
 	return nil
 }
 
-// acceptedPrefixes is the help shown on a rejection, built from levels so that
+// acceptedPrefixes is the help shown on a rejection, built from sections so that
+
 // it cannot drift from what is accepted.
 func acceptedPrefixes() string {
 	byLevel := map[bumpLevel][]string{}

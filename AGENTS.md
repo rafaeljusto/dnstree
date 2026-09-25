@@ -35,8 +35,8 @@ have drifted apart.
 package per Linux architecture, the Homebrew formula and the checksums over all
 of them. It is the same target the release workflow runs, so what ships can be
 reproduced without a runner. [`packaging/README.md`](packaging/README.md) says
-how the pieces fit; `nfpm` is fetched at a pinned version, like golangci-lint,
-and is not a dependency of the module.
+how the pieces fit; `nfpm`, like golangci-lint, comes from the PATH or is
+fetched at the version the Makefile pins, and is not a dependency of the module.
 
 ## Do not commit
 
@@ -162,8 +162,9 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
 - The engine is tested offline against in-process authoritative servers
   (`internal/testutil/fakens`), signed hierarchies included. `fakens.Behaviour`
   has a knob for each way a server misbehaves — silence, REFUSED, lameness,
-  truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue and six ways to
-  break a chain of trust. A change to the way a delegation is followed belongs
+  truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, six ways to
+  break a chain of trust, signatures near expiry, NXDOMAIN for an empty
+  non-terminal, and broken cookies and CDS. A change to the way a delegation is followed belongs
   with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
 - Table tests are keyed by a sentence that says what the case is, not by index.
@@ -180,9 +181,11 @@ review comment: the usage string in `internal/cli/cli.go`, the flag table in
 the tests. Every example in the README and on the page is real output, pasted
 from an actual run — regenerate it rather than editing it by hand.
 
-The man page is not a fifth place. `cmd/mkman` renders it from `cli.Usage` at
-release time, and refuses to render a usage text whose shape it cannot read, so
-a flag added to the usage string reaches the packages on its own.
+The man page is not a fifth place. `cmd/mkman` renders it from `cli.Usage` in
+`make man`, which CI's packaging job runs on every pull request, and refuses to
+render a usage text whose shape it cannot read, so a flag added to the usage
+string reaches the packages on its own.
+
 
 `dnstreerc.example` is written by hand, but it is not a fifth place either.
 `TestExampleParses` reads it as it ships and then reads every run of adjacent

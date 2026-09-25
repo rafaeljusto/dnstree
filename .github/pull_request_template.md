@@ -27,12 +27,14 @@ You can discuss changes with maintainers in the GitHub Discussions in this repos
 
 <!--
 Put an `x` in the boxes that apply. You can also fill these out after creating the PR. If you're unsure about any of
-them, don't hesitate to ask. We're here to help! This is simply a reminder of what we are going to look for before merging your code.
+them, don't hesitate to ask. We're here to help! This is what we look for before merging your code.
 -->
 
 - [ ] I have read the [contributing guidelines](../blob/main/CONTRIBUTING.md).
-- [ ] My pull request title carries a [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
-      prefix. The pull request is squashed under that title, so the release
+- [ ] My pull request title carries one of the prefixes in
+      [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#commit-subjects-decide-the-version).
+      The pull request
+ is squashed under that title, so the release
       version is worked out from it: a feature under a plain title ships as a
       patch.
 - [ ] `make check` passes: it builds, lints, runs the tests under `-race` and

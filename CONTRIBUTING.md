@@ -21,10 +21,6 @@ contacting us at cadastros@rafael.net.br.
 There are many ways in which you can contribute. The goal of this document is to
 provide a high-level overview of how you can get involved in dnstree.
 
-As a potential contributor, your changes and ideas are welcome at any hour of
-the day or night, on weekdays, weekends, and holidays. Please do not ever
-hesitate to ask a question or send a pull request.
-
 If you are unsure, ask, or open the issue or pull request anyway: the worst that
 can happen is a polite request to change something.
 
@@ -74,7 +70,7 @@ to help out:
   information or pointing them to existing issues that match their description
   of the problem.
 
-- **Review documentation changes.** Most documentation just needs a review for
+- **Review documentation changes.** Most documentation needs only a review for
   proper spelling and grammar. If you think a document can be improved in any
   way, feel free to hit the `edit` button at the top of the page.
 
@@ -123,9 +119,8 @@ Pull requests eligible for review
    regressions;
 3. document the changes in the code and/or the project's documentation;
 4. pass the CI pipeline;
-5. carry a title following the
-   [Conventional Commit Specification](https://www.conventionalcommits.org/en/v1.0.0/),
-   since it becomes the commit subject on `main`.
+5. carry a title with one of the prefixes in the table below, since it becomes
+   the commit subject on `main`.
 
 Some other important notes when contributing:
 
@@ -175,15 +170,23 @@ on purpose — there is a knob for lame servers, truncation, out-of-bailiwick
 glue, broken signatures and more.
 
 ```bash
-make check   # what CI runs
-make live    # goes out to the real root servers; never part of check
+make check    # what CI runs, less hadolint and the packaging dry run
+make goldens  # rewrite the renderer goldens and docs/trace.schema.json; read the diff
+make live     # goes out to the real root servers; never part of check
 ```
+
+After touching anything concurrent or `fakens`, run
+`go test -race -count=2 ./...`: races here have only shown up on the second
+run. Tests that need the internet go behind `//go:build live`. A new flag goes
+in the usage string in `internal/cli/cli.go`, the README flag table,
+`docs/index.html` and the tests.
 
 ### Working with forks
 
 ```bash
 # First you clone the original repository
 git clone git@github.com:rafaeljusto/dnstree.git
+cd dnstree
 
 # Next you add a git remote that is your fork:
 git remote add fork git@github.com:<YOUR-GITHUB-USERNAME-HERE>/dnstree.git
@@ -198,7 +201,8 @@ git checkout -b my-feature-branch
 
 # Now you do your work and commit your changes:
 git add -A
-git commit -a -m "fix: this is the subject line" -m "This is the body line. Closes #123"
+git commit -a -m "fix: Say what the change does" -m "This is the body line. Closes #123"
+
 
 # And the last step is pushing this to your fork
 git push -u fork my-feature-branch

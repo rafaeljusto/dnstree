@@ -51,9 +51,10 @@ feature, run the workflow again with `bump: minor`.
 
 ## The changelog
 
-`-changelog` writes the same changes as release notes, one section per kind in
-the order of the table above, with the prefix dropped from each subject because
-the heading already says it.
+`-changelog` writes the same changes as release notes: breaking changes first,
+then one section per kind in the order of the table above, with the prefix
+dropped from each subject because the heading already says it.
+
 
 ```markdown
 ## Features
