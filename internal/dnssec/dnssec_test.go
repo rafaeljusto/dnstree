@@ -56,12 +56,14 @@ func (z *zone) anchors(tb testing.TB, digestType uint8) roothints.Anchors {
 	}}
 }
 
-// dnskeys is what a DNSKEY query would answer.
+// dnskeys is what a DNSKEY query would answer. The signature runs out an hour
+// from now: one that runs out now expires the moment the clock ticks over a
+// second, and the chain then reads a sound zone as bogus.
 func (z *zone) dnskeys(tb testing.TB) []dns.RR {
 	tb.Helper()
 
 	keys := []dns.RR{z.key}
-	return append(keys, z.sign(tb, keys, time.Now()))
+	return append(keys, z.sign(tb, keys, time.Now().Add(time.Hour)))
 }
 
 func (z *zone) sign(tb testing.TB, rrset []dns.RR, expiry time.Time) dns.RR {
