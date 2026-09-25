@@ -29,6 +29,15 @@ func TestReadRoundTrip(t *testing.T) {
 				Extended: []trace.ExtendedError{{Code: 0, Text: `a \ and a ` + "\x1b"}},
 			}}},
 		},
+		"a zone's request of its parent, and its own NS TTL": {
+			Question: trace.Question{Name: "example.com.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "com.", Kind: trace.KindReferral,
+				Delegation: &trace.Delegation{Zone: "example.com.", TTL: 172800, ZoneTTL: 3600},
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Signal: &trace.Signal{
+					State: trace.SignalPending, Reason: "the zone asks for key 9", Requested: []uint16{9}, Held: []uint16{7}}},
+			}}},
+		},
 		"nothing walked at all": {Question: trace.Question{Name: "example.", Type: "A", Class: "IN"}},
 	}
 
@@ -98,6 +107,11 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "trusted"}}}`,
 			want: `"trusted"`,
+		},
+		"a request of the parent in a state nothing here knows": {
+			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure", "signal": {"state": "granted"}}}}`,
+			want: `"granted"`,
 		},
 		"an address that is not one": {
 			document: `{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

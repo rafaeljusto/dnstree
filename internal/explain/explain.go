@@ -201,8 +201,28 @@ func cache(tr *trace.Trace) []Finding {
 	if finding, ok := lifetimes(tr); ok {
 		findings = append(findings, finding)
 	}
+	if finding, ok := nameservers(tr); ok {
+		findings = append(findings, finding)
+	}
 	findings = append(findings, leftover(tr)...)
 	return findings
+}
+
+// nameservers is how long the nameservers of the zone the walk ended in go on
+// being used after they change, where the parent and the zone disagree about
+// it. Resolvers differ over whose copy they keep — the parent's, or the zone's
+// own once they have seen it — so a change of nameservers takes the longer of
+// the two to reach everybody. The parent's is often the registry's to choose,
+// so a difference is the ordinary case and not a fault.
+func nameservers(tr *trace.Trace) (Finding, bool) {
+	zone := ended(tr)
+	delegation := delegated(tr, zone)
+	if delegation == nil || delegation.ZoneTTL == 0 || delegation.ZoneTTL == delegation.TTL {
+		return Finding{}, false
+	}
+	return Finding{Topic: Cache, Level: Note, Text: fmt.Sprintf(
+		"the parent hands out the nameservers of %s for %s and the zone gives its own for %s, so a change of nameservers takes up to %s to reach every resolver",
+		zone, spell(delegation.TTL), spell(delegation.ZoneTTL), spell(max(delegation.TTL, delegation.ZoneTTL)))}, true
 }
 
 // lifetimes is what a cache may hold this resolution for: what the walk came

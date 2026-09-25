@@ -340,6 +340,13 @@ footer a:hover{color:var(--ink)}
         DNS pick up a hop the chosen transport could not reach rather than leaving a gap
         where the walk should be.
       </p>
+
+      <p class="section-lede" style="margin-top:1.4rem">
+        <code>-x 8.8.8.8</code> walks to the PTR of an address instead, the way
+        <code>dig -x</code> does: down <code>in-addr.arpa.</code> or <code>ip6.arpa.</code>,
+        whose nameservers are usually named somewhere else entirely, so every side walk to
+        find one is drawn as a branch of its own.
+      </p>
     </section>
 
     <section id="broken">
@@ -373,12 +380,17 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">disagreeing</span>
           <h3>A delegation the zone does not recognise</h3>
-          <p><code>--check-ns</code> asks the zone the walk ends in for its own NS records and holds them against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed: a nameserver the parent still delegates to, or one the zone lists that nobody is told about, is named either way.</p>
+          <p><code>--check-ns</code> asks the zone the walk ends in for its own NS records and holds them against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed: a nameserver the parent still delegates to, or one the zone lists that nobody is told about, is named either way. With <code>--explain</code> it also says how long a change of nameservers takes, where the two keep them for different times.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">no room left</span>
           <h3>An answer that barely fits</h3>
           <p>Every hop records the bytes that came back against the room the query allowed. A datagram nearly full is one record from truncating, which costs every resolver a retry over TCP. It is drawn only where the room has run out; the figures are in <code>--format json</code>.</p>
+        </div>
+        <div class="finding">
+          <span class="tag tag-warn">stuck</span>
+          <h3>A key rollover waiting on the parent</h3>
+          <p><code>--check-ds</code> reads the CDS and CDNSKEY a zone publishes to ask its parent for a new DS, checks they are signed by the zone's own keys, and holds them against the DS the parent hands out. A request nobody acted on is a rollover stuck halfway, under a chain that is secure all the while.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">minimised</span>

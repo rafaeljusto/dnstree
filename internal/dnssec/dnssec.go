@@ -49,6 +49,10 @@ func New(anchors roothints.Anchors) *Chain {
 // State is how far the chain got.
 func (c *Chain) State() trace.DNSSECState { return c.state }
 
+// Zone is the zone whose keys the chain holds, which a cut crossed without a
+// referral can have moved on from the one the walk was pointed at.
+func (c *Chain) Zone() string { return c.zone }
+
 // Enter validates the keys of a zone against the DS records its parent handed
 // out, and makes them the keys the chain verifies with from here on. authority
 // is the authority section of the parent's referral, and dnskeys the child's

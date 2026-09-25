@@ -368,6 +368,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		All:       cfg.All,
 		Family:    cfg.Family,
 		CheckNS:   cfg.CheckNS,
+		CheckDS:   cfg.CheckDS,
 		Serial:    cfg.Serial,
 		NSID:      cfg.NSID,
 		Minimise:  cfg.Minimise,

@@ -252,6 +252,11 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if dnssec := r.dnssec(step.DNSSEC); dnssec != "" {
 		fields = append(fields, dnssec)
 	}
+	if step.DNSSEC != nil {
+		if signal := r.signal(step.DNSSEC.Signal); signal != "" {
+			fields = append(fields, signal)
+		}
+	}
 	if notes := r.notes(step); notes != "" {
 		fields = append(fields, notes)
 	}
@@ -424,6 +429,43 @@ func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 	default:
 		return r.paint.dim(label)
 	}
+}
+
+// signal is what the zone asks its parent to publish, beside the verdict the
+// parent's DS was checked to. Only a request the parent should do something
+// about, or cannot, is worth the colour.
+func (r *renderer) signal(signal *trace.Signal) string {
+	if signal == nil {
+		return ""
+	}
+	switch signal.State {
+	case trace.SignalNone:
+		return r.paint.dim("no cds")
+	case trace.SignalMatch:
+		return r.paint.dim("cds matches the ds")
+	case trace.SignalPending:
+		return r.paint.paint("cds asks for "+tags(signal.Requested)+", the ds is for "+tags(signal.Held), yellow)
+	case trace.SignalDelete:
+		return r.paint.paint("cds asks for no ds", yellow)
+	case trace.SignalInconsistent:
+		return r.paint.paint("cds and cdnskey disagree", yellow)
+	}
+	return r.paint.dim("cds unchecked")
+}
+
+// tags names keys by their tags.
+func tags(keys []uint16) string {
+	if len(keys) == 0 {
+		return "no key"
+	}
+	named := make([]string, len(keys))
+	for i, tag := range keys {
+		named[i] = fmt.Sprint(tag)
+	}
+	if len(named) == 1 {
+		return "key " + named[0]
+	}
+	return "keys " + strings.Join(named[:len(named)-1], ", ") + " and " + named[len(named)-1]
 }
 
 func (r *renderer) recordLabel(record trace.RR) string {

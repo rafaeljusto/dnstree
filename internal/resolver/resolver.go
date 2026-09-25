@@ -108,6 +108,11 @@ type Config struct {
 	// does not match what the parent delegated. It costs one more query.
 	CheckNS bool
 
+	// CheckDS asks the zone the walk ends in for the CDS and CDNSKEY records
+	// it publishes, and holds them against the DS its parent holds. It costs
+	// two queries, and needs DNSSEC: a request nobody signed is nobody's.
+	CheckDS bool
+
 	// Serial asks every nameserver of the zone the walk ends in for that zone's
 	// start of authority, and holds the answers against each other. It costs a
 	// query per nameserver, and it is the only way from outside to see a
@@ -330,11 +335,15 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			r.verify(ctx, chain, hop, qname, qtype)
 			return r.chaseCNAME(ctx, step, qname, qtype, side)
 		case step.Kind != trace.KindReferral:
-			r.verify(ctx, chain, hop, qname, qtype)
+			last := zoneCut{zone: zone, step: referred, authority: delegation}
+			if crossed := r.verify(ctx, chain, hop, qname, qtype); crossed != nil {
+				last = *crossed
+			}
 			if side == 0 {
 				r.checkECH(step)
 				r.checkSubnet(step)
 				r.checkNS(ctx, step, referred)
+				r.checkDS(ctx, chain, step, last)
 				r.checkSerial(ctx, step, zone, servers)
 			}
 			return step
@@ -397,16 +406,26 @@ func (r *run) enterZone(ctx context.Context, chain *dnssec.Chain, zone string, r
 	return chain.Enter(zone, delegation, keys)
 }
 
+// zoneCut is the zone cut the walk last crossed: the zone below it, the step that
+// carries its verdict, and the authority its DS came in.
+type zoneCut struct {
+	zone      string
+	step      *trace.Step
+	authority []dns.RR
+}
+
 // verify checks the signatures over an answer, once the zone that gave it is
-// known to be trustworthy.
-func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname string, qtype uint16) {
+// known to be trustworthy. It hands back the cut it crossed on the way, where
+// the answer came from below one no referral pointed at.
+func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname string, qtype uint16) *zoneCut {
 	if chain == nil || hop.resp == nil {
-		return
+		return nil
 	}
-	r.crossCut(ctx, chain, hop, qname)
+	crossed := r.crossCut(ctx, chain, hop, qname)
 	// The authority section comes too: an answer with no records is denied
 	// there rather than answered, and the denial is what makes it checkable.
 	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, hop.resp.Ns, hop.resp.Rcode, qname, qtype)
+	return crossed
 }
 
 // crossCut enters a zone the walk was never referred to. A server authoritative
@@ -414,24 +433,24 @@ func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname s
 // without a referral, which leaves the chain holding the parent's keys and the
 // answer signed with the child's. The signatures name the zone to enter, and
 // its DS comes from the same server, which serves the parent side of the cut.
-func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname string) {
+func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname string) *zoneCut {
 	if chain.State() != trace.Secure {
-		return
+		return nil
 	}
 	zone := hop.step.Zone
 	cut := signerOf(hop.resp, qname)
 	if cut == "" || dns.EqualName(cut, zone) || !dnsutil.IsBelow(zone, cut) {
-		return
+		return nil
 	}
 	// The signer is the server's word. A cut the name is not under is not one
 	// this answer crossed, and entering it would trade the zone's keys for
 	// those of any insecure delegation the server cared to name.
 	if !dnsutil.IsBelow(cut, qname) {
-		return
+		return nil
 	}
 	if err := r.counters.query(); err != nil {
 		chain.Unchecked(cut, "the budget ran out before the DS of "+cut+" could be fetched")
-		return
+		return nil
 	}
 
 	ds := r.query(ctx, zone, hop.step.Server, cut, dns.TypeDS)
@@ -444,15 +463,16 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname
 	// cut is left unchecked rather than called insecure.
 	if ds.resp == nil {
 		ds.step.DNSSEC = chain.Unchecked(cut, "the DS of "+cut+" could not be fetched")
-		return
+		return nil
 	}
 
 	// The verdict belongs on the step that published the DS, the way a
 	// referral's does: it is the same zone cut, crossed without one. A DS that
 	// is not there is denied in the authority section rather than answered, so
 	// both are handed over.
-	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, hop.step,
-		append(append([]dns.RR{}, ds.resp.Answer...), ds.resp.Ns...))
+	authority := append(append([]dns.RR{}, ds.resp.Answer...), ds.resp.Ns...)
+	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, hop.step, authority)
+	return &zoneCut{zone: cut, step: ds.step, authority: authority}
 }
 
 // signerOf is the zone that signed a response, as its signatures name it. It is
@@ -930,6 +950,9 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 	child := make([]string, 0, len(step.Records))
 	for _, record := range step.Records {
 		if record.Type == "NS" && dns.EqualName(record.Name, delegated.Zone) {
+			if len(child) == 0 {
+				delegated.ZoneTTL = record.TTL // an RRset carries one TTL
+			}
 			child = append(child, record.Data)
 		}
 	}
@@ -947,6 +970,81 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 		r.warnf("%s lists %s, which the delegation does not carry",
 			delegated.Zone, strings.Join(extra, ", "))
 	}
+}
+
+// checkDS asks the zone the walk ended in what it wants its parent to publish,
+// and holds that against what the parent does publish. A zone rolls its key by
+// putting the new one in its CDS and waiting for the parent to notice, so the
+// two disagreeing is a rollover stuck halfway, and nothing else in a walk says
+// so: the chain is secure throughout.
+//
+// The request counts only once the zone's own keys have signed it, the way a
+// parent that acts on it checks it (RFC 7344 4.1). An unsigned one is anyone's,
+// and a zone that proves it has none is asking for nothing.
+func (r *run) checkDS(ctx context.Context, chain *dnssec.Chain, answer *trace.Step, last zoneCut) {
+	// The root has no parent to ask anything of.
+	if !r.cfg.CheckDS || chain == nil || last.step.DNSSEC == nil || last.zone == "." {
+		return
+	}
+	zone, verdict := last.zone, last.step.DNSSEC
+	// Only a zone the chain entered secure has keys to check the request with.
+	// Anywhere else the verdict already says why, and the request is left.
+	if verdict.State != trace.Secure || chain.State() != trace.Secure || !dns.EqualName(chain.Zone(), zone) {
+		verdict.Signal = &trace.Signal{State: trace.SignalUnchecked,
+			Reason: "the chain of trust did not reach " + zone + " secure"}
+		return
+	}
+
+	var fetched [2][]dns.RR
+	for i, qtype := range []uint16{dns.TypeCDS, dns.TypeCDNSKEY} {
+		records, reason := r.fetchSigned(ctx, chain, answer, zone, qtype)
+		if reason != "" {
+			verdict.Signal = &trace.Signal{State: trace.SignalUnchecked, Reason: reason}
+			r.warnf("the request %s makes of its parent could not be checked: %s", zone, reason)
+			return
+		}
+		fetched[i] = records
+	}
+
+	signal := dnssec.Signal(last.authority, zone, fetched[0], fetched[1])
+	verdict.Signal = signal
+	switch signal.State {
+	case trace.SignalPending:
+		r.warnf("%s asks its parent for a DS it does not publish (%s), so a key rollover is waiting on the parent; if it has waited longer than the parent polls, ask the registrar why",
+			zone, signal.Reason)
+	case trace.SignalDelete:
+		r.warnf("%s asks its parent to remove its DS (RFC 8078), which leaves it unsigned once the parent acts; if that is not the plan, remove its CDS and CDNSKEY",
+			zone)
+	case trace.SignalInconsistent:
+		r.warnf("the CDS and CDNSKEY of %s do not describe the same keys (%s), so a parent acts on neither; publish both from one key set",
+			zone, signal.Reason)
+	}
+}
+
+// fetchSigned asks the server that answered for one of the zone's records at
+// its apex, and hands back the ones the zone's keys signed. It says why where
+// there is nothing it can vouch for: an answer that did not come, or did not
+// verify. A zone that proves it has none of them hands back nothing.
+func (r *run) fetchSigned(ctx context.Context, chain *dnssec.Chain, answer *trace.Step, zone string, qtype uint16) ([]dns.RR, string) {
+	name := dnsutil.TypeToString(qtype)
+	if err := r.counters.query(); err != nil {
+		return nil, "the budget ran out before the " + name + " could be fetched"
+	}
+
+	hop := r.query(ctx, zone, answer.Server, zone, qtype)
+	hop.step.Aside = true
+	hop.step.Records = nil // the comparison is the point, and it is on the verdict
+	hop.step.Notes = append(hop.step.Notes, name+" of "+zone)
+	r.attach(answer, hop.step)
+
+	if hop.resp == nil || (hop.step.Kind != trace.KindAnswer && hop.step.Kind != trace.KindNoData) {
+		return nil, "the " + name + " could not be fetched"
+	}
+	status := chain.Verify(hop.resp.Answer, hop.resp.Ns, hop.resp.Rcode, zone, qtype)
+	if status.State != trace.Secure {
+		return nil, "the " + name + " is " + string(status.State) + ": " + status.Reason
+	}
+	return hop.resp.Answer, ""
 }
 
 // checkSerial asks every nameserver of the zone the walk ended in which copy of

@@ -168,6 +168,7 @@ type service struct {
 type delegation struct {
 	Zone           string              `json:"zone"`
 	TTL            uint32              `json:"ttl"`
+	ZoneTTL        uint32              `json:"zone_ttl,omitempty"`
 	NS             []string            `json:"ns,omitempty"`
 	Glue           map[string][]string `json:"glue,omitempty"`
 	GlueLess       []string            `json:"glueless,omitempty"`
@@ -189,6 +190,16 @@ type dnssec struct {
 	Algorithm  string      `json:"algorithm,omitempty"`
 	Digest     string      `json:"digest,omitempty"`
 	Signatures []signature `json:"signatures,omitempty"`
+	Signal     *signal     `json:"signal,omitempty"`
+}
+
+// signal is what the zone asks its parent to publish, in its CDS and CDNSKEY,
+// held against the DS the parent does publish.
+type signal struct {
+	State     string   `json:"state"`
+	Reason    string   `json:"reason,omitempty"`
+	Requested []uint16 `json:"requested,omitempty"`
+	Held      []uint16 `json:"held,omitempty"`
 }
 
 // signature is how long one signature a secure verdict rests on was made to
@@ -339,6 +350,7 @@ func convertDelegation(from *trace.Delegation) *delegation {
 	to := &delegation{
 		Zone:           from.Zone,
 		TTL:            from.TTL,
+		ZoneTTL:        from.ZoneTTL,
 		NS:             from.NS,
 		GlueLess:       from.GlueLess,
 		OutOfBailiwick: from.OutOfBailiwick,
@@ -366,6 +378,10 @@ func convertDNSSEC(from *trace.DNSSECStatus) *dnssec {
 		KeyTags:   from.KeyTags,
 		Algorithm: from.Algorithm,
 		Digest:    from.Digest,
+	}
+	if from.Signal != nil {
+		to.Signal = &signal{State: string(from.Signal.State), Reason: from.Signal.Reason,
+			Requested: from.Signal.Requested, Held: from.Signal.Held}
 	}
 	for _, lifetime := range from.Signatures {
 		to.Signatures = append(to.Signatures, signature{

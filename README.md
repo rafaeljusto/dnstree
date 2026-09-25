@@ -92,6 +92,7 @@ dnstree [flags] NAME [TYPE]
 
 | Flag | What it does |
 | --- | --- |
+| `-x` | resolve the PTR of this address, in place of a name and a type |
 | `-4`, `-6` | ask only IPv4 or only IPv6 servers; the others are drawn unqueried |
 | `--udp`, `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
 | `--dot`, `--doh` | carry them encrypted, over TLS or HTTPS |
@@ -99,6 +100,7 @@ dnstree [flags] NAME [TYPE]
 | `--all` | ask every nameserver of a zone, not just the first that answers |
 | `--dnssec` | ask for signatures and follow the chain of trust |
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
+| `--check-ds` | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS |
 | `--serial` | ask every nameserver of the zone which copy of it they serve, and compare |
 | `--nsid` | ask each server which of itself answered, and draw it beside the address |
 | `--qmin` | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
@@ -127,6 +129,74 @@ dnstree [flags] NAME [TYPE]
 | `--schema` | print the JSON Schema of `--format json` and stop |
 | `--version` | print the version and stop |
 
+### Reverse lookups
+
+`-x ADDR` asks for the PTR record of an address, the way `dig -x` does:
+`192.0.2.1` is asked as `1.2.0.192.in-addr.arpa.`, and an IPv6 address nibble
+by nibble under `ip6.arpa.`. It takes the place of the name and the type. The
+reverse tree is delegated like any other, only more deeply, and its
+nameservers are usually named somewhere else entirely, so a reverse walk is
+where the side walks that resolve a nameserver's own name are most often seen.
+A delegation below a /24 (RFC 2317) arrives as an alias, and is followed.
+
+<details>
+<summary>The walk to the PTR of 8.8.8.8</summary>
+
+```
+$ dnstree -x 8.8.8.8 --no-asn
+. (root)
+├── a.root-servers.net. 198.41.0.4  164ms  NOERROR  referral → in-addr.arpa.
+│   ├── f.in-addr-servers.arpa. 193.0.9.1  244ms  NOERROR  referral → 8.in-addr.arpa.
+│   │   ├── . (root)  (resolving r.arin.net.)
+│   │   │   ├── a.root-servers.net. 198.41.0.4  178ms  NOERROR  referral → net.
+│   │   │   │   ├── m.gtld-servers.net. 192.55.83.30  178ms  NOERROR  referral → arin.net.
+│   │   │   │   │   ├── ns1.arin.net. 199.212.0.108  149ms  NOERROR  AA
+│   │   │   │   │   │   └── r.arin.net. 43200 A 199.180.180.63
+│   │   │   │   │   ├── ns1.arin.net. 2001:500:13::108  (not queried)
+│   │   │   │   │   ├── ns2.arin.net. 199.71.0.108  (not queried)
+│   │   │   │   │   ├── ns2.arin.net. 2001:500:31::108  (not queried)
+│   │   │   │   │   └── (and 4 more not queried)
+│   │   │   │   ├── m.gtld-servers.net. 2001:501:b1f9::30  (not queried)
+│   │   │   │   ├── k.gtld-servers.net. 192.52.178.30  (not queried)
+│   │   │   │   ├── k.gtld-servers.net. 2001:503:d2d::30  (not queried)
+│   │   │   │   └── (and 22 more not queried)
+│   │   │   ├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+│   │   │   ├── b.root-servers.net. 170.247.170.2  (not queried)
+│   │   │   ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+│   │   │   └── (and 22 more not queried)
+│   │   └── r.arin.net. 199.180.180.63  172ms  NOERROR  referral → 8.8.8.in-addr.arpa.
+│   │       ├── . (root)  (resolving ns1.google.com.)
+│   │       │   ├── a.root-servers.net. 198.41.0.4  150ms  NOERROR  referral → com.
+│   │       │   │   ├── l.gtld-servers.net. 192.41.162.30  191ms  NOERROR  referral → google.com.
+│   │       │   │   │   ├── ns2.google.com. 2001:4860:4802:34::a  63ms  NOERROR  AA
+│   │       │   │   │   │   └── ns1.google.com. 345600 A 216.239.32.10
+│   │       │   │   │   ├── ns2.google.com. 216.239.34.10  (not queried)
+│   │       │   │   │   ├── ns1.google.com. 2001:4860:4802:32::a  (not queried)
+│   │       │   │   │   ├── ns1.google.com. 216.239.32.10  (not queried)
+│   │       │   │   │   └── (and 4 more not queried)
+│   │       │   │   ├── l.gtld-servers.net. 2001:500:d937::30  (not queried)
+│   │       │   │   ├── j.gtld-servers.net. 192.48.79.30  (not queried)
+│   │       │   │   ├── j.gtld-servers.net. 2001:502:7094::30  (not queried)
+│   │       │   │   └── (and 22 more not queried)
+│   │       │   ├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+│   │       │   ├── b.root-servers.net. 170.247.170.2  (not queried)
+│   │       │   ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+│   │       │   └── (and 22 more not queried)
+│   │       └── ns1.google.com. 216.239.32.10  58ms  NOERROR  AA
+│   │           └── 8.8.8.8.in-addr.arpa. 86400 PTR dns.google.
+│   ├── f.in-addr-servers.arpa. 2a13:27c0:30::1  (not queried)
+│   ├── b.in-addr-servers.arpa. 199.253.183.183  (not queried)
+│   ├── b.in-addr-servers.arpa. 2001:500:87::87  (not queried)
+│   └── (and 8 more not queried)
+├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── b.root-servers.net. 170.247.170.2  (not queried)
+├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── (and 22 more not queried)
+✔ answered in 1.5s · resolver in 9ms · 10 queries · 8 servers
+```
+
+</details>
+
 ### Defaults
 
 Flags you always type belong in a file instead. `dnstree` reads the first of
@@ -146,8 +216,8 @@ and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
-`no-config`, `version`, `schema` and `from`: those five ask something of the run
-rather than set a default for it.
+`no-config`, `version`, `schema`, `from` and `x`: those six ask something of the
+run rather than set a default for it.
 
 > [!NOTE]
 > A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be
@@ -408,6 +478,58 @@ drifted.
 
 It costs one query, asked of the server that answered the question, and it is
 off unless asked for.
+
+The zone's own NS set carries a TTL of its own, too, and it is rarely the
+parent's: the parent's is often the registry's to choose. Resolvers differ over
+whose copy they keep once they have seen both, so a change of nameservers takes
+the longer of the two to reach everybody. `--explain` says so where they differ:
+
+```
+$ dnstree --check-ns --explain --no-asn www.example.com A
+...
+✔ answered in 384ms · resolver in 21ms · 4 queries · 3 servers
+
+...
+· the parent hands out the nameservers of example.com. for 2 days and the zone gives its own for 1 day, so a change of nameservers takes up to 2 days to reach every resolver
+```
+
+### What the zone asks its parent
+
+A zone changes the DS that vouches for it by asking: it publishes the DS it
+wants in a CDS record, or the key in a CDNSKEY (RFC 7344), and its parent picks
+the request up when it next looks. A key rollover is exactly that, which makes a
+request the parent has not acted on a rollover stuck halfway — and the chain is
+secure all the while, so nothing else says so. `--check-ds` asks the zone the
+walk ends in for both, and holds them against the DS its parent handed out:
+
+```
+$ dnstree --dnssec --check-ds --no-asn cloudflare.com A
+. (root)  [secure RSASHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  151ms  1174 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  491ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
+│   ├── l.gtld-servers.net. 192.41.162.30  186ms  NOERROR  DO  referral → cloudflare.com.  [secure ECDSAP256SHA256/SHA256]  cds matches the ds
+│   │   ├── l.gtld-servers.net. 192.41.162.30  214ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── ns3.cloudflare.com. 162.159.0.33  8.2ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   ├── cloudflare.com. 300 A 104.16.133.229
+│   │   │   ├── cloudflare.com. 300 A 104.16.132.229
+│   │   │   ├── ns3.cloudflare.com. 162.159.0.33  12ms  NOERROR  AA DO  (DNSKEY of cloudflare.com.)
+...
+✔ answered in 1.1s · resolver in 14ms · 8 queries · 3 servers
+```
+
+Beside the verdict of the cut it reads `cds matches the ds`, `no cds`, or one of
+the three things worth a warning: a zone asking for a key the parent does not
+publish, a zone asking for no DS at all (RFC 8078), which leaves it unsigned
+once the parent acts, and a CDS and a CDNSKEY describing different keys, which a
+parent acts on neither of. A parent holding a SHA-1 digest beside the SHA-256
+one asked for holds the same key, and is not a rollover.
+
+The request counts only once the zone's own keys have signed it, the way a
+parent checks it, so `--check-ds` needs `--dnssec` — a file of defaults that sets
+it is heeded by the runs that check signatures, and left alone by the rest — and
+a zone the chain did not reach secure reads `cds unchecked`. A zone that crosses into a child served by
+the same machines, with no referral, is checked against the DS fetched to cross
+it. It costs two queries, asked of the server that answered.
 
 ### Whether they all have the same zone
 

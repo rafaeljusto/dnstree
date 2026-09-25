@@ -165,6 +165,20 @@ func TestFindings(t *testing.T) {
 			}()),
 			want: []string{"the chain of trust holds from the root to test.", "ECDSAP256SHA256"},
 		},
+		"a zone that keeps its nameservers for less than its parent says so": {
+			trace: func() *trace.Trace {
+				tr := walk(&trace.Step{Zone: ".", Kind: trace.KindReferral,
+					Delegation: &trace.Delegation{Zone: "test.", TTL: 172800, ZoneTTL: 3600}}, answer())
+				return tr
+			}(),
+			want: []string{"the parent hands out the nameservers of test. for 2 days and the zone gives its own for 1 hour",
+				"takes up to 2 days"},
+		},
+		"a zone that agrees with its parent is said nothing about": {
+			trace: walk(&trace.Step{Zone: ".", Kind: trace.KindReferral,
+				Delegation: &trace.Delegation{Zone: "test.", TTL: 3600, ZoneTTL: 3600}}, answer()),
+			avoid: []string{"the zone gives its own"},
+		},
 		"a signature late in its life says when it runs out": {
 			trace: lasting(answer(), 30*24*time.Hour, 50*time.Hour),
 			want:  []string{"a signature over test. runs out in 2 days 2 hours", "re-signed", "SERVFAIL"},

@@ -1,6 +1,7 @@
 package resolver_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -334,5 +335,148 @@ func TestDNSSECExpiring(t *testing.T) {
 	}
 	if _, ok := tr.Expiring(tr.Root.DNSSEC); ok {
 		t.Error("got the root late in its life, want the fourteen days it was signed for")
+	}
+}
+
+// TestCheckDS holds what the zone that answers asks its parent to publish, in
+// its CDS and CDNSKEY, against the DS the parent publishes for it.
+func TestCheckDS(t *testing.T) {
+	tests := map[string]struct {
+		example fakens.Behaviour
+		state   trace.SignalState
+		warning string
+	}{
+		"a zone that asks for nothing": {
+			state: trace.SignalNone,
+		},
+		"a zone that asks for the key the parent holds": {
+			example: fakens.Behaviour{CDS: fakens.CDSCurrent},
+			state:   trace.SignalMatch,
+		},
+		"a zone rolling to a key the parent has not picked up": {
+			example: fakens.Behaviour{CDS: fakens.CDSNext},
+			state:   trace.SignalPending,
+			warning: "a key rollover is waiting on the parent",
+		},
+		"a zone asking to be made insecure": {
+			example: fakens.Behaviour{CDS: fakens.CDSDelete},
+			state:   trace.SignalDelete,
+			warning: "asks its parent to remove its DS",
+		},
+		"a CDS and a CDNSKEY for two different keys": {
+			example: fakens.Behaviour{CDS: fakens.CDSMismatched},
+			state:   trace.SignalInconsistent,
+			warning: "do not describe the same keys",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, test.example)
+			cfg.CheckDS = true
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if answer := tr.Result(); answer == nil || answer.DNSSEC == nil || answer.DNSSEC.State != trace.Secure {
+				t.Fatalf("got %+v, want a secure answer: %s", answer, format(steps(tr)))
+			}
+
+			var signal *trace.Signal
+			for step := range tr.Mainline() {
+				if step.Delegation != nil && strings.EqualFold(step.Delegation.Zone, "example.com.") && step.DNSSEC != nil {
+					signal = step.DNSSEC.Signal
+				}
+			}
+			if signal == nil || signal.State != test.state {
+				t.Fatalf("got %+v, want %s", signal, test.state)
+			}
+			if test.state == trace.SignalMatch && (len(signal.Requested) != 1 || !slices.Equal(signal.Requested, signal.Held)) {
+				t.Errorf("got %v asked for and %v held, want the same key", signal.Requested, signal.Held)
+			}
+
+			warnings := strings.Join(tr.Warnings, "\n")
+			switch {
+			case test.warning == "" && warnings != "":
+				t.Errorf("got warnings %q, want none", tr.Warnings)
+			case test.warning != "" && !strings.Contains(warnings, test.warning):
+				t.Errorf("got warnings %q, want one saying %q", tr.Warnings, test.warning)
+			}
+		})
+	}
+}
+
+// TestCheckDSUnsigned is a zone whose signatures do not verify. Its request of
+// the parent is nobody's, and is reported as unchecked rather than read.
+func TestCheckDSUnsigned(t *testing.T) {
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
+		fakens.Behaviour{CDS: fakens.CDSNext, BadSignature: true})
+	cfg.CheckDS = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	var signal *trace.Signal
+	for step := range tr.Mainline() {
+		if step.DNSSEC != nil && step.DNSSEC.Signal != nil {
+			signal = step.DNSSEC.Signal
+		}
+	}
+	if signal == nil || signal.State != trace.SignalUnchecked || !strings.Contains(signal.Reason, "CDS is bogus") {
+		t.Errorf("got %+v, want an unsigned request left unread", signal)
+	}
+	if !strings.Contains(strings.Join(tr.Warnings, "\n"), "could not be checked") {
+		t.Errorf("got warnings %q, want one saying the request went unread", tr.Warnings)
+	}
+}
+
+// TestCheckDSHiddenCut is a zone served by the machines of its parent, which the
+// walk crosses into without a referral: its DS comes from the query made to
+// cross the cut, and its request is held against that.
+func TestCheckDSHiddenCut(t *testing.T) {
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+	cfg.CheckDS = true
+	h.hierarchy.Add(fakens.Config{
+		Name: "ns.com.", Origin: "hosted.com.", Zone: hostedZone, Declared: "192.0.2.2",
+		DNSSEC: true, Behaviour: fakens.Behaviour{CDS: fakens.CDSNext},
+	})
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.hosted.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	var signal *trace.Signal
+	for step := range tr.Steps() {
+		if step.DNSSEC != nil && step.DNSSEC.Signal != nil {
+			signal = step.DNSSEC.Signal
+		}
+	}
+	if signal == nil || signal.State != trace.SignalPending {
+		t.Fatalf("got %+v, want the rollover of hosted.com. seen: %s", signal, format(steps(tr)))
+	}
+}
+
+// TestCheckDSInsecure is a zone the chain did not reach secure. There are no
+// keys to check its request with, and it is left unread rather than skipped
+// without a word.
+func TestCheckDSInsecure(t *testing.T) {
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
+		fakens.Behaviour{NoDS: true, CDS: fakens.CDSCurrent})
+	cfg.CheckDS = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	var signal *trace.Signal
+	for step := range tr.Steps() {
+		if step.DNSSEC != nil && step.DNSSEC.Signal != nil {
+			signal = step.DNSSEC.Signal
+		}
+	}
+	if signal == nil || signal.State != trace.SignalUnchecked || !strings.Contains(signal.Reason, "did not reach") {
+		t.Errorf("got %+v, want the request left unread", signal)
 	}
 }

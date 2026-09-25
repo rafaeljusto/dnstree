@@ -375,6 +375,12 @@ type Delegation struct {
 	// usually a great deal longer.
 	TTL uint32
 
+	// ZoneTTL is the TTL the zone gives its own NS set, set only where
+	// --check-ns asked it. The two are allowed to differ, and usually do: the
+	// parent's is often the registry's to choose. A resolver that goes by the
+	// child's copy once it has one keeps the nameservers for this long instead.
+	ZoneTTL uint32
+
 	// NS are the nameserver names, in the order they were received.
 	NS []string
 
@@ -422,12 +428,46 @@ type DNSSECStatus struct {
 	Algorithm string // the signing algorithm, e.g. ECDSAP256SHA256
 	Digest    string // the DS digest type, e.g. SHA256
 
+	// Signal is what the zone asks its parent to publish for it, set where
+	// --check-ds asked. It sits beside the verdict because it is a request to
+	// change the DS the verdict was reached with.
+	Signal *Signal
+
 	// Signatures are the lifetimes of the signatures this verdict rests on,
 	// set only on a secure one: the keys of the zone, the DS its parent signed,
 	// the records that answered. A zone that stops being re-signed goes on
 	// validating until the first of them runs out, and then fails all at once.
 	Signatures []Lifetime
 }
+
+// Signal is what a zone's CDS and CDNSKEY records ask of its parent (RFC 7344,
+// RFC 8078), held against the DS the parent publishes. A zone rolls its key by
+// publishing the new one here and waiting for the parent to notice, so a
+// request the parent has not acted on is a rollover stuck halfway.
+type Signal struct {
+	State SignalState
+
+	// Reason says what did not add up, where something did not.
+	Reason string
+
+	// Requested are the key tags the zone asks for, and Held the ones the
+	// parent's DS names, each sorted.
+	Requested []uint16
+	Held      []uint16
+}
+
+// SignalState is what a zone's request of its parent came to.
+type SignalState string
+
+// What a zone's request of its parent came to.
+const (
+	SignalNone         SignalState = "none"         // the zone asks for nothing
+	SignalMatch        SignalState = "match"        // it asks for what the parent holds
+	SignalPending      SignalState = "pending"      // it asks for another key than the parent holds
+	SignalDelete       SignalState = "delete"       // it asks for no DS at all (RFC 8078)
+	SignalInconsistent SignalState = "inconsistent" // its CDS and CDNSKEY describe different keys
+	SignalUnchecked    SignalState = "unchecked"    // the request could not be fetched or verified
+)
 
 // Lifetime is how long one signature was made to last.
 type Lifetime struct {

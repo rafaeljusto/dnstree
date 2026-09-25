@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -71,6 +72,43 @@ func generate(tb testing.TB, zone string, flags uint16) (*dns.DNSKEY, crypto.Sig
 		tb.Fatalf("fakens: the key for %s cannot sign", zone)
 	}
 	return key, signer
+}
+
+// signals is the CDS and CDNSKEY records of the request the zone makes of its
+// parent, in presentation format. A key of the next rollover is made for the
+// purpose and never signs anything: it only has to be a key the parent does not
+// yet vouch for.
+func (s *signer) signals(tb testing.TB, which CDS) string {
+	tb.Helper()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	next := func() *dns.DNSKEY {
+		key, _ := generate(tb, s.zone, dns.FlagZONE|dns.FlagSEP)
+		return key
+	}
+	switch which {
+	case CDSCurrent:
+		return cds(s.ksk) + cdnskey(s.ksk)
+	case CDSNext:
+		key := next()
+		return cds(key) + cdnskey(key)
+	case CDSDelete:
+		return "@ IN CDS 0 0 0 00\n@ IN CDNSKEY 0 3 0 AA==\n"
+	case CDSMismatched:
+		return cds(s.ksk) + cdnskey(next())
+	}
+	return ""
+}
+
+func cds(key *dns.DNSKEY) string {
+	ds := key.ToDS(dns.SHA256)
+	return fmt.Sprintf("@ IN CDS %d %d %d %s\n", ds.KeyTag, ds.Algorithm, ds.DigestType, ds.Digest)
+}
+
+func cdnskey(key *dns.DNSKEY) string {
+	return fmt.Sprintf("@ IN CDNSKEY %d %d %d %s\n", key.Flags, key.Protocol, key.Algorithm, key.PublicKey)
 }
 
 // ds is what the parent publishes to vouch for this zone.

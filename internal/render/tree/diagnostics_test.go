@@ -306,3 +306,38 @@ func TestRenderMinimised(t *testing.T) {
 		t.Errorf("got %q, want it to say what it asked", out)
 	}
 }
+
+// TestRenderSignal covers what a zone asks its parent to publish, beside the
+// verdict of the cut its DS belongs to.
+func TestRenderSignal(t *testing.T) {
+	tests := map[string]struct {
+		signal trace.Signal
+		want   string
+	}{
+		"a zone that asks for nothing": {
+			signal: trace.Signal{State: trace.SignalNone}, want: "no cds"},
+		"a zone that asks for what the parent holds": {
+			signal: trace.Signal{State: trace.SignalMatch, Requested: []uint16{7}, Held: []uint16{7}},
+			want:   "cds matches the ds"},
+		"a rollover waiting on the parent": {
+			signal: trace.Signal{State: trace.SignalPending, Requested: []uint16{7, 9}, Held: []uint16{7}},
+			want:   "cds asks for keys 7 and 9, the ds is for key 7"},
+		"a zone asking to be made insecure": {
+			signal: trace.Signal{State: trace.SignalDelete}, want: "cds asks for no ds"},
+		"a request that could not be read": {
+			signal: trace.Signal{State: trace.SignalUnchecked}, want: "cds unchecked"},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			out := draw(t, oneHop(&trace.Step{
+				Kind:   trace.KindReferral,
+				Rcode:  "NOERROR",
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Signal: &test.signal},
+			}))
+			if !strings.Contains(out, test.want) {
+				t.Errorf("got %q, want it to carry %q", out, test.want)
+			}
+		})
+	}
+}

@@ -161,6 +161,9 @@ func label(step *trace.Step) string {
 
 	if step.DNSSEC != nil {
 		lines = append(lines, "["+string(step.DNSSEC.State)+"]")
+		if step.DNSSEC.Signal != nil {
+			lines = append(lines, "cds "+string(step.DNSSEC.Signal.State))
+		}
 	}
 	for _, ede := range step.Extended {
 		lines = append(lines, "ede "+ede.String())

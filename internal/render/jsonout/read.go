@@ -220,6 +220,7 @@ func readDelegation(from *delegation) (*trace.Delegation, error) {
 	to := &trace.Delegation{
 		Zone:           from.Zone,
 		TTL:            from.TTL,
+		ZoneTTL:        from.ZoneTTL,
 		NS:             from.NS,
 		GlueLess:       from.GlueLess,
 		OutOfBailiwick: from.OutOfBailiwick,
@@ -257,6 +258,17 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 		KeyTags:   from.KeyTags,
 		Algorithm: from.Algorithm,
 		Digest:    from.Digest,
+	}
+	if from.Signal != nil {
+		state := trace.SignalState(from.Signal.State)
+		switch state {
+		case trace.SignalNone, trace.SignalMatch, trace.SignalPending, trace.SignalDelete,
+			trace.SignalInconsistent, trace.SignalUnchecked:
+		default:
+			return nil, fmt.Errorf("jsonout: %q is not what a zone's request of its parent can come to", from.Signal.State)
+		}
+		to.Signal = &trace.Signal{State: state, Reason: from.Signal.Reason,
+			Requested: from.Signal.Requested, Held: from.Signal.Held}
 	}
 	for _, signed := range from.Signatures {
 		inception, err := moment(signed.Inception)

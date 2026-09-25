@@ -269,6 +269,11 @@
           "type": "integer",
           "minimum": 0
         },
+        "zone_ttl": {
+          "description": "The TTL the zone gives its own NS set, in seconds, present only where --check-ns asked it. The two usually differ, since the parent's is often the registry's to choose, and a resolver that goes by the child's copy once it has one keeps the nameservers for this long instead.",
+          "type": "integer",
+          "minimum": 0
+        },
         "ns": {
           "description": "The nameserver names, in the order they were received.",
           "type": "array",
@@ -329,6 +334,30 @@
           "description": "The signatures a secure verdict rests on, as long as each was made to last: the keys of the zone, the DS its parent signed, the records that answered. Absent on any other verdict. A zone that stops being re-signed goes on validating until the first of them runs out, and then fails all at once.",
           "type": "array",
           "items": { "$ref": "#/$defs/signature" }
+        },
+        "signal": { "$ref": "#/$defs/signal" }
+      }
+    },
+    "signal": {
+      "description": "What the zone asks its parent to publish, in its CDS and CDNSKEY records (RFC 7344, RFC 8078), held against the DS the parent publishes. Present where --check-ds asked, on the verdict of the cut the DS belongs to.",
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "state": {
+          "description": "none is a zone that proved it asks for nothing; match asks for the keys the parent holds; pending asks for another key than the parent holds, which is a rollover waiting on the parent; delete asks for no DS at all; inconsistent is a CDS and a CDNSKEY describing different keys, which a parent acts on neither of; unchecked is a request that could not be fetched, or was not signed by the zone's keys.",
+          "type": "string",
+          "enum": ["none", "match", "pending", "delete", "inconsistent", "unchecked"]
+        },
+        "reason": { "type": "string" },
+        "requested": {
+          "description": "The key tags the zone asks for.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "held": {
+          "description": "The key tags the parent's DS names.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
         }
       }
     },

@@ -35,6 +35,12 @@
 # hands out. A mismatch is a real delegation fault that still resolves.
 # check-ns = true
 
+# Ask the zone for the CDS and CDNSKEY it publishes to ask its parent for a new
+# DS, and compare them with the DS the parent holds: a request nobody acted on is
+# a key rollover stuck halfway. Two queries, and it needs dnssec beside it.
+# dnssec = true
+# check-ds = true
+
 # Ask every nameserver of the zone which copy of it they are serving, and say
 # so when they do not all serve the same one. A secondary a transfer left
 # behind answers correctly, out of an older zone. One query per nameserver.

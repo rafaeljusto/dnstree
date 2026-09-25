@@ -59,6 +59,13 @@ type Behaviour struct {
 	SignatureLeft time.Duration
 	SignatureLife time.Duration
 
+	// CDS is what the zone asks its parent to publish, in the CDS and CDNSKEY
+	// records at its apex (RFC 7344): nothing when it is empty, the key the
+	// parent already vouches for with CDSCurrent, a key of the next rollover
+	// with CDSNext, no DS at all with CDSDelete, or a CDS and a CDNSKEY for two
+	// different keys with CDSMismatched. Only a signed zone publishes one.
+	CDS CDS
+
 	// DenyEmptyNonTerminal answers NXDOMAIN for a name that owns nothing but
 	// has names below it, which RFC 8020 makes a claim that nothing is below it
 	// either. It is what breaks a resolver that minimises its questions.
@@ -81,6 +88,18 @@ type Behaviour struct {
 	// nothing, which is the other case worth testing.
 	NSID string
 }
+
+// CDS is what a zone asks its parent to publish.
+type CDS int
+
+// What a zone can ask its parent to publish.
+const (
+	CDSNone CDS = iota
+	CDSCurrent
+	CDSNext
+	CDSDelete
+	CDSMismatched
+)
 
 // ExtendedError is what a server says about its own answer (RFC 8914).
 type ExtendedError struct {
@@ -184,7 +203,11 @@ func New(tb testing.TB, cfg Config) *Server {
 		server.Declared = declared
 	}
 
-	server.zone.Store(new(parse(tb, server.origin, cfg.Zone)))
+	records := parse(tb, server.origin, cfg.Zone)
+	if server.signer != nil {
+		records = append(records, parse(tb, server.origin, server.signer.signals(tb, cfg.Behaviour.CDS))...)
+	}
+	server.zone.Store(&records)
 
 	host := cfg.Host
 	if host == "" {

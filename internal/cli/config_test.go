@@ -173,6 +173,29 @@ func TestParseDefaults(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsCheckDS covers a file that asks for the CDS to be checked,
+// on a run that checks no signatures: the setting waits for one that does,
+// rather than refusing every run that does not.
+func TestParseDefaultsCheckDS(t *testing.T) {
+	path := write(t, "check-ds\n")
+
+	got, err := cli.Parse([]string{"--config", path, "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.CheckDS {
+		t.Error("got --check-ds on a walk that checks no signatures, want it left for one that does")
+	}
+
+	got, err = cli.Parse([]string{"--config", path, "--dnssec", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !got.CheckDS {
+		t.Error("got no --check-ds on a walk that checks signatures, want the file's setting")
+	}
+}
+
 // TestParseDefaultsFrom covers a walk already made under a file that sets what
 // only a walk being made can use: the file's live drawing, watch and comparison
 // are about the walks it makes, and give way rather than refuse the run.
@@ -283,6 +306,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"a file that asks for the version":    {file: "version\n"},
 		"a file that asks for the schema":     {file: "schema\n"},
 		"a file that draws a saved walk":      {file: "from = walk.json\n"},
+		"a file that names an address":        {file: "x = 192.0.2.1\n"},
 	}
 
 	for name, test := range tests {

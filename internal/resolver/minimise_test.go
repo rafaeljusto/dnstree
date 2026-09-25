@@ -227,3 +227,28 @@ func TestMinimiseAll(t *testing.T) {
 		t.Errorf("got %d hops seen by the watcher, want all %d", hops, len(steps(tr)))
 	}
 }
+
+// TestCheckNSZoneTTL covers the TTL the zone gives its own NS set, which the
+// parent's referral does not carry and only --check-ns asks for.
+func TestCheckNSZoneTTL(t *testing.T) {
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
+	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Declared: "192.0.2.2",
+		Zone: strings.Replace(comZone, "example IN NS", "example 172800 IN NS", 1)})
+	hierarchy.Add(fakens.Config{Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3"})
+
+	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{CheckNS: true}).
+		Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	for step := range tr.Mainline() {
+		if delegation := step.Delegation; delegation != nil && delegation.Zone == "example.com." {
+			if delegation.TTL != 172800 || delegation.ZoneTTL != 3600 {
+				t.Errorf("got the parent's %d and the zone's %d, want 172800 and 3600", delegation.TTL, delegation.ZoneTTL)
+			}
+			return
+		}
+	}
+	t.Fatalf("got no delegation to example.com.: %s", format(steps(tr)))
+}

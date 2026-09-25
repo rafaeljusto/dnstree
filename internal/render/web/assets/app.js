@@ -543,6 +543,7 @@ class DnsInspector extends HTMLElement {
       ["digest", step.dnssec.digest],
       ["keys", step.dnssec.key_tags?.join(", ")],
       ["runs out", step.dnssec.signatures?.map((signature) => signature.expiration).sort()[0]],
+      ["cds", step.dnssec.signal && [step.dnssec.signal.state, step.dnssec.signal.reason].filter(Boolean).join(": ")],
     ].filter(([, value]) => value);
 
     return this.#block("chain of trust", step.dnssec.state,

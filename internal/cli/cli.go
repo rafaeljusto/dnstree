@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ const Usage = `usage: dnstree [flags] NAME [TYPE]
 Resolve NAME from the root servers down, following every referral, and draw the
 path it took. TYPE defaults to A.
 
+  -x ADDR                 resolve the PTR of this address, instead of a name
   -4, -6                  ask only IPv4 or only IPv6 servers
   --udp, --tcp            carry the queries over plain DNS (--udp is the default)
   --dot, --doh            carry them encrypted, over TLS or HTTPS
@@ -36,6 +38,7 @@ path it took. TYPE defaults to A.
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
   --check-ns              ask each zone for its own NS set and compare
+  --check-ds              ask the zone for its CDS and CDNSKEY and compare
   --serial                ask every nameserver of the zone which copy it serves
   --nsid                  ask each server which of itself answered (RFC 5001)
   --qmin                  ask each zone for no more of the name than it needs
@@ -97,6 +100,20 @@ is served until the command is interrupted. --web-addr moves it, which is what a
 walk made on another machine needs, and --no-browser leaves the address to be
 opened by hand. Whatever is pointed at the same server can read the walk as
 --format json writes it, under /trace.json.
+
+-x resolves the PTR record of an address, the way dig -x does: 192.0.2.1 is
+asked as 1.2.0.192.in-addr.arpa. and an IPv6 address under ip6.arpa. It takes
+the place of NAME and TYPE. The reverse tree is delegated like any other, and
+a delegation below a /24 (RFC 2317) arrives as an alias, which is followed.
+
+--check-ds asks the zone the walk ends in for the CDS and CDNSKEY records it
+publishes (RFC 7344, RFC 8078), which is how a zone asks its parent to change
+the DS that vouches for it, and holds them against the DS the parent holds. A
+zone asking for a key the parent has not published is a rollover waiting on
+the parent; a zone asking for no DS at all is asking to be made insecure. The
+request counts only once it is signed by the keys the chain of trust reached,
+so it needs --dnssec; a file of defaults that sets it is heeded only by the
+runs that check signatures. It costs two queries.
 
 --format mermaid writes the same picture as --format dot, for the places that
 draw Mermaid rather than Graphviz: pasted into a fenced mermaid block, GitHub,
@@ -206,6 +223,7 @@ type Config struct {
 	All      bool
 	DNSSEC   bool
 	CheckNS  bool
+	CheckDS  bool
 	Serial   bool
 	NSID     bool
 	Minimise bool
@@ -302,12 +320,14 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		configPath    string
 		color, format string
 		subnet        string
+		reverse       string
 		timeout       time.Duration
 		port          uint
 		roots         rootList
 		wanted        expectList
 		resolvers     resolverList
 	)
+	flags.StringVar(&reverse, "x", "", "resolve the PTR of this address")
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
 	flags.BoolVar(&six, "6", false, "ask only IPv6 servers")
 	flags.BoolVar(&udp, "udp", false, "carry the queries over UDP")
@@ -318,6 +338,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.All, "all", false, "ask every nameserver of a zone")
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
+	flags.BoolVar(&cfg.CheckDS, "check-ds", false, "compare the zone's CDS and CDNSKEY with its DS")
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
@@ -395,9 +416,17 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch n := flags.NArg(); {
-	case cfg.From != "" && n > 0:
+	case cfg.From != "" && (n > 0 || reverse != ""):
 		return nil, fmt.Errorf("%w: --from draws a walk already made, so there is no name to resolve", ErrUsage)
 	case cfg.From != "":
+	case reverse != "" && n > 0:
+		return nil, fmt.Errorf("%w: -x names what to resolve, so a name cannot be given as well", ErrUsage)
+	case reverse != "":
+		addr, err := netip.ParseAddr(reverse)
+		if err != nil {
+			return nil, fmt.Errorf("%w: -x %q is not an address", ErrUsage, reverse)
+		}
+		cfg.Name, cfg.Type = reverseName(addr.Unmap()), "PTR"
 	case n == 0:
 		flags.Usage()
 		return nil, fmt.Errorf("%w: no name to resolve", ErrUsage)
@@ -429,6 +458,16 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Watch != 0 && once(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so there is nothing to watch it change",
 			ErrUsage, cfg.Format)
+	}
+	if cfg.CheckDS && !cfg.DNSSEC {
+		// Typed out, it is a mistake to say so. From the file it is a default
+		// for the walks that check signatures, and this one does not.
+		named := false
+		scan(flags, args, func(name, _ string) { named = named || name == "check-ds" })
+		if named {
+			return nil, fmt.Errorf("%w: --check-ds weighs a signed request, and only --dnssec checks signatures", ErrUsage)
+		}
+		cfg.CheckDS = false
 	}
 	if cfg.From != "" {
 		// Named on the command line, a flag that shapes the walk would read as
@@ -514,7 +553,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "serial": true, "nsid": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "nsid": true, "qmin": true,
 	"subnet": true, "no-asn": true, "no-compare": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
@@ -531,6 +570,25 @@ func once(format string) bool {
 // which has the whole trace already and no use for prose under it.
 func programs(format string) bool {
 	return format == "json" || format == "dot" || format == "mermaid"
+}
+
+// reverseName is the name the PTR of an address is kept under: its octets in
+// reverse under in-addr.arpa., or its nibbles in reverse under ip6.arpa.
+func reverseName(addr netip.Addr) string {
+	var labels []string
+	if addr.Is4() {
+		octets := addr.As4()
+		for i := len(octets) - 1; i >= 0; i-- {
+			labels = append(labels, strconv.Itoa(int(octets[i])))
+		}
+		return strings.Join(labels, ".") + ".in-addr.arpa."
+	}
+	const hex = "0123456789abcdef"
+	bytes := addr.As16()
+	for i := len(bytes) - 1; i >= 0; i-- {
+		labels = append(labels, string(hex[bytes[i]&0x0f]), string(hex[bytes[i]>>4]))
+	}
+	return strings.Join(labels, ".") + ".ip6.arpa."
 }
 
 // The prefix lengths a bare address is read as. The subnet says which network
