@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // Render writes the trace to w as a Graphviz graph: one node per query,

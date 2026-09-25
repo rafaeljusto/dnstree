@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // ErrVersion is a document of another schema_version, which has had a field

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/explain"
-	"github.com/rafaeljusto/dnstree/internal/render/tree"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // explained is what --explain writes under a walk that ran into a lame server,

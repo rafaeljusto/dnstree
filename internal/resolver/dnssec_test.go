@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/resolver"
-	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // signed builds the same three zones as the plain hierarchy, all signed, with

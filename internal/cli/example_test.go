@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 )
 
 // examplePath is the annotated file of defaults the repository ships. It is

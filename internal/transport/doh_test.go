@@ -11,7 +11,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // TestDoHStatusIsNotTheServersWords covers a DoH server refusing with a status

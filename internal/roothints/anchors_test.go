@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/roothints"
+	"github.com/rafaeljusto/dnstree/v2/internal/roothints"
 )
 
 func TestDefaultAnchors(t *testing.T) {

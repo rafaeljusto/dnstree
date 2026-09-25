@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/explain"
 )
 
 // Changes is what is not what it was, said the way the rest of the explanation

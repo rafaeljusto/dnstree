@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/cli"
-	"github.com/rafaeljusto/dnstree/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/cli"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 )
 
 // TestMain puts the whole package in a home of its own. Every Parse reads a

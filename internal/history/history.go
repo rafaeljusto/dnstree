@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // DirEnv names the directory remembered walks are kept in, ahead of every

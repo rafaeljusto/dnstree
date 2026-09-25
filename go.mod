@@ -1,4 +1,4 @@
-module github.com/rafaeljusto/dnstree
+module github.com/rafaeljusto/dnstree/v2
 
 go 1.27.0
 

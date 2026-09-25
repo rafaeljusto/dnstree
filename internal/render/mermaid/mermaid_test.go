@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/render/mermaid"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/mermaid"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")

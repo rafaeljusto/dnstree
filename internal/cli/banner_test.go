@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/cli"
-	"github.com/rafaeljusto/dnstree/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/cli"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 )
 
 func TestWriteVersion(t *testing.T) {

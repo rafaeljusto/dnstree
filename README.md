@@ -45,7 +45,7 @@ the chain of trust holds.
 ## Installing
 
 ```
-go install github.com/rafaeljusto/dnstree/cmd/dnstree@latest
+go install github.com/rafaeljusto/dnstree/v2/cmd/dnstree@latest
 ```
 
 Or run it straight from a container:

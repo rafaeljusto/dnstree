@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/cli"
-	"github.com/rafaeljusto/dnstree/internal/history"
-	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
+	"github.com/rafaeljusto/dnstree/v2/internal/cli"
+	"github.com/rafaeljusto/dnstree/v2/internal/history"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 )
 
 // rootZone is a whole synthetic internet in one zone, so that the command can

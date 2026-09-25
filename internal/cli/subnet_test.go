@@ -4,7 +4,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 )
 
 func TestParseSubnet(t *testing.T) {

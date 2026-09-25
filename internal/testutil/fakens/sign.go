@@ -11,7 +11,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/roothints"
+	"github.com/rafaeljusto/dnstree/v2/internal/roothints"
 )
 
 // signer holds the keys of a signed zone: a key signing key the parent's DS

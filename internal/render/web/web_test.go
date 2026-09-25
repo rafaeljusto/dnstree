@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/render/web"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // TestServe walks the whole way round: a trace goes in, an address comes out,

@@ -10,8 +10,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 const zone = `

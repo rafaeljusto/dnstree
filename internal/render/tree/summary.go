@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // Summary is the line under a finished tree: how the walk went, what a resolver

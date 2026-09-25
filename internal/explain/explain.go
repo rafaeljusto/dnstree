@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // Topic is what a finding is about, and the order the findings are said in:

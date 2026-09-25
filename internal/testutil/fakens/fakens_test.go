@@ -7,8 +7,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // tldZone delegates example.com. and keeps an address for a nameserver it has

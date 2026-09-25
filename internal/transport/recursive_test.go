@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
-	"github.com/rafaeljusto/dnstree/internal/trace"
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 const recursiveZone = `

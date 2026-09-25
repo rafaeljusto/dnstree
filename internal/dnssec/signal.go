@@ -7,7 +7,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // Signal holds what a zone asks its parent to publish, in its CDS and CDNSKEY

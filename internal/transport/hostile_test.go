@@ -16,7 +16,7 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // datagrams is a UDP server that answers the first query it gets with every

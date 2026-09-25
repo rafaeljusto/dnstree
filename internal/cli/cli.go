@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/expect"
-	"github.com/rafaeljusto/dnstree/internal/render/tree"
-	"github.com/rafaeljusto/dnstree/internal/render/web"
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/expect"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // Summary is the one line that says what the tool is, for the places outside

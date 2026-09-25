@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/explain"
-	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // payload is everything the page reads. The walk itself is carried verbatim as

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/render/dot"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/dot"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")

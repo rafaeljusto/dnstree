@@ -8,7 +8,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 func TestWithSubnet(t *testing.T) {

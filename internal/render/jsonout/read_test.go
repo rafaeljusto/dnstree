@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // TestReadRoundTrip reads back what Render wrote and writes it again: a trace

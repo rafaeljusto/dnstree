@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/expect"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/expect"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // walk is a trace of one question that came to the step given.

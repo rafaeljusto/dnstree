@@ -20,10 +20,10 @@ import (
 	"codeberg.org/miekg/dns/rdata"
 	"codeberg.org/miekg/dns/svcb"
 
-	"github.com/rafaeljusto/dnstree/internal/dnssec"
-	"github.com/rafaeljusto/dnstree/internal/roothints"
-	"github.com/rafaeljusto/dnstree/internal/trace"
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
+	"github.com/rafaeljusto/dnstree/v2/internal/roothints"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 const (

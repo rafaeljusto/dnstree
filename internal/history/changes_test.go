@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/explain"
-	"github.com/rafaeljusto/dnstree/internal/history"
+	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/history"
 )
 
 // remembered is a walk that answered, as the walk before this one left it. Each

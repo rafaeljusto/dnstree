@@ -7,8 +7,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // TestClientCookie covers what RFC 9018 asks of the client half: the same for

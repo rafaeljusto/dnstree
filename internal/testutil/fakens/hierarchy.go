@@ -9,7 +9,7 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 
-	"github.com/rafaeljusto/dnstree/internal/transport"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // Hierarchy is a set of fake nameservers standing in for a delegation chain.

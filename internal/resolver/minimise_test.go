@@ -6,9 +6,9 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/resolver"
-	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // deepZone has a name three labels below its apex with nothing at the two

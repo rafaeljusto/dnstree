@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // walk is a trace of hops hanging one under the other, as a live drawing sees

@@ -7,7 +7,7 @@ package recursive
 import (
 	"slices"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // Compare sets how the resolver's answer stands against the one the walk found

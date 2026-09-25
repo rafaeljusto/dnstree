@@ -6,8 +6,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/dnssec"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // secured is a chain standing in example., a zone the root vouches for. The

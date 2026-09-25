@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 )
 
 func main() {

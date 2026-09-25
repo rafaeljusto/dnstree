@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
 )
 
 // publishedPath is the copy of the schema the pages workflow serves. That

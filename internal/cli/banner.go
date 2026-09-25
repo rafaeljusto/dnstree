@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/rafaeljusto/dnstree/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 )
 
 // home is where the banner sends anyone who wants more than a version.

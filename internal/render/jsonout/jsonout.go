@@ -7,7 +7,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // SchemaVersion changes whenever a field changes meaning or goes away, so that

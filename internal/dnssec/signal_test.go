@@ -5,8 +5,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/dnssec"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // asCDS is the request a zone makes for a DS, written as its parent holds one.

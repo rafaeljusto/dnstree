@@ -9,8 +9,8 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 
-	"github.com/rafaeljusto/dnstree/internal/dnssec"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 const (

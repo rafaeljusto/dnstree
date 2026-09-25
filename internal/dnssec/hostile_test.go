@@ -8,8 +8,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/dnssec"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // record is one record in presentation format, the way the other tests here

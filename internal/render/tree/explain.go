@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/explain"
 )
 
 // Explain writes findings under the tree they were read off: one sentence to a

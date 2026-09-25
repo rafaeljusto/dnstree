@@ -6,8 +6,8 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // render encodes a trace and reads it back as plain maps, which is how anything

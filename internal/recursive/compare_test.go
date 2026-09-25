@@ -3,8 +3,8 @@ package recursive_test
 import (
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/recursive"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/recursive"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // traceOf is a finished walk and a resolver's answer to the same question, with

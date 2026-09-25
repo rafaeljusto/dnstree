@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/internal/roothints"
+	"github.com/rafaeljusto/dnstree/v2/internal/roothints"
 )
 
 func TestDefault(t *testing.T) {

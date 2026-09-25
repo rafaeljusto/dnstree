@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/render/tree"
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // draw renders a trace with colour off, which is what every assertion here is

@@ -9,7 +9,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // The sizes RFC 7873 section 4 gives the two halves of a cookie.

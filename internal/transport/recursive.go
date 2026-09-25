@@ -11,7 +11,7 @@ import (
 	"codeberg.org/miekg/dns/dnsconf"
 	"codeberg.org/miekg/dns/dnsutil"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // The question a walk answered the long way round, put to a recursive server

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // tree is a walk that tried two servers at the root before getting anywhere.
