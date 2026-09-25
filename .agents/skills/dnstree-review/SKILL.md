@@ -56,6 +56,9 @@ change touches without a test holding it. The ones that regress most quietly:
 - DNSSEC reaching `bogus` for something it couldn't check, or `secure`
   because a record was absent.
 - Anything written to disk outside `internal/history`, or without `--diff`.
+- A name or wire text drawn without going through `Trace.Shown`.
+- A minimised hop (`Step.Minimised`) read as the answer.
+- A signature's time left read against the clock rather than `Trace.Started`.
 - Exit codes repurposed.
 - A JSON field that changes meaning or goes away without bumping
   `schema_version`. `docs/trace.schema.json` must match `--schema`.
@@ -118,7 +121,8 @@ page is generated, so don't ask for it.
 When the code is trusted, or the user has agreed:
 
 ```bash
-make check                      # what CI runs
+make check                      # what CI runs, less hadolint and the packaging dry run
+
 go test -race -count=2 ./...    # when concurrency or fakens changed
 make goldens && git diff --stat # goldens stay put?
 ```

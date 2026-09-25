@@ -36,7 +36,7 @@ Write the messages for the maintainer to apply. Print them, don't run them.
 
    | Prefix | Bump | Use for |
    | --- | --- | --- |
-   | `feat:` | minor | a new flag, format, output or behaviour users see |
+   | `feat:` (or `feature:`) | minor | a new flag, format, output or behaviour users see |
    | `fix:` | patch | a bug, including a security fix |
    | `perf:` | patch | faster, same output |
    | `docs:` | patch | README, `docs/`, contributor docs |
@@ -44,11 +44,12 @@ Write the messages for the maintainer to apply. Print them, don't run them.
    | `test:` | patch | tests only, `fakens` knobs included |
    | `build:`, `ci:` | patch | `Makefile`, packaging, `go.mod`, workflows |
    | `chore:` | patch | housekeeping: goldens alone, skills, ignores |
+   | `style:` | patch | formatting only |
+   | `revert:` | patch | undoing an earlier commit |
    | `feat!:` or a `BREAKING CHANGE:` footer | major | a removed or re-meant flag, exit code or JSON field |
 
-   Below v1.0.0 every level shifts down one. A JSON field that changes
-   meaning also needs `schema_version` bumped in the same commit; say so if
-   the diff doesn't.
+   A JSON field that changes meaning also needs `schema_version` bumped in
+   the same commit; say so if the diff doesn't.
 
 4. **Check the subject.**
    ```bash

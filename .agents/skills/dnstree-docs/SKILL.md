@@ -146,7 +146,8 @@ reshuffle.
 
 ## Mechanical pass
 
-Run these first. They find the gaps; reading decides whether each one is real.
+Run these first, under `bash` (zsh reads the backticks in the patterns). They
+find the gaps; reading decides whether each one is real.
 
 ```bash
 # Each usage flag: README mentions, page mentions, dnstreerc.example settings.
@@ -173,6 +174,27 @@ grep -oE '^[a-z-]+:' Makefile
 flag. Check relative links by hand or with a short script over `](...)`,
 `href=` and `src=`, resolving each against the file's directory.
 
+## History
+
+Reviews run again and again, and their fixes are the next review's input. A
+suggestion that undoes an earlier one is a loop, not a finding. Before writing
+a rewrite, a `verbose` or a `nit`, look at where the text came from:
+
+```bash
+git log --format='%h %ad %s' --date=short -L<first>,<last>:<file>
+git log --format='%h %s' -S'<phrase>' -- <file>
+```
+
+- If a `docs:` commit set the text to what it says now, and nothing it
+  describes has changed since, leave it. Only a `wrong` or `stale` finding,
+  backed by code newer than that commit, may reopen it; cite the commit.
+- Never suggest wording a past commit replaced. Read the removed lines in
+  `git show <commit> -- <file>` before proposing a sentence.
+- A value that has been changed by hand release after release, such as a
+  version number, needs a placeholder or a script, not another bump.
+- Check `git log --oneline --grep='^docs:'` for the last review's commits. What
+  it rewrote for length is settled unless the behaviour moved.
+
 ## Method
 
 - For a whole review, if your agent can run subagents, give the user-facing
@@ -186,6 +208,10 @@ flag. Check relative links by hand or with a short script over `](...)`,
   contradicts. If you can't point at the other side, it's a question, not a
   finding.
 - Don't run `make live` or `make demos`, or regenerate examples, without asking.
+  Tell subagents the same. Any command that names a question goes to the root
+  servers, even one meant to test the flag parser: test the parser with
+  `go test ./internal/cli`.
+
 - Don't edit anything unless asked. When asked to fix, regenerate examples
   instead of editing them by hand, change the `Usage` string rather than the
   man page, and don't commit.
