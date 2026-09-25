@@ -37,7 +37,7 @@ path it took. TYPE defaults to A.
   --fallback              let plain DNS pick up a hop the transport could not
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
-  --check-ns              ask each zone for its own NS set and compare
+  --check-ns              ask the zone that answered for its NS set and compare
   --check-ds              ask the zone for its CDS and CDNSKEY and compare
   --serial                ask every nameserver of the zone which copy it serves
   --nsid                  ask each server which of itself answered (RFC 5001)
@@ -156,10 +156,10 @@ the round before and write nothing.
 rather than reads. It takes one of the words that name how far the chain of
 trust got (secure, insecure, bogus, indeterminate), or what the walk came to
 (answer, cname, nodata, nxdomain), or fresh, which asks for a chain of trust
-that holds and none of whose signatures runs out within a week; fresh:3d or
-fresh:36h asks for that long instead. Or else it takes the rdata of a record
-that has to be among the answers, such as an address. Repeat it for every one
-that has to hold.
+that holds and none of whose signatures is late in the life it was made for;
+fresh:3d or fresh:36h asks instead that none runs out that soon. Or else it
+takes the rdata of a record that has to be among the answers, such as an
+address. Repeat it for every one that has to hold.
 Those words win where a value could be read either way, so a record whose rdata
 reads like one of them is asked for with a leading =, which expects rdata and
 nothing else.
