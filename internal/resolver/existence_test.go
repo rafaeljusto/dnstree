@@ -1,6 +1,7 @@
 package resolver_test
 
 import (
+	"slices"
 	"testing"
 
 	"codeberg.org/miekg/dns"
@@ -16,6 +17,12 @@ import (
 // says, with the leaf zone free to misbehave.
 func signedAs(tb testing.TB, denial fakens.Denial, leaf fakens.Behaviour) (harness, resolver.Config) {
 	tb.Helper()
+	return signedZoneAs(tb, exampleZone, denial, leaf)
+}
+
+// signedZoneAs is signedAs with example.com. serving zone.
+func signedZoneAs(tb testing.TB, zone string, denial fakens.Denial, leaf fakens.Behaviour) (harness, resolver.Config) {
+	tb.Helper()
 
 	hierarchy := fakens.NewHierarchy(tb)
 	root := hierarchy.Add(fakens.Config{
@@ -25,7 +32,7 @@ func signedAs(tb testing.TB, denial fakens.Denial, leaf fakens.Behaviour) (harne
 		Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2",
 		DNSSEC: true, Denial: denial})
 	hierarchy.Add(fakens.Config{
-		Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3",
+		Name: "ns.example.com.", Origin: "example.com.", Zone: zone, Declared: "192.0.2.3",
 		DNSSEC: true, Denial: denial, Behaviour: leaf})
 	return harness{hierarchy, root}, resolver.Config{DNSSEC: true, Anchors: root.Anchors(tb)}
 }
@@ -164,6 +171,35 @@ func TestDeniedNameThatIsThere(t *testing.T) {
 		if answer.DNSSEC.State == trace.Secure {
 			t.Fatalf("got secure (%s), want a name denied that the zone holds refused",
 				answer.DNSSEC.Reason)
+		}
+	})
+}
+
+// TestDeniedEmptyNonTerminal covers a server turning the NODATA for an empty
+// non-terminal into NXDOMAIN. The rcode is not signed, and the gap the zone
+// signed ends at a name below the one asked about, which proves it is there.
+func TestDeniedEmptyNonTerminal(t *testing.T) {
+	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
+		h, cfg := signedZoneAs(t, deepZone, denial, fakens.Behaviour{})
+		cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(req, resp *dns.Msg) {
+			nodata := resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 &&
+				slices.ContainsFunc(resp.Ns, func(rr dns.RR) bool { return dns.RRToType(rr) == dns.TypeSOA })
+			if name, _ := dnsutil.Question(req); name == "b.c.example.com." && nodata {
+				resp.Rcode = dns.RcodeNameError
+			}
+		}}
+
+		tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "b.c.example.com", "A")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		answer := tr.Result()
+		if answer == nil || answer.DNSSEC == nil {
+			t.Fatalf("got %+v, want a verdict: %s", answer, format(steps(tr)))
+		}
+		if answer.DNSSEC.State != trace.Bogus {
+			t.Fatalf("got %s (%s), want an empty non-terminal denied refused",
+				answer.DNSSEC.State, answer.DNSSEC.Reason)
 		}
 	})
 }

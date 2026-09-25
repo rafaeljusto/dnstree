@@ -77,7 +77,7 @@ func (c *Chain) provesNoCloserMatch(authority []dns.RR, qname string, labels uin
 
 	if nsecs := nsecsOf(authority); len(nsecs) > 0 {
 		for _, nsec := range nsecs {
-			if !nsecCovers(nsec, nextCloser) {
+			if !nsecDenies(nsec, nextCloser) {
 				continue
 			}
 			return c.signedBy(authority, nsec.Hdr.Name, dns.TypeNSEC)
@@ -110,7 +110,7 @@ func (c *Chain) provesNoCloserMatch(authority []dns.RR, qname string, labels uin
 func (c *Chain) nsecDeniesName(nsecs []*dns.NSEC, authority []dns.RR, qname string) error {
 	var covering *dns.NSEC
 	for _, nsec := range nsecs {
-		if nsecCovers(nsec, qname) {
+		if nsecDenies(nsec, qname) {
 			covering = nsec
 			break
 		}
@@ -133,7 +133,7 @@ func (c *Chain) nsecDeniesName(nsecs []*dns.NSEC, authority []dns.RR, qname stri
 		}
 	}
 	for _, nsec := range nsecs {
-		if !nsecCovers(nsec, wildcard) {
+		if !nsecDenies(nsec, wildcard) {
 			continue
 		}
 		return c.signedBy(authority, nsec.Hdr.Name, dns.TypeNSEC)
@@ -173,7 +173,7 @@ func (c *Chain) nsecDeniesType(nsecs []*dns.NSEC, authority []dns.RR, qname stri
 	// A wildcard answered, and it has no more of this type than the name does.
 	var covering *dns.NSEC
 	for _, nsec := range nsecs {
-		if nsecCovers(nsec, qname) {
+		if nsecDenies(nsec, qname) {
 			covering = nsec
 			break
 		}

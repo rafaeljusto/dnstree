@@ -113,6 +113,21 @@ func TestWildcardStretchedOverAName(t *testing.T) {
 	}
 }
 
+// TestWildcardOverAnEmptyNonTerminal covers a wildcard answer replayed for a
+// name under an empty non-terminal, which blocks the wildcard. The gap covers
+// the next closer name but ends below it, so that name is there.
+func TestWildcardOverAnEmptyNonTerminal(t *testing.T) {
+	chain, root := secured(t)
+
+	answer := wildcardAnswer(t, root, "*.example.", "x.c.example.")
+	authority := root.nsec(t, "*.example.", "a.b.c.example.", dns.TypeTXT, dns.TypeRRSIG, dns.TypeNSEC)
+
+	status := chain.Verify(answer, authority, dns.RcodeSuccess, "x.c.example.", dns.TypeTXT)
+	if status.State == trace.Secure {
+		t.Fatalf("got %+v, want a wildcard over an empty non-terminal refused", status)
+	}
+}
+
 // TestNoDataNamesTheTypesItHolds covers the ordinary NODATA: the record naming
 // the name says which types it has, and the one asked for is not among them.
 func TestNoDataNamesTheTypesItHolds(t *testing.T) {

@@ -293,6 +293,13 @@ func nsecCovers(nsec *dns.NSEC, name string) bool {
 	return dns.CompareName(owner, name) < 0 && dns.CompareName(name, next) < 0
 }
 
+// nsecDenies is a gap that says a name is not there. One that ends below the
+// name spans an empty non-terminal, which is there and owns nothing.
+func nsecDenies(nsec *dns.NSEC, name string) bool {
+	next := nsec.NextDomain
+	return nsecCovers(nsec, name) && (dns.EqualName(next, name) || !dnsutil.IsBelow(name, next))
+}
+
 // nsec3Matches and nsec3Covers are the same two things, about the hash of a
 // name rather than the name itself.
 func nsec3Matches(nsec3 *dns.NSEC3, name string) bool {
