@@ -22,6 +22,11 @@ type Trace struct {
 
 	Elapsed time.Duration
 
+	// Started is when the walk began. It is what the lifetime of a signature is
+	// read against, so that a trace read back later says what it said when it
+	// was made rather than what the clock says now.
+	Started time.Time
+
 	// Resolvers is the same question put to recursive servers, in the order the
 	// run named them, when it asked for the comparison. A walk from the root is
 	// deliberately the slow way round — it keeps no cache and takes every step
@@ -247,6 +252,11 @@ type Step struct {
 	// which of them answered is the whole of what this says.
 	NSID string
 
+	// Minimised marks a hop that asked for less of the name than the walk was
+	// after, to find where the next zone cut is (RFC 9156). What it came back
+	// with is about that shorter name, so it is never the resolution's answer.
+	Minimised bool
+
 	// Aside marks work that answers a different question: the address of a
 	// nameserver, or the NS set of a zone. The resolution's own answer is never
 	// inside one. Following an alias is not an aside: the target is what the
@@ -411,6 +421,96 @@ type DNSSECStatus struct {
 	KeyTags   []uint16
 	Algorithm string // the signing algorithm, e.g. ECDSAP256SHA256
 	Digest    string // the DS digest type, e.g. SHA256
+
+	// Signatures are the lifetimes of the signatures this verdict rests on,
+	// set only on a secure one: the keys of the zone, the DS its parent signed,
+	// the records that answered. A zone that stops being re-signed goes on
+	// validating until the first of them runs out, and then fails all at once.
+	Signatures []Lifetime
+}
+
+// Lifetime is how long one signature was made to last.
+type Lifetime struct {
+	Inception  time.Time
+	Expiration time.Time
+}
+
+// staleShare is the part of a signature's life that, left, marks it stale. A
+// signer re-signs with between a quarter and a half of a signature's life still
+// ahead of it, so one with less than a fifth left has a signer that stopped.
+// An absolute margin would not do: an online signer hands out signatures that
+// last a day, fresh every time.
+const staleShare = 5
+
+// Left is how long the first of the signatures under a verdict had to run when
+// the walk was made, and false where that is not known: no signature held, or
+// the trace does not say when it was made.
+func (t *Trace) Left(status *DNSSECStatus) (time.Duration, bool) {
+	if t == nil || status == nil || len(status.Signatures) == 0 || t.Started.IsZero() {
+		return 0, false
+	}
+	left := status.Signatures[0].Expiration.Sub(t.Started)
+	for _, signature := range status.Signatures[1:] {
+		left = min(left, signature.Expiration.Sub(t.Started))
+	}
+	return left, true
+}
+
+// Expiring is how long is left of the stalest signature under a verdict, and
+// whether it is stale at all: in the last fifth of the life it was made for,
+// when the walk was made.
+func (t *Trace) Expiring(status *DNSSECStatus) (time.Duration, bool) {
+	if t == nil || status == nil || t.Started.IsZero() {
+		return 0, false
+	}
+	var (
+		left  time.Duration
+		stale bool
+	)
+	for _, signature := range status.Signatures {
+		remaining := signature.Expiration.Sub(t.Started)
+		if remaining*staleShare >= signature.Expiration.Sub(signature.Inception) {
+			continue
+		}
+		if !stale || remaining < left {
+			left, stale = remaining, true
+		}
+	}
+	return left, stale
+}
+
+// Soonest is the step whose signatures run out first, nil where none were
+// checked. A chain is as good as its weakest link, and every link of it is
+// re-signed on its own schedule. The asides are read too, since a cut crossed
+// without a referral is checked on one.
+func (t *Trace) Soonest() *Step {
+	var (
+		soonest *Step
+		first   time.Duration
+	)
+	for step := range t.Steps() {
+		left, ok := t.Left(step.DNSSEC)
+		if ok && (soonest == nil || left < first) {
+			soonest, first = step, left
+		}
+	}
+	return soonest
+}
+
+// Stale is the step carrying the stalest signature of the walk, nil where none
+// is in the last fifth of its life.
+func (t *Trace) Stale() *Step {
+	var (
+		stalest *Step
+		first   time.Duration
+	)
+	for step := range t.Steps() {
+		left, ok := t.Expiring(step.DNSSEC)
+		if ok && (stalest == nil || left < first) {
+			stalest, first = step, left
+		}
+	}
+	return stalest
 }
 
 // Steps walks the tree depth first, parents before children.
@@ -478,7 +578,9 @@ func result(step *Step) *Step {
 	var found *Step
 	switch step.Kind {
 	case KindAnswer, KindCNAME, KindNoData, KindNXDomain:
-		found = step
+		if !step.Minimised {
+			found = step
+		}
 	}
 	for _, child := range step.Children {
 		if deeper := result(child); deeper != nil {

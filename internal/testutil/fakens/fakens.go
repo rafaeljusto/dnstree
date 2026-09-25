@@ -52,6 +52,18 @@ type Behaviour struct {
 	// there, but it did not sign itself.
 	BadKeySignature bool
 
+	// SignatureLeft is how long the signatures the zone hands out have left to
+	// run, out of a life of SignatureLife, or the fourteen days the library
+	// signs for where that is zero. Little left of a long life is a zone whose
+	// signer has stopped re-signing it. Zero leaves both to the library.
+	SignatureLeft time.Duration
+	SignatureLife time.Duration
+
+	// DenyEmptyNonTerminal answers NXDOMAIN for a name that owns nothing but
+	// has names below it, which RFC 8020 makes a claim that nothing is below it
+	// either. It is what breaks a resolver that minimises its questions.
+	DenyEmptyNonTerminal bool
+
 	// Extended attaches an RFC 8914 extended error to every answer, which is
 	// how a server says why it answered as it did. Paired with Refuse it is a
 	// filtering resolver; on its own it is a server explaining itself.
@@ -471,7 +483,7 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 	switch {
 	case len(answer) > 0:
 		reply.Answer = answer
-	case len(owned) > 0 || s.hasChildren(name):
+	case len(owned) > 0 || s.hasChildren(name) && !s.behaviour.DenyEmptyNonTerminal:
 		// NODATA, including the empty non-terminal: the name is there and the
 		// type is not, and a signed zone says so rather than only implying it.
 		reply.Ns = append(s.soa(), s.denial(name, false)...)

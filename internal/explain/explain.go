@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
@@ -322,9 +323,29 @@ func trust(tr *trace.Trace) []Finding {
 		if status.Algorithm != "" {
 			text += ", signed with " + status.Algorithm
 		}
-		return []Finding{{Topic: Trust, Level: Note, Text: text}}
+		findings := []Finding{{Topic: Trust, Level: Note, Text: text}}
+		if finding, ok := expiring(tr); ok {
+			findings = append(findings, finding)
+		}
+		return findings
 	}
 	return nil
+}
+
+// expiring is the link of a chain that holds now and will not for long: a
+// signature in the last fifth of the life it was made for, which a signer that
+// is still working would have replaced by now. A zone that stops being
+// re-signed validates to the last second and then fails all at once, which is
+// why it is worth saying while there is still time to fix it.
+func expiring(tr *trace.Trace) (Finding, bool) {
+	step := tr.Stale()
+	if step == nil {
+		return Finding{}, false
+	}
+	left, _ := tr.Expiring(step.DNSSEC)
+	return Finding{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
+		"a signature over %s runs out in %s, late in the life it was made for, and unless the zone is re-signed before then a resolver that validates answers SERVFAIL for this name",
+		zoneOf(step), spell(uint32(left/time.Second)))}, true
 }
 
 // state is the first hop the chain reached this state at, nil for a state it

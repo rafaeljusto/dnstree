@@ -17,6 +17,11 @@
       "type": "number",
       "minimum": 0
     },
+    "started": {
+      "description": "When the walk began, in RFC 3339. It is what dnssec.signatures is read against, so that a trace read back later says how long its signatures had left when it was made.",
+      "type": "string",
+      "format": "date-time"
+    },
     "resolvers": {
       "description": "The same question put to recursive servers, in the order the run named them. Several of them is the question asked from several places at once: two that answer differently are two views of one name, and which of them a client gets depends only on which resolver it uses. A server that could not be asked at all is left out rather than carried empty.",
       "type": "array",
@@ -133,6 +138,10 @@
         },
         "aside": {
           "description": "Set on work that answers a different question: the address of a nameserver, or the NS set of a zone. The resolution's own answer is never inside one. Following an alias is not an aside: the target is what the question meant all along.",
+          "type": "boolean"
+        },
+        "minimised": {
+          "description": "Set on a hop that asked for less of the name than the walk was after, to find where the next zone cut is (RFC 9156, --qmin). asked says what it put instead, and what it came back with is about that shorter name, so it is never the walk's answer.",
           "type": "boolean"
         },
         "delegation": { "$ref": "#/$defs/delegation" },
@@ -300,6 +309,10 @@
           "enum": ["secure", "insecure", "bogus", "indeterminate"]
         },
         "reason": { "type": "string" },
+        "zone": {
+          "description": "The zone the verdict is about, which is not always the zone of the step it sits on.",
+          "type": "string"
+        },
         "key_tags": {
           "type": "array",
           "items": { "type": "integer", "minimum": 0 }
@@ -311,7 +324,21 @@
         "digest": {
           "description": "The DS digest type.",
           "type": "string"
+        },
+        "signatures": {
+          "description": "The signatures a secure verdict rests on, as long as each was made to last: the keys of the zone, the DS its parent signed, the records that answered. Absent on any other verdict. A zone that stops being re-signed goes on validating until the first of them runs out, and then fails all at once.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/signature" }
         }
+      }
+    },
+    "signature": {
+      "description": "How long one signature was made to last, in RFC 3339. One with less than a fifth of that left when the walk was made is late in its life, which is what a stopped signer leaves behind.",
+      "type": "object",
+      "required": ["inception", "expiration"],
+      "properties": {
+        "inception": { "type": "string", "format": "date-time" },
+        "expiration": { "type": "string", "format": "date-time" }
       }
     },
     "extended_error": {

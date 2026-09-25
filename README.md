@@ -101,16 +101,18 @@ dnstree [flags] NAME [TYPE]
 | `--check-ns` | ask each zone for its own NS set and compare it with the delegation |
 | `--serial` | ask every nameserver of the zone which copy of it they serve, and compare |
 | `--nsid` | ask each server which of itself answered, and draw it beside the address |
+| `--qmin` | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
-| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot` or `web` |
+| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot`, `mermaid` or `web` |
 | `--web-addr`, `--no-browser` | where `--format web` serves the page, and whether a browser is opened at it |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--watch` | walk again this often, and say only what changed since the walk before |
 | `--explain` | say in sentences what the walk came to, under the tree |
 | `--diff` | say what has changed since the last walk of the same question |
 | `--expect` | require this of the walk, and exit 4 where it does not hold; repeat it |
+| `--from` | draw a walk `--format json` saved, from a file or `-`, instead of making one |
 | `--color` | `auto` (the default: off where `NO_COLOR` is set or `TERM` is `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
@@ -144,8 +146,8 @@ and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
-`no-config`, `version` and `schema`: those four ask something of the run rather
-than set a default for it.
+`no-config`, `version`, `schema` and `from`: those five ask something of the run
+rather than set a default for it.
 
 > [!NOTE]
 > A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be
@@ -157,13 +159,14 @@ above and `--dnssec=false` turns a flag it set back off. Flags that answer one
 question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
-for `--tls-ca` and `--tls-insecure`. `--format json`, `--format dot` and
-`--format web` drop a `live` and a `watch` the file set, since all three are
-written once at the end and leave neither anything to draw nor anything to
-change; `json` and `dot` drop an `explain` and a `diff` as well, being read by a
-program that has the whole trace already. A format that serves no page drops a
-`web-addr` and a `no-browser` it set. `--config FILE` reads somewhere else, and
-`--no-config` reads nowhere.
+for `--tls-ca` and `--tls-insecure`. `--format json`, `--format dot`,
+`--format mermaid` and `--format web` drop a `live` and a `watch` the file set,
+since all four are written once at the end and leave neither anything to draw
+nor anything to change; `json`, `dot` and `mermaid` drop an `explain` and a
+`diff` as well, being read by a program that has the whole trace already. A
+format that serves no page drops a `web-addr` and a `no-browser` it set, and
+`--from` drops a `live`, a `watch` and a `diff`, which are about walks being
+made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.
 
 `root` is the one line worth repeating: a file may carry as many as the walk
 should start from, in the order they are written. One `--root` on the command
@@ -271,6 +274,16 @@ The signatures name the zone that made them, and the same server holds the
 parent side of the cut, so it is asked for the child's DS — an aside reading
 `(DS of registro.br.)` — and the chain crosses the cut before the answer is
 checked.
+
+A chain that holds today can stop holding on a schedule. Every signature is
+made to last a while, and a zone whose signer has stopped goes on validating
+until the first of them runs out, and then fails all at once. A signer re-signs
+with a quarter or more of a signature's life still ahead of it, so a verdict
+resting on one with less than a fifth of its life left says when it runs out —
+`[secure ECDSAP256SHA256, expires in 2d3h]` — and `--explain` says what happens
+then. The time left is read against when the walk was made, which is also what
+a walk drawn again with `--from` reads it against. `--expect fresh` holds a
+script to the same thing; see [Asking rather than reading](#asking-rather-than-reading).
 
 ### What a server said about its answer
 
@@ -475,6 +488,46 @@ hex it arrived as, and an identifier longer than a line has room for is cut.
 A server that publishes none says nothing, which is most of them below the
 root, and its hop reads as it would without the flag.
 
+### Asking only what each zone needs
+
+A walk asks every server the whole name, the way `dig +trace` does. Resolvers
+stopped doing that years ago: they ask each zone for one label more than it
+already has, so the root hears about `com.` and never about `www.example.com.`
+(RFC 9156). `--qmin` walks that way, and every hop that asked less than the
+whole name says what it asked instead:
+
+```
+$ dnstree --qmin --no-asn www.example.com A
+. (root)
+├── a.root-servers.net. 198.41.0.4  164ms  NOERROR  referral → com.  (minimised to com.)
+│   ├── l.gtld-servers.net. 192.41.162.30  221ms  NOERROR  referral → example.com.  (minimised to example.com.)
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  13ms  NOERROR  AA
+│   │   │   ├── www.example.com. 300 A 172.66.147.243
+│   │   │   └── www.example.com. 300 A 104.20.23.154
+│   │   ├── hera.ns.cloudflare.com. 172.64.32.162  (not queried)
+│   │   ├── hera.ns.cloudflare.com. 173.245.58.162  (not queried)
+│   │   ├── hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
+│   │   └── (and 8 more not queried)
+│   ├── l.gtld-servers.net. 2001:500:d937::30  (not queried)
+│   ├── j.gtld-servers.net. 192.48.79.30  (not queried)
+│   ├── j.gtld-servers.net. 2001:502:7094::30  (not queried)
+│   └── (and 22 more not queried)
+├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── b.root-servers.net. 170.247.170.2  (not queried)
+├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── (and 22 more not queried)
+✔ answered in 401ms · resolver in 12ms · 3 queries · 3 servers
+```
+
+Below a zone cut it goes on a label at a time — an empty name on the way answers
+NODATA, and the walk asks one label further — so a name deep under its zone
+costs a query for each label. The point of asking this way is what it finds: a
+server that answers NXDOMAIN for a name only because nothing is at it yet, which
+RFC 8020 reads as nothing being below it either. A resolver that minimises
+stops there; one that does not never asks the question. `--qmin` asks the whole
+name again when it meets one, the way resolvers fall back, and says under the
+tree which server did it and for which name.
+
 ### How much room an answer had
 
 Every hop records how big the answer was and how big it was allowed to be: the
@@ -597,13 +650,31 @@ $ echo $?
 
 It takes one of the words that name how far the chain of trust got — `secure`,
 `insecure`, `bogus`, `indeterminate` — or what the walk came to — `answer`,
-`cname`, `nodata`, `nxdomain` — or else the rdata of a record that has to be
-among the answers. Repeat it for each thing that has to hold:
+`cname`, `nodata`, `nxdomain` — or `fresh`, below — or else the rdata of a
+record that has to be among the answers. Repeat it for each thing that has to
+hold:
 
 ```
 $ dnstree --dnssec --expect secure --expect 104.20.23.154 www.example.com A
 ...
 ✔ answered in 2s · resolver in 243ms · 6 queries · 3 servers
+```
+
+`fresh` asks for a chain of trust that holds and none of whose signatures is
+late in the life it was made for, which is what a signer that is still working
+leaves behind it. `fresh:3d` or `fresh:36h` asks instead that none of them runs
+out that soon, whatever it was made for. The difference is worth having: a zone
+signed on the fly, as Cloudflare signs, hands out signatures that last a day and
+are always fresh and never three days ahead:
+
+```
+$ dnstree --dnssec --expect fresh --expect fresh:3d www.example.com A
+...
+✔ answered in 1.1s · resolver in 33ms · 6 queries · 3 servers
+expected fresh:3d, got signatures over example.com. that run out in 1 day 1 hour
+
+$ echo $?
+4
 ```
 
 Addresses are compared as addresses and names the way DNS compares names, so
@@ -915,6 +986,82 @@ dnstree --format dot www.example.com | dot -Tsvg > trace.svg
 
 ![dnstree dot format example](docs/demo-dot.svg "dnstree dot format example")
 
+`--format mermaid` draws the same picture for the places that draw Mermaid
+rather than Graphviz: pasted into a fenced `mermaid` block, GitHub, GitLab and
+most wikis draw it where it stands, which makes it the one to put in an issue.
+Whatever a server wrote is escaped on the way, so a record cannot close a label
+or open a tag on the page it lands on.
+
+<details>
+<summary>The same walk, as GitHub draws it</summary>
+
+```mermaid
+---
+title: "dnstree www.example.com. A"
+---
+flowchart LR
+    subgraph z0 ["."]
+        n0([". (root)"])
+        n1["a.root-servers.net.<br/>198.41.0.4<br/>NOERROR referral to com."]
+        n12["a.root-servers.net.<br/>2001:503:ba3e::2:30<br/>not queried"]
+        n13["b.root-servers.net.<br/>170.247.170.2<br/>not queried"]
+        n14["b.root-servers.net.<br/>2801:1b8:10::b<br/>not queried"]
+        n15["(and 22 more not queried)"]
+    end
+    subgraph z1 ["com."]
+        n2["l.gtld-servers.net.<br/>192.41.162.30<br/>NOERROR referral to example.com.<br/>(asked again after a silence)"]
+        n8["l.gtld-servers.net.<br/>2001:500:d937::30<br/>not queried"]
+        n9["j.gtld-servers.net.<br/>192.48.79.30<br/>not queried"]
+        n10["j.gtld-servers.net.<br/>2001:502:7094::30<br/>not queried"]
+        n11["(and 22 more not queried)"]
+    end
+    subgraph z2 ["example.com."]
+        n3["hera.ns.cloudflare.com.<br/>108.162.192.162<br/>NOERROR answer<br/>www.example.com. A 172.66.147.243<br/>www.example.com. A 104.20.23.154"]
+        n4["hera.ns.cloudflare.com.<br/>172.64.32.162<br/>not queried"]
+        n5["hera.ns.cloudflare.com.<br/>173.245.58.162<br/>not queried"]
+        n6["hera.ns.cloudflare.com.<br/>2606:4700:50::adf5:3aa2<br/>not queried"]
+        n7["(and 8 more not queried)"]
+    end
+    n0 -->|"175ms"| n1
+    n1 -->|"2.19s"| n2
+    n2 -->|"14ms"| n3
+    n2 -.-> n4
+    n2 -.-> n5
+    n2 -.-> n6
+    n2 -.-> n7
+    n1 -.-> n8
+    n1 -.-> n9
+    n1 -.-> n10
+    n1 -.-> n11
+    n0 -.-> n12
+    n0 -.-> n13
+    n0 -.-> n14
+    n0 -.-> n15
+    classDef zone stroke:#666666
+    classDef answer stroke:#006400,stroke-width:2px
+    classDef denial stroke:#b8860b
+    classDef filtered stroke:#ff8c00,stroke-width:3px
+    classDef failed stroke:#b22222,stroke-width:2px
+    classDef skipped stroke:#999999,stroke-dasharray:4 3,color:#666666
+    classDef note stroke:#b8860b,stroke-dasharray:2 2
+    class n0 zone
+    class n12 skipped
+    class n13 skipped
+    class n14 skipped
+    class n15 skipped
+    class n8 skipped
+    class n9 skipped
+    class n10 skipped
+    class n11 skipped
+    class n3 answer
+    class n4 skipped
+    class n5 skipped
+    class n6 skipped
+    class n7 skipped
+```
+
+</details>
+
 `--schema` prints the JSON Schema of that document and stops, so whatever reads
 the output can be held against the shape of it — and told what a field means —
 without reading the source:
@@ -934,6 +1081,29 @@ The same schema is served at
 [rafaeljusto.github.io/dnstree/trace.schema.json](https://rafaeljusto.github.io/dnstree/trace.schema.json),
 which is the address its `$id` names, so a validator can be pointed at it with
 no binary to hand.
+
+### Drawing a walk again
+
+`--format json` is also a way to keep a walk. `--from` reads one back and draws
+it in whichever format was asked for, as though it had just been made, without
+asking any server anything — so a walk made from a machine nobody else can
+reach can be drawn, explained and checked somewhere else:
+
+```
+ssh far-away dnstree --dnssec --format json www.example.com > walk.json
+dnstree --from walk.json --explain
+dnstree --from walk.json --format mermaid
+dnstree --from - --expect secure < walk.json
+```
+
+It takes no name, since the file says what was asked, and refuses the flags
+that shape a walk being made — `--dnssec`, `--qmin`, a transport, a budget —
+since none of them can change one that is over. `--expect` and the exit
+codes read the saved walk as they would a new one, and a signature's time left
+is read against when the walk was made rather than against the clock. It cannot
+be drawn live, watched or held against the last walk with `--diff`: none of
+those is about a walk that is over. A document of another `schema_version` is
+refused rather than guessed at.
 
 ## How it walks
 

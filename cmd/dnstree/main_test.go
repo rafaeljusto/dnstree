@@ -88,6 +88,11 @@ func TestRun(t *testing.T) {
 				tb.Errorf("got %q, want a graph", out)
 			}
 		}},
+		"mermaid": {format: "mermaid", check: func(tb testing.TB, out string) {
+			if !strings.Contains(out, "flowchart LR") || strings.Contains(out, "answered in") {
+				tb.Errorf("got %q, want a chart and no summary under it", out)
+			}
+		}},
 	}
 
 	for name, test := range tests {
@@ -738,5 +743,87 @@ func TestRunWatchInterrupted(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "expected 192.0.2.2, got 192.0.2.1") {
 		t.Errorf("got %q, want it to say what it was still waiting for", stderr.String())
+	}
+}
+
+// TestRunFrom saves a walk as JSON and draws it again, which asks nothing of
+// any server: the second run is pointed at none and still answers the way the
+// first one did.
+func TestRunFrom(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+	hints := rootHintsFile(t)
+	port := strconv.Itoa(int(server.Addr.Port()))
+
+	var saved, stderr bytes.Buffer
+	if code := run(t.Context(), []string{
+		"--root-hints", hints, "--port", port, "--no-asn", "--no-compare", "--format", "json", ".", "NS",
+	}, &saved, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d: %s", code, exitAnswer, stderr.String())
+	}
+	path := filepath.Join(t.TempDir(), "walk.json")
+	if err := os.WriteFile(path, saved.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	asked := len(server.Queries())
+
+	tests := map[string]struct {
+		args []string
+		code int
+		want string
+	}{
+		"drawn as a tree, and explained": {
+			args: []string{"--from", path, "--explain", "--color", "never"},
+			code: exitAnswer, want: ". NS is a.root-servers.net.",
+		},
+		"written back out as it was saved": {
+			args: []string{"--from", path, "--format", "json"},
+			code: exitAnswer, want: saved.String(),
+		},
+		"drawn as a chart": {
+			args: []string{"--from", path, "--format", "mermaid"},
+			code: exitAnswer, want: "flowchart LR",
+		},
+		"held to what was expected of it": {
+			args: []string{"--from", path, "--expect", "nxdomain"},
+			code: exitExpect, want: "expected nxdomain, got answer",
+		},
+		"a file that is not a walk": {
+			args: []string{"--from", hints},
+			code: exitUsage, want: "not a trace",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run(t.Context(), test.args, &stdout, &stderr)
+			if code != test.code {
+				t.Fatalf("got exit %d, want %d: %s%s", code, test.code, stdout.String(), stderr.String())
+			}
+			if out := stdout.String() + stderr.String(); !strings.Contains(out, test.want) {
+				t.Errorf("got\n%s\nwant it to carry %q", out, test.want)
+			}
+		})
+	}
+
+	if got := len(server.Queries()); got != asked {
+		t.Errorf("got %d more queries, want a saved walk to ask nothing", got-asked)
+	}
+}
+
+// TestRunFromStdin reads the saved walk from the standard input.
+func TestRunFromStdin(t *testing.T) {
+	previous := stdin
+	t.Cleanup(func() { stdin = previous })
+	stdin = strings.NewReader(`{"schema_version": 3, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "rcode": "NXDOMAIN",
+		"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53}}]}}`)
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), []string{"--from", "-", "--color", "never"}, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d: %s", code, exitAnswer, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "a.root-servers.net. 192.0.2.1") {
+		t.Errorf("got\n%s\nwant the saved hop drawn", stdout.String())
 	}
 }

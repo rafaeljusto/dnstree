@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/cli"
+	"github.com/rafaeljusto/dnstree/internal/expect"
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
 )
 
@@ -112,6 +113,22 @@ func TestParse(t *testing.T) {
 			args: []string{"--no-compare", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A"},
 		},
+		"a walk that minimises its questions": {
+			args: []string{"--qmin", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Minimise: true},
+		},
+		"a chart for a wiki": {
+			args: []string{"--format", "mermaid", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "mermaid"},
+		},
+		"a walk already made needs no name": {
+			args: []string{"--from", "walk.json"},
+			want: cli.Config{From: "walk.json"},
+		},
+		"a walk already made, explained and held to a lifetime": {
+			args: []string{"--from", "-", "--explain", "--expect", "fresh:3d", "--format", "emoji"},
+			want: cli.Config{From: "-", Explain: true, Format: "emoji", Expect: expectations(t, "fresh:3d")},
+		},
 	}
 
 	for name, test := range tests {
@@ -146,33 +163,59 @@ func TestParse(t *testing.T) {
 	}
 }
 
+// expectations reads --expect values the way the command line does.
+func expectations(tb testing.TB, values ...string) []expect.Expectation {
+	tb.Helper()
+
+	var want []expect.Expectation
+	for _, value := range values {
+		expectation, err := expect.Parse(value)
+		if err != nil {
+			tb.Fatalf("expect.Parse(%q): %v", value, err)
+		}
+		want = append(want, expectation)
+	}
+	return want
+}
+
 func TestParseRejects(t *testing.T) {
 	tests := map[string][]string{
-		"nothing to resolve":            {},
-		"too many arguments":            {"example.com", "A", "please"},
-		"two address families":          {"-4", "-6", "example.com"},
-		"two transports":                {"--udp", "--doh", "example.com"},
-		"an unknown format":             {"--format", "runes", "example.com"},
-		"live json":                     {"--format", "json", "--live", "example.com"},
-		"live dot":                      {"--format", "dot", "--live", "example.com"},
-		"live web":                      {"--format", "web", "--live", "example.com"},
-		"watched json":                  {"--format", "json", "--watch", "30s", "example.com"},
-		"watched dot":                   {"--format", "dot", "--watch", "30s", "example.com"},
-		"watched web":                   {"--format", "web", "--watch", "30s", "example.com"},
-		"a watch tighter than a second": {"--watch", "100ms", "example.com"},
-		"a watch of no time at all":     {"--watch", "-1s", "example.com"},
-		"a page nobody serves":          {"--web-addr", "127.0.0.1:8080", "example.com"},
-		"a browser for a tree":          {"--no-browser", "example.com"},
-		"explained json":                {"--format", "json", "--explain", "example.com"},
-		"explained dot":                 {"--format", "dot", "--explain", "example.com"},
-		"compared json":                 {"--format", "json", "--diff", "example.com"},
-		"compared dot":                  {"--format", "dot", "--diff", "example.com"},
-		"an unknown colour":             {"--color", "sometimes", "example.com"},
-		"a timeout of nothing":          {"--timeout", "0", "example.com"},
-		"a negative retry count":        {"--retries", "-1", "example.com"},
-		"a port beyond the range":       {"--port", "70000", "example.com"},
-		"a flag nobody has":             {"--recursive", "example.com"},
-		"help":                          {"--help"},
+		"nothing to resolve":              {},
+		"too many arguments":              {"example.com", "A", "please"},
+		"two address families":            {"-4", "-6", "example.com"},
+		"two transports":                  {"--udp", "--doh", "example.com"},
+		"an unknown format":               {"--format", "runes", "example.com"},
+		"live json":                       {"--format", "json", "--live", "example.com"},
+		"live dot":                        {"--format", "dot", "--live", "example.com"},
+		"live web":                        {"--format", "web", "--live", "example.com"},
+		"watched json":                    {"--format", "json", "--watch", "30s", "example.com"},
+		"watched dot":                     {"--format", "dot", "--watch", "30s", "example.com"},
+		"watched web":                     {"--format", "web", "--watch", "30s", "example.com"},
+		"a watch tighter than a second":   {"--watch", "100ms", "example.com"},
+		"a watch of no time at all":       {"--watch", "-1s", "example.com"},
+		"a page nobody serves":            {"--web-addr", "127.0.0.1:8080", "example.com"},
+		"a browser for a tree":            {"--no-browser", "example.com"},
+		"explained json":                  {"--format", "json", "--explain", "example.com"},
+		"explained dot":                   {"--format", "dot", "--explain", "example.com"},
+		"compared json":                   {"--format", "json", "--diff", "example.com"},
+		"compared dot":                    {"--format", "dot", "--diff", "example.com"},
+		"live mermaid":                    {"--format", "mermaid", "--live", "example.com"},
+		"watched mermaid":                 {"--format", "mermaid", "--watch", "30s", "example.com"},
+		"explained mermaid":               {"--format", "mermaid", "--explain", "example.com"},
+		"compared mermaid":                {"--format", "mermaid", "--diff", "example.com"},
+		"a walk already made, and a name": {"--from", "walk.json", "example.com"},
+		"a walk already made, drawn live": {"--from", "walk.json", "--live"},
+		"a walk already made, watched":    {"--from", "walk.json", "--watch", "30s"},
+		"a walk already made, remembered": {"--from", "walk.json", "--diff"},
+		"a walk already made, re-checked": {"--dnssec", "--from", "walk.json"},
+		"a walk already made, re-asked":   {"--from", "walk.json", "--qmin", "--timeout", "3s"},
+		"a lifetime that is not one":      {"--expect", "fresh:soon", "example.com"},
+		"an unknown colour":               {"--color", "sometimes", "example.com"},
+		"a timeout of nothing":            {"--timeout", "0", "example.com"},
+		"a negative retry count":          {"--retries", "-1", "example.com"},
+		"a port beyond the range":         {"--port", "70000", "example.com"},
+		"a flag nobody has":               {"--recursive", "example.com"},
+		"help":                            {"--help"},
 
 		"two ways to start a walk":      {"--root", "127.0.0.1", "--root-hints", "hints", "example.com"},
 		"a root that is no address":     {"--root", "localhost", "example.com"},

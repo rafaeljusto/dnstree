@@ -11,7 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
@@ -23,12 +25,17 @@ const (
 	trust   about = iota // how far the chain of trust got
 	outcome              // what the walk came to
 	answer               // the records that answered
+	fresh                // how long the signatures have left to run
 )
 
 // Expectation is one thing the command line asked to be true of the walk.
 type Expectation struct {
 	about about
 	want  string
+
+	// left is how long every signature the chain rests on has to have left,
+	// for an expectation about freshness. Zero asks only that none is stale.
+	left time.Duration
 }
 
 // String is the expectation as it was asked for, which is what has to appear in
@@ -37,8 +44,10 @@ func (e Expectation) String() string { return e.want }
 
 // Parse reads one --expect value. It is either one of the words that names how
 // far the chain of trust got — secure, insecure, bogus, indeterminate — or what
-// the walk came to — answer, cname, nodata, nxdomain — or else the rdata of a
-// record that has to be among the answers.
+// the walk came to — answer, cname, nodata, nxdomain — or fresh, which asks for
+// a secure chain none of whose signatures is late in the life it was made for,
+// or none of which runs out within the time after a colon, such as fresh:3d; or
+// else the rdata of a record that has to be among the answers.
 //
 // The words win, because they are what is nearly always meant. A zone that
 // serves a record whose rdata reads like one of them is asked for with a
@@ -55,6 +64,16 @@ func Parse(text string) (Expectation, error) {
 	}
 
 	lower := strings.ToLower(text)
+	if lower == "fresh" {
+		return Expectation{about: fresh, want: lower}, nil
+	}
+	if within, ok := strings.CutPrefix(lower, "fresh:"); ok {
+		left, err := lifetime(within)
+		if err != nil {
+			return Expectation{}, fmt.Errorf("%s: %w", text, err)
+		}
+		return Expectation{about: fresh, want: lower, left: left}, nil
+	}
 	switch trace.DNSSECState(lower) {
 	case trace.Secure, trace.Insecure, trace.Bogus, trace.Indeterminate:
 		return Expectation{about: trust, want: lower}, nil
@@ -107,6 +126,9 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 		}
 		kind := string(result.Kind)
 		return kind, kind == e.want
+
+	case fresh:
+		return e.fresh(tr)
 	}
 
 	result := tr.Result()
@@ -123,6 +145,88 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 		}
 	}
 	return list(answers), false
+}
+
+// fresh reports whether the chain holds and will go on holding for as long as
+// was asked. Only a secure chain has signatures whose lifetime means anything: an
+// insecure one has none to run out, which is not the same as having time left.
+func (e Expectation) fresh(tr *trace.Trace) (got string, ok bool) {
+	step := tr.Trust()
+	if step == nil || step.DNSSEC == nil {
+		return "a walk that followed no chain of trust", false
+	}
+	if step.DNSSEC.State != trace.Secure {
+		return string(step.DNSSEC.State), false
+	}
+
+	soonest := tr.Soonest()
+	if soonest == nil {
+		return "signatures whose lifetime the trace does not record", false
+	}
+	if e.left == 0 {
+		if stale := tr.Stale(); stale != nil {
+			left, _ := tr.Expiring(stale.DNSSEC)
+			return fmt.Sprintf("a signature over %s late in its life, running out in %s", zoneOf(stale), spell(left)), false
+		}
+		return "fresh", true
+	}
+	left, _ := tr.Left(soonest.DNSSEC)
+	return fmt.Sprintf("signatures over %s that run out in %s", zoneOf(soonest), spell(left)), left >= e.left
+}
+
+// zoneOf is the zone a verdict is about, which is not always the zone of the
+// step it sits on.
+func zoneOf(step *trace.Step) string {
+	if step.DNSSEC.Zone != "" {
+		return step.DNSSEC.Zone
+	}
+	return step.Zone
+}
+
+// lifetime reads how long fresh asks for: a Go duration, with days allowed in
+// front of it, since days are what zones are re-signed in.
+func lifetime(text string) (time.Duration, error) {
+	var days time.Duration
+	if before, after, ok := strings.Cut(text, "d"); ok {
+		n, err := strconv.Atoi(before)
+		if err != nil {
+			return 0, fmt.Errorf("%q is not a number of days", before)
+		}
+		days, text = time.Duration(n)*24*time.Hour, after
+	}
+
+	var rest time.Duration
+	if text != "" {
+		var err error
+		if rest, err = time.ParseDuration(text); err != nil {
+			return 0, fmt.Errorf("%q is not a length of time", text)
+		}
+	}
+	if days+rest <= 0 {
+		return 0, errors.New("a signature has to have some time left")
+	}
+	return days + rest, nil
+}
+
+// spell is how long is left, in the two largest units it fills.
+func spell(d time.Duration) string {
+	days, hours := int(d/(24*time.Hour)), int(d%(24*time.Hour)/time.Hour)
+	switch {
+	case days > 0 && hours > 0:
+		return plural(days, "day") + " " + plural(hours, "hour")
+	case days > 0:
+		return plural(days, "day")
+	case hours > 0:
+		return plural(hours, "hour")
+	}
+	return plural(int(d/time.Minute), "minute")
+}
+
+func plural(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return strconv.Itoa(n) + " " + unit + "s"
 }
 
 // same holds one rdata against what was expected. Names are compared the way

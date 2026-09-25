@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/expect"
 	"github.com/rafaeljusto/dnstree/internal/trace"
@@ -174,5 +175,92 @@ func TestParseRejects(t *testing.T) {
 func TestUnmetOfNothing(t *testing.T) {
 	if got := expect.Unmet(nil, parse(t, "192.0.2.1")); got != nil {
 		t.Errorf("got %q, want nothing", got)
+	}
+}
+
+// TestFresh holds the lifetime of a chain of trust against what was asked of
+// it. The walk is made at noon, and the signatures under the answer run out a
+// fixed time after that.
+func TestFresh(t *testing.T) {
+	noon := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	// Signed for a month, the way an offline signer signs.
+	lasting := func(state trace.DNSSECState, left time.Duration) *trace.Trace {
+		step := signed(answered("A", "192.0.2.1"), state)
+		if left > 0 {
+			expiration := noon.Add(left)
+			step.DNSSEC.Signatures = []trace.Lifetime{{Inception: expiration.Add(-30 * 24 * time.Hour), Expiration: expiration}}
+		}
+		tr := walk("A", step)
+		tr.Started = noon
+		return tr
+	}
+
+	tests := map[string]struct {
+		tr    *trace.Trace
+		want  string
+		unmet string
+	}{
+		"a fortnight left of a month is fresh": {
+			tr: lasting(trace.Secure, 14*24*time.Hour), want: "fresh",
+		},
+		"two days left of a month is late in its life": {
+			tr: lasting(trace.Secure, 50*time.Hour), want: "fresh",
+			unmet: "expected fresh, got a signature over test. late in its life, running out in 2 days 2 hours",
+		},
+		"a fortnight left is not three weeks": {
+			tr: lasting(trace.Secure, 14*24*time.Hour), want: "fresh:21d",
+			unmet: "expected fresh:21d, got signatures over test. that run out in 14 days",
+		},
+		"two days left is more than a day": {
+			tr: lasting(trace.Secure, 50*time.Hour), want: "fresh:1d",
+		},
+		"a length of time in hours": {
+			tr: lasting(trace.Secure, 50*time.Hour), want: "fresh:72h",
+			unmet: "expected fresh:72h, got signatures over test. that run out in 2 days 2 hours",
+		},
+		"an unsigned zone has nothing fresh about it": {
+			tr: lasting(trace.Insecure, 0), want: "fresh",
+			unmet: "expected fresh, got insecure",
+		},
+		"a walk that checked nothing": {
+			tr: walk("A", answered("A", "192.0.2.1")), want: "fresh",
+			unmet: "expected fresh, got a walk that followed no chain of trust",
+		},
+		"a trace that does not say when it was made": {
+			tr: func() *trace.Trace {
+				tr := lasting(trace.Secure, 14*24*time.Hour)
+				tr.Started = time.Time{}
+				return tr
+			}(),
+			want:  "fresh",
+			unmet: "expected fresh, got signatures whose lifetime the trace does not record",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			unmet := expect.Unmet(test.tr, parse(t, test.want))
+			switch {
+			case test.unmet == "" && len(unmet) > 0:
+				t.Errorf("got %q, want it met", unmet)
+			case test.unmet != "" && (len(unmet) != 1 || unmet[0] != test.unmet):
+				t.Errorf("got %q, want %q", unmet, test.unmet)
+			}
+		})
+	}
+}
+
+func TestParseFresh(t *testing.T) {
+	for name, value := range map[string]string{
+		"no time at all":      "fresh:0d",
+		"days that are not":   "fresh:xd",
+		"a length that isn't": "fresh:soon",
+		"a negative length":   "fresh:-1h",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := expect.Parse(value); err == nil {
+				t.Errorf("Parse(%q) took it, want it refused", value)
+			}
+		})
 	}
 }

@@ -1,10 +1,12 @@
 package fakens
 
 import (
+	"cmp"
 	"crypto"
 	"encoding/hex"
 	"sync"
 	"testing"
+	"time"
 
 	"codeberg.org/miekg/dns"
 
@@ -35,12 +37,17 @@ type signer struct {
 	// the key set itself. They break different links of the same chain.
 	bad     bool
 	badKeys bool
+
+	// left and life are how long a signature runs from now and how long it
+	// was made to last; a zero left leaves both to the library.
+	left, life time.Duration
 }
 
 func newSigner(tb testing.TB, zone string, behaviour Behaviour) *signer {
 	tb.Helper()
 
-	signer := &signer{zone: zone, bad: behaviour.BadSignature, badKeys: behaviour.BadKeySignature}
+	signer := &signer{zone: zone, bad: behaviour.BadSignature, badKeys: behaviour.BadKeySignature,
+		left: behaviour.SignatureLeft, life: cmp.Or(behaviour.SignatureLife, 14*24*time.Hour)}
 	signer.ksk, signer.kskPriv = generate(tb, zone, dns.FlagZONE|dns.FlagSEP)
 	signer.zsk, signer.zskPriv = generate(tb, zone, dns.FlagZONE)
 	if behaviour.StrayDNSKEY {
@@ -106,6 +113,11 @@ func (s *signer) sign(rrset []dns.RR, key *dns.DNSKEY, private crypto.Signer, sp
 		copies[i] = rr.Clone()
 	}
 	signature := dns.NewRRSIG(s.zone, key.Algorithm, key.KeyTag())
+	if s.left != 0 {
+		expiration := time.Now().Add(s.left)
+		signature.Inception = uint32(expiration.Add(-s.life).Unix())
+		signature.Expiration = uint32(expiration.Unix())
+	}
 	if err := signature.Sign(private, copies, &dns.SignOption{}); err != nil {
 		return nil
 	}

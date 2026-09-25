@@ -137,7 +137,7 @@ func defaults(flags *flag.FlagSet, file configFile) ([]string, bool, error) {
 		case "config", "no-config":
 			return nil, false, fmt.Errorf("%w: %s: --%s says which file to read, so it cannot be read from one",
 				ErrUsage, where, name)
-		case "version", "schema":
+		case "version", "schema", "from":
 			return nil, false, fmt.Errorf("%w: %s: --%s is asked for, not set", ErrUsage, where, name)
 		}
 
@@ -196,13 +196,18 @@ func override(flags *flag.FlagSet, fileArgs, args []string) []string {
 	// the other way round for the flags only a served page takes.
 	switch format := given["format"]; format {
 	case "":
-	case "json", "dot":
+	case "json", "dot", "mermaid":
 		drop["live"], drop["watch"] = true, true
 		drop["explain"], drop["diff"] = true, true
 	case "web":
 		drop["live"], drop["watch"] = true, true
 	default:
 		drop["web-addr"], drop["no-browser"] = true, true
+	}
+
+	// A walk already made is neither drawn live, watched nor remembered.
+	if _, ok := given["from"]; ok {
+		drop["live"], drop["watch"], drop["diff"] = true, true, true
 	}
 
 	if len(drop) == 0 {

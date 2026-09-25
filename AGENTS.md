@@ -84,6 +84,15 @@ Each of these has been a bug, or would be a silent regression.
   delegation, an NXDOMAIN, a NODATA and a wildcard all rest on a proof the zone
   signed, never on an absence: an absence is what anyone able to drop records
   from a response can manufacture.
+- **A minimised hop is never the answer.** Under `--qmin` a zone is asked about
+  a shorter name, and its NODATA or NXDOMAIN is about that name. `Step.Minimised`
+  keeps `Trace.Result` — and so the exit code, `--expect` and `--diff` — from
+  reading one as the resolution's own.
+- **A signature's time left is read against `Trace.Started`, never the clock.**
+  That is what makes a trace drawn again with `--from` say what it said when it
+  was made, and keeps the goldens still. Staleness is a share of the life a
+  signature was made for, not a fixed margin: online signers hand out
+  signatures that last a day, fresh every time.
 - **Nothing reaches the disk unless `--diff` asks for it.** `internal/history`
   is the only writer, it keeps one file per question, and the file names what
   was looked up and when. A cache that cannot be read or written costs the

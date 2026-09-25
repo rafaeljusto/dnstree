@@ -38,10 +38,11 @@ path it took. TYPE defaults to A.
   --check-ns              ask each zone for its own NS set and compare
   --serial                ask every nameserver of the zone which copy it serves
   --nsid                  ask each server which of itself answered (RFC 5001)
+  --qmin                  ask each zone for no more of the name than it needs
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
-  --format FORMAT         tree, ascii, emoji, json, dot or web (default tree)
+  --format FORMAT         tree, ascii, emoji, json, dot, mermaid or web
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
   --live                  draw the tree as the walk makes it
@@ -49,6 +50,7 @@ path it took. TYPE defaults to A.
   --explain               say in sentences what the walk came to
   --diff                  say what has changed since the last walk remembered
   --expect VALUE          require this of the walk, and exit 4 where it fails
+  --from FILE             draw a walk --format json saved, instead of walking
   --color WHEN            auto, always or never (default auto)
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
@@ -96,6 +98,19 @@ walk made on another machine needs, and --no-browser leaves the address to be
 opened by hand. Whatever is pointed at the same server can read the walk as
 --format json writes it, under /trace.json.
 
+--format mermaid writes the same picture as --format dot, for the places that
+draw Mermaid rather than Graphviz: pasted into a fenced mermaid block, GitHub,
+GitLab and most wikis draw it where it stands.
+
+--from reads a walk that --format json wrote, from FILE or from - for the
+standard input, and draws it in whichever format was asked for, as though it
+had just been made: a walk from a machine nobody else can reach can be drawn,
+explained and checked with --expect anywhere. Nothing is asked of any server, so
+it takes no name, refuses the flags that shape a walk being made, and a
+signature's time left is read against when the walk was made rather than
+against the clock. It cannot be drawn live, watched or held
+against the walk remembered with --diff, since it is not a walk being made now.
+
 --subnet asks every server the question as though it came from somebody inside
 that prefix, which is how a server that tailors its answers by network can be
 asked what it tells somewhere else. A bare address is taken as a /24 or a /56,
@@ -122,8 +137,11 @@ the round before and write nothing.
 --expect says what the walk should have come to, and is how a script asks
 rather than reads. It takes one of the words that name how far the chain of
 trust got (secure, insecure, bogus, indeterminate), or what the walk came to
-(answer, cname, nodata, nxdomain), or else the rdata of a record that has to be
-among the answers, such as an address. Repeat it for every one that has to hold.
+(answer, cname, nodata, nxdomain), or fresh, which asks for a chain of trust
+that holds and none of whose signatures runs out within a week; fresh:3d or
+fresh:36h asks for that long instead. Or else it takes the rdata of a record
+that has to be among the answers, such as an address. Repeat it for every one
+that has to hold.
 Those words win where a value could be read either way, so a record whose rdata
 reads like one of them is asked for with a leading =, which expects rdata and
 nothing else.
@@ -143,6 +161,14 @@ the serials is the newer one is not claimed, because serial arithmetic wraps.
 --all sees the other half of the same thing without being asked to: where it
 puts the question itself to every nameserver of a zone, it says so when they do
 not all answer it alike.
+
+--qmin asks each zone for no more of the name than it needs in order to say
+where the next zone cut is (RFC 9156), the way resolvers do by default now: the
+root is asked about com., not about www.example.com. Each hop that asked less
+than the whole name says so in its margin. It is how to see a server that
+answers NXDOMAIN for a name only because nothing is at it yet, which stops a
+resolver that minimises and never troubles one that does not. It costs a query
+for every label below the zone that answers.
 
 --nsid asks every server for the name it goes by (RFC 5001), and draws it
 beside the address. One anycast address is a great many machines in a great many
@@ -182,6 +208,7 @@ type Config struct {
 	CheckNS  bool
 	Serial   bool
 	NSID     bool
+	Minimise bool
 	ASN      bool
 	Compare  bool
 	Format   string
@@ -238,6 +265,11 @@ type Config struct {
 	// ConfigFile is the file the defaults came from, empty when none was read.
 	ConfigFile string
 
+	// From is a walk --format json saved, to be drawn instead of making one:
+	// a path, or "-" for the standard input. The name and the type are the
+	// ones the walk was made for.
+	From string
+
 	// Schema asks for the JSON Schema of the json format and nothing else. Like
 	// Version it answers a question about the command rather than resolving a
 	// name, so it needs no name to resolve.
@@ -288,10 +320,11 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
+	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot or web")
+	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot, mermaid or web")
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
@@ -299,6 +332,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Explain, "explain", false, "say in sentences what the walk came to")
 	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
 	flags.Var(&wanted, "expect", "require this of the walk")
+	flags.StringVar(&cfg.From, "from", "", "draw a walk --format json saved")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
 	flags.DurationVar(&timeout, "timeout", transport.DefaultTimeout, "how long one query may take")
 	flags.IntVar(&cfg.Retries, "retries", 1, "how often to ask again after a silence")
@@ -350,7 +384,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch format {
-	case "tree", "ascii", "emoji", "json", "dot", "web":
+	case "tree", "ascii", "emoji", "json", "dot", "mermaid", "web":
 		cfg.Format = format
 	default:
 		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
@@ -360,13 +394,16 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return &cfg, nil
 	}
 
-	switch flags.NArg() {
-	case 0:
+	switch n := flags.NArg(); {
+	case cfg.From != "" && n > 0:
+		return nil, fmt.Errorf("%w: --from draws a walk already made, so there is no name to resolve", ErrUsage)
+	case cfg.From != "":
+	case n == 0:
 		flags.Usage()
 		return nil, fmt.Errorf("%w: no name to resolve", ErrUsage)
-	case 1:
+	case n == 1:
 		cfg.Name, cfg.Type = flags.Arg(0), "A"
-	case 2:
+	case n == 2:
 		cfg.Name, cfg.Type = flags.Arg(0), strings.ToUpper(flags.Arg(1))
 	default:
 		return nil, fmt.Errorf("%w: only a name and a type were expected", ErrUsage)
@@ -385,13 +422,36 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Proto, err = proto(udp, tcp, dot, doh); err != nil {
 		return nil, err
 	}
-	if cfg.Live && (cfg.Format == "json" || cfg.Format == "dot" || cfg.Format == "web") {
+	if cfg.Live && once(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so it cannot be drawn live",
 			ErrUsage, cfg.Format)
 	}
-	if cfg.Watch != 0 && (cfg.Format == "json" || cfg.Format == "dot" || cfg.Format == "web") {
+	if cfg.Watch != 0 && once(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so there is nothing to watch it change",
 			ErrUsage, cfg.Format)
+	}
+	if cfg.From != "" {
+		// Named on the command line, a flag that shapes the walk would read as
+		// though the saved one had been made with it. The file's are about the
+		// walks it makes, and are left alone.
+		var walking []string
+		scan(flags, args, func(name, _ string) {
+			if walkFlags[name] {
+				walking = append(walking, "--"+name)
+			}
+		})
+		if len(walking) > 0 {
+			return nil, fmt.Errorf("%w: --from draws a walk already made, which %s cannot change",
+				ErrUsage, strings.Join(walking, " and "))
+		}
+		switch {
+		case cfg.Live:
+			return nil, fmt.Errorf("%w: --from draws a walk already made, so there is nothing to draw live", ErrUsage)
+		case cfg.Watch != 0:
+			return nil, fmt.Errorf("%w: --from draws a walk already made, so there is nothing to watch change", ErrUsage)
+		case cfg.Diff:
+			return nil, fmt.Errorf("%w: --from draws a walk already made, and remembering it would put an old walk in place of the last one", ErrUsage)
+		}
 	}
 	// Every round is a whole walk from the root servers down. There is nothing
 	// a change window needs below a second, and a loop tighter than that is
@@ -400,7 +460,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s between one walk and the next is too little; a second is the least",
 			ErrUsage, cfg.Watch)
 	}
-	if (cfg.Explain || cfg.Diff) && (cfg.Format == "json" || cfg.Format == "dot") {
+	if (cfg.Explain || cfg.Diff) && programs(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
 			ErrUsage, cfg.Format)
 	}
@@ -448,6 +508,29 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// walkFlags are the flags that shape a walk being made, and say nothing about
+// one already made.
+var walkFlags = map[string]bool{
+	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
+	"all": true, "dnssec": true, "check-ns": true, "serial": true, "nsid": true, "qmin": true,
+	"subnet": true, "no-asn": true, "no-compare": true, "timeout": true, "retries": true,
+	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
+	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
+	"tls-ca": true, "tls-insecure": true,
+}
+
+// once reports whether a format is written once, at the end, which leaves
+// nothing to draw live and nothing to watch change.
+func once(format string) bool {
+	return programs(format) || format == "web"
+}
+
+// programs reports whether a format is read by a program rather than a person,
+// which has the whole trace already and no use for prose under it.
+func programs(format string) bool {
+	return format == "json" || format == "dot" || format == "mermaid"
 }
 
 // The prefix lengths a bare address is read as. The subnet says which network

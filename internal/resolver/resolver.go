@@ -127,6 +127,13 @@ type Config struct {
 	// where the person running it sits.
 	Subnet netip.Prefix
 
+	// Minimise asks each zone for no more of the name than it needs to say
+	// where the next cut is (RFC 9156), the way resolvers do by default now. It
+	// is what finds a server that denies a name only because nothing is at it
+	// yet: a resolver that minimises stops there, and one that does not never
+	// asks the question.
+	Minimise bool
+
 	Budget Budget
 }
 
@@ -205,9 +212,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		},
 	}
 
-	start := time.Now()
+	run.trace.Started = time.Now()
 	run.walk(ctx, qname, rrtype, run.trace.Root, 0)
-	run.trace.Elapsed = time.Since(start)
+	run.trace.Elapsed = time.Since(run.trace.Started)
 	return run.trace, nil
 }
 
@@ -248,12 +255,33 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 	}
 	var delegation []dns.RR // the authority section that led into this zone
 
-	for depth := 0; ; depth++ {
+	// reach is how many labels of the name the next question in this zone asks
+	// for, which is all of them unless the walk is minimising. entered is
+	// whether the chain has checked this zone yet: minimising asks one zone
+	// several questions, and its keys are fetched once.
+	reach, entered := r.reach(zone, qname), false
+
+	// referred is the step that pointed the walk into this zone, which the
+	// minimised hops inside it hang below rather than replace.
+	referred := parent
+
+	// denied is the shorter name a server said was not there, which the walk
+	// has gone on to ask about in full to see whether that was so.
+	var denied *trace.Step
+
+	for depth := 0; ; {
 		if depth >= r.counters.max.MaxDepth {
 			return r.fail(parent, zone, fmt.Sprintf("gave up after %d zone cuts", r.counters.max.MaxDepth))
 		}
 
-		hop := r.queryZone(ctx, zone, servers, parent, qname, qtype)
+		asked, askedType, minimised := qname, qtype, reach < dnsutil.Labels(qname)
+		if minimised {
+			// RFC 9156 asks for an address rather than the NS set, which some
+			// servers and middleboxes answer badly.
+			asked, askedType = ancestor(qname, reach), dns.TypeA
+		}
+
+		hop := r.queryZone(ctx, zone, servers, parent, asked, askedType, minimised)
 		if hop == nil {
 			r.warnf("no server answered for %s", zone)
 			return nil
@@ -266,12 +294,35 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		// budget leaves one, and the budget stops the DNSKEY query too, but
 		// saying so here does not rely on that and reads better than "the
 		// DNSKEY set could not be fetched".
-		if chain != nil {
+		if chain != nil && !entered {
 			if !step.Server.IP.IsValid() {
-				parent.DNSSEC = chain.Unchecked(zone, "no server of "+zone+" answered")
+				referred.DNSSEC = chain.Unchecked(zone, "no server of "+zone+" answered")
 			} else {
-				parent.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
+				referred.DNSSEC = r.enterZone(ctx, chain, zone, step, delegation)
 			}
+			entered = true
+		}
+
+		if denied != nil && step.Kind != trace.KindNXDomain && step.Kind != trace.KindFiltered && step.Server.IP.IsValid() {
+			r.warnf("%s answered NXDOMAIN for %s, which has names below it, so a resolver that minimises its questions stops there (RFC 8020); it should answer NODATA",
+				at(denied), denied.Asked.Name)
+		}
+		denied = nil
+
+		if minimised && step.Kind != trace.KindReferral {
+			switch step.Kind {
+			case trace.KindNXDomain:
+				// Nothing below a name that is not there exists either, but
+				// servers that say so of an empty non-terminal are common
+				// enough that resolvers ask again in full, and so does this.
+				denied, reach = step, dnsutil.Labels(qname)
+			case trace.KindAnswer, trace.KindCNAME, trace.KindNoData:
+				reach++ // no cut here, so the same zone is asked one label further
+			default:
+				return step // filtered, or no server left to ask
+			}
+			parent = step
+			continue
 		}
 
 		switch {
@@ -283,7 +334,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			if side == 0 {
 				r.checkECH(step)
 				r.checkSubnet(step)
-				r.checkNS(ctx, step, parent)
+				r.checkNS(ctx, step, referred)
 				r.checkSerial(ctx, step, zone, servers)
 			}
 			return step
@@ -295,12 +346,32 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
 			return step
 		}
-		zone, servers, parent = step.Delegation.Zone, next, step
+		zone, servers, parent, referred = step.Delegation.Zone, next, step, step
+		reach, entered = r.reach(zone, qname), false
+		depth++
 		delegation = nil
 		if hop.resp != nil {
 			delegation = hop.resp.Ns
 		}
 	}
+}
+
+// reach is how many labels of qname the first question put to zone asks for:
+// one more than the zone has when minimising, and the whole name otherwise.
+func (r *run) reach(zone, qname string) int {
+	if !r.cfg.Minimise {
+		return dnsutil.Labels(qname)
+	}
+	return dnsutil.Labels(zone) + 1
+}
+
+// ancestor is the name made of the last labels of name.
+func ancestor(name string, labels int) string {
+	offset := 0
+	for range dnsutil.Labels(name) - labels {
+		offset, _ = dnsutil.Next(name, offset)
+	}
+	return name[offset:]
 }
 
 // enterZone fetches the keys of the zone the walk has reached and checks them
@@ -410,7 +481,10 @@ func signerOf(resp *dns.Msg, qname string) string {
 // queryZone asks the servers of one zone. By default it stops at the first that
 // is any use and shows the rest as unqueried; with All it asks every one of
 // them. It returns nil when none of them was any use.
-func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *hop {
+//
+// minimised marks every hop as asking less than the whole name, which keeps what
+// they come back with from being read as the resolution's answer.
+func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16, minimised bool) *hop {
 	var usable []trace.Server
 	for _, server := range dedupe(servers) {
 		// A server of the wrong family is shown rather than hidden: a zone
@@ -425,19 +499,20 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 	}
 
 	if r.cfg.All {
-		return r.queryAll(ctx, zone, usable, parent, qname, qtype)
+		return r.queryAll(ctx, zone, usable, parent, qname, qtype, minimised)
 	}
-	return r.queryFirst(ctx, zone, usable, parent, qname, qtype)
+	return r.queryFirst(ctx, zone, usable, parent, qname, qtype, minimised)
 }
 
 // queryFirst is the default strategy: ask until one of them answers.
-func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *hop {
+func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16, minimised bool) *hop {
 	for i, server := range servers {
 		if err := r.counters.query(); err != nil {
 			return &hop{step: r.fail(parent, zone, err.Error())}
 		}
 
 		hop := r.query(ctx, zone, server, qname, qtype)
+		minimise(hop.step, minimised)
 		r.attach(parent, hop.step)
 		switch hop.step.Kind {
 		case trace.KindLame, trace.KindTimeout, trace.KindError:
@@ -460,7 +535,7 @@ func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Serve
 
 // queryAll asks every server at once, a few at a time, and keeps them in the
 // order they were delegated so that the tree stays the same between runs.
-func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16) *hop {
+func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16, minimised bool) *hop {
 	var budget error
 	for i := range servers {
 		if err := r.counters.query(); err != nil {
@@ -482,6 +557,7 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 	wait.Wait()
 
 	for _, hop := range hops {
+		minimise(hop.step, minimised)
 		r.attach(parent, hop.step)
 	}
 	if budget != nil {
@@ -498,6 +574,16 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 		return hop
 	}
 	return nil
+}
+
+// minimise marks a hop that asked for less of the name than the walk is after,
+// and says in its margin what it asked, since that is not the question above.
+func minimise(step *trace.Step, minimised bool) {
+	if !minimised {
+		return
+	}
+	step.Minimised = true
+	step.Notes = append(step.Notes, "minimised to "+step.Asked.Name)
 }
 
 // compareAnswers warns where the nameservers of one zone answer the same

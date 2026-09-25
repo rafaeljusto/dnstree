@@ -24,6 +24,11 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		tr = tr.Shown()
 		document.Question = question{Name: tr.Question.Name, Type: tr.Question.Type, Class: tr.Question.Class}
 		document.ElapsedMS = milliseconds(tr.Elapsed)
+		// Kept whole, since the time left on a signature is read against it
+		// and a replay has to say what the walk said.
+		if !tr.Started.IsZero() {
+			document.Started = tr.Started.UTC().Format(time.RFC3339Nano)
+		}
 		for _, answer := range tr.Resolvers {
 			document.Resolvers = append(document.Resolvers, convertResolver(answer))
 		}
@@ -40,6 +45,7 @@ type document struct {
 	SchemaVersion int         `json:"schema_version"`
 	Question      question    `json:"question"`
 	ElapsedMS     float64     `json:"elapsed_ms"`
+	Started       string      `json:"started,omitempty"`
 	Resolvers     []*resolver `json:"resolvers,omitempty"`
 	Root          *step       `json:"root,omitempty"`
 	Warnings      []string    `json:"warnings,omitempty"`
@@ -110,6 +116,7 @@ type step struct {
 	SOA        *soa            `json:"soa,omitempty"`
 	NSID       string          `json:"nsid,omitempty"`
 	Aside      bool            `json:"aside,omitempty"`
+	Minimised  bool            `json:"minimised,omitempty"`
 	Delegation *delegation     `json:"delegation,omitempty"`
 	DNSSEC     *dnssec         `json:"dnssec,omitempty"`
 	Error      string          `json:"error,omitempty"`
@@ -175,11 +182,20 @@ type soa struct {
 }
 
 type dnssec struct {
-	State     string   `json:"state"`
-	Reason    string   `json:"reason,omitempty"`
-	KeyTags   []uint16 `json:"key_tags,omitempty"`
-	Algorithm string   `json:"algorithm,omitempty"`
-	Digest    string   `json:"digest,omitempty"`
+	State      string      `json:"state"`
+	Reason     string      `json:"reason,omitempty"`
+	Zone       string      `json:"zone,omitempty"`
+	KeyTags    []uint16    `json:"key_tags,omitempty"`
+	Algorithm  string      `json:"algorithm,omitempty"`
+	Digest     string      `json:"digest,omitempty"`
+	Signatures []signature `json:"signatures,omitempty"`
+}
+
+// signature is how long one signature a secure verdict rests on was made to
+// last, which is what says whether its signer is still at work.
+type signature struct {
+	Inception  string `json:"inception"`
+	Expiration string `json:"expiration"`
 }
 
 func convert(from *trace.Step) *step {
@@ -205,6 +221,7 @@ func convert(from *trace.Step) *step {
 		SOA:        convertSOA(from.SOA),
 		NSID:       from.NSID,
 		Aside:      from.Aside,
+		Minimised:  from.Minimised,
 		Delegation: convertDelegation(from.Delegation),
 		DNSSEC:     convertDNSSEC(from.DNSSEC),
 		Error:      from.Err,
@@ -342,13 +359,30 @@ func convertDNSSEC(from *trace.DNSSECStatus) *dnssec {
 	if from == nil {
 		return nil
 	}
-	return &dnssec{
+	to := &dnssec{
 		State:     string(from.State),
 		Reason:    from.Reason,
+		Zone:      from.Zone,
 		KeyTags:   from.KeyTags,
 		Algorithm: from.Algorithm,
 		Digest:    from.Digest,
 	}
+	for _, lifetime := range from.Signatures {
+		to.Signatures = append(to.Signatures, signature{
+			Inception:  timestamp(lifetime.Inception),
+			Expiration: timestamp(lifetime.Expiration),
+		})
+	}
+	return to
+}
+
+// timestamp is a moment as RFC 3339 writes it, in UTC and to the second, which
+// is as fine as a signature's lifetime is kept. The zero time is no moment.
+func timestamp(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // milliseconds is how long something took, in the unit a reader expects and

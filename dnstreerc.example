@@ -45,6 +45,11 @@
 # apart. It costs no query of its own.
 # nsid = true
 
+# Ask each zone for no more of the name than it needs, the way resolvers do by
+# default now (RFC 9156). It finds the server that denies a name for being
+# empty, which stops such a resolver dead. A query per label below the zone.
+# qmin = true
+
 # Ask as though the question came from somebody inside this network, which is
 # how a server that answers by where you are can be asked what it tells
 # somewhere else. A bare address is read as the /24 or /56 around it. Every
@@ -78,8 +83,8 @@
 
 # What to draw
 
-# tree, ascii, emoji, json, dot or web. ascii emits nothing above codepoint
-# 127, for pasting somewhere that cannot carry box drawing.
+# tree, ascii, emoji, json, dot, mermaid or web. ascii emits nothing above
+# codepoint 127, for pasting somewhere that cannot carry box drawing.
 # format = tree
 
 # web draws nothing in the terminal. It serves the finished walk as a page on

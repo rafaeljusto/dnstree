@@ -107,9 +107,14 @@ type renderer struct {
 	paint     painter
 	highlight *trace.Step
 	out       *bufio.Writer
+
+	// trace is what is being drawn, which says when the walk was made: the
+	// lifetime of a signature is read against that.
+	trace *trace.Trace
 }
 
 func (r *renderer) render(tr *trace.Trace) {
+	r.trace = tr
 	if tr.Root != nil {
 		r.write(r.label(tr.Root) + "\n")
 		r.children(tr.Root, "")
@@ -389,6 +394,16 @@ func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 			label += ": " + status.Reason
 		}
 	}
+
+	// A chain that holds today and breaks in two days is the one outage a walk
+	// can see coming, so the time left is said wherever a signature is late in
+	// the life it was made for.
+	left, expiring := r.trace.Expiring(status)
+	expiring = expiring && status.State == trace.Secure
+	if expiring {
+		label += ", expires in " + short(left)
+	}
+
 	label = "[" + label + "]"
 	if r.glyphs.icons {
 		if icon := dnssecIcons[status.State]; icon != "" {
@@ -398,6 +413,9 @@ func (r *renderer) dnssec(status *trace.DNSSECStatus) string {
 
 	switch status.State {
 	case trace.Secure:
+		if expiring {
+			return r.paint.paint(label, yellow)
+		}
 		return r.paint.paint(label, green)
 	case trace.Insecure:
 		return r.paint.paint(label, yellow)
@@ -538,6 +556,20 @@ func list(data []string) string {
 		return strings.Join(data, ", ")
 	}
 	return strings.Join(data[:most], ", ") + fmt.Sprintf(" (and %d more)", len(data)-most)
+}
+
+// short is how long a signature has left, in the two largest units it fills.
+func short(d time.Duration) string {
+	days, hours := d/(24*time.Hour), d%(24*time.Hour)/time.Hour
+	switch {
+	case days > 0 && hours > 0:
+		return fmt.Sprintf("%dd%dh", days, hours)
+	case days > 0:
+		return fmt.Sprintf("%dd", days)
+	case hours > 0:
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dm", d/time.Minute)
 }
 
 // duration keeps a round trip readable: milliseconds for anything a network

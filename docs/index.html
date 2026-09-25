@@ -381,6 +381,16 @@ footer a:hover{color:var(--ink)}
           <p>Every hop records the bytes that came back against the room the query allowed. A datagram nearly full is one record from truncating, which costs every resolver a retry over TCP. It is drawn only where the room has run out; the figures are in <code>--format json</code>.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">minimised</span>
+          <h3>A name denied for being empty</h3>
+          <p><code>--qmin</code> asks each zone for one label more than it has, the way resolvers do now. A server that answers NXDOMAIN for a name only because nothing is at it yet stops such a resolver dead, and a walk asking the whole name never sees it; this one asks again in full and names the server.</p>
+        </div>
+        <div class="finding">
+          <span class="tag tag-warn">running out</span>
+          <h3>Signatures late in their life</h3>
+          <p>A zone whose signer stopped validates to the last second and then fails all at once. A verdict resting on a signature with less than a fifth of its life left says when it runs out, while there is still time to re-sign.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-ok">bounded</span>
           <h3>A walk that always ends</h3>
           <p>Queries, zone cuts, aliases and nameserver lookups each have a budget, so a hostile delegation wastes time and nothing more.</p>
@@ -455,8 +465,10 @@ footer a:hover{color:var(--ink)}
         also why the nameservers of a zone are only weighed against each other where the walk
         asked all of them — <code>--all</code> does, and a set that is not all accounted for
         leaves the question unanswered rather than half answered.
-        <code>--format json</code> and <code>--format dot</code> refuse the flag — both are
-        read by a program, which has the same facts in fields already.
+        <code>--format json</code>, <code>--format dot</code> and <code>--format mermaid</code>
+        refuse the flag — all three are read by a program, which has the same facts in fields
+        already. A chain whose signatures are late in the life they were made for is said too,
+        with how long it has left: a zone whose signer stopped validates to the last second.
       </p>
     </section>
 
@@ -492,10 +504,10 @@ footer a:hover{color:var(--ink)}
     </section>
 
     <section id="formats">
-      <h2>Six ways out</h2>
+      <h2>Seven ways out</h2>
       <p class="section-lede">
-        The tree is for reading, and the emoji for enjoying it. Three more are for pasting
-        into a document, a pipeline, or a picture. The last one opens a browser.
+        The tree is for reading, and the emoji for enjoying it. Four more are for pasting
+        into a document, a pipeline, a picture or an issue. The last one opens a browser.
       </p>
 
       <div class="tabs" role="tablist" aria-label="Output formats">
@@ -504,6 +516,7 @@ footer a:hover{color:var(--ink)}
         <button class="tab" role="tab" id="tab-ascii" aria-controls="panel-ascii" aria-selected="false">--format ascii</button>
         <button class="tab" role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">--format json</button>
         <button class="tab" role="tab" id="tab-dot" aria-controls="panel-dot" aria-selected="false">--format dot</button>
+        <button class="tab" role="tab" id="tab-mermaid" aria-controls="panel-mermaid" aria-selected="false">--format mermaid</button>
         <button class="tab" role="tab" id="tab-web" aria-controls="panel-web" aria-selected="false">--format web</button>
       </div>
 
@@ -649,6 +662,30 @@ footer a:hover{color:var(--ink)}
 }</pre>
           </div>
 
+          <div class="panel" role="tabpanel" id="panel-mermaid" aria-labelledby="tab-mermaid" hidden>
+<pre>---
+title: <span class="s">"dnstree www.example.com. A"</span>
+---
+flowchart LR
+    subgraph z0 [<span class="s">"."</span>]
+        n0([<span class="s">". (root)"</span>])
+        n1[<span class="s">"a.root-servers.net.&lt;br/&gt;198.41.0.4&lt;br/&gt;NOERROR referral to com."</span>]
+        …
+    end
+    subgraph z1 [<span class="s">"com."</span>]
+        n2[<span class="s">"l.gtld-servers.net.&lt;br/&gt;192.41.162.30&lt;br/&gt;NOERROR referral to example.com.&lt;br/&gt;(asked again after a silence)"</span>]
+        …
+    end
+    subgraph z2 [<span class="s">"example.com."</span>]
+        n3[<span class="s">"hera.ns.cloudflare.com.&lt;br/&gt;108.162.192.162&lt;br/&gt;NOERROR answer&lt;br/&gt;www.example.com. A 172.66.147.243&lt;br/&gt;www.example.com. A 104.20.23.154"</span>]
+        …
+    end
+    n0 --&gt;|<span class="s">"175ms"</span>| n1
+    n1 --&gt;|<span class="s">"2.19s"</span>| n2
+    n2 --&gt;|<span class="s">"14ms"</span>| n3
+    …</pre>
+          </div>
+
           <div class="panel" role="tabpanel" id="panel-web" aria-labelledby="tab-web" hidden>
 <pre><span class="prompt">$ <b>dnstree --format web --dnssec www.example.com</b></span>
 <span class="note">the walk is at</span> <span class="k">http://127.0.0.1:52341/</span>
@@ -672,6 +709,12 @@ footer a:hover{color:var(--ink)}
         </video>
         <figcaption><code>--format emoji --live</code>: the same walk, arriving.</figcaption>
       </figure>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        <code>--from walk.json</code> draws a walk <code>--format json</code> saved, in any of
+        these, without asking any server anything: a walk made from a machine nobody else can
+        reach can be drawn, explained and checked with <code>--expect</code> somewhere else.
+      </p>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
         <code>--schema</code> prints the JSON Schema of that document, so a program can check
@@ -708,7 +751,9 @@ footer a:hover{color:var(--ink)}
       <p class="section-lede"><code>--expect</code> is how a script asks rather than reads:
       give it an address, a name, or one of <code>secure</code>, <code>bogus</code>,
       <code>nxdomain</code> and the rest, repeat it for everything that has to hold, and a
-      walk that does not meet it says so on stderr and exits 4. The walk's own verdict wins
+      walk that does not meet it says so on stderr and exits 4. <code>fresh:3d</code> asks
+      that no signature under the answer runs out in the next three days, which is a cron job
+      that catches a stopped signer before a resolver does. The walk's own verdict wins
       where there is one, so a broken chain of trust still exits 3.</p>
       <table class="exits">
         <tbody>
@@ -864,6 +909,7 @@ timeout = 3s</pre>
     "tab-ascii": "~ · plain enough to paste into a document",
     "tab-json": "~ · versioned, with durations in milliseconds",
     "tab-dot": "~ · one node per query, clustered by zone",
+    "tab-mermaid": "~ · the same graph, drawn where it is pasted on GitHub",
     "tab-web": "~ · served on this machine, and opened in a browser"
   };
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));

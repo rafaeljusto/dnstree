@@ -100,10 +100,10 @@ function flatten(root) {
 const asked = (step) => step.kind !== "zone" && step.kind !== "skipped";
 
 // resultOf is the hop the resolution ended on, read the way the trace itself
-// defines it: the deepest one that is not an aside.
+// defines it: the deepest one that is neither an aside nor a minimised hop.
 function resultOf(step) {
   if (!step || step.aside) return null;
-  let found = ["answer", "cname", "nodata", "nxdomain"].includes(step.kind) ? step : null;
+  let found = !step.minimised && ["answer", "cname", "nodata", "nxdomain"].includes(step.kind) ? step : null;
   for (const child of step.children ?? []) found = resultOf(child) ?? found;
   return found;
 }
@@ -161,6 +161,7 @@ function chipsFor(step) {
       step.extended.map((e) => [e.reason || e.code, e.text].filter(Boolean).join(": ")).join("; ")));
   }
   if (step.aside) chips.push(chip("aside", "quiet", "work the walk did on the way, not where it got to"));
+  if (step.minimised) chips.push(chip("minimised", "quiet", `asked only for ${step.asked?.name ?? "part of the name"}, to find the next zone cut`));
   if (step.notes?.length) chips.push(chip(step.notes.join("; "), "quiet"));
   return chips;
 }
@@ -541,6 +542,7 @@ class DnsInspector extends HTMLElement {
       ["algorithm", step.dnssec.algorithm],
       ["digest", step.dnssec.digest],
       ["keys", step.dnssec.key_tags?.join(", ")],
+      ["expires", step.dnssec.expires],
     ].filter(([, value]) => value);
 
     return this.#block("chain of trust", step.dnssec.state,

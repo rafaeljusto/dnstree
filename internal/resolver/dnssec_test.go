@@ -3,6 +3,7 @@ package resolver_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/resolver"
 	"github.com/rafaeljusto/dnstree/internal/testutil/fakens"
@@ -300,5 +301,38 @@ func TestDNSSECAsksForKeys(t *testing.T) {
 		if asked[zone] != 1 {
 			t.Errorf("asked %s for its keys %d times, want once", zone, asked[zone])
 		}
+	}
+}
+
+// TestDNSSECExpiring signs the zone that answers for a fortnight and leaves it
+// two days of that, where the zones above sign as the library does: the way a
+// zone whose signer has stopped looks from outside. Everything validates, and
+// the link late in its life is that one.
+func TestDNSSECExpiring(t *testing.T) {
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
+		fakens.Behaviour{SignatureLeft: 48 * time.Hour})
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	answer := tr.Result()
+	if answer == nil || answer.DNSSEC == nil || answer.DNSSEC.State != trace.Secure {
+		t.Fatalf("got %+v, want a secure answer: %s", answer, format(steps(tr)))
+	}
+	if len(answer.DNSSEC.Signatures) == 0 {
+		t.Fatal("got no signature lifetimes on the answer, want the one that held")
+	}
+
+	stale := tr.Stale()
+	if stale == nil || !strings.EqualFold(stale.DNSSEC.Zone, "example.com.") {
+		t.Fatalf("got %+v, want the verdict about example.com. late in its life", stale)
+	}
+	left, _ := tr.Expiring(stale.DNSSEC)
+	if left < 47*time.Hour || left > 49*time.Hour {
+		t.Errorf("got %s left, want about two days", left)
+	}
+	if _, ok := tr.Expiring(tr.Root.DNSSEC); ok {
+		t.Error("got the root late in its life, want the fourteen days it was signed for")
 	}
 }

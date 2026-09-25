@@ -173,6 +173,24 @@ func TestParseDefaults(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsFrom covers a walk already made under a file that sets what
+// only a walk being made can use: the file's live drawing, watch and comparison
+// are about the walks it makes, and give way rather than refuse the run.
+func TestParseDefaultsFrom(t *testing.T) {
+	path := write(t, "live\nwatch = 30s\ndiff\ndnssec\nqmin\nformat = emoji\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--from", "walk.json"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Live || got.Watch != 0 || got.Diff {
+		t.Errorf("got live %t, watch %s and diff %t, want the file's given up", got.Live, got.Watch, got.Diff)
+	}
+	if got.Format != "emoji" || got.From != "walk.json" {
+		t.Errorf("got format %q from %q, want the file's format for the saved walk", got.Format, got.From)
+	}
+}
+
 // TestParseDefaultsFound covers where the file is looked for, which is the part
 // nobody can see from the command line.
 func TestParseDefaultsFound(t *testing.T) {
@@ -264,6 +282,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"a file that says which file to read": {file: "config = elsewhere\n"},
 		"a file that asks for the version":    {file: "version\n"},
 		"a file that asks for the schema":     {file: "schema\n"},
+		"a file that draws a saved walk":      {file: "from = walk.json\n"},
 	}
 
 	for name, test := range tests {

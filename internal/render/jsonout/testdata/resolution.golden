@@ -6,6 +6,7 @@
     "class": "IN"
   },
   "elapsed_ms": 41.5,
+  "started": "2026-09-24T12:00:00Z",
   "resolvers": [
     {
       "server": {
@@ -141,10 +142,17 @@
                 ],
                 "dnssec": {
                   "state": "secure",
+                  "zone": "example.com.",
                   "key_tags": [
                     31589
                   ],
-                  "algorithm": "ECDSAP256SHA256"
+                  "algorithm": "ECDSAP256SHA256",
+                  "signatures": [
+                    {
+                      "inception": "2026-09-16T12:00:00Z",
+                      "expiration": "2026-09-30T12:00:00Z"
+                    }
+                  ]
                 },
                 "children": [
                   {

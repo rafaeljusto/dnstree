@@ -4,10 +4,25 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/explain"
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
+
+// noon is when the walks here that carry a clock were made.
+var noon = time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+
+// lasting is a walk made at noon whose answer rests on a signature made to last
+// life, with left of it to run.
+func lasting(step *trace.Step, life, left time.Duration) *trace.Trace {
+	expiration := noon.Add(left)
+	step.DNSSEC = &trace.DNSSECStatus{State: trace.Secure, Zone: "test.",
+		Signatures: []trace.Lifetime{{Inception: expiration.Add(-life), Expiration: expiration}}}
+	tr := walk(step)
+	tr.Started = noon
+	return tr
+}
 
 // question is what every walk here set out to answer.
 var question = trace.Question{Name: "www.test.", Type: "A", Class: "IN"}
@@ -149,6 +164,14 @@ func TestFindings(t *testing.T) {
 				return step
 			}()),
 			want: []string{"the chain of trust holds from the root to test.", "ECDSAP256SHA256"},
+		},
+		"a signature late in its life says when it runs out": {
+			trace: lasting(answer(), 30*24*time.Hour, 50*time.Hour),
+			want:  []string{"a signature over test. runs out in 2 days 2 hours", "re-signed", "SERVFAIL"},
+		},
+		"a signature an online signer made for a day is not late in it": {
+			trace: lasting(answer(), 25*time.Hour, 23*time.Hour),
+			avoid: []string{"runs out"},
 		},
 		"a broken chain says so, and what a validating resolver will do about it": {
 			trace: walk(func() *trace.Step {

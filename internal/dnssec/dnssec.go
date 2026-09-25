@@ -35,6 +35,10 @@ type Chain struct {
 
 	// now is the clock signature validity is judged against.
 	now func() time.Time
+
+	// signatures are the lifetimes of the signatures that held since the chain
+	// was last asked for a verdict, which a secure verdict is stamped with.
+	signatures []trace.Lifetime
 }
 
 // New starts a chain at the root, trusting anchors and nothing else.
@@ -51,6 +55,7 @@ func (c *Chain) State() trace.DNSSECState { return c.state }
 // answer to a DNSKEY query; either may be empty. The root takes its DS from the
 // anchors instead of from a parent.
 func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECStatus {
+	c.signatures = nil
 	return c.about(c.enter(zone, authority, dnskeys))
 }
 
@@ -168,6 +173,7 @@ func (c *Chain) Unchecked(zone, reason string) *trace.DNSSECStatus {
 // the server answered with, which is the difference between a name that is not
 // there and a name that has nothing of this type.
 func (c *Chain) Verify(answer, authority []dns.RR, rcode uint16, qname string, qtype uint16) *trace.DNSSECStatus {
+	c.signatures = nil
 	return c.about(c.verifyAnswer(answer, authority, rcode, qname, qtype))
 }
 
@@ -318,6 +324,7 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 				reason = fmt.Errorf("the signature of key %d does not verify", key.KeyTag())
 				continue
 			}
+			c.signatures = append(c.signatures, lifetime(signature, c.now()))
 			return signature, nil
 		}
 	}
@@ -325,12 +332,29 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 }
 
 // about stamps a verdict with the zone the chain was in when it was reached,
-// which is what the verdict is about.
+// which is what the verdict is about, and a secure one with the lifetimes of the
+// signatures it rests on.
 func (c *Chain) about(status *trace.DNSSECStatus) *trace.DNSSECStatus {
 	if status != nil {
 		status.Zone = c.zone
+		if status.State == trace.Secure {
+			status.Signatures = c.signatures
+		}
 	}
 	return status
+}
+
+// lifetime is how long a signature was made to last, read the way its validity
+// is checked: both fields are 32 bit serials that wrap (RFC 4034 3.1.5), so each
+// is taken as the moment nearest now that it can stand for.
+func lifetime(signature *dns.RRSIG, now time.Time) trace.Lifetime {
+	return trace.Lifetime{Inception: moment(signature.Inception, now), Expiration: moment(signature.Expiration, now)}
+}
+
+func moment(serial uint32, now time.Time) time.Time {
+	utc := now.Unix()
+	wraps := (int64(serial) - utc) / dns.MaxSerialIncrement
+	return time.Unix(int64(serial)+wraps*dns.MaxSerialIncrement, 0).UTC()
 }
 
 // settleAs moves the chain to a state and reports it.

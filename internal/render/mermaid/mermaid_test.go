@@ -1,4 +1,4 @@
-package dot_test
+package mermaid_test
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rafaeljusto/dnstree/internal/render/dot"
+	"github.com/rafaeljusto/dnstree/internal/render/mermaid"
 	"github.com/rafaeljusto/dnstree/internal/trace"
 )
 
@@ -108,52 +108,78 @@ func resolution() *trace.Trace {
 
 func TestRender(t *testing.T) {
 	var got bytes.Buffer
-	if err := dot.Render(&got, resolution()); err != nil {
+	if err := mermaid.Render(&got, resolution()); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	compare(t, "resolution", got.String())
 }
 
-// TestRenderIsGraphviz hands the output to Graphviz, which is the only real
-// judge of whether this is a graph.
-func TestRenderIsGraphviz(t *testing.T) {
-	graphviz, err := exec.LookPath("dot")
+// TestRenderEscapes covers text the servers wrote, which reaches a page that
+// reads Mermaid entities and HTML: neither may be able to end a label early,
+// open a tag or become an entity it did not spell.
+func TestRenderEscapes(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: `a"b.example.`, Type: "TXT"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: ".", Kind: trace.KindAnswer, Server: trace.Server{IP: netip.MustParseAddr("192.0.2.1")},
+			Records: []trace.RR{{Name: "a.example.", Type: "TXT", Data: `"<script>x</script> #quot; & ` + "`" + `"`}},
+		}}},
+		Warnings: []string{"title: end"},
+	}
+
+	var got bytes.Buffer
+	if err := mermaid.Render(&got, tr); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := got.String()
+	for _, raw := range []string{"<script>", "</script>", "#quot; &", "`"} {
+		if strings.Contains(out, raw) {
+			t.Errorf("got %q in the chart, want it escaped:\n%s", raw, out)
+		}
+	}
+	if !strings.Contains(out, `title: "dnstree a\"b.example. TXT"`) {
+		t.Errorf("got\n%s\nwant the title quoted for YAML", out)
+	}
+}
+
+// TestRenderIsMermaid hands the output to the Mermaid CLI, which is the only
+// real judge of whether this is a chart.
+func TestRenderIsMermaid(t *testing.T) {
+	mmdc, err := exec.LookPath("mmdc")
 	if err != nil {
-		t.Skip("graphviz is not installed here")
+		t.Skip("the mermaid cli is not installed here")
 	}
 
 	for name, tr := range map[string]*trace.Trace{
 		"a resolution": resolution(),
-		"nothing":      nil,
 		"a bare trace": {Question: trace.Question{Name: `a "quoted\name".`, Type: "A"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			var graph bytes.Buffer
-			if err := dot.Render(&graph, tr); err != nil {
+			var chart bytes.Buffer
+			if err := mermaid.Render(&chart, tr); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
-
-			command := exec.Command(graphviz, "-Tsvg")
-			command.Stdin = &graph
-			svg, err := command.CombinedOutput()
-			if err != nil {
-				t.Fatalf("dot -Tsvg: %v\n--- graph ---\n%s\n--- output ---\n%s", err, graph.String(), svg)
+			dir := t.TempDir()
+			input := filepath.Join(dir, "chart.mmd")
+			if err := os.WriteFile(input, chart.Bytes(), 0o644); err != nil {
+				t.Fatal(err)
 			}
-			if !strings.Contains(string(svg), "<svg") {
-				t.Errorf("got %q, want an SVG", svg)
+			output, err := exec.Command(mmdc, "-i", input, "-o", filepath.Join(dir, "chart.svg")).CombinedOutput()
+			if err != nil {
+				t.Fatalf("mmdc: %v\n--- chart ---\n%s\n--- output ---\n%s", err, chart.String(), output)
 			}
 		})
 	}
 }
 
-// TestRenderIsStable guards against the clusters coming out in whatever order a
-// map felt like.
+// TestRenderIsStable guards against the subgraphs coming out in whatever order
+// a map felt like.
 func TestRenderIsStable(t *testing.T) {
 	var first, second bytes.Buffer
-	if err := dot.Render(&first, resolution()); err != nil {
+	if err := mermaid.Render(&first, resolution()); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if err := dot.Render(&second, resolution()); err != nil {
+	if err := mermaid.Render(&second, resolution()); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	if first.String() != second.String() {
@@ -195,10 +221,10 @@ func TestRenderMinimised(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := dot.Render(&out, tr); err != nil {
+	if err := mermaid.Render(&out, tr); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if strings.Contains(out.String(), "color=darkgoldenrod") {
+	if strings.Contains(out.String(), "class n1 denial") {
 		t.Errorf("got %q, want the minimised hop left uncoloured", out.String())
 	}
 	if !strings.Contains(out.String(), "minimised to test.") {

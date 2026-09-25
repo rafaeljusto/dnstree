@@ -1,0 +1,37 @@
+---
+title: "dnstree www.example.com. A"
+---
+flowchart LR
+    subgraph z0 ["."]
+        n0([". (root)"])
+        n1["a.root-servers.net.<br/>198.41.0.4<br/>NOERROR referral to com.<br/>[insecure]<br/>@fra2"]
+    end
+    subgraph z1 ["com."]
+        n2["b.gtld-servers.net.<br/>192.33.14.30<br/>timeout<br/>udp 192.33.14.30:53: i/o timeout"]
+        n3["a.gtld-servers.net.<br/>192.5.6.30<br/>NOERROR referral to example.com.<br/>[secure]<br/>(truncated over udp)"]
+    end
+    subgraph z2 ["example.com."]
+        n4["a.iana-servers.net.<br/>199.43.135.53<br/>AS10745<br/>NOERROR answer<br/>[secure]<br/>www.example.com. A 93.184.216.34"]
+        n5["a.iana-servers.net.<br/>199.43.135.53<br/>NOERROR answer<br/>(DNSKEY of example.com.)"]
+        n6["b.iana-servers.net.<br/>199.43.133.53<br/>not queried"]
+    end
+    n0 -->|"12ms"| n1
+    n1 -->|"2s"| n2
+    n1 -->|"18ms"| n3
+    n3 -->|"9.4ms"| n4
+    n4 -.->|"8ms"| n5
+    n3 -.-> n6
+    notes["192.0.2.53 answered in 23ms<br/>warning: the delegation to example.com. lists a nameserver the zone does not"]
+    class notes note
+    classDef zone stroke:#666666
+    classDef answer stroke:#006400,stroke-width:2px
+    classDef denial stroke:#b8860b
+    classDef filtered stroke:#ff8c00,stroke-width:3px
+    classDef failed stroke:#b22222,stroke-width:2px
+    classDef skipped stroke:#999999,stroke-dasharray:4 3,color:#666666
+    classDef note stroke:#b8860b,stroke-dasharray:2 2
+    class n0 zone
+    class n2 failed
+    class n4 answer
+    class n5 answer
+    class n6 skipped

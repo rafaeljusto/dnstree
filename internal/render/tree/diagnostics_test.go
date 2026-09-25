@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/internal/trace"
@@ -252,5 +253,56 @@ func TestASCIIStaysASCII(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "\n`-- ns.evil.") {
 		t.Errorf("got a line the server wrote: %q", out.String())
+	}
+}
+
+// TestRenderExpiring covers a chain that holds and is about to stop holding. The
+// time left is read against when the walk was made, never against the clock,
+// so the same trace always draws the same way.
+func TestRenderExpiring(t *testing.T) {
+	made := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	month := 30 * 24 * time.Hour
+	tests := map[string]struct {
+		life, left time.Duration
+		want       string
+	}{
+		"two days left of a month is said": {
+			life: month, left: 51 * time.Hour, want: "[secure ECDSAP256SHA256, expires in 2d3h]"},
+		"a few hours left is said": {
+			life: month, left: 5*time.Hour + 20*time.Minute, want: "expires in 5h"},
+		"a fortnight left of a month is nothing": {
+			life: month, left: 14 * 24 * time.Hour, want: "[secure ECDSAP256SHA256]"},
+		"a day left of a day's signature is nothing": {
+			life: 25 * time.Hour, left: 23 * time.Hour, want: "[secure ECDSAP256SHA256]"},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr := oneHop(&trace.Step{
+				Kind:  trace.KindAnswer,
+				Rcode: "NOERROR",
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Algorithm: "ECDSAP256SHA256",
+					Signatures: []trace.Lifetime{{Inception: made.Add(test.left - test.life), Expiration: made.Add(test.left)}}},
+			})
+			tr.Started = made
+			if out := draw(t, tr); !strings.Contains(out, test.want) {
+				t.Errorf("got %q, want it to carry %q", out, test.want)
+			}
+		})
+	}
+}
+
+// TestRenderMinimised covers a hop that asked for less of the name than the
+// question: it says in its margin what it asked instead.
+func TestRenderMinimised(t *testing.T) {
+	out := draw(t, oneHop(&trace.Step{
+		Kind:      trace.KindNoData,
+		Rcode:     "NOERROR",
+		Minimised: true,
+		Asked:     trace.Question{Name: "test.", Type: "A"},
+		Notes:     []string{"minimised to test."},
+	}))
+	if !strings.Contains(out, "(minimised to test.)") {
+		t.Errorf("got %q, want it to say what it asked", out)
 	}
 }

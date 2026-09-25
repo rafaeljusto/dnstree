@@ -158,6 +158,10 @@ func label(step *trace.Step) string {
 // attributes colour a node by how the hop went, following the same legend the
 // tree does.
 func attributes(step *trace.Step) string {
+	// An answer about a shorter name than the question is only a way down.
+	if step.Minimised && (step.Kind == trace.KindAnswer || step.Kind == trace.KindNoData) {
+		return ""
+	}
 	switch step.Kind {
 	case trace.KindAnswer, trace.KindCNAME:
 		return ", color=darkgreen"

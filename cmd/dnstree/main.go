@@ -28,6 +28,7 @@ import (
 	"github.com/rafaeljusto/dnstree/internal/recursive"
 	"github.com/rafaeljusto/dnstree/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/internal/render/mermaid"
 	"github.com/rafaeljusto/dnstree/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/internal/render/web"
 	"github.com/rafaeljusto/dnstree/internal/resolver"
@@ -52,6 +53,9 @@ const asnGrace = 2 * time.Second
 
 // version is stamped into a release build; see the dist target of the Makefile.
 var version = "dev"
+
+// stdin is where --from - reads a saved walk from.
+var stdin io.Reader = os.Stdin
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -93,7 +97,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	var lookups *asn.Resolver
-	if cfg.ASN {
+	if cfg.ASN && cfg.From == "" {
 		lookups = asn.New(asnLookup(cfg), log)
 	}
 
@@ -109,7 +113,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		defer live.Clear()
 	}
 
-	tr, err := made(ctx, cfg, log, lookups, live)
+	var tr *trace.Trace
+	if cfg.From != "" {
+		tr, err = saved(cfg.From)
+	} else {
+		tr, err = made(ctx, cfg, log, lookups, live)
+	}
 	if err != nil {
 		live.Clear()
 		fmt.Fprintln(stderr, err)
@@ -141,7 +150,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	if live != nil {
 		live.Summary(stdout, tr)
-	} else if cfg.Format != "json" && cfg.Format != "dot" {
+	} else if cfg.Format != "json" && cfg.Format != "dot" && cfg.Format != "mermaid" {
 		tree.Summary(stdout, tr, treeOptions(cfg))
 	}
 	if findings := readings(cfg, tr, stderr); len(findings) > 0 {
@@ -199,6 +208,30 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	if timed != nil {
 		tr.Resolvers = <-timed
 		recursive.Compare(tr)
+	}
+	return tr, nil
+}
+
+// saved is a walk --format json wrote, read back to be drawn again: from a
+// file, or from the standard input where the name is "-".
+func saved(path string) (*trace.Trace, error) {
+	if path == "-" {
+		tr, err := jsonout.Read(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("the standard input: %w", err)
+		}
+		return tr, nil
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	tr, err := jsonout.Read(file)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return tr, nil
 }
@@ -337,6 +370,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		CheckNS:   cfg.CheckNS,
 		Serial:    cfg.Serial,
 		NSID:      cfg.NSID,
+		Minimise:  cfg.Minimise,
 		Subnet:    cfg.Subnet,
 		Retries:   cfg.Retries,
 		Budget: resolver.Budget{
@@ -515,6 +549,8 @@ func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 		return jsonout.Render(w, tr)
 	case "dot":
 		return dot.Render(w, tr)
+	case "mermaid":
+		return mermaid.Render(w, tr)
 	default:
 		return tree.Render(w, tr, treeOptions(cfg))
 	}
