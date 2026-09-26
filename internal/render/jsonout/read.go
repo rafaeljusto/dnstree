@@ -295,6 +295,9 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 		to.Signal = &trace.Signal{State: state, Reason: from.Signal.Reason,
 			Requested: from.Signal.Requested, Held: from.Signal.Held}
 	}
+	if from.NSEC3 != nil {
+		to.NSEC3 = &trace.NSEC3{Zone: from.NSEC3.Zone, Iterations: from.NSEC3.Iterations, Salt: from.NSEC3.Salt}
+	}
 	for _, signed := range from.Signatures {
 		inception, err := moment(signed.Inception)
 		if err != nil {

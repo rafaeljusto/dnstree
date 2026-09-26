@@ -94,6 +94,11 @@ func (s *Step) Shown() *Step {
 			signal.Reason = Shown(signal.Reason)
 			d.Signal = &signal
 		}
+		if d.NSEC3 != nil {
+			nsec3 := *d.NSEC3
+			nsec3.Zone, nsec3.Salt = Shown(nsec3.Zone), Shown(nsec3.Salt)
+			d.NSEC3 = &nsec3
+		}
 		shown.DNSSEC = &d
 	}
 	shown.Children = nil

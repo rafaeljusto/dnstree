@@ -39,6 +39,10 @@ type Chain struct {
 	// signatures are the lifetimes of the signatures that held since the chain
 	// was last asked for a verdict, which a secure verdict is stamped with.
 	signatures []trace.Lifetime
+
+	// nsec3 is the hashing of the last NSEC3 whose signature held since the
+	// chain was last asked for a verdict.
+	nsec3 *trace.NSEC3
 }
 
 // New starts a chain at the root, trusting anchors and nothing else.
@@ -59,7 +63,7 @@ func (c *Chain) Zone() string { return c.zone }
 // answer to a DNSKEY query; either may be empty. The root takes its DS from the
 // anchors instead of from a parent.
 func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECStatus {
-	c.signatures = nil
+	c.signatures, c.nsec3 = nil, nil
 	return c.about(c.enter(zone, authority, dnskeys))
 }
 
@@ -177,7 +181,7 @@ func (c *Chain) Unchecked(zone, reason string) *trace.DNSSECStatus {
 // the server answered with, which is the difference between a name that is not
 // there and a name that has nothing of this type.
 func (c *Chain) Verify(answer, authority []dns.RR, rcode uint16, qname string, qtype uint16) *trace.DNSSECStatus {
-	c.signatures = nil
+	c.signatures, c.nsec3 = nil, nil
 	return c.about(c.verifyAnswer(answer, authority, rcode, qname, qtype))
 }
 
@@ -341,6 +345,7 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 func (c *Chain) about(status *trace.DNSSECStatus) *trace.DNSSECStatus {
 	if status != nil {
 		status.Zone = c.zone
+		status.NSEC3 = c.nsec3
 		if status.State == trace.Secure {
 			status.Signatures = c.signatures
 		}

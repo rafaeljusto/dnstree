@@ -451,6 +451,10 @@ type DNSSECStatus struct {
 	// change the DS the verdict was reached with.
 	Signal *Signal
 
+	// NSEC3 is how the zone that denied something hashes its names, read off a
+	// record whose signature held. Nil where no NSEC3 was checked.
+	NSEC3 *NSEC3
+
 	// Signatures are the lifetimes of the signatures this verdict rests on,
 	// set only on a secure one: the keys of the zone, the DS its parent signed,
 	// the records that answered. A zone that stops being re-signed goes on
@@ -472,6 +476,17 @@ type Signal struct {
 	// parent's DS names, each sorted.
 	Requested []uint16
 	Held      []uint16
+}
+
+// NSEC3 is the hashing a zone's denials use (RFC 5155). RFC 9276 asks for no
+// extra iterations and no salt: both cost every validator work and hide
+// nothing from anyone set on listing the zone.
+type NSEC3 struct {
+	// Zone owns the record, which is not always the zone of the verdict: a
+	// parent proving it has no DS denies with its own NSEC3.
+	Zone       string
+	Iterations uint16
+	Salt       string // hex, empty for none
 }
 
 // SignalState is what a zone's request of its parent came to.

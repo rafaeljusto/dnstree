@@ -339,7 +339,29 @@
           "type": "array",
           "items": { "$ref": "#/$defs/signature" }
         },
-        "signal": { "$ref": "#/$defs/signal" }
+        "signal": { "$ref": "#/$defs/signal" },
+        "nsec3": { "$ref": "#/$defs/nsec3" }
+      }
+    },
+    "nsec3": {
+      "description": "How the zone that denied something hashes its names (RFC 5155), read off an NSEC3 whose signature held. Absent where no NSEC3 was checked. RFC 9276 asks for no extra iterations and no salt.",
+      "type": "object",
+      "required": ["zone", "iterations"],
+      "properties": {
+        "zone": {
+          "description": "The zone that owns the NSEC3, which is the parent where it proved it publishes no DS.",
+          "type": "string"
+        },
+        "iterations": {
+          "description": "The extra times each name is hashed.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "salt": {
+          "description": "The salt, in hex. Absent for none.",
+          "type": "string"
+        }
       }
     },
     "signal": {

@@ -39,6 +39,14 @@ func TestReadRoundTrip(t *testing.T) {
 					State: trace.SignalPending, Reason: "the zone asks for key 9", Requested: []uint16{9}, Held: []uint16{7}}},
 			}}},
 		},
+		"a denial proven with salted NSEC3": {
+			Question: trace.Question{Name: "nope.example.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindNXDomain,
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "example.",
+					NSEC3: &trace.NSEC3{Zone: "example.", Iterations: 10, Salt: "aabbccdd"}},
+			}}},
+		},
 		"nothing walked at all": {Question: trace.Question{Name: "example.", Type: "A", Class: "IN"}},
 		"a time a float cannot hold exactly": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},

@@ -311,3 +311,89 @@ func TestNSEC3IterationsAreCapped(t *testing.T) {
 		t.Errorf("took %v, want the iterations rejected rather than run", elapsed)
 	}
 }
+
+// TestNSEC3HashingIsRecorded covers what --explain holds against RFC 9276: how
+// the zone that denied hashes its names, and only once its signature held.
+func TestNSEC3HashingIsRecorded(t *testing.T) {
+	tests := map[string]struct {
+		authority func(testing.TB, *zone) []dns.RR
+		want      *trace.NSEC3
+	}{
+		"a signed NSEC3 is recorded against the parent that signed it": {
+			authority: func(tb testing.TB, z *zone) []dns.RR {
+				hash := hashOf(tb, "example.")
+				return signedBy(tb, z, z.nsec3(tb, hash, step(hash, +1), 0, []uint16{dns.TypeNS, dns.TypeRRSIG}))
+			},
+			want: &trace.NSEC3{Zone: ".", Iterations: denialIter, Salt: denialSalt},
+		},
+		"an unsigned NSEC3 is anybody's and recorded as nobody's": {
+			authority: func(tb testing.TB, z *zone) []dns.RR {
+				hash := hashOf(tb, "example.")
+				return []dns.RR{z.nsec3(tb, hash, step(hash, +1), 0, []uint16{dns.TypeNS})}
+			},
+		},
+		"iterations under a hash nothing defines are not SHA-1 rounds": {
+			authority: func(tb testing.TB, z *zone) []dns.RR {
+				hash := hashOf(tb, "example.")
+				nsec3 := z.nsec3(tb, hash, step(hash, +1), 0, []uint16{dns.TypeNS})
+				nsec3.Hash = 2
+				return signedBy(tb, z, nsec3)
+			},
+		},
+		"a proof that uses no NSEC3 records none": {
+			authority: func(tb testing.TB, z *zone) []dns.RR {
+				nsec := &dns.NSEC{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET, TTL: 3600}}
+				nsec.NextDomain = z.name
+				nsec.TypeBitMap = []uint16{dns.TypeNS, dns.TypeRRSIG}
+				return signedBy(tb, z, nsec)
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := entered(t, func(z *zone) []dns.RR { return test.authority(t, z) }).NSEC3
+			switch {
+			case test.want == nil && got != nil:
+				t.Errorf("got %+v, want no hashing recorded", got)
+			case test.want != nil && (got == nil || *got != *test.want):
+				t.Errorf("got %+v, want %+v", got, test.want)
+			}
+		})
+	}
+}
+
+// TestNSEC3HashingOfADenial covers the other way a denial is checked: an empty
+// answer, proven by the zone the chain is in rather than by a parent.
+func TestNSEC3HashingOfADenial(t *testing.T) {
+	chain, child := secured(t)
+	hash := hashOf(t, "there.example.")
+	authority := signedBy(t, child, child.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeA, dns.TypeRRSIG}))
+
+	status := chain.Verify(nil, authority, dns.RcodeSuccess, "there.example.", dns.TypeTXT)
+	if status.State != trace.Secure {
+		t.Fatalf("got %+v, want a proven NODATA", status)
+	}
+	want := trace.NSEC3{Zone: "example.", Iterations: denialIter, Salt: denialSalt}
+	if status.NSEC3 == nil || *status.NSEC3 != want {
+		t.Errorf("got %+v, want %+v", status.NSEC3, want)
+	}
+}
+
+// TestNSEC3HashingTooCostlyIsStillRecorded covers the zone most worth telling:
+// one whose iterations are past what the chain will hash, so the link is left
+// unchecked, but whose signature over them held.
+func TestNSEC3HashingTooCostlyIsStillRecorded(t *testing.T) {
+	status := entered(t, func(z *zone) []dns.RR {
+		hash := hashOf(t, "example.")
+		nsec3 := z.nsec3(t, hash, step(hash, +1), 0, []uint16{dns.TypeNS})
+		nsec3.Iterations = 500
+		return signedBy(t, z, nsec3)
+	})
+	if status.State != trace.Indeterminate {
+		t.Fatalf("got %+v, want too many iterations to read indeterminate", status)
+	}
+	if status.NSEC3 == nil || status.NSEC3.Iterations != 500 {
+		t.Errorf("got %+v, want the 500 iterations recorded", status.NSEC3)
+	}
+}

@@ -193,6 +193,14 @@ type dnssec struct {
 	Digest     string      `json:"digest,omitempty"`
 	Signatures []signature `json:"signatures,omitempty"`
 	Signal     *signal     `json:"signal,omitempty"`
+	NSEC3      *nsec3      `json:"nsec3,omitempty"`
+}
+
+// nsec3 is how the zone that denied something hashes its names.
+type nsec3 struct {
+	Zone       string `json:"zone"`
+	Iterations uint16 `json:"iterations"`
+	Salt       string `json:"salt,omitempty"`
 }
 
 // signal is what the zone asks its parent to publish, in its CDS and CDNSKEY,
@@ -385,6 +393,9 @@ func convertDNSSEC(from *trace.DNSSECStatus) *dnssec {
 	if from.Signal != nil {
 		to.Signal = &signal{State: string(from.Signal.State), Reason: from.Signal.Reason,
 			Requested: from.Signal.Requested, Held: from.Signal.Held}
+	}
+	if from.NSEC3 != nil {
+		to.NSEC3 = &nsec3{Zone: from.NSEC3.Zone, Iterations: from.NSEC3.Iterations, Salt: from.NSEC3.Salt}
 	}
 	for _, lifetime := range from.Signatures {
 		to.Signatures = append(to.Signatures, signature{

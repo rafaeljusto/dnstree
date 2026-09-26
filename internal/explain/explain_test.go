@@ -526,6 +526,79 @@ func TestFindingsSpread(t *testing.T) {
 	}
 }
 
+// denied is a walk whose answer was a denial proven with NSEC3 records of test.
+// hashed this way.
+func denied(iterations uint16, salt string) *trace.Trace {
+	step := hop(trace.KindNXDomain, "ns.test.")
+	step.DNSSEC = &trace.DNSSECStatus{State: trace.Secure, Zone: "test.",
+		NSEC3: &trace.NSEC3{Zone: "test.", Iterations: iterations, Salt: salt}}
+	return walk(step)
+}
+
+func TestFindingsHashing(t *testing.T) {
+	tests := map[string]struct {
+		trace *trace.Trace
+		level explain.Level
+		want  []string
+		avoid []string
+	}{
+		"no iterations and no salt is what RFC 9276 asks for": {
+			trace: denied(0, ""),
+			avoid: []string{"NSEC3"},
+		},
+		"extra iterations cost every validator work": {
+			trace: denied(10, ""),
+			level: explain.Warn,
+			want:  []string{"the NSEC3 records of test. hash each name 10 extra times,", "RFC 9276"},
+			avoid: []string{"salted"},
+		},
+		"iterations and a salt are said together": {
+			trace: denied(1, "aabbccdd"),
+			level: explain.Warn,
+			want:  []string{"hash each name 1 extra time and salted"},
+		},
+		"a salt alone is only a chore": {
+			trace: denied(0, "aabbccdd"),
+			level: explain.Note,
+			want:  []string{"the NSEC3 records of test. are salted"},
+		},
+		"a zone is named once however many denials it signed": {
+			trace: func() *trace.Trace {
+				tr := denied(10, "")
+				tr.Root.Children = append(tr.Root.Children, denied(10, "").Root.Children...)
+				return tr
+			}(),
+			level: explain.Warn,
+			want:  []string{"hash each name 10 extra times"},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := said(test.trace)
+			for _, want := range test.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("got\n%s\nwant it to carry %q", got, want)
+				}
+			}
+			for _, avoid := range test.avoid {
+				if strings.Contains(got, avoid) {
+					t.Errorf("got\n%s\nwant nothing in it saying %q", got, avoid)
+				}
+			}
+			var hashing []explain.Finding
+			for _, finding := range explain.Findings(test.trace) {
+				if strings.Contains(finding.Text, "NSEC3") {
+					hashing = append(hashing, finding)
+				}
+			}
+			if len(test.want) > 0 && (len(hashing) != 1 || hashing[0].Level != test.level) {
+				t.Errorf("got %+v, want one finding about the hashing, at %s", hashing, test.level)
+			}
+		})
+	}
+}
+
 // cut is a walk that was told where test. lives before it got there, so
 // that the delegation carries a lifetime of its own.
 func cut(ttl uint32, answer *trace.Step) *trace.Trace {

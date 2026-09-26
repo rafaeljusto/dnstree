@@ -8,6 +8,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
+
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // A delegation with no DS is a claim, not an absence: the parent is saying that
@@ -154,7 +156,22 @@ func (c *Chain) signedBy(authority []dns.RR, owner string, rrtype uint16) error 
 		return fmt.Errorf("the %s of %s was signed for a wildcard, not for that name",
 			dnsutil.TypeToString(rrtype), owner)
 	}
+	// Iterations are SHA-1 rounds, and mean nothing under another hash.
+	if nsec3, ok := rrset[0].(*dns.NSEC3); ok && nsec3.Hash == 1 {
+		c.nsec3 = hashing(nsec3, signature.SignerName)
+	}
 	return nil
+}
+
+// hashing is how an NSEC3 hashes its zone's names. The zone is the signer's,
+// which the signature was verified against: the owner name only says where in
+// that zone the record sits.
+func hashing(nsec3 *dns.NSEC3, signer string) *trace.NSEC3 {
+	hashed := &trace.NSEC3{Zone: dnsutil.Canonical(signer), Iterations: nsec3.Iterations}
+	if nsec3.SaltLength > 0 {
+		hashed.Salt = strings.ToLower(nsec3.Salt)
+	}
+	return hashed
 }
 
 // ownerHash is the hash an NSEC3 owner name carries, which is its first label.

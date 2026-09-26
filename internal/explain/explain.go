@@ -99,6 +99,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings := []Finding{outcome(tr)}
 	findings = append(findings, cache(tr)...)
 	findings = append(findings, trust(tr)...)
+	findings = append(findings, hashing(tr)...)
 	findings = append(findings, spread(tr)...)
 	findings = append(findings, servers(tr)...)
 	findings = append(findings, cookies(tr)...)
@@ -354,6 +355,43 @@ func expiring(tr *trace.Trace) (Finding, bool) {
 	return Finding{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
 		"a signature over %s runs out in %s, late in the life it was made for, and unless the zone is re-signed before then a resolver that validates answers SERVFAIL for this name",
 		zoneOf(step), spell(uint32(left/time.Second)))}, true
+}
+
+// hashing is every zone whose NSEC3 records the walk checked and found hashed
+// the way RFC 9276 asks zones to stop hashing: with extra iterations, which
+// cost every validator work and let one stop trusting the proofs as the count
+// grows, or with a salt, which can only be changed by re-signing the zone.
+func hashing(tr *trace.Trace) []Finding {
+	var (
+		findings []Finding
+		seen     = make(map[string]bool)
+	)
+	for step := range tr.Steps() {
+		if step.DNSSEC == nil || step.DNSSEC.NSEC3 == nil {
+			continue
+		}
+		hashed := step.DNSSEC.NSEC3
+		zone := strings.ToLower(hashed.Zone)
+		if seen[zone] || (hashed.Iterations == 0 && hashed.Salt == "") {
+			continue
+		}
+		seen[zone] = true
+
+		if hashed.Iterations == 0 {
+			findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+				"the NSEC3 records of %s are salted, which RFC 9276 asks zones to stop doing: it hides nothing, and changing it means re-signing the whole zone",
+				hashed.Zone)})
+			continue
+		}
+		salted := ""
+		if hashed.Salt != "" {
+			salted = " and salted"
+		}
+		findings = append(findings, Finding{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
+			"the NSEC3 records of %s hash each name %s%s, where RFC 9276 asks for no extra iterations and no salt: it costs every validator work, adds little against listing the zone, and a validator may stop trusting the proofs as the count grows; set the iterations to 0",
+			hashed.Zone, plural(int(hashed.Iterations), "extra time", "extra times"), salted)})
+	}
+	return findings
 }
 
 // zoneOf is the zone a verdict is about, which the walk recorded on the verdict
