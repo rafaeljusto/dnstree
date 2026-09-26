@@ -194,12 +194,12 @@ func override(flags *flag.FlagSet, fileArgs, args []string) []string {
 	// either, the file's --live, --watch and --explain are about the other
 	// formats: they are dropped rather than held against the run. The same goes
 	// the other way round for the flags only a served page takes.
-	switch format := given["format"]; format {
-	case "":
-	case "json", "dot", "mermaid":
+	switch format := given["format"]; {
+	case format == "":
+	case Programs(format):
 		drop["live"], drop["watch"] = true, true
 		drop["explain"], drop["diff"] = true, true
-	case "web":
+	case format == "web":
 		drop["live"], drop["watch"] = true, true
 	default:
 		drop["web-addr"], drop["no-browser"] = true, true

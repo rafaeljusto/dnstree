@@ -29,6 +29,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/mermaid"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/openmetrics"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
@@ -149,7 +150,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	if live != nil {
 		live.Summary(stdout, tr)
-	} else if cfg.Format != "json" && cfg.Format != "dot" && cfg.Format != "mermaid" {
+	} else if !cli.Programs(cfg.Format) {
 		tree.Summary(stdout, tr, treeOptions(cfg))
 	}
 	if findings := readings(cfg, tr, stderr); len(findings) > 0 {
@@ -552,6 +553,8 @@ func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 		return dot.Render(w, tr)
 	case "mermaid":
 		return mermaid.Render(w, tr)
+	case "openmetrics":
+		return openmetrics.Render(w, tr)
 	default:
 		return tree.Render(w, tr, treeOptions(cfg))
 	}

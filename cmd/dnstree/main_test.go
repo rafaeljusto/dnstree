@@ -93,6 +93,11 @@ func TestRun(t *testing.T) {
 				tb.Errorf("got %q, want a chart and no summary under it", out)
 			}
 		}},
+		"openmetrics": {format: "openmetrics", check: func(tb testing.TB, out string) {
+			if !strings.HasSuffix(out, "\n# EOF\n") || strings.Contains(out, "answered in") {
+				tb.Errorf("got %q, want metrics and no summary under them", out)
+			}
+		}},
 	}
 
 	for name, test := range tests {
@@ -834,6 +839,7 @@ func TestRunFromHostile(t *testing.T) {
 		{"--format", "json"},
 		{"--format", "dot"},
 		{"--format", "mermaid"},
+		{"--format", "openmetrics"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			previous := stdin

@@ -108,7 +108,7 @@ dnstree [flags] NAME [TYPE]
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
-| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot`, `mermaid` or `web` |
+| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot`, `mermaid`, `openmetrics` or `web` |
 | `--web-addr`, `--no-browser` | where `--format web` serves the page, and whether a browser is opened at it |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--watch` | walk again this often, and say only what changed since the walk before |
@@ -231,10 +231,11 @@ question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
 for `--tls-ca` and `--tls-insecure`. `--format json`, `--format dot`,
-`--format mermaid` and `--format web` drop a `live` and a `watch` the file set,
-since all four are written once at the end and leave neither anything to draw
-nor anything to change; `json`, `dot` and `mermaid` drop an `explain` and a
-`diff` as well, being read by a program that has the whole trace already. A
+`--format mermaid`, `--format openmetrics` and `--format web` drop a `live` and
+a `watch` the file set, since all five are written once at the end and leave
+neither anything to draw nor anything to change; all but `web` drop an
+`explain` and a `diff` as well, being read by a program that has the whole
+trace already. A
 format that serves no page drops a `web-addr` and a `no-browser` it set, and
 `--from` drops a `live`, a `watch` and a `diff`, which are about walks being
 made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.
@@ -940,8 +941,8 @@ question unanswered rather than half answered. The address families are read off
 the parent's glue instead, which is whole whether or not the servers were asked,
 so a zone with no IPv4 anywhere in its delegation is named without `--all`.
 
-`--format json`, `--format dot` and `--format mermaid` refuse `--explain` and
-`--diff`: all three are read by a program, which has the same facts in fields
+`--format json`, `dot`, `mermaid` and `openmetrics` refuse `--explain` and
+`--diff`: all four are read by a program, which has the same facts in fields
 already.
 
 ### What has changed since last time
@@ -1027,8 +1028,8 @@ prints, followed by one line saying how it went:
 
 > [!NOTE]
 > Off a terminal the flag does nothing, and it cannot be combined with
-> `--format json`, `dot`, `mermaid` or `web`, all four of which are written
-> once, at the end.
+> `--format json`, `dot`, `mermaid`, `openmetrics` or `web`, all of which are
+> written once, at the end.
 
 ### Leaving it running
 
@@ -1076,9 +1077,9 @@ that stopped resolving altogether still exits 2. A walk cut off part way through
 by the interrupt is not read as a finding about the name: the last one that
 finished on its own is what answers.
 
-`--format json`, `dot`, `mermaid` and `web` are written once, at the end, so
-there is nothing for a watch to change; all four refuse it, as they refuse
-`--live`.
+`--format json`, `dot`, `mermaid`, `openmetrics` and `web` are written once,
+at the end, so there is nothing for a watch to change; all of them refuse it,
+as they refuse `--live`.
 
 ### Other formats
 
@@ -1249,6 +1250,87 @@ The same schema is served at
 [rafaeljusto.github.io/dnstree/trace.schema.json](https://rafaeljusto.github.io/dnstree/trace.schema.json),
 which is the address its `$id` names, so a validator can be pointed at it with
 no binary to hand.
+
+### Numbers for a monitoring system
+
+`--format openmetrics` writes the walk as numbers in the
+[OpenMetrics](https://prometheus.io/docs/specs/om/open_metrics_spec/) text
+format, each labelled with the question: how it ended, how long it and each hop
+on the path took, how many queries failed, the chain of trust, the time left on
+the first signature to run out, what `--check-ds` found, and how long each
+resolver took and whether it agreed. Only gauges are used, so the older
+Prometheus text format reads it too. A family the walk has nothing to say about
+is left out rather than written as zero: a walk without `--dnssec` says nothing
+about trust.
+
+It is written once, so the repeating is cron's: written into the directory of
+node_exporter's
+[textfile collector](https://github.com/prometheus/node_exporter#textfile-collector),
+it reaches Prometheus with the rest of the machine's metrics.
+
+```
+*/5 * * * * dnstree --dnssec --format openmetrics www.example.com > /var/lib/node_exporter/example.prom.$$ && mv /var/lib/node_exporter/example.prom.$$ /var/lib/node_exporter/example.prom
+```
+
+The rename keeps the collector from reading a file half written. The exit code
+is not in the output, since the walk's own numbers say the same: `dnstree_result`
+with `kind` of `none` or `filtered` is exit 2, and `dnstree_dnssec` with
+`state="bogus"` is exit 3, which outranks both. A hop is labelled with the
+server that answered it, so a walk that picks another nameserver of a zone next
+time starts a series of its own rather than moving the old one.
+
+<details>
+<summary>What the walk to www.example.com writes</summary>
+
+```
+# TYPE dnstree_result gauge
+# HELP dnstree_result how the walk ended, one of answer, cname, nodata, nxdomain, filtered or none
+dnstree_result{name="www.example.com.",type="A",kind="answer"} 1
+dnstree_result{name="www.example.com.",type="A",kind="cname"} 0
+dnstree_result{name="www.example.com.",type="A",kind="nodata"} 0
+dnstree_result{name="www.example.com.",type="A",kind="nxdomain"} 0
+dnstree_result{name="www.example.com.",type="A",kind="filtered"} 0
+dnstree_result{name="www.example.com.",type="A",kind="none"} 0
+# TYPE dnstree_walk_seconds gauge
+# UNIT dnstree_walk_seconds seconds
+# HELP dnstree_walk_seconds how long the walk took
+dnstree_walk_seconds{name="www.example.com.",type="A"} 2.247598709
+# TYPE dnstree_queries gauge
+# HELP dnstree_queries the queries the walk sent
+dnstree_queries{name="www.example.com.",type="A"} 6
+# TYPE dnstree_failed_queries gauge
+# HELP dnstree_failed_queries the queries that timed out, failed or reached a lame server
+dnstree_failed_queries{name="www.example.com.",type="A"} 0
+# TYPE dnstree_hop_seconds gauge
+# UNIT dnstree_hop_seconds seconds
+# HELP dnstree_hop_seconds how long each query on the path took, a timeout included
+dnstree_hop_seconds{name="www.example.com.",type="A",zone=".",server="a.root-servers.net.",address="198.41.0.4",asked="www.example.com."} 0.353333417
+dnstree_hop_seconds{name="www.example.com.",type="A",zone="com.",server="l.gtld-servers.net.",address="192.41.162.30",asked="www.example.com."} 0.285808584
+dnstree_hop_seconds{name="www.example.com.",type="A",zone="example.com.",server="hera.ns.cloudflare.com.",address="108.162.192.162",asked="www.example.com."} 0.266672916
+# TYPE dnstree_dnssec gauge
+# HELP dnstree_dnssec how far the chain of trust got, one of secure, insecure, bogus or indeterminate
+dnstree_dnssec{name="www.example.com.",type="A",state="secure"} 1
+dnstree_dnssec{name="www.example.com.",type="A",state="insecure"} 0
+dnstree_dnssec{name="www.example.com.",type="A",state="bogus"} 0
+dnstree_dnssec{name="www.example.com.",type="A",state="indeterminate"} 0
+# TYPE dnstree_signature_left_seconds gauge
+# UNIT dnstree_signature_left_seconds seconds
+# HELP dnstree_signature_left_seconds how long the first signature to run out had left when the walk was made
+dnstree_signature_left_seconds{name="www.example.com.",type="A"} 90001.697257
+# TYPE dnstree_resolver_seconds gauge
+# UNIT dnstree_resolver_seconds seconds
+# HELP dnstree_resolver_seconds how long each recursive server took to answer the same question
+dnstree_resolver_seconds{name="www.example.com.",type="A",resolver="8.8.8.8"} 0.352785333
+# TYPE dnstree_resolver_agrees gauge
+# HELP dnstree_resolver_agrees whether each recursive server answered what the walk found
+dnstree_resolver_agrees{name="www.example.com.",type="A",resolver="8.8.8.8"} 1
+# TYPE dnstree_warnings gauge
+# HELP dnstree_warnings what the walk could not do
+dnstree_warnings{name="www.example.com.",type="A"} 0
+# EOF
+```
+
+</details>
 
 ### Drawing a walk again
 

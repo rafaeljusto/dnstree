@@ -46,7 +46,7 @@ path it took. TYPE defaults to A.
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
-  --format FORMAT         tree, ascii, emoji, json, dot, mermaid or web
+  --format FORMAT         tree, ascii, emoji, json, dot, mermaid, openmetrics or web
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
   --live                  draw the tree as the walk makes it
@@ -119,6 +119,12 @@ runs that check signatures. It costs two queries.
 --format mermaid writes the same picture as --format dot, for the places that
 draw Mermaid rather than Graphviz: pasted into a fenced mermaid block, GitHub,
 GitLab and most wikis draw it where it stands.
+
+--format openmetrics writes the walk as numbers for a monitoring system: how
+it ended, what it and each hop on the path took, the chain of trust, the time
+left on the signatures, what --check-ds found and what the resolvers answered,
+each labelled with the question. Run from cron into the directory of
+node_exporter's textfile collector, it is what Prometheus alerts on.
 
 --from reads a walk that --format json wrote, from FILE or from - for the
 standard input, and draws it in whichever format was asked for, as though it
@@ -356,7 +362,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot, mermaid or web")
+	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot, mermaid, openmetrics or web")
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
@@ -416,7 +422,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch format {
-	case "tree", "ascii", "emoji", "json", "dot", "mermaid", "web":
+	case "tree", "ascii", "emoji", "json", "dot", "mermaid", "openmetrics", "web":
 		cfg.Format = format
 	default:
 		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
@@ -510,7 +516,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s between one walk and the next is too little; a second is the least",
 			ErrUsage, cfg.Watch)
 	}
-	if (cfg.Explain || cfg.Diff) && programs(cfg.Format) {
+	if (cfg.Explain || cfg.Diff) && Programs(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
 			ErrUsage, cfg.Format)
 	}
@@ -574,13 +580,13 @@ var walkFlags = map[string]bool{
 // once reports whether a format is written once, at the end, which leaves
 // nothing to draw live and nothing to watch change.
 func once(format string) bool {
-	return programs(format) || format == "web"
+	return Programs(format) || format == "web"
 }
 
-// programs reports whether a format is read by a program rather than a person,
+// Programs reports whether a format is read by a program rather than a person,
 // which has the whole trace already and no use for prose under it.
-func programs(format string) bool {
-	return format == "json" || format == "dot" || format == "mermaid"
+func Programs(format string) bool {
+	return format == "json" || format == "dot" || format == "mermaid" || format == "openmetrics"
 }
 
 // reverseName is the name the PTR of an address is kept under: its octets in

@@ -141,6 +141,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "mermaid", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "mermaid"},
 		},
+		"numbers for a monitoring system": {
+			args: []string{"--format", "openmetrics", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "openmetrics"},
+		},
 		"a walk already made needs no name": {
 			args: []string{"--from", "walk.json"},
 			want: cli.Config{From: "walk.json"},
@@ -223,6 +227,10 @@ func TestParseRejects(t *testing.T) {
 		"watched mermaid":                   {"--format", "mermaid", "--watch", "30s", "example.com"},
 		"explained mermaid":                 {"--format", "mermaid", "--explain", "example.com"},
 		"compared mermaid":                  {"--format", "mermaid", "--diff", "example.com"},
+		"live openmetrics":                  {"--format", "openmetrics", "--live", "example.com"},
+		"watched openmetrics":               {"--format", "openmetrics", "--watch", "30s", "example.com"},
+		"explained openmetrics":             {"--format", "openmetrics", "--explain", "example.com"},
+		"compared openmetrics":              {"--format", "openmetrics", "--diff", "example.com"},
 		"a walk already made, and a name":   {"--from", "walk.json", "example.com"},
 		"a walk already made, drawn live":   {"--from", "walk.json", "--live"},
 		"a walk already made, watched":      {"--from", "walk.json", "--watch", "30s"},

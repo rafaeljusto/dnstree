@@ -485,8 +485,8 @@ footer a:hover{color:var(--ink)}
         also why the nameservers of a zone are only weighed against each other where the walk
         asked all of them — <code>--all</code> does, and a set that is not all accounted for
         leaves the question unanswered rather than half answered.
-        <code>--format json</code>, <code>--format dot</code> and <code>--format mermaid</code>
-        refuse the flag — all three are read by a program, which has the same facts in fields
+        <code>--format json</code>, <code>dot</code>, <code>mermaid</code> and <code>openmetrics</code>
+        refuse the flag — all four are read by a program, which has the same facts in fields
         already. A chain whose signatures are late in the life they were made for is said too,
         with how long it has left: a zone whose signer stopped validates to the last second.
       </p>
@@ -524,10 +524,11 @@ footer a:hover{color:var(--ink)}
     </section>
 
     <section id="formats">
-      <h2>Seven ways out</h2>
+      <h2>Eight ways out</h2>
       <p class="section-lede">
         The tree is for reading, and the emoji for enjoying it. Four more are for pasting
-        into a document, a pipeline, a picture or an issue. The last one opens a browser.
+        into a document, a pipeline, a picture or an issue, and one for a monitoring system.
+        The last one opens a browser.
       </p>
 
       <div class="tabs" role="tablist" aria-label="Output formats">
@@ -537,6 +538,7 @@ footer a:hover{color:var(--ink)}
         <button class="tab" role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">--format json</button>
         <button class="tab" role="tab" id="tab-dot" aria-controls="panel-dot" aria-selected="false">--format dot</button>
         <button class="tab" role="tab" id="tab-mermaid" aria-controls="panel-mermaid" aria-selected="false">--format mermaid</button>
+        <button class="tab" role="tab" id="tab-openmetrics" aria-controls="panel-openmetrics" aria-selected="false">--format openmetrics</button>
         <button class="tab" role="tab" id="tab-web" aria-controls="panel-web" aria-selected="false">--format web</button>
       </div>
 
@@ -705,6 +707,34 @@ flowchart LR
     n1 --&gt;|<span class="s">"2.19s"</span>| n2
     n2 --&gt;|<span class="s">"14ms"</span>| n3
     …</pre>
+          </div>
+
+          <div class="panel" role="tabpanel" id="panel-openmetrics" aria-labelledby="tab-openmetrics" hidden>
+<pre># TYPE dnstree_result gauge
+dnstree_result{name="www.example.com.",type="A",kind="answer"} 1
+…
+# TYPE dnstree_walk_seconds gauge
+dnstree_walk_seconds{name="www.example.com.",type="A"} 2.247598709
+# TYPE dnstree_queries gauge
+dnstree_queries{name="www.example.com.",type="A"} 6
+# TYPE dnstree_failed_queries gauge
+dnstree_failed_queries{name="www.example.com.",type="A"} 0
+# TYPE dnstree_hop_seconds gauge
+dnstree_hop_seconds{name="www.example.com.",type="A",zone=".",server="a.root-servers.net.",address="198.41.0.4",asked="www.example.com."} 0.353333417
+dnstree_hop_seconds{name="www.example.com.",type="A",zone="com.",server="l.gtld-servers.net.",address="192.41.162.30",asked="www.example.com."} 0.285808584
+dnstree_hop_seconds{name="www.example.com.",type="A",zone="example.com.",server="hera.ns.cloudflare.com.",address="108.162.192.162",asked="www.example.com."} 0.266672916
+# TYPE dnstree_dnssec gauge
+dnstree_dnssec{name="www.example.com.",type="A",state="secure"} 1
+…
+# TYPE dnstree_signature_left_seconds gauge
+dnstree_signature_left_seconds{name="www.example.com.",type="A"} 90001.697257
+# TYPE dnstree_resolver_seconds gauge
+dnstree_resolver_seconds{name="www.example.com.",type="A",resolver="8.8.8.8"} 0.352785333
+# TYPE dnstree_resolver_agrees gauge
+dnstree_resolver_agrees{name="www.example.com.",type="A",resolver="8.8.8.8"} 1
+# TYPE dnstree_warnings gauge
+dnstree_warnings{name="www.example.com.",type="A"} 0
+# EOF</pre>
           </div>
 
           <div class="panel" role="tabpanel" id="panel-web" aria-labelledby="tab-web" hidden>
@@ -932,6 +962,7 @@ timeout = 3s</pre>
     "tab-json": "~ · versioned, with durations in milliseconds",
     "tab-dot": "~ · one node per query, clustered by zone",
     "tab-mermaid": "~ · the same graph, drawn where it is pasted on GitHub",
+    "tab-openmetrics": "~ · numbers for Prometheus, one gauge per fact",
     "tab-web": "~ · served on this machine, and opened in a browser"
   };
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
