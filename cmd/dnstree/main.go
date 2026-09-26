@@ -573,10 +573,8 @@ func treeOptions(cfg *cli.Config) tree.Options {
 // verdict reads the trace the way a script would: a broken chain of trust
 // outranks an answer, and an answer outranks nothing.
 func verdict(tr *trace.Trace) int {
-	for step := range tr.Steps() {
-		if step.DNSSEC != nil && step.DNSSEC.State == trace.Bogus {
-			return exitBogus
-		}
+	if step := tr.Chain(); step != nil && step.DNSSEC.State == trace.Bogus {
+		return exitBogus
 	}
 	if tr.Result() == nil {
 		return exitNoAnswer

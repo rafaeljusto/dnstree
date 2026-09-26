@@ -312,3 +312,36 @@ func TestExpiringLongLife(t *testing.T) {
 		})
 	}
 }
+
+// TestChain covers the one reading of the chain of trust the exit code, the
+// summary, the sentences and the metrics all share.
+func TestChain(t *testing.T) {
+	status := func(state trace.DNSSECState) *trace.DNSSECStatus { return &trace.DNSSECStatus{State: state} }
+	tests := map[string]struct {
+		aside, answer *trace.DNSSECStatus
+		want          trace.DNSSECState
+	}{
+		"nothing checked says nothing":             {want: ""},
+		"the answer's verdict when nothing is off": {answer: status(trace.Secure), want: trace.Secure},
+		"a broken aside outranks a secure answer":  {aside: status(trace.Bogus), answer: status(trace.Secure), want: trace.Bogus},
+		"an unchecked aside outranks a secure one": {aside: status(trace.Indeterminate), answer: status(trace.Secure), want: trace.Indeterminate},
+		"broken outranks unchecked":                {aside: status(trace.Indeterminate), answer: status(trace.Bogus), want: trace.Bogus},
+		"an insecure answer beside a secure aside": {aside: status(trace.Secure), answer: status(trace.Insecure), want: trace.Insecure},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			answer := &trace.Step{Zone: "example.com.", Kind: trace.KindAnswer, DNSSEC: test.answer}
+			aside := &trace.Step{Zone: "example.com.", Kind: trace.KindAnswer, Aside: true, DNSSEC: test.aside}
+			tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{aside, answer}}}
+
+			var got trace.DNSSECState
+			if step := tr.Chain(); step != nil {
+				got = step.DNSSEC.State
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}

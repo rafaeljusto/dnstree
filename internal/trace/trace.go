@@ -704,6 +704,31 @@ func (t *Trace) Trust() *Step {
 	return last
 }
 
+// Chain is the step carrying what the chain of trust came to, read the way the
+// exit code reads it: broken anywhere is broken, and unchecked anywhere comes
+// next, ahead of the verdict the answer rests on. It is nil where the walk
+// checked no signatures.
+func (t *Trace) Chain() *Step {
+	var unchecked *Step
+	for step := range t.Steps() {
+		if step.DNSSEC == nil {
+			continue
+		}
+		switch step.DNSSEC.State {
+		case Bogus:
+			return step
+		case Indeterminate:
+			if unchecked == nil {
+				unchecked = step
+			}
+		}
+	}
+	if unchecked != nil {
+		return unchecked
+	}
+	return t.Trust()
+}
+
 // Filtered is a hop where somebody decided the answer rather than serving it,
 // or nil where nothing did. It is not a [Trace.Result]: a walk that ends here
 // has not been answered, it has been turned away, and the two are worth saying

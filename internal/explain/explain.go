@@ -306,35 +306,22 @@ func leftover(tr *trace.Trace) []Finding {
 // It claims no more than the walk checked: a zone this build could not check
 // reads as unchecked, never as broken.
 func trust(tr *trace.Trace) []Finding {
-	var checked bool
-	for step := range tr.Steps() {
-		if step.DNSSEC != nil {
-			checked = true
-			break
-		}
-	}
-	if !checked {
+	step := tr.Chain()
+	if step == nil {
 		return nil
 	}
-
-	// Bogus is read the way the exit code reads it: anywhere in the trace, and
-	// ahead of everything else.
-	if step := state(tr, trace.Bogus); step != nil {
+	status, zone := step.DNSSEC, zoneOf(step)
+	switch status.State {
+	case trace.Bogus:
 		return []Finding{{Topic: Trust, Level: Fault, Text: fmt.Sprintf(
 			"the chain of trust breaks at %s%s, so a resolver that validates answers SERVFAIL for this name",
-			zoneOf(step), because(step.DNSSEC.Reason))}}
-	}
-	if step := state(tr, trace.Indeterminate); step != nil {
+			zone, because(status.Reason))}}
+
+	case trace.Indeterminate:
 		return []Finding{{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
 			"the chain of trust at %s could not be checked%s, which is not the same as finding it broken",
-			zoneOf(step), because(step.DNSSEC.Reason))}}
-	}
+			zone, because(status.Reason))}}
 
-	status, zone := final(tr)
-	if status == nil {
-		return nil
-	}
-	switch status.State {
 	case trace.Insecure:
 		return []Finding{{Topic: Trust, Level: Note, Text: fmt.Sprintf(
 			"%s is not signed%s, so nothing here vouches for the answer", zone, because(status.Reason))}}
@@ -367,27 +354,6 @@ func expiring(tr *trace.Trace) (Finding, bool) {
 	return Finding{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
 		"a signature over %s runs out in %s, late in the life it was made for, and unless the zone is re-signed before then a resolver that validates answers SERVFAIL for this name",
 		zoneOf(step), spell(uint32(left/time.Second)))}, true
-}
-
-// state is the first hop the chain reached this state at, nil for a state it
-// never did.
-func state(tr *trace.Trace, want trace.DNSSECState) *trace.Step {
-	for step := range tr.Steps() {
-		if step.DNSSEC != nil && step.DNSSEC.State == want {
-			return step
-		}
-	}
-	return nil
-}
-
-// final is the state the answer itself rests on: the one recorded where the
-// walk ended, or the last it reached when it ended without an answer.
-func final(tr *trace.Trace) (*trace.DNSSECStatus, string) {
-	step := tr.Trust()
-	if step == nil {
-		return nil, ""
-	}
-	return step.DNSSEC, zoneOf(step)
 }
 
 // zoneOf is the zone a verdict is about, which the walk recorded on the verdict

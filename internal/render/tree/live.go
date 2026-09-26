@@ -251,12 +251,8 @@ func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 // which outranks having an answer at all. It is the same reading main gives
 // the trace when it picks an exit code.
 func bogus(tr *trace.Trace) bool {
-	for step := range tr.Steps() {
-		if step.DNSSEC != nil && step.DNSSEC.State == trace.Bogus {
-			return true
-		}
-	}
-	return false
+	step := tr.Chain()
+	return step != nil && step.DNSSEC.State == trace.Bogus
 }
 
 // draw renders the walk and puts a whole frame on the screen.
