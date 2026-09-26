@@ -28,7 +28,7 @@ const Summary = "resolve a name from the root servers down, and draw the path it
 const Usage = `usage: dnstree [flags] NAME [TYPE]
 
 Resolve NAME from the root servers down, following every referral, and draw the
-path it took. TYPE defaults to A.
+path it took. TYPE defaults to A; ANY, AXFR and IXFR are refused.
 
   -x ADDR                 resolve the PTR of this address, instead of a name
   -4, -6                  ask only IPv4 or only IPv6 servers
@@ -313,6 +313,18 @@ type Config struct {
 	Version bool
 }
 
+// notLookups are the types a question can name that do not ask for one RRset.
+// Every step of a walk, and the chain of trust over it, is about exactly one.
+var notLookups = map[string]string{
+	"ANY":    "servers answer it with a sample (RFC 8482); ask for the types you want",
+	"AXFR":   "it transfers a zone rather than looking a name up",
+	"IXFR":   "it transfers a zone rather than looking a name up",
+	"OPT":    "it carries EDNS0 and is never asked for",
+	"TSIG":   "it signs a message and is never asked for",
+	"TKEY":   "it sets up a key and is never asked for",
+	"NXNAME": "it marks a name that does not exist and is never asked for",
+}
+
 // ErrUsage is anything the command line itself got wrong, including a request
 // for help.
 var ErrUsage = errors.New("cli: the command line cannot be read")
@@ -453,6 +465,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		cfg.Name, cfg.Type = flags.Arg(0), strings.ToUpper(flags.Arg(1))
 	default:
 		return nil, fmt.Errorf("%w: only a name and a type were expected", ErrUsage)
+	}
+	if why, ok := notLookups[cfg.Type]; ok {
+		return nil, fmt.Errorf("%w: %s is not a lookup: %s", ErrUsage, cfg.Type, why)
 	}
 
 	if four && six {

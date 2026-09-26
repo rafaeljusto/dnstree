@@ -261,6 +261,15 @@ func TestParseRejects(t *testing.T) {
 		},
 		"TLS settings with no TLS":  {"--tls-insecure", "example.com"},
 		"a CA with nothing to sign": {"--dot", "--tls-ca", "ca.pem", "--tls-insecure", "example.com"},
+
+		"ANY, which servers answer with a sample": {"example.com", "ANY"},
+		"ANY in lowercase":                        {"example.com", "any"},
+		"a zone transfer":                         {"example.com", "AXFR"},
+		"an incremental zone transfer":            {"example.com", "IXFR"},
+		"the EDNS0 pseudo-record":                 {"example.com", "OPT"},
+		"a transaction signature":                 {"example.com", "TSIG"},
+		"a key exchange":                          {"example.com", "TKEY"},
+		"the compact denial marker":               {"example.com", "NXNAME"},
 	}
 
 	for name, args := range tests {

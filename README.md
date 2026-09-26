@@ -88,7 +88,9 @@ brew install --formula ./dnstree.rb
 dnstree [flags] NAME [TYPE]
 ```
 
-`TYPE` defaults to `A`.
+`TYPE` defaults to `A`. It names one RRset, so `ANY` and the zone transfers
+`AXFR` and `IXFR` are refused: servers answer `ANY` with a sample of their
+choosing (RFC 8482), and a walk would draw that as the whole answer.
 
 | Flag | What it does |
 | --- | --- |
