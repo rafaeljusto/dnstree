@@ -395,12 +395,48 @@ func spread(tr *trace.Trace) []Finding {
 			"all %d nameservers of %s are in AS%d, so one operator's outage takes the whole zone with it",
 			len(delegation.NS), zone, as)})
 	}
-	if glue, whole := glued(delegation); whole && !slices.ContainsFunc(glue, four) {
+	glue, whole := glued(delegation)
+	if !whole {
+		return findings
+	}
+	if !slices.ContainsFunc(glue, four) {
 		findings = append(findings, Finding{Topic: Spread, Level: Warn, Text: fmt.Sprintf(
 			"the delegation of %s carries no IPv4 address for any of its nameservers, so a resolver without IPv6 has no way in",
 			zone)})
 	}
+	for _, family := range []string{"IPv4", "IPv6"} {
+		if network, ok := shared(glue, family == "IPv4"); ok {
+			findings = append(findings, Finding{Topic: Spread, Level: Warn, Text: fmt.Sprintf(
+				"every %s address of the nameservers of %s is in %s, so one route going away takes the whole zone with it",
+				family, zone, network)})
+		}
+	}
 	return findings
+}
+
+// shared is the one network every address of a family sits in, at the size
+// routes are filtered at: a /24 for IPv4, a /48 for IPv6. A family with fewer
+// than two addresses has no set to share one.
+func shared(glue []netip.Addr, v4 bool) (netip.Prefix, bool) {
+	bits := 48
+	if v4 {
+		bits = 24
+	}
+	var (
+		network netip.Prefix
+		count   int
+	)
+	for _, addr := range glue {
+		if addr = addr.Unmap(); addr.Is4() != v4 {
+			continue
+		}
+		prefix, _ := addr.Prefix(bits)
+		if count > 0 && prefix != network {
+			return netip.Prefix{}, false
+		}
+		network, count = prefix, count+1
+	}
+	return network, count > 1
 }
 
 // ended is the zone the walk came to rest in: the one that answered, or the

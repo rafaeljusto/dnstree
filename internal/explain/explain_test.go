@@ -461,6 +461,30 @@ func TestFindingsSpread(t *testing.T) {
 			trace: askedAll(both, ns("a.ns.test.", "192.0.2.1", 64496), ns("b.ns.test.", "198.51.100.1", 64497)),
 			avoid: []string{"IPv4"},
 		},
+		"nameservers that all sit in one /24 share a route": {
+			trace: askedFirst(both, ns("a.ns.test.", "192.0.2.1", 0), ns("b.ns.test.", "192.0.2.2", 0)),
+			want:  []string{"every IPv4 address of the nameservers of test. is in 192.0.2.0/24"},
+		},
+		"nameservers that all sit in one /48 share a route": {
+			trace: askedFirst(both, ns("a.ns.test.", "2001:db8::1", 0), ns("b.ns.test.", "2001:db8:0:1::1", 0)),
+			want:  []string{"every IPv6 address of the nameservers of test. is in 2001:db8::/48"},
+		},
+		"each family is judged apart from the other": {
+			trace: askedFirst(both,
+				ns("a.ns.test.", "192.0.2.1", 0), ns("a.ns.test.", "2001:db8::1", 0),
+				ns("b.ns.test.", "192.0.2.2", 0), ns("b.ns.test.", "2001:db8:1::1", 0)),
+			want:  []string{"every IPv4 address of the nameservers of test. is in 192.0.2.0/24"},
+			avoid: []string{"every IPv6"},
+		},
+		"one address of a family is not a set to share a network": {
+			trace: askedFirst(both, ns("a.ns.test.", "192.0.2.1", 0), ns("b.ns.test.", "2001:db8::1", 0)),
+			avoid: []string{"every IPv4", "every IPv6"},
+		},
+		"a nameserver with no glue leaves the network of the set unknown": {
+			trace: askedFirst([]string{"a.ns.test.", "b.ns.test.", "far.example."},
+				ns("a.ns.test.", "192.0.2.1", 0), ns("b.ns.test.", "192.0.2.2", 0)),
+			avoid: []string{"every IPv4"},
+		},
 		"the zone that answered is the one read, not the ones above it": {
 			trace: walk(&trace.Step{
 				Zone: ".", Kind: trace.KindReferral, Server: ns("root.test.", "192.0.2.53", 64496),
