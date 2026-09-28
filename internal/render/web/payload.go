@@ -37,6 +37,12 @@ type finding struct {
 	Text  string `json:"text"`
 }
 
+// Payload is what page.json and trace.json answer for one finished walk, for a
+// server that mounts [Files] somewhere of its own.
+func Payload(tr *trace.Trace, findings []explain.Finding, opts Options) (page, traceDoc []byte, err error) {
+	return build(tr, findings, opts)
+}
+
 // build is the payload for one finished walk, and the trace document inside it.
 // The two are returned apart because the page reads the first and a script
 // pointed at the same server wants the second on its own.

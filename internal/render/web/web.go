@@ -222,6 +222,24 @@ func siteFor(opts Options) site {
 // here reads the trace and nothing needs a lock.
 func handler(pages site, page, traceDoc []byte) http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("/", files(pages))
+
+	// The walk as the page reads it, and the walk on its own, which is byte for
+	// byte what --format json writes for whatever is pointed at it.
+	mux.Handle("GET /page.json", serve("application/json; charset=utf-8", page))
+	mux.Handle("GET /trace.json", serve("application/json; charset=utf-8", traceDoc))
+
+	return local(mux)
+}
+
+// Files serves one of the pages and the files it is made of, but not the walk:
+// whatever mounts it answers page.json and trace.json beside it.
+func Files(scene bool) http.Handler {
+	return files(siteFor(Options{Scene: scene}))
+}
+
+func files(pages site) http.Handler {
+	mux := http.NewServeMux()
 	index, err := assets.ReadFile(pages.dir + "/index.html")
 	if err != nil {
 		// The files are embedded at build time, so this cannot happen in a
@@ -247,13 +265,7 @@ func handler(pages site, page, traceDoc []byte) http.Handler {
 		}
 		mux.Handle("GET /"+name, serve(contentType, body))
 	}
-
-	// The walk as the page reads it, and the walk on its own, which is byte for
-	// byte what --format json writes for whatever is pointed at it.
-	mux.Handle("GET /page.json", serve("application/json; charset=utf-8", page))
-	mux.Handle("GET /trace.json", serve("application/json; charset=utf-8", traceDoc))
-
-	return local(mux)
+	return mux
 }
 
 func serve(contentType string, body []byte) http.Handler {
