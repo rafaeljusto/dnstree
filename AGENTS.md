@@ -64,8 +64,10 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   renderers and the AS lookups is what makes them testable without a network.
   `internal/layering` fails on any other import of it.
 - `cmd/dnstree` wires things together and owns nothing.
-- Two dependencies, on purpose: the DNS codec, and `golang.org/x/sys` for the
-  terminal size. Adding a third needs an argument.
+- Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
+  terminal size, and `golang.org/x/net/idna` for the names `dnstree-web` is
+  typed, which the codec leaves to its callers. Adding a fourth needs an
+  argument.
 
 ## Invariants
 

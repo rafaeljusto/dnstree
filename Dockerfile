@@ -17,7 +17,18 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG BUILD_VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-	go build -trimpath -ldflags "-s -w -X main.version=$BUILD_VERSION" -o /out/dnstree ./cmd/dnstree
+	go build -trimpath -ldflags "-s -w -X main.version=$BUILD_VERSION" -o /out/ ./cmd/dnstree ./cmd/dnstree-web
+
+# The page as a service, built with --target web. It is not released: whoever
+# hosts it builds it. The stage the release publishes stays the last one.
+FROM gcr.io/distroless/static:nonroot AS web
+
+COPY --from=builder /out/dnstree-web /usr/local/bin/dnstree-web
+
+USER 65532:65532
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/dnstree-web"]
 
 # The binary is static, so the image needs nothing but the root certificates
 # the encrypted transports check a nameserver against. A distribution would

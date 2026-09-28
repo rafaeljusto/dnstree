@@ -124,9 +124,11 @@ Pull requests eligible for review
 
 Some other important notes when contributing:
 
-- **Keep the dependency list short.** dnstree has two dependencies:
+- **Keep the dependency list short.** dnstree has three dependencies:
   `codeberg.org/miekg/dns`, because the standard library has no DNS wire-format
-  codec, and `golang.org/x/sys`, for the terminal size. Everything else is
+  codec, `golang.org/x/sys`, for the terminal size, and `golang.org/x/net/idna`,
+  for the names `dnstree-web` is typed, which the codec leaves to its callers.
+  Everything else is
   standard library, and a pull request adding a dependency needs to argue for
   it.
 - **Only three packages may import the DNS codec**: `transport`, `resolver` and

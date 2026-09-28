@@ -54,7 +54,7 @@ MAN_DATE ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +'%Y-%m-%d')
 BUILD := build
 
 .PHONY: all build install test race lint lint-docker vuln check live goldens dist man \
-	archives packages formula checksums image image-push clean roothints demos demo-3d
+	archives packages formula checksums image image-push image-web clean roothints demos demo-3d
 
 # The stages of dist read each other's output, so they run one after another
 # rather than at the same time.
@@ -172,6 +172,15 @@ image:
 		--build-arg BUILD_VCS_REF=$(VCS_REF) \
 		--build-arg BUILD_VERSION=$(VERSION) \
 		--tag $(IMAGE):$(VERSION) \
+		--load \
+		.
+
+# dnstree-web, the page as a service. Only ever built here: it is not released.
+image-web:
+	docker buildx build \
+		--target web \
+		--build-arg BUILD_VERSION=$(VERSION) \
+		--tag $(IMAGE)-web:$(VERSION) \
 		--load \
 		.
 
