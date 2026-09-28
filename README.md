@@ -1182,6 +1182,8 @@ placed where the hops are, so that turning the scene turns it too. It is WebGL2
 and nothing else: a browser without it is pointed back at `--format web`, and
 one asking for reduced motion gets the walk already assembled and standing still.
 
+![dnstree --format web-3d on www.example.com: the hops in a cone from the root down, the chain of trust ringed round each cut and the answer lit green](docs/demo-3d.png)
+
 `--format ascii` swaps the branches for `` |-- `` and drops the colour, for
 pasting into documents. `--format json` writes a versioned document with
 durations in milliseconds, every hop carrying the question it put: a walk asks
@@ -1433,7 +1435,8 @@ make lint-docker  # hadolint against the Dockerfile
 make vuln         # govulncheck against the vulnerability database
 make goldens      # rewrite the renderer goldens and docs/trace.schema.json; read the diff
 make live         # the smoke test that goes out to the real root servers
-make demos        # re-record the terminal demos in docs/ from tapes/
+make demos        # re-record the terminal demos in docs/ from tapes/, and the 3d still
+make demo-3d      # take only the still of --format web-3d in docs/
 make roothints    # refresh the embedded root hints and trust anchors
 make dist         # cross compile a release into dist/
 make image        # build the container image for this machine
@@ -1456,7 +1459,10 @@ The recordings under `docs/` are written by [vhs](https://github.com/charmbracel
 from the tapes in [tapes/](tapes/), one per scene. `make demos` rebuilds the
 binary and records all four; it needs `ttyd` and `ffmpeg` on the PATH, and it
 walks the real root servers, so the timings in a recording are whatever the
-link gave that day. `make check` leaves them alone.
+link gave that day. It then takes the still of `--format web-3d` with
+[scripts/demo-3d.sh](scripts/demo-3d.sh), which serves a fresh walk and has
+headless Chrome draw it without a GPU; `CHROME` names the browser when the
+script cannot find it. `make check` leaves them alone.
 
 ## Contributing
 
