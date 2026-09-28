@@ -141,7 +141,9 @@ func TestWaterfallHostileTimes(t *testing.T) {
 		"a start at the end of time":    {start: math.MaxInt64 - 1, rtt: math.MaxInt64, elapsed: math.MaxInt64},
 		"a round trip that runs back":   {start: time.Second, rtt: -time.Hour},
 		"a start before the walk began": {start: -time.Hour, rtt: time.Millisecond},
-		"no time at all, anywhere":      {},
+		"a start far past a walk that took no time": {
+			start: 9_000_000_000_000_000_000, rtt: time.Nanosecond - 9_000_000_000_000_000_000},
+		"no time at all, anywhere": {},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

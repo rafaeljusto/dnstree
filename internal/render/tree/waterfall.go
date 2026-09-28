@@ -151,7 +151,10 @@ func (f *waterfall) cell(at time.Duration) int {
 	if f.span <= 0 {
 		return 0
 	}
-	return int(math.Round(float64(at) / float64(f.span) * float64(f.cells)))
+	// Clamped while it is a float: one past the range of an int converts to
+	// whatever the platform makes of it, which on amd64 is negative.
+	share := min(max(float64(at)/float64(f.span), 0), 1)
+	return int(math.Round(share * float64(f.cells)))
 }
 
 // axis is the scale over the bars: round numbers, far enough apart to read.

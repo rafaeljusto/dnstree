@@ -201,6 +201,25 @@ func TestReadRefuses(t *testing.T) {
 				strings.Repeat(`{"zone": ".", "kind": "zone", "children": [`, 1100) + strings.Repeat(`]}`, 1100) + `}`,
 			want: "deeper",
 		},
+		"a walk that took longer than a Duration holds": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1e300}`,
+			want:     "elapsed_ms",
+		},
+		"a query that went out before the walk began": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "start_ms": -1}]}}`,
+			want: "start_ms",
+		},
+		"a round trip that ran backwards": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "rtt_ms": -1}]}}`,
+			want: "rtt_ms",
+		},
+		"a resolver that took longer than a year": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"server": {"ip": "192.0.2.1"}, "elapsed_ms": 4e10}]}`,
+			want: "elapsed_ms",
+		},
 		"something after the trace": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} {"more": 1}`,
 			want:     "after",

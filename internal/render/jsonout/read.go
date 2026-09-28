@@ -46,8 +46,10 @@ func Read(r io.Reader) (*trace.Trace, error) {
 
 	tr := &trace.Trace{
 		Question: trace.Question{Name: doc.Question.Name, Type: doc.Question.Type, Class: doc.Question.Class},
-		Elapsed:  duration(doc.ElapsedMS),
 		Warnings: doc.Warnings,
+	}
+	if tr.Elapsed, err = duration("elapsed_ms", doc.ElapsedMS); err != nil {
+		return nil, err
 	}
 	if tr.Started, err = moment(doc.Started); err != nil {
 		return nil, fmt.Errorf("jsonout: started: %w", err)
@@ -72,6 +74,7 @@ func Read(r io.Reader) (*trace.Trace, error) {
 const (
 	maxDocument = 64 << 20
 	maxNesting  = 1024
+	maxDuration = 365 * 24 * time.Hour
 )
 
 func readStep(from *step, depth int) (*trace.Step, error) {
@@ -93,7 +96,6 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	to := &trace.Step{
 		Zone:      from.Zone,
 		Proto:     from.Proto,
-		RTT:       duration(from.RTTMS),
 		Size:      from.SizeBytes,
 		Limit:     from.LimitBytes,
 		Rcode:     from.Rcode,
@@ -107,8 +109,14 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		Minimised: from.Minimised,
 		Err:       from.Error,
 	}
+	var err error
+	if to.RTT, err = duration("rtt_ms", from.RTTMS); err != nil {
+		return nil, err
+	}
 	if from.StartMS != nil {
-		to.Start = duration(*from.StartMS)
+		if to.Start, err = duration("start_ms", *from.StartMS); err != nil {
+			return nil, err
+		}
 	}
 	if from.Asked != nil {
 		to.Asked = trace.Question{Name: from.Asked.Name, Type: from.Asked.Type}
@@ -125,7 +133,6 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		return nil, fmt.Errorf("jsonout: %q is not a way to answer a cookie", from.Cookie)
 	}
 
-	var err error
 	if to.Server, err = readServer(from.Server); err != nil {
 		return nil, err
 	}
@@ -179,7 +186,6 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 	}
 
 	to := &trace.Resolver{
-		Elapsed:  duration(from.ElapsedMS),
 		Rcode:    from.Rcode,
 		Err:      from.Error,
 		Records:  readRecords(from.Records),
@@ -187,6 +193,9 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 		Match:    match,
 	}
 	var err error
+	if to.Elapsed, err = duration("elapsed_ms", from.ElapsedMS); err != nil {
+		return nil, err
+	}
 	if to.Server, err = readServer(from.Server); err != nil {
 		return nil, err
 	}
@@ -335,9 +344,13 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 
 // duration is the way back from milliseconds, which were kept to the
 // microsecond. It rounds, since 1.001 is a hair under 1001 microseconds once it
-// is a float.
-func duration(ms float64) time.Duration {
-	return time.Duration(math.Round(ms*1000)) * time.Microsecond
+// is a float. A time no walk takes is refused while it is still a float, since
+// one past the range of a Duration converts to whatever the platform makes of it.
+func duration(field string, ms float64) (time.Duration, error) {
+	if ms < 0 || ms > float64(maxDuration/time.Millisecond) {
+		return 0, fmt.Errorf("jsonout: %s is %g, and no walk takes less than nothing or more than a year", field, ms)
+	}
+	return time.Duration(math.Round(ms*1000)) * time.Microsecond, nil
 }
 
 // moment reads an RFC 3339 time, with or without a fraction of a second.
