@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -91,6 +92,26 @@ func TestRun(t *testing.T) {
 		"mermaid": {format: "mermaid", check: func(tb testing.TB, out string) {
 			if !strings.Contains(out, "flowchart LR") || strings.Contains(out, "answered in") {
 				tb.Errorf("got %q, want a chart and no summary under it", out)
+			}
+		}},
+		"waterfall": {format: "waterfall", check: func(tb testing.TB, out string) {
+			if !strings.Contains(out, "█") || !strings.Contains(out, "answered in") {
+				tb.Errorf("got %q, want a bar per query and the summary under them", out)
+			}
+		}},
+		"waterfall-ascii": {format: "waterfall-ascii", check: func(tb testing.TB, out string) {
+			if !strings.Contains(out, "#") {
+				tb.Errorf("got %q, want ASCII bars", out)
+			}
+			for _, r := range out {
+				if r > 127 {
+					tb.Fatalf("got %q in waterfall-ascii output, want none", r)
+				}
+			}
+		}},
+		"waterfall-mermaid": {format: "waterfall-mermaid", check: func(tb testing.TB, out string) {
+			if !strings.Contains(out, "\ngantt\n") || strings.Contains(out, "answered in") {
+				tb.Errorf("got %q, want a gantt chart and no summary under it", out)
 			}
 		}},
 		"openmetrics": {format: "openmetrics", check: func(tb testing.TB, out string) {
@@ -793,6 +814,16 @@ func TestRunFrom(t *testing.T) {
 	}
 	asked := len(server.Queries())
 
+	// The same walk as a build that kept no start times would have saved it.
+	untimed := filepath.Join(t.TempDir(), "untimed.json")
+	stripped := regexp.MustCompile(`\s*"start_ms": [0-9.]+,`).ReplaceAll(saved.Bytes(), nil)
+	if bytes.Equal(stripped, saved.Bytes()) {
+		t.Fatal("got a saved walk with no start_ms to take out")
+	}
+	if err := os.WriteFile(untimed, stripped, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := map[string]struct {
 		args []string
 		code int
@@ -809,6 +840,26 @@ func TestRunFrom(t *testing.T) {
 		"drawn as a chart": {
 			args: []string{"--from", path, "--format", "mermaid"},
 			code: exitAnswer, want: "flowchart LR",
+		},
+		"drawn as a waterfall": {
+			args: []string{"--from", path, "--format", "waterfall-ascii"},
+			code: exitAnswer, want: "a.root-servers.net.",
+		},
+		"drawn as a gantt chart": {
+			args: []string{"--from", path, "--format", "waterfall-mermaid"},
+			code: exitAnswer, want: "\ngantt\n",
+		},
+		"a walk saved before start times, refused a waterfall": {
+			args: []string{"--from", untimed, "--format", "waterfall"},
+			code: exitUsage, want: "walk the name again",
+		},
+		"a walk saved before start times, refused a gantt chart": {
+			args: []string{"--from", untimed, "--format", "waterfall-mermaid"},
+			code: exitUsage, want: "walk the name again",
+		},
+		"a walk saved before start times, still drawn as a tree": {
+			args: []string{"--from", untimed, "--color", "never"},
+			code: exitAnswer, want: "a.root-servers.net.",
 		},
 		"held to what was expected of it": {
 			args: []string{"--from", path, "--expect", "nxdomain"},
@@ -848,6 +899,7 @@ func TestRunFromHostile(t *testing.T) {
 		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer",
 			"rcode": "NOERROR\u001b[2K\u001b[1A\r", "proto": "udp\u001b[41m",
 			"asked": {"name": "x.", "type": "A\u001b[7m", "class": "IN"},
+			"start_ms": 0, "rtt_ms": 1,
 			"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53},
 			"records": [{"name": "x.", "ttl": 60, "type": "A\u001b[8m", "data": "192.0.2.1"}],
 			"extended": [{"code": 15, "reason": "Blocked\u001b[5m\u00e9"}],
@@ -862,6 +914,9 @@ func TestRunFromHostile(t *testing.T) {
 		{"--format", "dot"},
 		{"--format", "mermaid"},
 		{"--format", "openmetrics"},
+		{"--format", "waterfall", "--color", "always"},
+		{"--format", "waterfall-ascii", "--explain"},
+		{"--format", "waterfall-mermaid"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			previous := stdin
@@ -873,17 +928,20 @@ func TestRunFromHostile(t *testing.T) {
 				t.Fatalf("got exit %d, want %d: %s", code, exitAnswer, stderr.String())
 			}
 			out := stdout.String()
-			if args[0] == "--color" && args[1] == "always" {
+			if slices.Contains(args, "always") {
 				// Only the palette's own colours may stay; the file's are not in it.
 				out = regexp.MustCompile("\x1b\\[(0|1|3[1-5]|90)m").ReplaceAllString(out, "")
 			}
 			if strings.ContainsAny(out, "\x1b\x07\r") || strings.Contains(out, `\u001b`) {
 				t.Errorf("got an escape through:\n%q", out)
 			}
-			if args[1] == "ascii" && strings.ContainsFunc(out, func(r rune) bool { return r > 127 }) {
+			if strings.HasSuffix(args[1], "ascii") && strings.ContainsFunc(out, func(r rune) bool { return r > 127 }) {
 				t.Errorf("got a rune above 127 in --format ascii:\n%q", out)
 			}
 			if args[1] == "mermaid" && strings.Count(out, "\nflowchart LR\n") != 1 {
+				t.Errorf("got the front matter broken out of:\n%s", out)
+			}
+			if args[1] == "waterfall-mermaid" && strings.Count(out, "\ngantt\n") != 1 {
 				t.Errorf("got the front matter broken out of:\n%s", out)
 			}
 		})

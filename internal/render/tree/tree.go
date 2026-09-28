@@ -1,5 +1,6 @@
-// Package tree renders a trace as an indented tree, with Unicode or ASCII
-// branches and optional colour.
+// Package tree renders a trace for a terminal: as an indented tree, with
+// Unicode or ASCII branches and optional colour, or as a waterfall of the time
+// each query took.
 package tree
 
 import (
@@ -32,6 +33,10 @@ type Options struct {
 	// that just joined the walk. Its branch grows an arrowhead, so the eye
 	// catches what landed without waiting for colour. Nil points at nothing.
 	Highlight *trace.Step
+
+	// Width is how many columns a waterfall is laid out in. Zero asks the
+	// terminal, and takes 80 where there is none.
+	Width int
 }
 
 // glyphs are the pieces a tree is drawn with. Every branch is four cells wide,

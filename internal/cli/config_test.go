@@ -153,6 +153,21 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--format", "web-3d", "example.com"},
 			want: cli.Config{Format: "web-3d", WebAddr: "127.0.0.1:8080"},
 		},
+		"a waterfall outlives the file's live drawing and keeps its explanation": {
+			file: "live\nexplain\nformat = emoji\n",
+			args: []string{"--format", "waterfall", "example.com"},
+			want: cli.Config{Format: "waterfall", Explain: true},
+		},
+		"a waterfall outlives the file's watch and its address for a page": {
+			file: "watch = 30s\nweb-addr = 127.0.0.1:8080\n",
+			args: []string{"--format", "waterfall-ascii", "example.com"},
+			want: cli.Config{Format: "waterfall-ascii"},
+		},
+		"a gantt chart is read by a program, and outlives the file's explanation": {
+			file: "live\nexplain\n",
+			args: []string{"--format", "waterfall-mermaid", "example.com"},
+			want: cli.Config{Format: "waterfall-mermaid"},
+		},
 		"a root asked for replaces the file's hints": {
 			file: "root-hints = hints\n",
 			args: []string{"--root", "192.0.2.9", "example.com"},

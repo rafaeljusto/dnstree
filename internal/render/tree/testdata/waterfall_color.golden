@@ -1,0 +1,10 @@
+                      [90m0          100ms       200ms      300ms      400ms[0m
+[1ma.root-servers.net.[0m   █████                                                 [90m47ms[0m  referral → com.
+[1mm.gtld-servers.net.[0m        [31m██████████████████████████████████████████████[0m  [90m400ms[0m  [31mtimeout[0m  [90m(asked again after a silence)[0m
+[1ml.gtld-servers.net.[0m        ███████                                          [90m61ms[0m  referral → example.com.
+[1mb.root-servers.net.[0m               ░░░░░░                                    [90m51ms[0m  referral → net.  [90mA ns1.dnshost.net.[0m
+[1ma.gtld-servers.net.[0m                     [32m░░░░░░░░░░░[0m                         [90m98ms[0m  [32manswer[0m  [90mA ns1.dnshost.net.[0m
+[1mhera.ns.example.com.[0m                                [32m████████[0m                [90m74ms[0m  [32manswer[0m
+[1mhera.ns.example.com.[0m                                        [32m░[0m              [90m380µs[0m  [32manswer[0m  [90mDNSKEY example.com.[0m  [90m(DNSKEY of example.com.)[0m
+[90mcom.[0m                                                                              [31merror: gave up after 64 queries[0m
+[33mwarning: the delegation to example.com. came with no glue[0m

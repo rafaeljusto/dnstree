@@ -145,6 +145,18 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "mermaid", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "mermaid"},
 		},
+		"a timeline of the walk": {
+			args: []string{"--format", "waterfall", "--explain", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "waterfall", Explain: true},
+		},
+		"a timeline for a document": {
+			args: []string{"--format", "waterfall-ascii", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "waterfall-ascii"},
+		},
+		"a timeline for a wiki": {
+			args: []string{"--format", "waterfall-mermaid", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "waterfall-mermaid"},
+		},
 		"numbers for a monitoring system": {
 			args: []string{"--format", "openmetrics", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "openmetrics"},
@@ -233,6 +245,10 @@ func TestParseRejects(t *testing.T) {
 		"watched mermaid":                   {"--format", "mermaid", "--watch", "30s", "example.com"},
 		"explained mermaid":                 {"--format", "mermaid", "--explain", "example.com"},
 		"compared mermaid":                  {"--format", "mermaid", "--diff", "example.com"},
+		"live waterfall":                    {"--format", "waterfall", "--live", "example.com"},
+		"watched waterfall":                 {"--format", "waterfall-ascii", "--watch", "30s", "example.com"},
+		"explained gantt chart":             {"--format", "waterfall-mermaid", "--explain", "example.com"},
+		"a page for a waterfall":            {"--format", "waterfall", "--no-browser", "example.com"},
 		"live openmetrics":                  {"--format", "openmetrics", "--live", "example.com"},
 		"watched openmetrics":               {"--format", "openmetrics", "--watch", "30s", "example.com"},
 		"explained openmetrics":             {"--format", "openmetrics", "--explain", "example.com"},

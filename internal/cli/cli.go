@@ -46,7 +46,7 @@ path it took. TYPE defaults to A; ANY, AXFR and IXFR are refused.
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
-  --format FORMAT         tree, ascii, emoji, json, dot, mermaid, openmetrics, web or web-3d
+  --format FORMAT         how to draw the walk: tree, waterfall, json, web; see below
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
   --live                  draw the tree as the walk makes it
@@ -93,6 +93,9 @@ lookups go to the first of them, since they need somewhere to ask rather than a
 poll. One --resolver on the command line replaces every one the file of defaults
 chose, rather than adding to them.
 
+FORMAT is one of tree (the default), ascii, emoji, waterfall, waterfall-ascii,
+waterfall-mermaid, json, dot, mermaid, openmetrics, web or web-3d.
+
 --format web draws nothing in the terminal. It serves the finished walk as a
 page instead, on this machine and on whatever port is free, and opens a browser
 at it: the tree is the same walk with every hop worth clicking on, beside what
@@ -121,6 +124,16 @@ runs that check signatures. It costs two queries.
 --format mermaid writes the same picture as --format dot, for the places that
 draw Mermaid rather than Graphviz: pasted into a fenced mermaid block, GitHub,
 GitLab and most wikis draw it where it stands.
+
+--format waterfall draws the walk as a timeline instead of a tree: one row per
+query, a bar from when it went out to when it came back, on the scale of the
+whole walk, the way the network tab of a browser draws a page loading. It shows
+where the time went: a slow server, a detour to find a nameserver's address,
+a retry after a silence, and with --all what was asked at the same time.
+The asides are drawn lighter than the walk's own queries. waterfall-ascii
+draws it with # and . for pasting into a document, and waterfall-mermaid
+writes it as a Mermaid gantt chart. A walk saved with --format json before
+dnstree kept when each query started cannot be drawn this way, and is refused.
 
 --format openmetrics writes the walk as numbers for a monitoring system: how
 it ended, what it and each hop on the path took, the chain of trust, the time
@@ -376,7 +389,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot, mermaid, openmetrics, web or web-3d")
+	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, json, dot, mermaid, openmetrics, web or web-3d")
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
@@ -436,7 +449,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch format {
-	case "tree", "ascii", "emoji", "json", "dot", "mermaid", "openmetrics", "web", "web-3d":
+	case "tree", "ascii", "emoji", "waterfall", "waterfall-ascii", "waterfall-mermaid",
+		"json", "dot", "mermaid", "openmetrics", "web", "web-3d":
 		cfg.Format = format
 	default:
 		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
@@ -595,9 +609,10 @@ var walkFlags = map[string]bool{
 }
 
 // once reports whether a format is written once, at the end, which leaves
-// nothing to draw live and nothing to watch change.
+// nothing to draw live and nothing to watch change. A waterfall is one of them
+// because its scale is the whole walk, which is not known until it is over.
 func once(format string) bool {
-	return Programs(format) || Serves(format)
+	return Programs(format) || Serves(format) || format == "waterfall" || format == "waterfall-ascii"
 }
 
 // Serves reports whether a format is a page served to a browser rather than
@@ -609,7 +624,11 @@ func Serves(format string) bool {
 // Programs reports whether a format is read by a program rather than a person,
 // which has the whole trace already and no use for prose under it.
 func Programs(format string) bool {
-	return format == "json" || format == "dot" || format == "mermaid" || format == "openmetrics"
+	switch format {
+	case "json", "dot", "mermaid", "waterfall-mermaid", "openmetrics":
+		return true
+	}
+	return false
 }
 
 // reverseName is the name the PTR of an address is kept under: its octets in

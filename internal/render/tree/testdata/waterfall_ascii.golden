@@ -1,0 +1,10 @@
+                      0          100ms       200ms      300ms      400ms
+a.root-servers.net.   #####                                                 47ms  referral -> com.
+m.gtld-servers.net.        ##############################################  400ms  timeout  (asked again after a silence)
+l.gtld-servers.net.        #######                                          61ms  referral -> example.com.
+b.root-servers.net.               ......                                    51ms  referral -> net.  A ns1.dnshost.net.
+a.gtld-servers.net.                     ...........                         98ms  answer  A ns1.dnshost.net.
+hera.ns.example.com.                                ########                74ms  answer
+hera.ns.example.com.                                        .              380us  answer  DNSKEY example.com.  (DNSKEY of example.com.)
+com.                                                                              error: gave up after 64 queries
+warning: the delegation to example.com. came with no glue

@@ -33,7 +33,7 @@ const (
 type painter bool
 
 func (p painter) paint(text, code string) string {
-	if !p || text == "" {
+	if !p || text == "" || code == "" {
 		return text
 	}
 	return code + text + reset

@@ -427,11 +427,29 @@
   }
   .track { height: .62rem; border-radius: 999px; background: color-mix(in oklab, var(--line) 60%, transparent); overflow: hidden; }
   .fill {
-    height: 100%; border-radius: 999px; width: var(--fill);
+    height: 100%; border-radius: 999px; width: var(--fill); margin-inline-start: var(--at, 0%);
     background: linear-gradient(90deg, color-mix(in oklab, var(--tone) 55%, transparent), var(--tone));
     animation: fill-in .5s cubic-bezier(.2, .8, .3, 1) both;
   }
   @keyframes fill-in { from { --fill: 0%; } }
+  .aside .fill { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--tone) 55%, transparent) 0 3px, transparent 3px 6px); }
+  .timeline .track { border-radius: 4px; }
+  .timeline .fill { min-inline-size: 3px; }
+  /* A point the walk gave up at is a moment, not a span. */
+  .stop .fill {
+    min-inline-size: 2px; background: var(--tone); animation: none;
+    /* Giving up at the very end would put the mark past the track's edge. */
+    margin-inline-start: min(var(--at, 0%), calc(100% - 2px));
+  }
+  .stop .label { color: var(--tone); }
+  .bar-row.axis { padding-block: 0; cursor: default; &:hover { background: none; } }
+  .ticks {
+    position: relative; height: 1.1rem;
+    font: .7rem/1 var(--mono); color: var(--faint); font-variant-numeric: tabular-nums;
+    & span { position: absolute; inset-inline-start: var(--at); translate: -50% 0; white-space: nowrap; }
+    & span:first-child { translate: 0 0; }
+    & span:last-child:not(:first-child) { translate: -100% 0; }
+  }
   @media (prefers-reduced-motion: reduce) { .fill { animation: none; } }
 
   /* servers */

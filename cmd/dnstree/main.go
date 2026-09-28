@@ -555,6 +555,10 @@ func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 		return dot.Render(w, tr)
 	case "mermaid":
 		return mermaid.Render(w, tr)
+	case "waterfall-mermaid":
+		return mermaid.Gantt(w, tr)
+	case "waterfall", "waterfall-ascii":
+		return tree.Waterfall(w, tr, treeOptions(cfg))
 	case "openmetrics":
 		return openmetrics.Render(w, tr)
 	default:
@@ -565,7 +569,7 @@ func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 // treeOptions is how the tree is drawn, live and at the end alike.
 func treeOptions(cfg *cli.Config) tree.Options {
 	switch cfg.Format {
-	case "ascii":
+	case "ascii", "waterfall-ascii":
 		// Plain enough to paste into a document, which means no escapes at all.
 		return tree.Options{Charset: tree.ASCII, Color: tree.ColorNever}
 	case "emoji":

@@ -1,0 +1,19 @@
+---
+title: "dnstree www.example.com. A"
+---
+gantt
+    dateFormat x
+    axisFormat %L ms
+    todayMarker off
+    section .
+    2001꞉500꞉2꞉꞉c timeout:crit, 0, 400
+    a.root-servers.net. referral to com.:0, 47
+    section com.
+    l.gtld-servers.net. referral to example.com.:48, 109
+    section .
+    b.root-servers.net. referral to net., A ns1.dnshost.net.:done, 110, 161
+    section example.com.
+    hera.ns.example.com. answer:active, 261, 335
+    hera.ns.example.com. answer, DNSKEY example.com.:done, 335, 373
+    section com.
+    error, gave up after 64 queries:milestone, crit, 400, 400

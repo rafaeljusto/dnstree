@@ -310,29 +310,80 @@ class DnsTree extends HTMLElement {
   }
 }
 
-/* ── how long each hop took ────────────────────────────────────────────── */
+/* ── how long each hop took, and when ──────────────────────────────────── */
 
+// A walk that kept when each query went out is drawn on one timeline, the way
+// --format waterfall draws it; one saved before it did has only how long each
+// took, and is drawn as that rather than as a timeline it cannot place.
 class DnsTiming extends HTMLElement {
+  elapsed = 0;
+
   set hops(hops) {
     const made = hops.filter((hop) => asked(hop.step));
-    const slowest = Math.max(...made.map((hop) => hop.step.rtt_ms ?? 0), 0.001);
+    const timed = made.some((hop) => hop.step.start_ms !== undefined);
+    if (timed) this.#timeline(hops);
+    else this.#trips(made);
+  }
+
+  // The same reading as Trace.Timeline: every query, and every point the walk
+  // gave up at, standing where the last thing before it finished.
+  #timeline(hops) {
+    let now = 0;
+    const spans = [];
+    for (const hop of hops) {
+      const { step } = hop;
+      if (step.asked) {
+        const start = Math.max(step.start_ms ?? 0, 0);
+        const rtt = step.rtt_ms ?? 0;
+        spans.push({ hop, start, rtt, aside: aside(hop) });
+        now = Math.max(now, start + rtt);
+      } else if (step.kind === "error") {
+        spans.push({ hop, start: now, rtt: 0, aside: aside(hop), stop: true });
+      }
+    }
+    // In the order they went out, which is not the order they joined the walk
+    // once --all asks the servers of a zone together.
+    spans.sort((a, b) => a.start - b.start);
+    const total = Math.max(this.elapsed ?? 0, ...spans.map((span) => span.start + span.rtt), 0.001);
+    const at = (ms) => `${(ms / total) * 100}%`;
 
     fill(this,
+      el("p", { class: "group-title" }, "timeline",
+        el("span", { text: "when each query went out and came back. bars that overlap were in flight together; the asides are drawn lighter." })),
+      el("div", { class: "bars timeline" },
+        el("div", { class: "bar-row axis", "aria-hidden": "true" },
+          el("span"),
+          el("div", { class: "ticks" }, ...ticks(total).map((ms) =>
+            el("span", { style: `--at:${at(ms)}`, text: ms ? took(ms) : "0" }))),
+          el("span")),
+        ...spans.map((span) => this.#row(span.hop, {
+          at: at(span.start), width: at(span.rtt), aside: span.aside, stop: span.stop,
+        }))),
+    );
+  }
+
+  #trips(made) {
+    const slowest = Math.max(...made.map((hop) => hop.step.rtt_ms ?? 0), 0.001);
+    fill(this,
       made.length && el("p", { class: "group-title" }, "round trips",
-        el("span", { text: "what each server took to answer. hops the walk made at the same time are drawn one under the other." })),
+        el("span", { text: "what each server took to answer. this walk was saved without when each query went out, so it cannot be drawn as a timeline." })),
       made.length
-        ? el("div", { class: "bars" }, ...made.map((hop) => this.#bar(hop, slowest)))
+        ? el("div", { class: "bars" }, ...made.map((hop) => this.#row(hop, {
+          at: "0%", width: `${Math.max(1.5, ((hop.step.rtt_ms ?? 0) / slowest) * 100)}%`,
+        })))
         : el("p", { class: "empty-note", text: "no server was asked" }),
     );
   }
 
-  #bar(hop, slowest) {
+  #row(hop, { at, width, aside: light = false, stop = false }) {
     const { step } = hop;
-    const width = `${Math.max(1.5, ((step.rtt_ms ?? 0) / slowest) * 100)}%`;
-    const row = el("div", { class: `bar-row tone-${kindOf(step.kind).tone}` },
-      el("span", { class: "label", text: step.server?.name || step.server?.ip || step.zone, title: step.zone }),
-      el("div", { class: "track" }, el("div", { class: "fill", style: `--fill:${width}` })),
-      el("span", { class: "took", text: took(step.rtt_ms) || "—" }),
+    const classes = ["bar-row", `tone-${kindOf(step.kind).tone}`, light && "aside", stop && "stop"].filter(Boolean);
+    // A walk that gave up asked nothing there, so it says why in place of who.
+    const label = stop ? step.error || "gave up" : step.server?.name || step.server?.ip || step.zone;
+    const row = el("div", { class: classes.join(" ") },
+      el("span", { class: "label", text: label, title: step.zone }),
+      el("div", { class: "track" }, el("div", { class: "fill", style: `--at:${at};--fill:${width}` })),
+      el("span", { class: "took", text: stop ? "" : took(step.rtt_ms) || "—" }),
     );
     row.dataset.text = hop.text;
     row.addEventListener("click", () => this.dispatchEvent(new CustomEvent("hop", { detail: hop, bubbles: true })));
@@ -341,13 +392,34 @@ class DnsTiming extends HTMLElement {
 
   filter(query) {
     let hits = 0;
-    for (const row of this.querySelectorAll(".bar-row")) {
+    for (const row of this.querySelectorAll(".bar-row:not(.axis)")) {
       const shown = !query || row.dataset.text.includes(query);
       row.hidden = !shown;
       if (shown) hits++;
     }
     return hits;
   }
+}
+
+// aside is a hop inside work that answers another question, which the trace
+// marks on the step that starts it rather than on every step below.
+const aside = (hop) => {
+  for (let at = hop; at; at = at.parent) if (at.step.aside) return true;
+  return false;
+};
+
+// ticks are round moments along a timeline, few enough to read.
+function ticks(total) {
+  // A hand-written file can carry a time no walk takes; it gets no scale.
+  if (!Number.isFinite(total)) return [0];
+  let step = 0.001;
+  for (let unit = 0.001; ; unit *= 10) {
+    const fit = [1, 2, 5].map((n) => n * unit).find((n) => total / n < 5);
+    if (fit) { step = fit; break; }
+  }
+  const marks = [];
+  for (let ms = 0; ms <= total + 1e-9; ms += step) marks.push(Math.round(ms * 1000) / 1000);
+  return marks;
 }
 
 /* ── who answered, and from where ──────────────────────────────────────── */
@@ -665,6 +737,7 @@ const views = {
   servers: document.getElementById("view-servers"),
   trust: document.getElementById("view-trust"),
 };
+views.timing.elapsed = walk.elapsed_ms;
 for (const view of Object.values(views)) view.hops = hops;
 document.getElementById("findings").findings = page.findings;
 document.getElementById("inspector").hop = hops[0];
