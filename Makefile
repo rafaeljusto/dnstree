@@ -54,7 +54,7 @@ MAN_DATE ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +'%Y-%m-%d')
 BUILD := build
 
 .PHONY: all build install test race lint lint-docker vuln check live goldens dist man \
-	archives packages formula checksums image image-push clean roothints demos
+	archives packages formula checksums image image-push clean roothints demos demo-3d
 
 # The stages of dist read each other's output, so they run one after another
 # rather than at the same time.
@@ -186,10 +186,11 @@ image-push:
 		--push \
 		.
 
-# Re-records the terminal demos in docs/ from tapes/. Every tape walks the real
-# root servers, so the timings in a recording are whatever the recording
-# machine's link gave that day, and two runs are never byte identical. Left out
-# of check for that reason: it is run by hand when the output changes.
+# Re-records the terminal demos in docs/ from tapes/, and the still of
+# --format web-3d. Every one walks the real root servers, so the timings in a
+# recording are whatever the recording machine's link gave that day, and two
+# runs are never byte identical. Left out of check for that reason: it is run by
+# hand when the output changes.
 demos:
 	@mkdir -p $(BUILD)
 	@$(GO) build -ldflags '$(LDFLAGS)' -o $(BUILD)/dnstree ./cmd/dnstree
@@ -197,6 +198,14 @@ demos:
 		echo "recording $$tape"; \
 		PATH="$(CURDIR)/$(BUILD):$$PATH" $(VHS) $$tape.tape || exit 1; \
 	done
+	@DNSTREE=$(CURDIR)/$(BUILD)/dnstree ./scripts/demo-3d.sh
+
+# Takes the still of --format web-3d in docs/ on its own. It needs Chrome or
+# Chromium; CHROME names it when the script cannot find it.
+demo-3d:
+	@mkdir -p $(BUILD)
+	@$(GO) build -ldflags '$(LDFLAGS)' -o $(BUILD)/dnstree ./cmd/dnstree
+	@DNSTREE=$(CURDIR)/$(BUILD)/dnstree ./scripts/demo-3d.sh
 
 # Refreshes the embedded root hints and trust anchors.
 roothints:
