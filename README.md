@@ -1476,6 +1476,28 @@ be drawn live, watched or held against the last walk with `--diff`: none of
 those is about a walk that is over. A document of another `schema_version` is
 refused rather than guessed at.
 
+### Serving it to anyone
+
+`dnstree-web` is the same walk behind a form: somebody types a name and a type,
+and gets the scene or the tree at an address of its own, such as
+`/3d/www.example.com/A/`, that can be handed on. It is not released; it is built
+as a container from this repository:
+
+```
+make image-web
+docker run --rm -p 8080:8080 ghcr.io/rafaeljusto/dnstree-web:$(git describe --tags --always)
+```
+
+Every walk checks the chain of trust, and nothing a visitor sends reaches the
+resolver but the question. Glue pointing at a private, loopback or link-local
+address is recorded as refused and never asked, so a zone cannot aim the server
+at the network it runs on. Walks for the same question are made once and kept
+for a minute, and `-walks`, `-per-client` and `-timeout` bound how many run,
+how many one client starts, and how long each may take. It listens on `$PORT`
+when the host sets one; behind a proxy, `-client-header` names the header that
+carries the visitor's address. The host needs UDP and TCP out to port 53, and
+IPv6 to reach the servers that only have it.
+
 ## How it walks
 
 Every hop is a question to one server, and every answer is classified before
