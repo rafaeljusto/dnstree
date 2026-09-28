@@ -53,8 +53,8 @@ change touches without a test holding it. The ones that regress most quietly:
 - A failure that aborts instead of becoming a step.
 - A hop attached anywhere but `run.attach` on the walking goroutine.
   `Config.Asking` or the live tail reading the trace.
-- DNSSEC reaching `bogus` for something it couldn't check, or `secure`
-  because a record was absent.
+- DNSSEC reaching `bogus` for something it couldn't check, `indeterminate`
+  for a DS nobody signed, or `secure` because a record was absent.
 - Anything written to disk outside `internal/history`, or without `--diff`.
 - A name or wire text drawn without going through `Trace.Shown`.
 - A minimised hop (`Step.Minimised`) read as the answer.

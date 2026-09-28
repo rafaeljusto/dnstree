@@ -50,8 +50,8 @@ Check the docs against these, never against each other alone:
   and default, and every row in the table is a flag that still exists. Start
   with the mechanical pass below, then read the rows against the usage lines.
 - Features the page names exist in the README, and the page doesn't promise
-  anything the README or the code doesn't. Section counts on the page ("Six
-  ways out", "One line, six facts") still match what follows them.
+  anything the README or the code doesn't. Section counts on the page (the
+  "… ways out" heading, "One line, six facts") still match what follows them.
 - Exit codes agree everywhere they are listed: README, page, `SECURITY.md`,
   `AGENTS.md`, the skills. A code the binary returns and a list leaves out is a
   finding in the list.

@@ -10,14 +10,7 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 
 ## Open findings
 
-None. The one found at `499eefc` is fixed in the working tree: a `--from` file
-with a huge `start_ms` over a tiny span panicked `--format waterfall` on amd64,
-because `cell()` turned an out-of-range float into a negative int. `cell()`
-clamps while it is a float, and `jsonout.Read` refuses a duration that is
-negative or longer than a year. The tests kept are `TestWaterfallHostileTimes`
-("a start far past a walk that took no time") and four rows of
-`TestReadRefuses`. Until they are committed, the next run starts from this
-commit and those tests.
+None.
 
 ## Checked and sound
 

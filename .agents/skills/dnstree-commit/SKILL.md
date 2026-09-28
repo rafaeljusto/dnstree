@@ -1,6 +1,6 @@
 ---
 name: dnstree-commit
-description: Write the commit messages, and the pull request title, for the current dnstree changes — prefixes from the table the release workflow reads, subjects in the repository's own style, unrelated work split into separate commits with the files each covers, and a branch name when on main. Use when asked for a commit message, a PR title, to "commit" the work, or to describe the changes for git. Prints the messages; never runs git commit, git add, git push or git tag.
+description: Write the commit messages, and the pull request title, for the current dnstree changes — prefixes from the table the release workflow reads, subjects in the repository's own style, unrelated work split into separate commits with the files each covers, and a branch name when on main. Use when asked for a commit message, a PR title, to "commit" the work, or to describe the changes for git. Prints the messages; never runs git commit, git push or git tag, and stages only when asked.
 ---
 
 # dnstree commit
