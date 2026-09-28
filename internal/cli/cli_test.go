@@ -27,6 +27,10 @@ func TestParse(t *testing.T) {
 			args: []string{"example.com", "mx"},
 			want: cli.Config{Name: "example.com", Type: "MX"},
 		},
+		"a name in another script, asked in punycode": {
+			args: []string{"münchen.de", "mx"},
+			want: cli.Config{Name: "xn--mnchen-3ya.de", Type: "MX"},
+		},
 		"a walk to watch": {
 			args: []string{"--format", "emoji", "--live", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "emoji", Live: true},
@@ -223,6 +227,7 @@ func TestParseRejects(t *testing.T) {
 		"nothing to resolve":                {},
 		"too many arguments":                {"example.com", "A", "please"},
 		"two address families":              {"-4", "-6", "example.com"},
+		"a name no punycode can spell":      {"\u202eexample.com"},
 		"two transports":                    {"--udp", "--doh", "example.com"},
 		"an unknown format":                 {"--format", "runes", "example.com"},
 		"live json":                         {"--format", "json", "--live", "example.com"},

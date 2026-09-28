@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/idn"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -139,8 +140,9 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 	if len(answers) == 0 {
 		return "no " + tr.Question.Type + " record", false
 	}
+	names := named[tr.Question.Type]
 	for _, data := range answers {
-		if same(data, e.want) {
+		if same(data, e.want, names) {
 			return data, true
 		}
 	}
@@ -233,13 +235,37 @@ func plural(n int, unit string) string {
 // DNS compares them, and an address as an address: 2001:db8::1 and
 // 2001:0db8:0:0:0:0:0:1 are one address written two ways, and somebody who
 // typed either of them meant the record.
-func same(data, want string) bool {
+func same(data, want string, names bool) bool {
 	if got, err := netip.ParseAddr(data); err == nil {
 		if wanted, err := netip.ParseAddr(want); err == nil {
 			return got.Unmap() == wanted.Unmap()
 		}
 	}
-	return strings.EqualFold(data, want)
+	if strings.EqualFold(data, want) {
+		return true
+	}
+	// A name in rdata is in punycode however the question was typed, and so may
+	// the one expected of it have been.
+	return names && strings.EqualFold(data, punycode(want))
+}
+
+// named are the types whose rdata holds names. Text anywhere else stays text,
+// whatever script it is in.
+var named = map[string]bool{
+	"CNAME": true, "DNAME": true, "NS": true, "PTR": true, "MX": true,
+	"SRV": true, "SOA": true, "HTTPS": true, "SVCB": true, "NAPTR": true,
+}
+
+// punycode is want with every field that is a name in another script spelled
+// the way the zone writes it.
+func punycode(want string) string {
+	fields := strings.Fields(want)
+	for i, field := range fields {
+		if spelled, err := idn.ASCII(field); err == nil {
+			fields[i] = spelled
+		}
+	}
+	return strings.Join(fields, " ")
 }
 
 // list is the answers in a sentence. An RRset can be longer than anyone wants

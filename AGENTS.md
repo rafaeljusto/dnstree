@@ -65,8 +65,8 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   `internal/layering` fails on any other import of it.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
-  terminal size, and `golang.org/x/net/idna` for the names `dnstree-web` is
-  typed, which the codec leaves to its callers. Adding a fourth needs an
+  terminal size, and `golang.org/x/net/idna` for names typed in any script,
+  which the codec leaves to its callers. Adding a fourth needs an
   argument.
 
 ## Invariants

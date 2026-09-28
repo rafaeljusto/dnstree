@@ -85,6 +85,15 @@ func TestUnmet(t *testing.T) {
 			expect: []string{"10 mail.TEST."},
 			trace:  walk("MX", answered("MX", "10 MAIL.test.")),
 		},
+		"a name in another script is held against the punycode the zone wrote": {
+			expect: []string{"10 mail.bücher.example."},
+			trace:  walk("MX", answered("MX", "10 mail.xn--bcher-kva.example.")),
+		},
+		"text in another script is held against the text, not its punycode": {
+			expect: []string{"bücher"},
+			trace:  walk("TXT", answered("TXT", "xn--bcher-kva")),
+			want:   []string{"expected bücher, got xn--bcher-kva"},
+		},
 		"every expectation has to hold": {
 			expect: []string{"192.0.2.1", "192.0.2.9"},
 			trace:  walk("A", answered("A", "192.0.2.1")),

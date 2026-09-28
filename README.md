@@ -92,6 +92,9 @@ dnstree [flags] NAME [TYPE]
 `AXFR` and `IXFR` are refused: servers answer `ANY` with a sample of their
 choosing (RFC 8482), and a walk would draw that as the whole answer.
 
+A name in any script is asked in punycode, which is how the DNS holds it:
+`dnstree münchen.de` walks to `xn--mnchen-3ya.de`, and draws it that way.
+
 | Flag | What it does |
 | --- | --- |
 | `-x` | resolve the PTR of this address, in place of a name and a type |

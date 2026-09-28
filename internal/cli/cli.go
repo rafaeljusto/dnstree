@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/expect"
+	"github.com/rafaeljusto/dnstree/v2/internal/idn"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 	"github.com/rafaeljusto/dnstree/v2/internal/transport"
@@ -28,7 +29,8 @@ const Summary = "resolve a name from the root servers down, and draw the path it
 const Usage = `usage: dnstree [flags] NAME [TYPE]
 
 Resolve NAME from the root servers down, following every referral, and draw the
-path it took. TYPE defaults to A; ANY, AXFR and IXFR are refused.
+path it took. TYPE defaults to A; ANY, AXFR and IXFR are refused. A NAME in any
+script is asked in punycode, the way the DNS holds it.
 
   -x ADDR                 resolve the PTR of this address, instead of a name
   -4, -6                  ask only IPv4 or only IPv6 servers
@@ -481,6 +483,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		cfg.Name, cfg.Type = flags.Arg(0), strings.ToUpper(flags.Arg(1))
 	default:
 		return nil, fmt.Errorf("%w: only a name and a type were expected", ErrUsage)
+	}
+	if cfg.Name, err = idn.ASCII(cfg.Name); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
 	}
 	if why, ok := notLookups[cfg.Type]; ok {
 		return nil, fmt.Errorf("%w: %s is not a lookup: %s", ErrUsage, cfg.Type, why)

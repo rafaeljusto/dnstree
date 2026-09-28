@@ -20,9 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/idna"
-
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/idn"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -333,36 +332,19 @@ func (s *Server) failed(w http.ResponseWriter, status int, message string) {
 	_ = failure.Execute(w, message)
 }
 
-// lookup is how a name typed in any script becomes the one the DNS holds.
-// Underscores are let through, since _25._tcp and _dmarc labels are names a
-// walk is asked about as often as any.
-var lookup = idna.New(idna.MapForLookup(), idna.BidiRule(), idna.StrictDomainName(false))
-
 // canonical is the name as the walk and its address spell it: in lower case,
 // in punycode, without the dot at the end. The root is left out, since a path
 // cannot carry it without being cleaned away.
 func canonical(name string) (string, bool) {
 	name = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(name)), ".")
-	if !ascii(name) {
-		converted, err := lookup.ToASCII(name)
-		if err != nil {
-			return "", false
-		}
-		name = converted
+	name, err := idn.ASCII(name)
+	if err != nil {
+		return "", false
 	}
 	if name == "" || len(name) > 253 || strings.ContainsAny(name, "/\\ \t") {
 		return "", false
 	}
 	return name, true
-}
-
-func ascii(name string) bool {
-	for i := range len(name) {
-		if name[i] >= 0x80 {
-			return false
-		}
-	}
-	return true
 }
 
 func known(qtype string) (string, bool) {
