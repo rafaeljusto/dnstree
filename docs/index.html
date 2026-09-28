@@ -488,8 +488,8 @@ footer a:hover{color:var(--ink)}
         also why the nameservers of a zone are only weighed against each other where the walk
         asked all of them — <code>--all</code> does, and a set that is not all accounted for
         leaves the question unanswered rather than half answered.
-        <code>--format json</code>, <code>dot</code>, <code>mermaid</code> and <code>openmetrics</code>
-        refuse the flag — all four are read by a program, which has the same facts in fields
+        <code>--format json</code>, <code>dot</code>, <code>mermaid</code>, <code>waterfall-mermaid</code>
+        and <code>openmetrics</code> refuse the flag — all five are read by a program, which has the same facts in fields
         already. A chain whose signatures are late in the life they were made for is said too,
         with how long it has left: a zone whose signer stopped validates to the last second.
       </p>
@@ -527,9 +527,10 @@ footer a:hover{color:var(--ink)}
     </section>
 
     <section id="formats">
-      <h2>Nine ways out</h2>
+      <h2>Ten ways out</h2>
       <p class="section-lede">
-        The tree is for reading, and the emoji for enjoying it. Four more are for pasting
+        The tree is for reading, the emoji for enjoying it, and the waterfall for seeing
+        where the time went. Four more are for pasting
         into a document, a pipeline, a picture or an issue, and one for a monitoring system.
         The last two open a browser: one to read the walk in, one to fly round it.
       </p>
@@ -538,6 +539,7 @@ footer a:hover{color:var(--ink)}
         <button class="tab" role="tab" id="tab-tree" aria-controls="panel-tree" aria-selected="true">--format tree</button>
         <button class="tab" role="tab" id="tab-emoji" aria-controls="panel-emoji" aria-selected="false">--format emoji</button>
         <button class="tab" role="tab" id="tab-ascii" aria-controls="panel-ascii" aria-selected="false">--format ascii</button>
+        <button class="tab" role="tab" id="tab-waterfall" aria-controls="panel-waterfall" aria-selected="false">--format waterfall</button>
         <button class="tab" role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false">--format json</button>
         <button class="tab" role="tab" id="tab-dot" aria-controls="panel-dot" aria-selected="false">--format dot</button>
         <button class="tab" role="tab" id="tab-mermaid" aria-controls="panel-mermaid" aria-selected="false">--format mermaid</button>
@@ -616,6 +618,17 @@ footer a:hover{color:var(--ink)}
 |-- b.root-servers.net. 2801:1b8:10::b  (not queried)
 `-- (and 22 more not queried)
 answered in 714ms | resolver in 235ms | 3 queries | 3 servers</pre>
+          </div>
+
+          <div class="panel" role="tabpanel" id="panel-waterfall" aria-labelledby="tab-waterfall" hidden>
+<pre>                         <span class="dim">0            1s           2s</span>
+<span class="ns">a.root-servers.net.</span>      ████                          <span class="dim">289ms</span>  referral → com.
+<span class="ns">a.root-servers.net.</span>          <span class="ok">░░░░░░░░░░</span>                <span class="dim">791ms</span>  <span class="ok">answer</span>  <span class="dim">DNSKEY .</span>  <span class="dim">(truncated over udp; DNSKEY of .)</span>
+<span class="ns">l.gtld-servers.net.</span>                    ████            <span class="dim">268ms</span>  referral → example.com.
+<span class="ns">l.gtld-servers.net.</span>                        <span class="ok">░░░░</span>        <span class="dim">268ms</span>  <span class="ok">answer</span>  <span class="dim">DNSKEY com.</span>  <span class="dim">(DNSKEY of com.)</span>
+<span class="ns">hera.ns.cloudflare.com.</span>                        <span class="ok">███</span>     <span class="dim">241ms</span>  <span class="ok">answer</span>
+<span class="ns">hera.ns.cloudflare.com.</span>                           <span class="ok">░░░</span>  <span class="dim">227ms</span>  <span class="ok">answer</span>  <span class="dim">DNSKEY example.com.</span>  <span class="dim">(DNSKEY of example.com.)</span>
+<span class="ok">&#10004;</span> <span class="dim">answered in 2.1s · resolver in 252ms · 6 queries · 3 servers</span></pre>
           </div>
 
           <div class="panel" role="tabpanel" id="panel-json" aria-labelledby="tab-json" hidden>
@@ -791,6 +804,14 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
         </video>
         <figcaption><code>--format emoji --live</code>: the same walk, arriving.</figcaption>
       </figure>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        <code>--format waterfall</code> puts every query on one timeline, so a slow server, a
+        retry after a silence or a detour for a nameserver's address shows where it cost the
+        time. <code>waterfall-ascii</code> draws it in <code>#</code> and <code>.</code> for a
+        document, <code>waterfall-mermaid</code> writes it as a Mermaid gantt chart, and the
+        page <code>--format web</code> serves draws it under its timing tab.
+      </p>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
         <code>--from walk.json</code> draws a walk <code>--format json</code> saved, in any of
@@ -990,6 +1011,7 @@ timeout = 3s</pre>
     "tab-tree": "~ · unicode branches, colour when the terminal wants it",
     "tab-emoji": "~ · the same walk, told in emoji",
     "tab-ascii": "~ · plain enough to paste into a document",
+    "tab-waterfall": "~ · where the time went, one bar per query",
     "tab-json": "~ · versioned, with durations in milliseconds",
     "tab-dot": "~ · one node per query, clustered by zone",
     "tab-mermaid": "~ · the same graph, drawn where it is pasted on GitHub",

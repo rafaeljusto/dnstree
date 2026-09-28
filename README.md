@@ -110,7 +110,7 @@ choosing (RFC 8482), and a walk would draw that as the whole answer.
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
-| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot`, `mermaid`, `openmetrics`, `web` or `web-3d` |
+| `--format` | `tree` (the default), `ascii`, `emoji`, `waterfall`, `waterfall-ascii`, `waterfall-mermaid`, `json`, `dot`, `mermaid`, `openmetrics`, `web` or `web-3d` |
 | `--web-addr`, `--no-browser` | where `--format web` and `web-3d` serve the page, and whether a browser is opened at it |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--watch` | walk again this often, and say only what changed since the walk before |
@@ -232,12 +232,12 @@ above and `--dnssec=false` turns a flag it set back off. Flags that answer one
 question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
-for `--tls-ca` and `--tls-insecure`. `--format json`, `--format dot`,
-`--format mermaid`, `--format openmetrics`, `--format web` and `--format web-3d`
-drop a `live` and a `watch` the file set, since all six are written once at the
-end and leave neither anything to draw nor anything to change; all but the two
-pages drop an `explain` and a `diff` as well, being read by a program that has
-the whole trace already. A
+for `--tls-ca` and `--tls-insecure`. Every format but `tree`, `ascii` and
+`emoji` drops a `live` and a `watch` the file set, since all the others are
+written once at the end and leave neither anything to draw nor anything to
+change; `json`, `dot`, `mermaid`, `waterfall-mermaid` and `openmetrics` drop an
+`explain` and a `diff` as well, being read by a program that has the whole trace
+already. A
 format that serves no page drops a `web-addr` and a `no-browser` it set, and
 `--from` drops a `live`, a `watch` and a `diff`, which are about walks being
 made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.
@@ -943,9 +943,9 @@ question unanswered rather than half answered. The address families are read off
 the parent's glue instead, which is whole whether or not the servers were asked,
 so a zone with no IPv4 anywhere in its delegation is named without `--all`.
 
-`--format json`, `dot`, `mermaid` and `openmetrics` refuse `--explain` and
-`--diff`: all four are read by a program, which has the same facts in fields
-already.
+`--format json`, `dot`, `mermaid`, `waterfall-mermaid` and `openmetrics` refuse
+`--explain` and `--diff`: all five are read by a program, which has the same
+facts in fields already.
 
 ### What has changed since last time
 
@@ -1029,9 +1029,9 @@ prints, followed by one line saying how it went:
 ```
 
 > [!NOTE]
-> Off a terminal the flag does nothing, and it cannot be combined with
-> `--format json`, `dot`, `mermaid`, `openmetrics`, `web` or `web-3d`, all of
-> which are written once, at the end.
+> Off a terminal the flag does nothing, and it cannot be combined with any
+> format but `tree`, `ascii` and `emoji`: the others are written once, at the
+> end.
 
 ### Leaving it running
 
@@ -1079,9 +1079,85 @@ that stopped resolving altogether still exits 2. A walk cut off part way through
 by the interrupt is not read as a finding about the name: the last one that
 finished on its own is what answers.
 
-`--format json`, `dot`, `mermaid`, `openmetrics`, `web` and `web-3d` are written
-once, at the end, so there is nothing for a watch to change; all of them refuse it,
-as they refuse `--live`.
+Every format but `tree`, `ascii` and `emoji` is written once, at the end, so
+there is nothing for a watch to change; all of them refuse it, as they refuse
+`--live`.
+
+### Where the time went
+
+The tree says how long each query took, but not when it was sent, what it had
+to wait for, or what was in flight at the same moment. `--format waterfall` draws
+the same walk as a timeline, one row per query, the way the network tab of a
+browser draws a page loading: a bar from when the query went out to when the
+last of its answers came back, every bar on the scale of the whole walk. The
+asides, the work that answers some other question on the way, are drawn lighter
+than the walk's own queries:
+
+```
+$ dnstree --dnssec --format waterfall www.github.com
+                       0             2s            4s
+a.root-servers.net.    ██                              258ms  referral → com.
+a.root-servers.net.      ░░░░░░                        941ms  answer  DNSKEY .  (truncated over udp; DNSKEY of .)
+l.gtld-servers.net.            ██                      263ms  referral → github.com.
+l.gtld-servers.net.              ░░                    262ms  answer  DNSKEY com.  (DNSKEY of com.)
+ns-421.awsdns-52.com.              ██                  244ms  cname
+ns-421.awsdns-52.com.                ░░                246ms  no data  DNSKEY github.com.  (DNSKEY of github.com.)
+a.root-servers.net.                    █               260ms  referral → com.  A github.com.
+a.root-servers.net.                     ░░░░░░         790ms  answer  DNSKEY .  (truncated over udp; DNSKEY of .)
+l.gtld-servers.net.                           ██       266ms  referral → github.com.  A github.com.
+l.gtld-servers.net.                             ░░     257ms  answer  DNSKEY com.  (DNSKEY of com.)
+ns-421.awsdns-52.com.                             █    242ms  answer  A github.com.
+ns-421.awsdns-52.com.                              ░░  241ms  no data  DNSKEY github.com.  (DNSKEY of github.com.)
+✔ answered in 4.3s · resolver in 237ms · 12 queries · 3 servers
+```
+
+A slow server is a long bar, a retry after a silence is a long bar with
+`(asked again after a silence)` beside it, and `--all` shows as bars stacked one
+over the other. Here it is how the time goes in resolving an alias: the chain of
+trust is followed again from the root for the name the alias points at, keys of
+the root and all.
+
+`--format waterfall-ascii` draws it with `#` and `.`, for pasting into
+documents, and `--format waterfall-mermaid` writes it as a Mermaid gantt chart,
+which GitHub draws in a fenced `mermaid` block. The page `--format web` serves
+draws the same timeline under its timing tab.
+
+<details>
+<summary>The same walk, as GitHub draws it</summary>
+
+```mermaid
+---
+title: "dnstree www.github.com. A"
+---
+gantt
+    dateFormat x
+    axisFormat %S.%L s
+    todayMarker off
+    section .
+    a.root-servers.net. referral to com.:0, 258
+    a.root-servers.net. answer, DNSKEY .:done, 257, 1198
+    section com.
+    l.gtld-servers.net. referral to github.com.:1198, 1462
+    l.gtld-servers.net. answer, DNSKEY com.:done, 1461, 1723
+    section github.com.
+    ns-421.awsdns-52.com. cname:1724, 1969
+    ns-421.awsdns-52.com. no data, DNSKEY github.com.:done, 1969, 2215
+    section .
+    a.root-servers.net. referral to com., A github.com.:2215, 2476
+    a.root-servers.net. answer, DNSKEY .:done, 2476, 3266
+    section com.
+    l.gtld-servers.net. referral to github.com., A github.com.:3266, 3532
+    l.gtld-servers.net. answer, DNSKEY com.:done, 3532, 3789
+    section github.com.
+    ns-421.awsdns-52.com. answer, A github.com.:active, 3791, 4034
+    ns-421.awsdns-52.com. no data, DNSKEY github.com.:done, 4034, 4275
+```
+
+</details>
+
+Each query records when it went out, as `start_ms` in `--format json`, so a
+walk drawn again with `--from` keeps its timeline. A walk saved before dnstree
+kept that has none to draw: both formats refuse it, and the tree still draws it.
 
 ### Other formats
 
