@@ -1157,7 +1157,8 @@ gantt
 
 Each query records when it went out, as `start_ms` in `--format json`, so a
 walk drawn again with `--from` keeps its timeline. A walk saved before dnstree
-kept that has none to draw: both formats refuse it, and the tree still draws it.
+kept that has none to draw: all three waterfall formats refuse it, and the tree
+still draws it.
 
 ### Other formats
 
