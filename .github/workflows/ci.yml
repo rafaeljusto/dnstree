@@ -102,6 +102,19 @@ jobs:
           dnstree --version
           zcat /usr/share/man/man1/dnstree.1.gz | head -n 3
 
+  # The images are only ever pushed by a release, so the same reasoning holds:
+  # both are built here, for every platform a release publishes, and kept
+  # nowhere. A release that failed half way would ship one without the other.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - run: docker buildx build --platform linux/amd64,linux/arm64 .
+      - run: docker buildx build --platform linux/amd64,linux/arm64 --target web .
+
   live:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
