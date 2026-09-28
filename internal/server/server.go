@@ -191,15 +191,20 @@ func (s *Server) asked(w http.ResponseWriter, r *http.Request) {
 		s.failed(w, http.StatusBadRequest, "that is not one of the types this page walks")
 		return
 	}
-	view := query.Get("view")
-	if _, ok := views[view]; !ok {
-		view = "3d"
+	scene, ok := views[query.Get("view")]
+	if !ok {
+		scene = true
 	}
-	http.Redirect(w, r, path(view, name, qtype), http.StatusSeeOther)
+	http.Redirect(w, r, path(scene, name, qtype), http.StatusSeeOther)
 }
 
-// path is where a walk is drawn.
-func path(view, name, qtype string) string {
+// path is where a walk is drawn. The view is spelt from a literal rather than
+// from what was asked, so a redirect to it can only ever stay on this server.
+func path(scene bool, name, qtype string) string {
+	view := "tree"
+	if scene {
+		view = "3d"
+	}
 	return "/" + view + "/" + url.PathEscape(name) + "/" + qtype + "/"
 }
 
@@ -236,7 +241,7 @@ func (s *Server) drawn(w http.ResponseWriter, r *http.Request) {
 	// A walk has one address, which is what keeps the files the page asks for
 	// relative to where it was served from, and one question per walk kept.
 	if file == "" && (r.PathValue("name") != name || r.PathValue("type") != qtype) {
-		http.Redirect(w, r, path(r.PathValue("view"), name, qtype), http.StatusMovedPermanently)
+		http.Redirect(w, r, path(scene, name, qtype), http.StatusMovedPermanently)
 		return
 	}
 

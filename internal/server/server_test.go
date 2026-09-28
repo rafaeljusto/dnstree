@@ -96,6 +96,10 @@ func TestRoutes(t *testing.T) {
 		"a view nobody asked for drawn in 3d": {
 			path: "/walk?name=www.example.com&type=A", wantStatus: http.StatusSeeOther, wantAt: "/3d/www.example.com/A/",
 		},
+		"a view pointing at another site drawn in 3d here": {
+			path: "/walk?name=www.example.com&type=A&view=%2F%2Fevil.example", wantStatus: http.StatusSeeOther,
+			wantAt: "/3d/www.example.com/A/",
+		},
 		"the tree asked for": {
 			path: "/walk?name=www.example.com&type=A&view=tree", wantStatus: http.StatusSeeOther,
 			wantAt: "/tree/www.example.com/A/",
