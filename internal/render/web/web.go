@@ -1,6 +1,7 @@
 // Package web serves a finished trace as a page, and points a browser at it.
 // Nothing here works anything out about the DNS: the walk is handed over as the
-// document --format json writes, and the drawing happens in the browser.
+// document --format json writes, and the drawing happens in the browser. There
+// are two pages, the flat one and the scene, and they read the same walk.
 package web
 
 import (
@@ -44,6 +45,9 @@ type Options struct {
 	// Browser asks for a browser to be opened at the page. It is best effort: a
 	// machine that cannot open one still gets the address printed.
 	Browser bool
+
+	// Scene serves the walk drawn in three dimensions rather than as a tree.
+	Scene bool
 
 	// Version is the build the page says it came from.
 	Version string
@@ -95,7 +99,7 @@ func Serve(ctx context.Context, out io.Writer, tr *trace.Trace, findings []expla
 	}
 
 	server := &http.Server{
-		Handler:           handler(page, traceDoc),
+		Handler:           handler(siteFor(opts), page, traceDoc),
 		ReadHeaderTimeout: headerDeadline,
 	}
 	served := make(chan error, 1)
@@ -143,20 +147,38 @@ func listening(addr net.Addr) netip.AddrPort {
 	return netip.AddrPortFrom(netip.IPv6Loopback(), where.Port())
 }
 
-// The files the page is made of, and what they are served as. The list is
-// written out rather than walked, so that a file added to the directory is a
-// file somebody meant to publish.
-var files = map[string]string{
-	"app.css": "text/css; charset=utf-8",
-	"app.js":  "text/javascript; charset=utf-8",
+// site is one page and the files it is made of, and what they are served as.
+// The list is written out rather than walked, so that a file added to the
+// directory is a file somebody meant to publish.
+type site struct {
+	dir   string
+	files map[string]string
+}
+
+var (
+	flat = site{dir: "assets", files: map[string]string{
+		"app.css": "text/css; charset=utf-8",
+		"app.js":  "text/javascript; charset=utf-8",
+	}}
+	scene = site{dir: "assets/scene", files: map[string]string{
+		"scene.css": "text/css; charset=utf-8",
+		"scene.js":  "text/javascript; charset=utf-8",
+	}}
+)
+
+func siteFor(opts Options) site {
+	if opts.Scene {
+		return scene
+	}
+	return flat
 }
 
 // handler is the whole of what is served: the page, the files it is made of,
 // and the walk behind it. Everything is written once, at the start, so nothing
 // here reads the trace and nothing needs a lock.
-func handler(page, traceDoc []byte) http.Handler {
+func handler(pages site, page, traceDoc []byte) http.Handler {
 	mux := http.NewServeMux()
-	index, err := assets.ReadFile("assets/index.html")
+	index, err := assets.ReadFile(pages.dir + "/index.html")
 	if err != nil {
 		// The files are embedded at build time, so this cannot happen in a
 		// binary that was built; it can in one being changed.
@@ -164,8 +186,8 @@ func handler(page, traceDoc []byte) http.Handler {
 	}
 
 	mux.Handle("GET /{$}", serve("text/html; charset=utf-8", index))
-	for name, contentType := range files {
-		body, err := assets.ReadFile("assets/" + name)
+	for name, contentType := range pages.files {
+		body, err := assets.ReadFile(pages.dir + "/" + name)
 		if err != nil {
 			panic("web: " + name + " is missing from the binary: " + err.Error())
 		}

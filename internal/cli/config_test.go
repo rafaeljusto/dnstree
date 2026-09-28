@@ -148,6 +148,11 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--format", "web", "example.com"},
 			want: cli.Config{Format: "web", WebAddr: "127.0.0.1:0"},
 		},
+		"a scene keeps the file's address for the page and drops its live": {
+			file: "live\nweb-addr = 127.0.0.1:8080\n",
+			args: []string{"--format", "web-3d", "example.com"},
+			want: cli.Config{Format: "web-3d", WebAddr: "127.0.0.1:8080"},
+		},
 		"a root asked for replaces the file's hints": {
 			file: "root-hints = hints\n",
 			args: []string{"--root", "192.0.2.9", "example.com"},

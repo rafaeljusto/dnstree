@@ -199,7 +199,7 @@ func override(flags *flag.FlagSet, fileArgs, args []string) []string {
 	case Programs(format):
 		drop["live"], drop["watch"] = true, true
 		drop["explain"], drop["diff"] = true, true
-	case format == "web":
+	case Serves(format):
 		drop["live"], drop["watch"] = true, true
 	default:
 		drop["web-addr"], drop["no-browser"] = true, true

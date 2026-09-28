@@ -35,6 +35,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "web", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "web", WebAddr: "127.0.0.1:0"},
 		},
+		"a walk in a scene": {
+			args: []string{"--format", "web-3d", "--no-browser", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "web-3d", WebAddr: "127.0.0.1:0"},
+		},
 		"a walk served somewhere else": {
 			args: []string{"--format", "web", "--web-addr", "0.0.0.0:8080", "--no-browser", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "web", WebAddr: "0.0.0.0:8080"},
@@ -215,6 +219,8 @@ func TestParseRejects(t *testing.T) {
 		"watched json":                      {"--format", "json", "--watch", "30s", "example.com"},
 		"watched dot":                       {"--format", "dot", "--watch", "30s", "example.com"},
 		"watched web":                       {"--format", "web", "--watch", "30s", "example.com"},
+		"live web-3d":                       {"--format", "web-3d", "--live", "example.com"},
+		"watched web-3d":                    {"--format", "web-3d", "--watch", "30s", "example.com"},
 		"a watch tighter than a second":     {"--watch", "100ms", "example.com"},
 		"a watch of no time at all":         {"--watch", "-1s", "example.com"},
 		"a page nobody serves":              {"--web-addr", "127.0.0.1:8080", "example.com"},

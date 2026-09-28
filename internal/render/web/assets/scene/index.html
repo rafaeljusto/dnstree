@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex,nofollow">
+<title>dnstree</title>
+<link rel="stylesheet" href="scene.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>&#127794;</text></svg>">
+</head>
+<body>
+
+<canvas id="scene" aria-label="the walk, drawn in three dimensions: drag to turn it, scroll to come closer, n and p to step through the hops"></canvas>
+<div id="tags" class="tags" aria-hidden="true"></div>
+<div class="veil" aria-hidden="true"></div>
+
+<header class="hud top">
+  <div class="ident">
+    <a class="brand" href="/" title="dnstree"><span class="caret">&#9656;</span>dnstree<span class="dim">//3d</span></a>
+    <h1 id="q-name">&#8230;</h1>
+    <p class="asked"><span id="q-type"></span> <span id="q-class" class="dim"></span></p>
+  </div>
+  <div class="readout">
+    <output id="verdict" class="verdict"></output>
+    <ul id="stats" class="stats"></ul>
+  </div>
+</header>
+
+<aside id="inspector" class="panel inspector" aria-live="polite" hidden>
+  <div class="panel-bar">
+    <span class="panel-kind" id="i-kind"></span>
+    <span class="panel-nav">
+      <button class="key" type="button" id="i-prev" aria-label="previous hop" title="previous hop (p)">&#8249;</button>
+      <button class="key" type="button" id="i-next" aria-label="next hop" title="next hop (n)">&#8250;</button>
+      <button class="key" type="button" id="i-close" aria-label="close" title="close (esc)">&#215;</button>
+    </span>
+  </div>
+  <h2 id="i-title"></h2>
+  <p id="i-sub" class="mono dim"></p>
+  <p id="i-says" class="says"></p>
+  <dl id="i-facts" class="facts"></dl>
+  <ol id="i-records" class="records"></ol>
+</aside>
+
+<section id="findings" class="panel findings" hidden>
+  <div class="panel-bar"><span class="panel-kind">what the walk came to</span></div>
+  <div id="f-list"></div>
+</section>
+
+<nav class="hud dock" aria-label="controls">
+  <button class="key" type="button" id="c-replay" title="replay the walk (space)"><span class="glyph">&#8634;</span><span>replay</span></button>
+  <button class="key" type="button" id="c-orbit" aria-pressed="true" title="turn on its own (o)"><span class="glyph">&#10227;</span><span>orbit</span></button>
+  <button class="key" type="button" id="c-sound" aria-pressed="false" title="sound (m)"><span class="glyph">&#9835;</span><span>sound</span></button>
+  <button class="key" type="button" id="c-reset" title="back to where it started (r)"><span class="glyph">&#8982;</span><span>reset</span></button>
+  <button class="key" type="button" id="c-findings" aria-pressed="false" title="what the walk came to (e)" hidden><span class="glyph">&#8801;</span><span>findings</span></button>
+  <button class="key" type="button" popovertarget="help" title="keys and legend (?)"><span class="glyph">?</span></button>
+</nav>
+
+<footer class="hud foot">
+  <ul id="legend" class="legend" aria-label="what a hop says"></ul>
+  <p class="built"><span id="built"></span> <span class="dim">&#183;</span> <a href="/trace.json" download="trace.json">the walk as json</a></p>
+  <p id="warnings" class="warn"></p>
+</footer>
+
+<div id="help" popover class="panel sheet">
+  <h2>keys</h2>
+  <dl class="keys">
+    <dt><kbd>drag</kbd></dt><dd>turn the scene</dd>
+    <dt><kbd>shift</kbd> <kbd>drag</kbd></dt><dd>move it</dd>
+    <dt><kbd>scroll</kbd></dt><dd>come closer, or go back</dd>
+    <dt><kbd>&#8592;</kbd><kbd>&#8593;</kbd><kbd>&#8594;</kbd><kbd>&#8595;</kbd></dt><dd>turn it from the keyboard</dd>
+    <dt><kbd>n</kbd> <kbd>p</kbd></dt><dd>the next hop, or the one before</dd>
+    <dt><kbd>space</kbd></dt><dd>replay the walk</dd>
+    <dt><kbd>o</kbd></dt><dd>let it turn on its own</dd>
+    <dt><kbd>m</kbd></dt><dd>sound</dd>
+    <dt><kbd>r</kbd></dt><dd>back to where it started</dd>
+    <dt><kbd>esc</kbd></dt><dd>close whatever is open</dd>
+  </dl>
+  <p class="note">the walk assembles in the order it was made, each hop taking as long as
+  its server did. the brighter trail is the way to the answer; the rings are the chain of
+  trust at each cut. sound is placed where the hops are: turn the scene and it turns with it.</p>
+  <button class="key" type="button" popovertarget="help" popovertargetaction="hide">close</button>
+</div>
+
+<div id="nogl" class="nogl" hidden>
+  <p>this browser cannot draw in three dimensions (webgl2 is off or missing).</p>
+  <p class="dim">--format web draws the same walk flat, and <a href="/trace.json">the walk as json</a> is here.</p>
+</div>
+
+<script type="module" src="scene.js"></script>
+</body>
+</html>

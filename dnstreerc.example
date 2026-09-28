@@ -94,21 +94,23 @@
 
 # What to draw
 
-# tree, ascii, emoji, json, dot, mermaid, openmetrics or web. ascii emits nothing above
-# codepoint 127, for pasting somewhere that cannot carry box drawing.
+# tree, ascii, emoji, json, dot, mermaid, openmetrics, web or web-3d. ascii emits
+# nothing above codepoint 127, for pasting somewhere that cannot carry box
+# drawing.
 # format = tree
 
 # web draws nothing in the terminal. It serves the finished walk as a page on
 # this machine, opens a browser at it, and keeps serving until the command is
 # interrupted. The address it listens on is where a browser can reach it;
-# no-browser leaves the printed address to be opened by hand.
+# no-browser leaves the printed address to be opened by hand. web-3d does the
+# same with a scene to turn around instead of a tree to read.
 # format = web
 # web-addr = 127.0.0.1:0
 # no-browser = true
 
 # Draw the tree as the walk makes it. Asking for json, dot, mermaid,
-# openmetrics or web on the command line drops this line rather than failing on
-# it, since all five are written once at the end.
+# openmetrics, web or web-3d on the command line drops this line rather than
+# failing on it, since all six are written once at the end.
 # live = true
 
 # Say in sentences what the walk came to, under the tree. Asking for json, dot,

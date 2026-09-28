@@ -46,7 +46,7 @@ path it took. TYPE defaults to A; ANY, AXFR and IXFR are refused.
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
-  --format FORMAT         tree, ascii, emoji, json, dot, mermaid, openmetrics or web
+  --format FORMAT         tree, ascii, emoji, json, dot, mermaid, openmetrics, web or web-3d
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
   --live                  draw the tree as the walk makes it
@@ -100,7 +100,9 @@ each server cost, who they belong to and the chain of trust over them. The page
 is served until the command is interrupted. --web-addr moves it, which is what a
 walk made on another machine needs, and --no-browser leaves the address to be
 opened by hand. Whatever is pointed at the same server can read the walk as
---format json writes it, under /trace.json.
+--format json writes it, under /trace.json. --format web-3d serves the same walk
+the same way, drawn as a scene to turn around rather than a tree to read, and
+takes --web-addr and --no-browser as well.
 
 -x resolves the PTR record of an address, the way dig -x does: 192.0.2.1 is
 asked as 1.2.0.192.in-addr.arpa. and an IPv6 address under ip6.arpa. It takes
@@ -290,7 +292,7 @@ type Config struct {
 	// value sends none.
 	Subnet netip.Prefix
 
-	// WebAddr is where --format web serves the page, and Browser whether one is
+	// WebAddr is where --format web and web-3d serve the page, and Browser whether one is
 	// opened at it. A walk names the servers it asked and the addresses they
 	// answered from, so the page stays on this machine unless it is moved.
 	WebAddr string
@@ -374,7 +376,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot, mermaid, openmetrics or web")
+	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, json, dot, mermaid, openmetrics, web or web-3d")
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
@@ -434,7 +436,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch format {
-	case "tree", "ascii", "emoji", "json", "dot", "mermaid", "openmetrics", "web":
+	case "tree", "ascii", "emoji", "json", "dot", "mermaid", "openmetrics", "web", "web-3d":
 		cfg.Format = format
 	default:
 		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
@@ -551,12 +553,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	cfg.Compare = !noCompare
 	cfg.Browser = !noBrowser
 
-	if cfg.Format == "web" {
+	if Serves(cfg.Format) {
 		if cfg.WebAddr == "" {
 			cfg.WebAddr = web.DefaultAddr
 		}
 	} else if cfg.WebAddr != "" || noBrowser {
-		return nil, fmt.Errorf("%w: only --format web serves a page", ErrUsage)
+		return nil, fmt.Errorf("%w: only --format web and web-3d serve a page", ErrUsage)
 	}
 
 	if subnet != "" {
@@ -595,7 +597,13 @@ var walkFlags = map[string]bool{
 // once reports whether a format is written once, at the end, which leaves
 // nothing to draw live and nothing to watch change.
 func once(format string) bool {
-	return Programs(format) || format == "web"
+	return Programs(format) || Serves(format)
+}
+
+// Serves reports whether a format is a page served to a browser rather than
+// anything written here.
+func Serves(format string) bool {
+	return format == "web" || format == "web-3d"
 }
 
 // Programs reports whether a format is read by a program rather than a person,

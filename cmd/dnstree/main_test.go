@@ -119,61 +119,83 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// TestRunWeb covers the format that draws nothing: the walk is served instead,
+// TestRunWeb covers the formats that draw nothing: the walk is served instead,
 // the address is printed where somebody can open it, and interrupting the run
-// is what takes it down.
+// is what takes it down. The two pages read the same walk.
 func TestRunWeb(t *testing.T) {
-	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
-	hints := rootHintsFile(t)
-
-	ctx, stop := context.WithCancel(t.Context())
-	defer stop()
-
-	out := new(served)
-	done := make(chan int, 1)
-	go func() {
-		done <- run(ctx, []string{
-			"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
-			"--no-asn", "--no-compare", "--format", "web",
-			"--web-addr", "127.0.0.1:0", "--no-browser", "--explain", ".", "NS",
-		}, out, io.Discard)
-	}()
-
-	base := out.address(t)
-	answer, err := http.Get(base + "page.json")
-	if err != nil {
-		t.Fatalf("reading the page: %v", err)
-	}
-	defer answer.Body.Close()
-
-	var page struct {
-		Trace struct {
-			Question struct {
-				Name string `json:"name"`
-			} `json:"question"`
-		} `json:"trace"`
-		Findings []struct {
-			Text string `json:"text"`
-		} `json:"findings"`
-	}
-	if err := json.NewDecoder(answer.Body).Decode(&page); err != nil {
-		t.Fatalf("the page is not JSON: %v", err)
-	}
-	if page.Trace.Question.Name != "." {
-		t.Errorf("got %q, want the walk that was made", page.Trace.Question.Name)
-	}
-	if len(page.Findings) == 0 {
-		t.Error("got no findings, want --explain carried to the page")
+	tests := map[string]struct {
+		format string
+		page   string
+	}{
+		"the flat page": {format: "web", page: "app.js"},
+		"the scene":     {format: "web-3d", page: "scene.js"},
 	}
 
-	stop()
-	select {
-	case code := <-done:
-		if code != exitAnswer {
-			t.Errorf("got exit %d, want %d", code, exitAnswer)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the command is still running after it was interrupted")
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+			hints := rootHintsFile(t)
+
+			ctx, stop := context.WithCancel(t.Context())
+			defer stop()
+
+			out := new(served)
+			done := make(chan int, 1)
+			go func() {
+				done <- run(ctx, []string{
+					"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
+					"--no-asn", "--no-compare", "--format", test.format,
+					"--web-addr", "127.0.0.1:0", "--no-browser", "--explain", ".", "NS",
+				}, out, io.Discard)
+			}()
+
+			base := out.address(t)
+			index, err := http.Get(base)
+			if err != nil {
+				t.Fatalf("reading the page: %v", err)
+			}
+			html, _ := io.ReadAll(index.Body)
+			index.Body.Close()
+			if !strings.Contains(string(html), test.page) {
+				t.Errorf("got a page without %s, want the one --format %s serves", test.page, test.format)
+			}
+
+			answer, err := http.Get(base + "page.json")
+			if err != nil {
+				t.Fatalf("reading the walk: %v", err)
+			}
+			defer answer.Body.Close()
+
+			var page struct {
+				Trace struct {
+					Question struct {
+						Name string `json:"name"`
+					} `json:"question"`
+				} `json:"trace"`
+				Findings []struct {
+					Text string `json:"text"`
+				} `json:"findings"`
+			}
+			if err := json.NewDecoder(answer.Body).Decode(&page); err != nil {
+				t.Fatalf("the page is not JSON: %v", err)
+			}
+			if page.Trace.Question.Name != "." {
+				t.Errorf("got %q, want the walk that was made", page.Trace.Question.Name)
+			}
+			if len(page.Findings) == 0 {
+				t.Error("got no findings, want --explain carried to the page")
+			}
+
+			stop()
+			select {
+			case code := <-done:
+				if code != exitAnswer {
+					t.Errorf("got exit %d, want %d", code, exitAnswer)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("the command is still running after it was interrupted")
+			}
+		})
 	}
 }
 

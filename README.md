@@ -110,8 +110,8 @@ choosing (RFC 8482), and a walk would draw that as the whole answer.
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
-| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot`, `mermaid`, `openmetrics` or `web` |
-| `--web-addr`, `--no-browser` | where `--format web` serves the page, and whether a browser is opened at it |
+| `--format` | `tree` (the default), `ascii`, `emoji`, `json`, `dot`, `mermaid`, `openmetrics`, `web` or `web-3d` |
+| `--web-addr`, `--no-browser` | where `--format web` and `web-3d` serve the page, and whether a browser is opened at it |
 | `--live` | draw the tree as the walk makes it, hop by hop |
 | `--watch` | walk again this often, and say only what changed since the walk before |
 | `--explain` | say in sentences what the walk came to, under the tree |
@@ -233,11 +233,11 @@ question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
 for `--tls-ca` and `--tls-insecure`. `--format json`, `--format dot`,
-`--format mermaid`, `--format openmetrics` and `--format web` drop a `live` and
-a `watch` the file set, since all five are written once at the end and leave
-neither anything to draw nor anything to change; all but `web` drop an
-`explain` and a `diff` as well, being read by a program that has the whole
-trace already. A
+`--format mermaid`, `--format openmetrics`, `--format web` and `--format web-3d`
+drop a `live` and a `watch` the file set, since all six are written once at the
+end and leave neither anything to draw nor anything to change; all but the two
+pages drop an `explain` and a `diff` as well, being read by a program that has
+the whole trace already. A
 format that serves no page drops a `web-addr` and a `no-browser` it set, and
 `--from` drops a `live`, a `watch` and a `diff`, which are about walks being
 made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.
@@ -291,7 +291,7 @@ For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your own.
 | Code | Meaning |
 | --- | --- |
 | 0 | something answered |
-| 1 | the command line, a file it names, or the address `--format web` serves on could not be used |
+| 1 | the command line, a file it names, or the address `--format web` or `web-3d` serves on could not be used |
 | 2 | the walk ended without an answer |
 | 3 | the chain of trust is broken |
 | 4 | an expectation given with `--expect` was not met |
@@ -1030,8 +1030,8 @@ prints, followed by one line saying how it went:
 
 > [!NOTE]
 > Off a terminal the flag does nothing, and it cannot be combined with
-> `--format json`, `dot`, `mermaid`, `openmetrics` or `web`, all of which are
-> written once, at the end.
+> `--format json`, `dot`, `mermaid`, `openmetrics`, `web` or `web-3d`, all of
+> which are written once, at the end.
 
 ### Leaving it running
 
@@ -1079,8 +1079,8 @@ that stopped resolving altogether still exits 2. A walk cut off part way through
 by the interrupt is not read as a finding about the name: the last one that
 finished on its own is what answers.
 
-`--format json`, `dot`, `mermaid`, `openmetrics` and `web` are written once,
-at the end, so there is nothing for a watch to change; all of them refuse it,
+`--format json`, `dot`, `mermaid`, `openmetrics`, `web` and `web-3d` are written
+once, at the end, so there is nothing for a watch to change; all of them refuse it,
 as they refuse `--live`.
 
 ### Other formats
@@ -1141,6 +1141,25 @@ answered from, which is nobody else's business. `--web-addr :8080` moves it,
 which is what a walk made on another machine needs, and says so in a line when
 the address it was given is not this machine's alone. `--no-browser` leaves the
 address to be opened by hand.
+
+`--format web-3d` serves the same walk the same way, and takes `--web-addr` and
+`--no-browser` too, but draws it as a scene to turn around rather than a tree to
+read:
+
+```
+$ dnstree --format web-3d --dnssec www.example.com
+the walk is at http://127.0.0.1:58134/
+it is served until this command is interrupted
+```
+
+The hops float in a cone that opens downwards, one ring a zone cut, and the walk
+assembles in the order it was made, each query taking as long in the replay as
+its server took. The shape of a hop says what it came to, the rings round it are
+the chain of trust at that cut, and the brighter trail is the way to the answer;
+clicking a hop says what the server said. Sound is off until asked for, and is
+placed where the hops are, so that turning the scene turns it too. It is WebGL2
+and nothing else: a browser without it is pointed back at `--format web`, and
+one asking for reduced motion gets the walk already assembled and standing still.
 
 `--format ascii` swaps the branches for `` |-- `` and drops the colour, for
 pasting into documents. `--format json` writes a versioned document with

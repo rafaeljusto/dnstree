@@ -131,10 +131,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	// A served walk is drawn in a browser rather than here, and the sentences
 	// the run asked for go to the page with it.
-	if cfg.Format == "web" {
+	if cli.Serves(cfg.Format) {
 		options := web.Options{
 			Addr:    cfg.WebAddr,
 			Browser: cfg.Browser,
+			Scene:   cfg.Format == "web-3d",
 			Version: version,
 		}
 		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, stderr), options); err != nil {

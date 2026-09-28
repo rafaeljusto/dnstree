@@ -2,10 +2,13 @@ package web
 
 import (
 	"encoding/json"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -146,46 +149,71 @@ func TestBuildNothing(t *testing.T) {
 	}
 }
 
+// TestHandler covers what each page serves: its own files, the same walk
+// behind both, and none of the other page's files.
 func TestHandler(t *testing.T) {
 	page, traceDoc, err := build(walked(), nil, Options{})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	served := handler(page, traceDoc)
 
 	tests := map[string]struct {
+		pages       site
 		path        string
 		wantStatus  int
 		wantType    string
 		wantContent string
 	}{
 		"the page itself": {
-			path: "/", wantStatus: http.StatusOK,
+			pages: flat, path: "/", wantStatus: http.StatusOK,
 			wantType: "text/html; charset=utf-8", wantContent: "<title>dnstree</title>",
 		},
 		"what it is drawn with": {
-			path: "/app.css", wantStatus: http.StatusOK, wantType: "text/css; charset=utf-8", wantContent: "@layer",
+			pages: flat, path: "/app.css", wantStatus: http.StatusOK, wantType: "text/css; charset=utf-8", wantContent: "@layer",
 		},
 		"what draws it": {
-			path: "/app.js", wantStatus: http.StatusOK, wantType: "text/javascript; charset=utf-8", wantContent: "customElements",
+			pages: flat, path: "/app.js", wantStatus: http.StatusOK, wantType: "text/javascript; charset=utf-8", wantContent: "customElements",
 		},
 		"the walk the page reads": {
-			path: "/page.json", wantStatus: http.StatusOK,
+			pages: flat, path: "/page.json", wantStatus: http.StatusOK,
 			wantType: "application/json; charset=utf-8", wantContent: `"schema_version"`,
 		},
 		"the walk on its own": {
-			path: "/trace.json", wantStatus: http.StatusOK,
+			pages: flat, path: "/trace.json", wantStatus: http.StatusOK,
 			wantType: "application/json; charset=utf-8", wantContent: `"www.example.com."`,
 		},
-		"nothing else is served": {path: "/etc/passwd", wantStatus: http.StatusNotFound},
-		"not even the directory": {path: "/assets/app.js", wantStatus: http.StatusNotFound},
+		"nothing else is served": {pages: flat, path: "/etc/passwd", wantStatus: http.StatusNotFound},
+		"not even the directory": {pages: flat, path: "/assets/app.js", wantStatus: http.StatusNotFound},
+		"not the scene's files":  {pages: flat, path: "/scene.js", wantStatus: http.StatusNotFound},
+
+		"the scene itself": {
+			pages: scene, path: "/", wantStatus: http.StatusOK,
+			wantType: "text/html; charset=utf-8", wantContent: `<canvas id="scene"`,
+		},
+		"what the scene is laid over": {
+			pages: scene, path: "/scene.css", wantStatus: http.StatusOK, wantType: "text/css; charset=utf-8", wantContent: "@layer",
+		},
+		"what draws the scene": {
+			pages: scene, path: "/scene.js", wantStatus: http.StatusOK,
+			wantType: "text/javascript; charset=utf-8", wantContent: `getContext("webgl2"`,
+		},
+		"the walk the scene reads": {
+			pages: scene, path: "/page.json", wantStatus: http.StatusOK,
+			wantType: "application/json; charset=utf-8", wantContent: `"schema_version"`,
+		},
+		"the walk on its own, beside the scene": {
+			pages: scene, path: "/trace.json", wantStatus: http.StatusOK,
+			wantType: "application/json; charset=utf-8", wantContent: `"www.example.com."`,
+		},
+		"not the flat page's files":      {pages: scene, path: "/app.js", wantStatus: http.StatusNotFound},
+		"not even the scene's directory": {pages: scene, path: "/assets/scene/scene.js", wantStatus: http.StatusNotFound},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080"+test.path, nil)
 			recorder := httptest.NewRecorder()
-			served.ServeHTTP(recorder, request)
+			handler(test.pages, page, traceDoc).ServeHTTP(recorder, request)
 
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("got %d, want %d", recorder.Code, test.wantStatus)
@@ -197,12 +225,22 @@ func TestHandler(t *testing.T) {
 				t.Errorf("got %q, want %q", got, test.wantType)
 			}
 			if got := recorder.Body.String(); !strings.Contains(got, test.wantContent) {
-				t.Errorf("got %q, want %q in it", got, test.wantContent)
+				t.Errorf("got %.200q, want %q in it", got, test.wantContent)
 			}
 			if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
 				t.Errorf("got %q, want the page kept nowhere", got)
 			}
 		})
+	}
+}
+
+// TestSiteFor covers which page Options ask for.
+func TestSiteFor(t *testing.T) {
+	if got := siteFor(Options{}); got.dir != flat.dir {
+		t.Errorf("got %s, want the flat page by default", got.dir)
+	}
+	if got := siteFor(Options{Scene: true}); got.dir != scene.dir {
+		t.Errorf("got %s, want the scene when it is asked for", got.dir)
 	}
 }
 
@@ -213,7 +251,7 @@ func TestHandlerOnlyByAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	served := handler(page, traceDoc)
+	served := handler(flat, page, traceDoc)
 
 	tests := map[string]int{
 		"127.0.0.1:8080":             http.StatusOK,
@@ -256,5 +294,25 @@ func TestListening(t *testing.T) {
 				t.Errorf("got %s, want %s", got, test.want)
 			}
 		})
+	}
+}
+
+// TestPagesFetchNothing holds both pages to what the README says of them: the
+// page is in the binary, and nothing it is made of is fetched from anywhere.
+// The only address either may name is the one SVG is written in.
+func TestPagesFetchNothing(t *testing.T) {
+	address := regexp.MustCompile(`(?i)(https?:)?//[a-z0-9.-]+\.[a-z]{2,}`)
+	for _, pages := range []site{flat, scene} {
+		for _, name := range append(slices.Sorted(maps.Keys(pages.files)), "index.html") {
+			body, err := assets.ReadFile(pages.dir + "/" + name)
+			if err != nil {
+				t.Fatalf("%s/%s: %v", pages.dir, name, err)
+			}
+			for _, found := range address.FindAllString(string(body), -1) {
+				if !strings.HasSuffix(found, "//www.w3.org") {
+					t.Errorf("%s/%s names %s, want nothing fetched", pages.dir, name, found)
+				}
+			}
+		}
 	}
 }
