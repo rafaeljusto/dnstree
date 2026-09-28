@@ -168,6 +168,11 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--format", "waterfall-mermaid", "example.com"},
 			want: cli.Config{Format: "waterfall-mermaid"},
 		},
+		"a format read by a program outlives the file's address for the page": {
+			file: "format = web\nweb-addr = 127.0.0.1:8080\nno-browser\n",
+			args: []string{"--format", "json", "example.com"},
+			want: cli.Config{Format: "json"},
+		},
 		"a root asked for replaces the file's hints": {
 			file: "root-hints = hints\n",
 			args: []string{"--root", "192.0.2.9", "example.com"},
