@@ -121,6 +121,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | `--diff` | say what has changed since the last walk of the same question |
 | `--expect` | require this of the walk, and exit 4 where it does not hold; repeat it |
 | `--from` | draw a walk `--format json` saved, from a file or `-`, instead of making one |
+| `--against` | say how the walk differs from one `--format json` saved, from a file or `-` |
 | `--color` | `auto` (the default: only on a terminal, and off where `NO_COLOR` is set or `TERM` is unset or `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
@@ -235,8 +236,9 @@ above and `--dnssec=false` turns a flag it set back off. Flags that answer one
 question in different ways give way as a group, rather than colliding: naming
 any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
 chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
-for `--tls-ca` and `--tls-insecure`. Every format but `tree`, `ascii` and
-`emoji` drops a `live` and a `watch` the file set, since all the others are
+for `--tls-ca` and `--tls-insecure`; `--against` drops a `diff`. Every format
+but `tree`, `ascii` and `emoji` drops a `live` and a `watch` the file set, since
+all the others are
 written once at the end and leave neither anything to draw nor anything to
 change; `json`, `dot`, `mermaid`, `waterfall-mermaid` and `openmetrics` drop an
 `explain` and a `diff` as well, being read by a program that has the whole trace
@@ -947,8 +949,8 @@ the parent's glue instead, which is whole whether or not the servers were asked,
 so a zone with no IPv4 anywhere in its delegation is named without `--all`.
 
 `--format json`, `dot`, `mermaid`, `waterfall-mermaid` and `openmetrics` refuse
-`--explain` and `--diff`: all five are read by a program, which has the same
-facts in fields already.
+`--explain`, `--diff` and `--against`: all five are read by a program, which
+has the same facts in fields already.
 
 ### What has changed since last time
 
@@ -1478,6 +1480,26 @@ is read against when the walk was made rather than against the clock. It cannot
 be drawn live, watched or held against the last walk with `--diff`: none of
 those is about a walk that is over. A document of another `schema_version` is
 refused rather than guessed at.
+
+`--against` holds the walk against one saved the same way, and says what
+differs, as `--diff` does — the answer, its TTL, the zone cuts, their
+nameservers and the chain of trust over them. The walk drawn can be one read
+with `--from`, which compares two walks made before and after a change, or from
+two places, or one made now:
+
+```
+$ dnstree --from after.json --against before.json
+...
+✔ answered in 855ms · resolver in 373ms · 3 queries · 3 servers
+
+· nothing differs from the walk of www.example.com. A in before.json, made within a minute of this one
+```
+
+The file is read as the walk before the one drawn, and the first line says how
+far apart the two were made. Two walks of different questions are refused, and
+nothing is written to the disk. Different is not wrong: a name served from
+many places answers each of them in its own way. It takes the place of
+`--diff`, and cannot be set in the file of defaults.
 
 ### Serving it to anyone
 

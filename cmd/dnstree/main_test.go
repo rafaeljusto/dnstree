@@ -889,6 +889,107 @@ func TestRunFrom(t *testing.T) {
 	}
 }
 
+// TestRunAgainst holds walks against one saved to a file: another saved walk,
+// and one made now. Nothing is remembered, so the cache is left empty.
+func TestRunAgainst(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: watchZone("192.0.2.1")})
+	hints := rootHintsFile(t)
+	port := strconv.Itoa(int(server.Addr.Port()))
+	cache := t.TempDir()
+	t.Setenv(history.DirEnv, cache)
+
+	walking := []string{"--root-hints", hints, "--port", port, "--no-asn", "--no-compare"}
+	save := func(tb testing.TB, name string) string {
+		tb.Helper()
+
+		var stdout, stderr bytes.Buffer
+		args := append(slices.Clone(walking), "--format", "json", "www.test.")
+		if code := run(t.Context(), args, &stdout, &stderr); code != exitAnswer {
+			tb.Fatalf("got exit %d, want %d: %s", code, exitAnswer, stderr.String())
+		}
+		path := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(path, stdout.Bytes(), 0o644); err != nil {
+			tb.Fatal(err)
+		}
+		return path
+	}
+
+	before := save(t, "before.json")
+	server.Replace(t, watchZone("192.0.2.2"))
+	after := save(t, "after.json")
+
+	// A question whose type carries an escape, which only its escaped copy may
+	// be compared by or drawn as.
+	hostile := filepath.Join(t.TempDir(), "hostile.json")
+	if err := os.WriteFile(hostile, []byte(`{"schema_version": 4,
+		"question": {"name": "www.test.", "type": "A\u001b[41m", "class": "IN"}, "elapsed_ms": 1,
+		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "rcode": "NXDOMAIN",
+		"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53}}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := map[string]struct {
+		args []string
+		code int
+		want string
+	}{
+		"two saved walks that differ": {
+			args: []string{"--from", after, "--against", before},
+			code: exitAnswer, want: "the answer changed: 192.0.2.1 became 192.0.2.2",
+		},
+		"a saved walk held against itself": {
+			args: []string{"--from", after, "--against", after},
+			code: exitAnswer, want: "nothing differs from the walk of www.test. A in " + after,
+		},
+		"a walk made now, held against a saved one": {
+			args: append(slices.Clone(walking), "--against", before, "www.test."),
+			code: exitAnswer, want: "the answer changed: 192.0.2.1 became 192.0.2.2",
+		},
+		"a walk made now, of another question": {
+			args: append(slices.Clone(walking), "--against", before, "www.test.", "AAAA"),
+			code: exitUsage, want: before + " is a walk of www.test. A, and this one is of www.test. AAAA",
+		},
+		"a file that is not a walk": {
+			args: []string{"--from", after, "--against", hints},
+			code: exitUsage, want: "not a trace",
+		},
+		"a hostile question, held against itself": {
+			args: []string{"--from", hostile, "--against", hostile},
+			code: exitAnswer, want: "nothing differs",
+		},
+		"a hostile question, held against another": {
+			args: []string{"--from", hostile, "--against", before},
+			code: exitUsage, want: "and this one is of www.test. A",
+		},
+		"the first round of a watch": {
+			args: append(slices.Clone(walking),
+				"--watch", "1s", "--expect", "192.0.2.2", "--against", before, "www.test."),
+			code: exitAnswer, want: "the answer changed: 192.0.2.1 became 192.0.2.2",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run(t.Context(), append([]string{"--color", "never"}, test.args...), &stdout, &stderr)
+			if code != test.code {
+				t.Fatalf("got exit %d, want %d: %s%s", code, test.code, stdout.String(), stderr.String())
+			}
+			out := stdout.String() + stderr.String()
+			if !strings.Contains(out, test.want) {
+				t.Errorf("got\n%s\nwant it to carry %q", out, test.want)
+			}
+			if strings.Contains(out, "\x1b") {
+				t.Errorf("got an escape through:\n%q", out)
+			}
+		})
+	}
+
+	if entries, err := os.ReadDir(cache); err != nil || len(entries) != 0 {
+		t.Errorf("got %v and %v, want nothing remembered", entries, err)
+	}
+}
+
 // TestRunFromHostile reads a file written to forge output, with escapes in the
 // fields a walk fills with this build's own words. Whoever hands over a saved
 // walk chooses every byte of it, so no format may draw one raw.

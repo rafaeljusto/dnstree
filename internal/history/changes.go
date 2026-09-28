@@ -38,6 +38,35 @@ func Changes(before, now *Walk) []explain.Finding {
 	})
 }
 
+// Against is what [Changes] says of a walk held against one saved to a file,
+// which is named in place of an age: the two may come from two machines rather
+// than two times, so the framing says how far apart they were made either way.
+func Against(before, now *Walk, source string) []explain.Finding {
+	question := now.Question.Name + " " + now.Question.Type
+	when := "at a time it does not say" // a walk saved before dnstree kept when it started
+	if !before.Seen.IsZero() && !now.Seen.IsZero() {
+		when = made(now.Seen.Sub(before.Seen))
+	}
+
+	findings := Differences(before, now)
+	if len(findings) == 0 {
+		return []explain.Finding{{Topic: explain.Change, Level: explain.Note, Text: fmt.Sprintf(
+			"nothing differs from the walk of %s in %s, made %s", question, source, when)}}
+	}
+	return slices.Insert(findings, 0, explain.Finding{
+		Topic: explain.Change, Level: explain.Note,
+		Text: fmt.Sprintf("held against the walk of %s in %s, made %s", question, source, when),
+	})
+}
+
+// Asks reports whether the walk was made for this question, which is the only
+// thing a comparison between two walks makes sense of.
+func (w *Walk) Asks(name, qtype, class string) bool {
+	return strings.EqualFold(strings.TrimSuffix(w.Question.Name, "."), strings.TrimSuffix(name, ".")) &&
+		strings.EqualFold(w.Question.Type, qtype) &&
+		strings.EqualFold(w.Question.Class, class)
+}
+
 // Differences is what is not what it was, and nothing at all where nothing is.
 // It is what [Changes] says with the framing taken off: the line naming when
 // the walk before this one was made, and the line saying there was no change.
@@ -211,12 +240,31 @@ func ago(since time.Duration) string {
 		return "remembered from later than this one"
 	case since < time.Minute:
 		return "moments ago"
-	case since < time.Hour:
-		return plural(int(since.Minutes()), "minute", "minutes") + " ago"
-	case since < 24*time.Hour:
-		return plural(int(since.Hours()), "hour", "hours") + " ago"
 	}
-	return plural(int(since.Hours()/24), "day", "days") + " ago"
+	return span(since) + " ago"
+}
+
+// made is how far apart two walks were made, from the side of the one drawn.
+func made(since time.Duration) string {
+	switch {
+	case since.Abs() < time.Minute:
+		return "within a minute of this one"
+	case since < 0:
+		return span(-since) + " after this one"
+	}
+	return span(since) + " before this one"
+}
+
+// span is a duration of a minute or more, in the coarsest unit that still says
+// something.
+func span(since time.Duration) string {
+	switch {
+	case since < time.Hour:
+		return plural(int(since.Minutes()), "minute", "minutes")
+	case since < 24*time.Hour:
+		return plural(int(since.Hours()), "hour", "hours")
+	}
+	return plural(int(since.Hours()/24), "day", "days")
 }
 
 // list is a handful of names in a sentence, the tail of a long one counted

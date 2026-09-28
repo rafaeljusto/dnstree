@@ -239,6 +239,20 @@ func TestParseDefaultsFrom(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsAgainst covers a file that remembers every walk, and a
+// command line that asks for one to be held against a saved walk instead.
+func TestParseDefaultsAgainst(t *testing.T) {
+	path := write(t, "diff\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--against", "walk.json", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Diff || got.Against != "walk.json" {
+		t.Errorf("got diff %t against %q, want the file's --diff given up", got.Diff, got.Against)
+	}
+}
+
 // TestParseDefaultsFound covers where the file is looked for, which is the part
 // nobody can see from the command line.
 func TestParseDefaultsFound(t *testing.T) {
@@ -322,16 +336,17 @@ func TestParseDefaultsRejects(t *testing.T) {
 		file string
 		args []string
 	}{
-		"a line that is not a flag":           {file: "colour = never\n"},
-		"a value the flag cannot read":        {file: "timeout = soon\n"},
-		"a value the flag will not take":      {file: "format = runes\n"},
-		"a flag left without its value":       {file: "format\n"},
-		"the name to resolve":                 {file: "example.com\n"},
-		"a file that says which file to read": {file: "config = elsewhere\n"},
-		"a file that asks for the version":    {file: "version\n"},
-		"a file that asks for the schema":     {file: "schema\n"},
-		"a file that draws a saved walk":      {file: "from = walk.json\n"},
-		"a file that names an address":        {file: "x = 192.0.2.1\n"},
+		"a line that is not a flag":                {file: "colour = never\n"},
+		"a value the flag cannot read":             {file: "timeout = soon\n"},
+		"a value the flag will not take":           {file: "format = runes\n"},
+		"a flag left without its value":            {file: "format\n"},
+		"the name to resolve":                      {file: "example.com\n"},
+		"a file that says which file to read":      {file: "config = elsewhere\n"},
+		"a file that asks for the version":         {file: "version\n"},
+		"a file that asks for the schema":          {file: "schema\n"},
+		"a file that draws a saved walk":           {file: "from = walk.json\n"},
+		"a file that holds every walk against one": {file: "against = walk.json\n"},
+		"a file that names an address":             {file: "x = 192.0.2.1\n"},
 	}
 
 	for name, test := range tests {

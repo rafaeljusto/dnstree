@@ -102,8 +102,25 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		lookups = asn.New(asnLookup(cfg), log)
 	}
 
+	// The file to compare with is read before any server is asked, so that a
+	// walk is not made only to find there is nothing to hold it against.
+	var reference *history.Walk
+	if cfg.Against != "" {
+		if reference, err = against(cfg.Against); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		if cfg.From == "" {
+			asked := trace.Question{Name: cfg.Name, Type: cfg.Type, Class: "IN"}
+			if err := sameQuestion(reference, asked, cfg.Against); err != nil {
+				fmt.Fprintln(stderr, err)
+				return exitUsage
+			}
+		}
+	}
+
 	if cfg.Watch > 0 {
-		return watch(ctx, cfg, log, lookups, stdout, stderr)
+		return watch(ctx, cfg, log, lookups, reference, stdout, stderr)
 	}
 
 	// The live drawing owns the screen until it is cleared, and the finished
@@ -116,7 +133,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	var tr *trace.Trace
 	if cfg.From != "" {
-		tr, err = saved(cfg.From)
+		if tr, err = saved(cfg.From); err == nil && reference != nil {
+			err = sameQuestion(reference, tr.Shown().Question, cfg.Against)
+		}
 	} else {
 		tr, err = made(ctx, cfg, log, lookups, live)
 	}
@@ -139,7 +158,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			Color:   cfg.Color,
 			Version: version,
 		}
-		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, stderr), options); err != nil {
+		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, reference, stderr), options); err != nil {
 			fmt.Fprintln(stderr, err)
 			return exitUsage
 		}
@@ -155,7 +174,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	} else if !cli.Programs(cfg.Format) {
 		tree.Summary(stdout, tr, treeOptions(cfg))
 	}
-	if findings := readings(cfg, tr, stderr); len(findings) > 0 {
+	if findings := readings(cfg, tr, reference, stderr); len(findings) > 0 {
 		tree.Explain(stdout, findings, treeOptions(cfg))
 	}
 	return outcome(cfg, tr, stderr)
@@ -238,6 +257,34 @@ func saved(path string) (*trace.Trace, error) {
 	return tr, nil
 }
 
+// against is the walk --against named, as a comparison reads it. It is dated
+// by when it was made rather than when it was read, like any saved walk.
+func against(path string) (*history.Walk, error) {
+	tr, err := saved(path)
+	if err != nil {
+		return nil, err
+	}
+	return history.Of(tr, tr.Started), nil
+}
+
+// sameQuestion refuses to compare walks of two questions: every difference
+// between them would be one nobody needed telling about.
+func sameQuestion(reference *history.Walk, asked trace.Question, path string) error {
+	if reference.Asks(asked.Name, asked.Type, asked.Class) {
+		return nil
+	}
+	return fmt.Errorf("%s is a walk of %s %s, and this one is of %s %s", source(path),
+		reference.Question.Name, reference.Question.Type, asked.Name, asked.Type)
+}
+
+// source is how a saved walk is named in a sentence.
+func source(path string) string {
+	if path == "-" {
+		return "the standard input"
+	}
+	return path
+}
+
 // watch draws the walk once and then keeps making it, saying only what has
 // changed since the round before. A round that found nothing changed says
 // nothing at all: the whole point of leaving it running is that it stays quiet
@@ -246,7 +293,7 @@ func saved(path string) (*trace.Trace, error) {
 // It ends when it is interrupted, or when everything --expect asked for holds,
 // and it answers with whatever the last walk it made earned.
 func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, stdout, stderr io.Writer) int {
+	lookups *asn.Resolver, reference *history.Walk, stdout, stderr io.Writer) int {
 
 	var (
 		previous *history.Walk
@@ -296,7 +343,7 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			} else {
 				tree.Summary(stdout, tr, treeOptions(cfg))
 			}
-			if findings := readings(cfg, tr, stderr); len(findings) > 0 {
+			if findings := readings(cfg, tr, reference, stderr); len(findings) > 0 {
 				tree.Explain(stdout, findings, treeOptions(cfg))
 			}
 		} else {
@@ -320,14 +367,18 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 }
 
 // readings is what is said under the tree: the sentences the trace says about
-// itself, and what has changed since the last walk of the same question.
-func readings(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) []explain.Finding {
+// itself, and what has changed since the last walk of the same question or
+// differs from the one --against named.
+func readings(cfg *cli.Config, tr *trace.Trace, reference *history.Walk, stderr io.Writer) []explain.Finding {
 	var findings []explain.Finding
 	if cfg.Explain {
 		findings = append(findings, explain.Findings(tr)...)
 	}
 	if cfg.Diff {
 		findings = append(findings, changed(tr, stderr)...)
+	}
+	if reference != nil {
+		findings = append(findings, history.Against(reference, history.Of(tr, tr.Started), source(cfg.Against))...)
 	}
 	return findings
 }

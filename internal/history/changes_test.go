@@ -226,6 +226,50 @@ func TestChanges(t *testing.T) {
 	}
 }
 
+// TestAgainst covers a walk held against one saved to a file, which is named
+// where a remembered walk would be dated.
+func TestAgainst(t *testing.T) {
+	tests := map[string]struct {
+		before, now *history.Walk
+		want        string
+	}{
+		"two walks that came out the same": {
+			before: remembered(nil),
+			now:    later(nil),
+			want:   "nothing differs from the walk of www.test. A in before.json, made 1 day before this one",
+		},
+		"two walks that did not": {
+			before: remembered(nil),
+			now:    later(func(walk *history.Walk) { walk.Answer = []string{"192.0.2.2"} }),
+			want:   "held against the walk of www.test. A in before.json, made 1 day before this one\nthe answer changed",
+		},
+		"a file made after the walk drawn": {
+			before: later(nil),
+			now:    remembered(nil),
+			want:   "made 1 day after this one",
+		},
+		"two walks made at once, from two places": {
+			before: remembered(nil),
+			now:    remembered(nil),
+			want:   "made within a minute of this one",
+		},
+		"a file that does not say when it was made": {
+			before: remembered(func(walk *history.Walk) { walk.Seen = time.Time{} }),
+			now:    later(nil),
+			want:   "made at a time it does not say",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, _ := said(history.Against(test.before, test.now, "before.json"))
+			if !strings.Contains(got, test.want) {
+				t.Errorf("got\n%s\nwant it to carry %q", got, test.want)
+			}
+		})
+	}
+}
+
 // TestChangesAge covers the one number every comparison carries.
 func TestChangesAge(t *testing.T) {
 	tests := map[string]struct {

@@ -57,6 +57,7 @@ script is asked in punycode, the way the DNS holds it.
   --diff                  say what has changed since the last walk remembered
   --expect VALUE          require this of the walk, and exit 4 where it fails
   --from FILE             draw a walk --format json saved, instead of walking
+  --against FILE          say how the walk differs from one --format json saved
   --color WHEN            auto, always or never (default auto)
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
@@ -151,6 +152,15 @@ it takes no name, refuses the flags that shape a walk being made, and a
 signature's time left is read against when the walk was made rather than
 against the clock. It cannot be drawn live, watched or held
 against the walk remembered with --diff, since it is not a walk being made now.
+
+--against holds the walk against one --format json saved, and says under the
+tree what differs: the answer, its TTL, the zone cuts, their nameservers and the
+chain of trust over them, as --diff does. The walk drawn can be one made now or
+one read with --from, so --from after.json --against before.json compares two
+walks made before and after a change, or from two places. The file is read as the
+walk before the one drawn, and the first line says how far apart the two were
+made. Both have to be of the same question, and nothing is written to the disk.
+It takes the place of --diff.
 
 --subnet asks every server the question as though it came from somebody inside
 that prefix, which is how a server that tailors its answers by network can be
@@ -321,6 +331,10 @@ type Config struct {
 	// ones the walk was made for.
 	From string
 
+	// Against is a walk --format json saved, to say how the one drawn differs
+	// from it: a path, or "-" for the standard input.
+	Against string
+
 	// Schema asks for the JSON Schema of the json format and nothing else. Like
 	// Version it answers a question about the command rather than resolving a
 	// name, so it needs no name to resolve.
@@ -400,6 +414,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
 	flags.Var(&wanted, "expect", "require this of the walk")
 	flags.StringVar(&cfg.From, "from", "", "draw a walk --format json saved")
+	flags.StringVar(&cfg.Against, "against", "", "say how the walk differs from one --format json saved")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
 	flags.DurationVar(&timeout, "timeout", transport.DefaultTimeout, "how long one query may take")
 	flags.IntVar(&cfg.Retries, "retries", 1, "how often to ask again after a silence")
@@ -552,7 +567,13 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s between one walk and the next is too little; a second is the least",
 			ErrUsage, cfg.Watch)
 	}
-	if (cfg.Explain || cfg.Diff) && Programs(cfg.Format) {
+	switch {
+	case cfg.Against != "" && cfg.Diff:
+		return nil, fmt.Errorf("%w: --against and --diff each hold the walk against another; ask for one", ErrUsage)
+	case cfg.Against == "-" && cfg.From == "-":
+		return nil, fmt.Errorf("%w: --from and --against cannot both read the standard input", ErrUsage)
+	}
+	if (cfg.Explain || cfg.Diff || cfg.Against != "") && Programs(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
 			ErrUsage, cfg.Format)
 	}

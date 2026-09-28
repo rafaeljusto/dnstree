@@ -32,6 +32,7 @@ var groups = [][]string{
 	{"root", "root-hints"},
 	{"resolver", "asn-resolver"},
 	{"tls-ca", "tls-insecure"},
+	{"diff", "against"},
 }
 
 // defaultFile is where the defaults are read from when the command line does
@@ -137,7 +138,7 @@ func defaults(flags *flag.FlagSet, file configFile) ([]string, bool, error) {
 		case "config", "no-config":
 			return nil, false, fmt.Errorf("%w: %s: --%s says which file to read, so it cannot be read from one",
 				ErrUsage, where, name)
-		case "version", "schema", "from", "x":
+		case "version", "schema", "from", "against", "x":
 			return nil, false, fmt.Errorf("%w: %s: --%s is asked for, not set", ErrUsage, where, name)
 		}
 
