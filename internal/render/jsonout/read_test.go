@@ -47,6 +47,18 @@ func TestReadRoundTrip(t *testing.T) {
 					NSEC3: &trace.NSEC3{Zone: "example.", Iterations: 10, Salt: "aabbccdd"}},
 			}}},
 		},
+		"a walk that kept when each query went out": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Timed:    true,
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: ".", Kind: trace.KindReferral, Asked: trace.Question{Name: "example.", Type: "A"},
+				RTT: 12 * time.Millisecond,
+				Children: []*trace.Step{{
+					Zone: "example.", Kind: trace.KindAnswer, Asked: trace.Question{Name: "example.", Type: "A"},
+					Start: 12*time.Millisecond + 300*time.Microsecond, RTT: 9 * time.Millisecond,
+				}},
+			}}},
+		},
 		"nothing walked at all": {Question: trace.Question{Name: "example.", Type: "A", Class: "IN"}},
 		"a time a float cannot hold exactly": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
@@ -72,6 +84,49 @@ func TestReadRoundTrip(t *testing.T) {
 				t.Errorf("got\n%s\nwant\n%s", again.String(), saved.String())
 			}
 		})
+	}
+}
+
+// TestReadTimed tells a walk that kept start times from one saved before any
+// were kept. The first query of a walk goes out as it starts, so its start of
+// zero has to be written out rather than left for absent.
+func TestReadTimed(t *testing.T) {
+	tests := map[string]struct {
+		document string
+		want     bool
+	}{
+		"a start of zero": {
+			document: `{"schema_version":4,"question":{"name":"example.","type":"A","class":"IN"},"elapsed_ms":1,
+				"root":{"zone":".","kind":"zone","children":[{"zone":".","kind":"answer","start_ms":0,"rtt_ms":1}]}}`,
+			want: true,
+		},
+		"no start anywhere": {
+			document: `{"schema_version":4,"question":{"name":"example.","type":"A","class":"IN"},"elapsed_ms":1,
+				"root":{"zone":".","kind":"zone","children":[{"zone":".","kind":"answer","rtt_ms":1}]}}`,
+			want: false,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr, err := jsonout.Read(strings.NewReader(test.document))
+			if err != nil {
+				t.Fatalf("Read: %v", err)
+			}
+			if tr.Timed != test.want {
+				t.Errorf("got timed %t, want %t", tr.Timed, test.want)
+			}
+		})
+	}
+
+	var saved bytes.Buffer
+	tr := &trace.Trace{Timed: true, Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
+		{Zone: ".", Kind: trace.KindAnswer, Asked: trace.Question{Name: "example.", Type: "A"}},
+	}}}
+	if err := jsonout.Render(&saved, tr); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(saved.String(), `"start_ms": 0`) {
+		t.Errorf("got\n%s\nwant the first query's start of zero written out", saved.String())
 	}
 }
 

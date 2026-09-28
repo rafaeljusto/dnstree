@@ -62,6 +62,7 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	if tr.Root, err = readStep(doc.Root, 0); err != nil {
 		return nil, err
 	}
+	tr.Timed = timed(doc.Root)
 	return tr, nil
 }
 
@@ -106,6 +107,9 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		Minimised: from.Minimised,
 		Err:       from.Error,
 	}
+	if from.StartMS != nil {
+		to.Start = duration(*from.StartMS)
+	}
 	if from.Asked != nil {
 		to.Asked = trace.Question{Name: from.Asked.Name, Type: from.Asked.Type}
 	}
@@ -144,6 +148,23 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		}
 	}
 	return to, nil
+}
+
+// timed reports whether the walk says when its steps started. A walk saved
+// before it did carries no start on any of them.
+func timed(from *step) bool {
+	if from == nil {
+		return false
+	}
+	if from.StartMS != nil {
+		return true
+	}
+	for _, child := range from.Children {
+		if timed(child) {
+			return true
+		}
+	}
+	return false
 }
 
 func readResolver(from *resolver) (*trace.Resolver, error) {

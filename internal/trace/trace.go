@@ -27,6 +27,10 @@ type Trace struct {
 	// was made rather than what the clock says now.
 	Started time.Time
 
+	// Timed reports whether the steps say when they started. A walk saved
+	// before they did carries none, and a zero Start is then no position at all.
+	Timed bool
+
 	// Resolvers is the same question put to recursive servers, in the order the
 	// run named them, when it asked for the comparison. A walk from the root is
 	// deliberately the slow way round — it keeps no cache and takes every step
@@ -221,6 +225,11 @@ type Step struct {
 	// The class is the resolution's own and is not repeated here.
 	Asked Question
 	RTT   time.Duration
+
+	// Start is when the hop's first query went out, counted from
+	// Trace.Started. Its retries run on from there, so it occupies Start to
+	// Start+RTT, and hops that overlap were in flight together.
+	Start time.Duration
 
 	// Size is the answer as it arrived, in bytes on the wire: what dig reports
 	// as MSG SIZE. Zero where nothing answered.

@@ -95,6 +95,11 @@
           "description": "What the query was carried over: udp, tcp, dot or doh.",
           "type": "string"
         },
+        "start_ms": {
+          "description": "When the hop's first query went out, in milliseconds after started. The hop occupies start_ms to start_ms + rtt_ms, and hops that overlap were in flight together. Present on every hop that asked a server something, zero included, and absent throughout a walk saved before dnstree recorded it.",
+          "type": "number",
+          "minimum": 0
+        },
         "rtt_ms": {
           "description": "What the whole hop cost, retries included. Absent where the hop took no measurable time.",
           "type": "number",

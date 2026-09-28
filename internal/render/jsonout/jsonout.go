@@ -33,7 +33,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		for _, answer := range tr.Resolvers {
 			document.Resolvers = append(document.Resolvers, convertResolver(answer))
 		}
-		document.Root = convert(tr.Root)
+		document.Root = convert(tr.Root, tr.Timed)
 		document.Warnings = tr.Warnings
 	}
 
@@ -104,6 +104,7 @@ type step struct {
 	Server     *server         `json:"server,omitempty"`
 	Asked      *asked          `json:"asked,omitempty"`
 	Proto      string          `json:"proto,omitempty"`
+	StartMS    *float64        `json:"start_ms,omitempty"`
 	RTTMS      float64         `json:"rtt_ms,omitempty"`
 	SizeBytes  int             `json:"size_bytes,omitempty"`
 	LimitBytes int             `json:"limit_bytes,omitempty"`
@@ -219,7 +220,7 @@ type signature struct {
 	Expiration string `json:"expiration"`
 }
 
-func convert(from *trace.Step) *step {
+func convert(from *trace.Step, timed bool) *step {
 	if from == nil {
 		return nil
 	}
@@ -248,9 +249,14 @@ func convert(from *trace.Step) *step {
 		DNSSEC:     convertDNSSEC(from.DNSSEC),
 		Error:      from.Err,
 	}
+	// Written wherever it is known, a start of zero included: the first query
+	// goes out as the walk begins, and absent has to mean a walk that kept none.
+	if timed && from.Queried() {
+		to.StartMS = new(milliseconds(from.Start))
+	}
 	to.Records = convertRecords(from.Records)
 	for _, child := range from.Children {
-		to.Children = append(to.Children, convert(child))
+		to.Children = append(to.Children, convert(child, timed))
 	}
 	return to
 }

@@ -231,6 +231,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 
 	run.trace.Started = time.Now()
+	run.trace.Timed = true
 	run.walk(ctx, qname, rrtype, run.trace.Root, 0)
 	run.trace.Elapsed = time.Since(run.trace.Started)
 	return run.trace, nil
@@ -695,6 +696,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		Server: server,
 		Proto:  r.cfg.Transport.Proto(),
 		Asked:  trace.Question{Name: qname, Type: dnsutil.TypeToString(qtype)},
+		Start:  time.Since(r.trace.Started),
 	}
 
 	udpSize := r.cfg.UDPSize

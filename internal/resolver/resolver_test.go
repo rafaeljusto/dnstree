@@ -121,6 +121,32 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+// TestResolveStarts checks every hop says when it went out: a hop down the
+// chain is sent only once the one above it has answered, and nothing ends after
+// the walk does.
+func TestResolveStarts(t *testing.T) {
+	res := newResolver(t, internet(t), resolver.Config{})
+
+	tr, err := res.Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !tr.Timed {
+		t.Fatal("got a walk that kept no start times, want one that did")
+	}
+
+	var ended time.Duration
+	for i, step := range steps(tr) {
+		if step.Start < ended {
+			t.Errorf("step %d: got a start of %v, want none before the hop above it answered at %v", i, step.Start, ended)
+		}
+		ended = step.Start + step.RTT
+	}
+	if ended > tr.Elapsed {
+		t.Errorf("got the last hop ending at %v, want it within the walk's %v", ended, tr.Elapsed)
+	}
+}
+
 // TestResolveStepped watches a walk the way a live drawing does: one call per
 // hop, from the goroutine building the trace, with the whole tree readable
 // inside the call. Nothing here is guarded, which is the point: under -race, a
