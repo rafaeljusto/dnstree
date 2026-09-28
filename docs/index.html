@@ -127,7 +127,10 @@ pre{
 .ok{color:var(--term-ok)} .warn{color:var(--term-warn)} .bad{color:var(--term-bad)}
 .dim{color:var(--term-dim)} .note{color:var(--term-ink)}
 .a{color:var(--rr-a)} .aaaa{color:var(--rr-aaaa)} .cname{color:var(--rr-cname)} .txt{color:var(--rr-txt)}
-.k{color:var(--term-accent)} .s{color:var(--rr-a)} .n{color:var(--rr-cname)}
+.k{color:var(--term-accent)}
+/* The mark is braille, which few web fonts carry: every cell is held to one
+   character, so the fallback font cannot squash it or push the text beside it. */
+.mark i{display:inline-block; width:1ch; font-style:normal; text-align:center; vertical-align:top; overflow:visible} .s{color:var(--rr-a)} .n{color:var(--rr-cname)}
 
 /* ── sections ─────────────────────────────────────────────────────────── */
 section{padding-block:3.4rem; border-top:1px solid var(--line)}
@@ -740,14 +743,28 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
 
           <div class="panel" role="tabpanel" id="panel-web" aria-labelledby="tab-web" hidden>
 <pre><span class="prompt">$ <b>dnstree --format web --dnssec www.example.com</b></span>
-<span class="note">the walk is at</span> <span class="k">http://127.0.0.1:52341/</span>
-<span class="dim">it is served until this command is interrupted</span></pre>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣶</i><i>⡄</i><i> </i><i> </i><i>⢀</i><i>⣶</i><i> </i><i> </i><i> </i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⢀</i><i> </i><i>⠈</i><i>⢿</i><i>⣆</i><i>⣠</i><i>⡿</i><i>⠃</i><i>⢀</i><i>⣤</i><i>⡀</i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i>⣀</i><i>⡀</i><i>⢿</i><i>⣷</i><i>⡀</i><i> </i><i>⣿</i><i>⣿</i><i>⠁</i><i>⣠</i><i>⣿</i><i>⠟</i><i>⣀</i><i>⣀</i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i>⠉</i><i>⠛</i><i>⠳</i><i>⢿</i><i>⣿</i><i>⣆</i><i>⣿</i><i>⣿</i><i>⣼</i><i>⡿</i><i>⠟</i><i>⠛</i><i>⠋</i><i>⠉</i></span>   <b>www.example.com. A</b><span class="dim"> · drawn as a page to read</span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⠈</i><i>⢿</i><i>⣿</i><i>⣿</i><i>⠟</i><i> </i><i> </i><i> </i><i> </i><i> </i></span>   the walk is at <span class="k">http://127.0.0.1:59981/</span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣿</i><i>⣿</i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i></span>   <span class="dim">served until ctrl-c</span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣿</i><i>⣿</i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣿</i><i>⣿</i><i>⡆</i><i> </i><i> </i><i> </i><i> </i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⠸</i><i>⠿</i><i>⠿</i><i>⠇</i><i> </i><i> </i><i> </i><i> </i><i> </i></span>   </pre>
           </div>
 
           <div class="panel" role="tabpanel" id="panel-web-3d" aria-labelledby="tab-web-3d" hidden>
 <pre><span class="prompt">$ <b>dnstree --format web-3d --dnssec www.example.com</b></span>
-<span class="note">the walk is at</span> <span class="k">http://127.0.0.1:58134/</span>
-<span class="dim">it is served until this command is interrupted</span></pre>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣶</i><i>⡄</i><i> </i><i> </i><i>⢀</i><i>⣶</i><i> </i><i> </i><i> </i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⢀</i><i> </i><i>⠈</i><i>⢿</i><i>⣆</i><i>⣠</i><i>⡿</i><i>⠃</i><i>⢀</i><i>⣤</i><i>⡀</i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i>⣀</i><i>⡀</i><i>⢿</i><i>⣷</i><i>⡀</i><i> </i><i>⣿</i><i>⣿</i><i>⠁</i><i>⣠</i><i>⣿</i><i>⠟</i><i>⣀</i><i>⣀</i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i>⠉</i><i>⠛</i><i>⠳</i><i>⢿</i><i>⣿</i><i>⣆</i><i>⣿</i><i>⣿</i><i>⣼</i><i>⡿</i><i>⠟</i><i>⠛</i><i>⠋</i><i>⠉</i></span>   <b>www.example.com. A</b><span class="dim"> · drawn as a scene to turn around</span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⠈</i><i>⢿</i><i>⣿</i><i>⣿</i><i>⠟</i><i> </i><i> </i><i> </i><i> </i><i> </i></span>   the walk is at <span class="k">http://127.0.0.1:59983/</span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣿</i><i>⣿</i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i></span>   <span class="dim">served until ctrl-c</span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣿</i><i>⣿</i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⣿</i><i>⣿</i><i>⡆</i><i> </i><i> </i><i> </i><i> </i><i> </i></span>
+<span class="k mark"><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i> </i><i>⠸</i><i>⠿</i><i>⠿</i><i>⠇</i><i> </i><i> </i><i> </i><i> </i><i> </i></span>   </pre>
           </div>
         </div>
       </div>

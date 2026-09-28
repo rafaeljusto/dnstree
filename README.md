@@ -1122,8 +1122,15 @@ as a page on this machine and opens a browser at it:
 
 ```
 $ dnstree --format web --dnssec www.example.com
-the walk is at http://127.0.0.1:52341/
-it is served until this command is interrupted
+        ⣶⡄  ⢀⣶
+      ⢀ ⠈⢿⣆⣠⡿⠃⢀⣤⡀
+    ⣀⡀⢿⣷⡀ ⣿⣿⠁⣠⣿⠟⣀⣀
+    ⠉⠛⠳⢿⣿⣆⣿⣿⣼⡿⠟⠛⠋⠉   www.example.com. A · drawn as a page to read
+        ⠈⢿⣿⣿⠟        the walk is at http://127.0.0.1:59981/
+          ⣿⣿         served until ctrl-c
+          ⣿⣿
+          ⣿⣿⡆
+         ⠸⠿⠿⠇
 ```
 
 The page is the same walk with every hop worth clicking on — the records it
@@ -1140,9 +1147,14 @@ reached it by address — a walk names the servers it asked and the addresses th
 answered from, which is nobody else's business. `--web-addr :8080` moves it,
 which is what a walk made on another machine needs, and says so in a line when
 the address it was given is not this machine's alone. `--no-browser` leaves the
-address to be opened by hand. A terminal that wants colour gets the address
-beside the dnstree mark, as a link it can click; a pipe, or `--color never`,
-gets the two lines above, for a script to read it from.
+address to be opened by hand. On a terminal the address is a link it can click;
+a pipe, or `--color never`, gets two plain lines instead, for a script to read
+it from:
+
+```
+the walk is at http://127.0.0.1:59996/
+it is served until this command is interrupted
+```
 
 `--format web-3d` serves the same walk the same way, and takes `--web-addr` and
 `--no-browser` too, but draws it as a scene to turn around rather than a tree to
@@ -1150,8 +1162,15 @@ read:
 
 ```
 $ dnstree --format web-3d --dnssec www.example.com
-the walk is at http://127.0.0.1:58134/
-it is served until this command is interrupted
+        ⣶⡄  ⢀⣶
+      ⢀ ⠈⢿⣆⣠⡿⠃⢀⣤⡀
+    ⣀⡀⢿⣷⡀ ⣿⣿⠁⣠⣿⠟⣀⣀
+    ⠉⠛⠳⢿⣿⣆⣿⣿⣼⡿⠟⠛⠋⠉   www.example.com. A · drawn as a scene to turn around
+        ⠈⢿⣿⣿⠟        the walk is at http://127.0.0.1:59983/
+          ⣿⣿         served until ctrl-c
+          ⣿⣿
+          ⣿⣿⡆
+         ⠸⠿⠿⠇
 ```
 
 The hops float in a cone that opens downwards, one ring a zone cut, and the walk
