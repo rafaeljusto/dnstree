@@ -2,20 +2,22 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `f57b93b`
-- **Date**: 2026-09-25
-- **Scope**: the thirteen commits since `f556f8c` (`--qmin`, `--from`,
-  `--format mermaid`, signature expiry, `-x`, `--check-ds`, `--cookie`)
+- **Commit**: `499eefc`
+- **Date**: 2026-09-28
+- **Scope**: the twenty-five commits since `f57b93b` (`--format waterfall`,
+  `waterfall-mermaid`, `openmetrics`, `web-3d`, the NSEC3 hashing and shared
+  network findings, the ANY/AXFR/IXFR refusal, `Trace.Chain`, the `/v2` move)
 
 ## Open findings
 
-None. The eight found at `f57b93b` are fixed in the working tree, each with
-the test that reproduced it kept: `TestDeniedEmptyNonTerminal`,
-`TestWildcardOverAnEmptyNonTerminal`, `TestTraceShownEveryField`,
-`TestRunFromHostile`, `TestExpiringLongLife`, `TestReadRefuses` (depth,
-trailing data, version 3), `TestReadRefusesTheEndless`, `TestNSECBitmapWithCDS`
-and `TestBuildDatesTheWalk`. Until they are committed, the next run starts from
-this commit and those tests.
+None. The one found at `499eefc` is fixed in the working tree: a `--from` file
+with a huge `start_ms` over a tiny span panicked `--format waterfall` on amd64,
+because `cell()` turned an out-of-range float into a negative int. `cell()`
+clamps while it is a float, and `jsonout.Read` refuses a duration that is
+negative or longer than a year. The tests kept are `TestWaterfallHostileTimes`
+("a start far past a walk that took no time") and four rows of
+`TestReadRefuses`. Until they are committed, the next run starts from this
+commit and those tests.
 
 ## Checked and sound
 
@@ -70,8 +72,8 @@ this commit and those tests.
   every plain string of the trace but EDE text, which is escaped where drawn;
   a reflection test fails on a field added without it.
 - Staleness divides the lifetime, so no RRSIG time overflows it.
-- `--from` input: 64 MiB, 1024 steps deep, nothing after the document, and
-  schema 4 only (3 wrote EDE text raw).
+- `--from` input: 64 MiB, 1024 steps deep, nothing after the document,
+  schema 4 only (3 wrote EDE text raw), and durations between 0 and a year.
 - Mermaid: `quote()` escapes `"`, `#`, `<`, `>`, `&`, backtick and newline,
   labels always quoted, ids are `n<N>`/`z<N>`, edge labels are durations.
 - `wide` covers U+1F000–1F2FF and CJK Ext B+. Overcounting is the safe side.
@@ -102,3 +104,16 @@ this commit and those tests.
   `schema`, `from` and `x` not settable; groups replace; `--from` drops the
   file's `live`/`watch`/`diff`.
 - Layering: `internal/layering` passes.
+- NSEC3 hashing is recorded only off a record whose signature held, and its
+  zone and salt go through `Shown`.
+- `Trace.Chain` reads the chain the way the exit code does: bogus anywhere,
+  then indeterminate, then the answer's verdict. `verdict`, the live summary,
+  explain and openmetrics all read it.
+- Waterfall and gantt: every float-to-int conversion is bounded, the axis
+  counts its marks, gantt names swap `:`, `#`, `%`, `;` and newline.
+- OpenMetrics: label values escape `\`, `"` and newline over the shown trace.
+- web-3d: text only through `textContent` or text nodes, styles only from the
+  page's own tones, same `local()` host check. The icons are static assets.
+- The served address is announced with the question shown, never raw.
+- ANY, AXFR, IXFR and the meta types are refused; `TYPE255` is not in the
+  codec's type map either.
