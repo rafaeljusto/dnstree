@@ -203,6 +203,13 @@ var (
 	}}
 )
 
+// icons are served beside either page, at the names docs/index.html gives them.
+var icons = map[string]string{
+	"favicon.ico":          "image/x-icon",
+	"mark.svg":             "image/svg+xml",
+	"apple-touch-icon.png": "image/png",
+}
+
 func siteFor(opts Options) site {
 	if opts.Scene {
 		return scene
@@ -225,6 +232,16 @@ func handler(pages site, page, traceDoc []byte) http.Handler {
 	mux.Handle("GET /{$}", serve("text/html; charset=utf-8", index))
 	for name, contentType := range pages.files {
 		body, err := assets.ReadFile(pages.dir + "/" + name)
+		if err != nil {
+			panic("web: " + name + " is missing from the binary: " + err.Error())
+		}
+		mux.Handle("GET /"+name, serve(contentType, body))
+	}
+
+	// Both pages wear the landing page's icons. They are copies of the ones in
+	// docs, which the binary cannot reach, and a test keeps them the same.
+	for name, contentType := range icons {
+		body, err := assets.ReadFile("assets/" + name)
 		if err != nil {
 			panic("web: " + name + " is missing from the binary: " + err.Error())
 		}

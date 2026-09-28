@@ -1,12 +1,15 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -205,6 +208,18 @@ func TestHandler(t *testing.T) {
 			pages: scene, path: "/trace.json", wantStatus: http.StatusOK,
 			wantType: "application/json; charset=utf-8", wantContent: `"www.example.com."`,
 		},
+		"the icon the landing page wears": {
+			pages: flat, path: "/mark.svg", wantStatus: http.StatusOK, wantType: "image/svg+xml", wantContent: "<svg",
+		},
+		"the same icon beside the scene": {
+			pages: scene, path: "/mark.svg", wantStatus: http.StatusOK, wantType: "image/svg+xml", wantContent: "<svg",
+		},
+		"the icon an old browser asks for": {
+			pages: scene, path: "/favicon.ico", wantStatus: http.StatusOK, wantType: "image/x-icon",
+		},
+		"the icon a phone asks for": {
+			pages: flat, path: "/apple-touch-icon.png", wantStatus: http.StatusOK, wantType: "image/png", wantContent: "PNG",
+		},
 		"not the flat page's files":      {pages: scene, path: "/app.js", wantStatus: http.StatusNotFound},
 		"not even the scene's directory": {pages: scene, path: "/assets/scene/scene.js", wantStatus: http.StatusNotFound},
 	}
@@ -294,6 +309,24 @@ func TestListening(t *testing.T) {
 				t.Errorf("got %s, want %s", got, test.want)
 			}
 		})
+	}
+}
+
+// TestIconsMatchDocs keeps the icons in the binary the ones the landing page
+// wears: the copies are there only because go:embed cannot reach docs.
+func TestIconsMatchDocs(t *testing.T) {
+	for _, name := range slices.Sorted(maps.Keys(icons)) {
+		want, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", name))
+		if err != nil {
+			t.Fatalf("docs/%s: %v", name, err)
+		}
+		got, err := assets.ReadFile("assets/" + name)
+		if err != nil {
+			t.Fatalf("assets/%s: %v", name, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("assets/%s differs from docs/%s, want the landing page's icon: cp docs/%s internal/render/web/assets/", name, name, name)
+		}
 	}
 }
 
