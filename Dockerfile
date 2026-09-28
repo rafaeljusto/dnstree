@@ -19,14 +19,27 @@ ARG BUILD_VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
 	go build -trimpath -ldflags "-s -w -X main.version=$BUILD_VERSION" -o /out/ ./cmd/dnstree ./cmd/dnstree-web
 
-# The page as a service, built with --target web. It is not released: whoever
-# hosts it builds it. The stage the release publishes stays the last one.
+# The page as a service, built with --target web. The command line's image
+# stays the last stage, so a build that names no target still gets that one.
 FROM gcr.io/distroless/static:nonroot AS web
 
 COPY --from=builder /out/dnstree-web /usr/local/bin/dnstree-web
 
 USER 65532:65532
 EXPOSE 8080
+
+ARG BUILD_DATE
+ARG BUILD_VCS_REF
+ARG BUILD_VERSION
+
+LABEL org.opencontainers.image.title="dnstree-web" \
+	org.opencontainers.image.description="Resolve a name from the root servers down, and draw the path it took, as a web page" \
+	org.opencontainers.image.source="https://github.com/rafaeljusto/dnstree" \
+	org.opencontainers.image.url="https://github.com/rafaeljusto/dnstree" \
+	org.opencontainers.image.licenses="MIT" \
+	org.opencontainers.image.created=$BUILD_DATE \
+	org.opencontainers.image.revision=$BUILD_VCS_REF \
+	org.opencontainers.image.version=$BUILD_VERSION
 
 ENTRYPOINT ["/usr/local/bin/dnstree-web"]
 

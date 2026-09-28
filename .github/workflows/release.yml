@@ -131,7 +131,8 @@ jobs:
           echo "::notice::Tagged ${VERSION} at ${GITHUB_SHA}"
 
   # In parallel with the archives: the image carries the same binary, built
-  # the same way, from the same commit.
+  # the same way, from the same commit. dnstree-web's image comes out of the
+  # same Dockerfile, so it is built after it on the same builder.
   image:
     runs-on: ubuntu-latest
     needs: version
@@ -154,7 +155,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: make image-push VERSION=${{ needs.version.outputs.version }}
+      - run: make image-push image-web-push VERSION=${{ needs.version.outputs.version }}
 
   release:
     runs-on: ubuntu-latest

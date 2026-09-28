@@ -54,7 +54,7 @@ MAN_DATE ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +'%Y-%m-%d')
 BUILD := build
 
 .PHONY: all build install test race lint lint-docker vuln check live goldens dist man \
-	archives packages formula checksums image image-push image-web clean roothints demos demo-3d
+	archives packages formula checksums image image-push image-web image-web-push clean roothints demos demo-3d
 
 # The stages of dist read each other's output, so they run one after another
 # rather than at the same time.
@@ -175,14 +175,6 @@ image:
 		--load \
 		.
 
-# dnstree-web, the page as a service. Only ever built here: it is not released.
-image-web:
-	docker buildx build \
-		--target web \
-		--build-arg BUILD_VERSION=$(VERSION) \
-		--tag $(IMAGE)-web:$(VERSION) \
-		--load \
-		.
 
 image-push:
 	docker buildx build \
@@ -192,6 +184,30 @@ image-push:
 		--build-arg BUILD_VERSION=$(VERSION) \
 		--tag $(IMAGE):$(VERSION) \
 		--tag $(IMAGE):latest \
+		--push \
+		.
+
+# The same two for dnstree-web, the page as a service, which a release
+# publishes beside the command line's image.
+image-web:
+	docker buildx build \
+		--target web \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_VCS_REF=$(VCS_REF) \
+		--build-arg BUILD_VERSION=$(VERSION) \
+		--tag $(IMAGE)-web:$(VERSION) \
+		--load \
+		.
+
+image-web-push:
+	docker buildx build \
+		--target web \
+		--platform $(IMAGE_PLATFORMS) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_VCS_REF=$(VCS_REF) \
+		--build-arg BUILD_VERSION=$(VERSION) \
+		--tag $(IMAGE)-web:$(VERSION) \
+		--tag $(IMAGE)-web:latest \
 		--push \
 		.
 

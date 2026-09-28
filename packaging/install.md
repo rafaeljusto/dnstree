@@ -15,6 +15,9 @@ curl -LO @BASE@/dnstree.rb && brew install --formula ./dnstree.rb
 
 # Container
 docker run --rm ghcr.io/rafaeljusto/dnstree:@VERSION@ www.example.com A
+
+# The page, as a service on port 8080
+docker run --rm -p 8080:8080 ghcr.io/rafaeljusto/dnstree-web:@VERSION@
 ```
 
 arm64 and 32-bit arm packages are here too, alongside the archives for macOS,

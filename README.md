@@ -1483,12 +1483,11 @@ refused rather than guessed at.
 
 `dnstree-web` is the same walk behind a form: somebody types a name and a type,
 and gets the scene or the tree at an address of its own, such as
-`/3d/www.example.com/A/`, that can be handed on. It is not released; it is built
-as a container from this repository:
+`/3d/www.example.com/A/`, that can be handed on. Every release publishes it as a
+container, beside the command line's; `make image-web` builds one from the tree:
 
 ```
-make image-web
-docker run --rm -p 8080:8080 ghcr.io/rafaeljusto/dnstree-web:$(git describe --tags --always)
+docker run --rm -p 8080:8080 ghcr.io/rafaeljusto/dnstree-web
 ```
 
 Every walk checks the chain of trust, and nothing a visitor sends reaches the
@@ -1542,15 +1541,19 @@ make demo-3d      # take only the still of --format web-3d in docs/
 make roothints    # refresh the embedded root hints and trust anchors
 make dist         # cross compile a release into dist/
 make image        # build the container image for this machine
+make image-web    # build the dnstree-web image for this machine
 ```
 
 A release is cut by running the `release` workflow from `main`: it reads the
 commits since the last tag, works out the version their prefixes ask for,
-creates the tag, and publishes the archives alongside a multi-architecture
-image on `ghcr.io`. The same commits become the changelog, carried by both the
-annotated tag and the release notes. `dry_run` reports the version it
-would pick without tagging anything, and `bump` overrides it. See
-[cmd/next-version](cmd/next-version/) for how a subject earns a bump.
+creates the tag, and publishes the archives alongside two multi-architecture
+images on `ghcr.io`, `dnstree` and `dnstree-web`. The same commits become the
+changelog, carried by both the annotated tag and the release notes. `dry_run`
+reports the version it would pick without tagging anything, and `bump`
+overrides it. See [cmd/next-version](cmd/next-version/) for how a subject earns
+a bump. A package `ghcr.io` has not seen before starts out private: the first
+release to publish one has to be followed by making it public in the package's
+settings.
 
 
 The engine is tested offline against in-process authoritative servers
