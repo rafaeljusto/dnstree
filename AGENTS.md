@@ -6,6 +6,14 @@ and behaviours that the source does not state on its own. [README.md](README.md)
 says what the tool does; [CONTRIBUTING.md](CONTRIBUTING.md) covers branching,
 pull requests and the commit prefixes that decide the version.
 
+## Skills
+
+The repository ships its own skills in `.agents/skills/` (linked from
+`.claude/skills/`): `dnstree-commit`, `dnstree-review`, `dnstree-audit` and
+`dnstree-docs`. When one of them covers the task, use it over a general-purpose
+skill that does something similar: they know the rules this file sets down,
+and the others do not.
+
 ## Before handing work back
 
 ```bash
@@ -44,6 +52,7 @@ The maintainer reviews and signs every commit. Write the message, print it, and
 stop — no `git commit`, `git push` or `git tag`. Releases are cut by a workflow
 that reads the commit subjects since the last tag and works out the version;
 tagging by hand skips the calculation, and the tag carries no changelog.
+`dnstree-commit` writes the messages with the prefixes that workflow reads.
 
 ## Layering
 
