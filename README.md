@@ -1140,7 +1140,9 @@ reached it by address — a walk names the servers it asked and the addresses th
 answered from, which is nobody else's business. `--web-addr :8080` moves it,
 which is what a walk made on another machine needs, and says so in a line when
 the address it was given is not this machine's alone. `--no-browser` leaves the
-address to be opened by hand.
+address to be opened by hand. A terminal that wants colour gets the address
+beside the dnstree mark, as a link it can click; a pipe, or `--color never`,
+gets the two lines above, for a script to read it from.
 
 `--format web-3d` serves the same walk the same way, and takes `--web-addr` and
 `--no-browser` too, but draws it as a scene to turn around rather than a tree to

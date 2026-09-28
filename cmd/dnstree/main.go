@@ -136,6 +136,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			Addr:    cfg.WebAddr,
 			Browser: cfg.Browser,
 			Scene:   cfg.Format == "web-3d",
+			Color:   cfg.Color,
 			Version: version,
 		}
 		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, stderr), options); err != nil {

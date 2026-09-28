@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -98,6 +99,48 @@ func TestServeSaysWhereItIs(t *testing.T) {
 	}
 }
 
+// TestServeAnnounces covers the address said to a terminal that wants colour:
+// the mark beside it, the address as a link, and the name that was asked for
+// drawn escaped, since it is somebody's input going to a terminal.
+func TestServeAnnounces(t *testing.T) {
+	tests := map[string]struct {
+		scene bool
+		says  string
+	}{
+		"the flat page": {says: "drawn as a page to read"},
+		"the scene":     {scene: true, says: "drawn as a scene to turn around"},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr := resolution()
+			tr.Question.Name = "evil\x1b[2J.example."
+
+			out := new(watched)
+			ctx, stop := context.WithCancel(t.Context())
+			done := make(chan error, 1)
+			go func() {
+				done <- web.Serve(ctx, out, tr, nil, web.Options{
+					Addr: "127.0.0.1:0", Scene: test.scene, Color: tree.ColorAlways,
+				})
+			}()
+			out.until(t, "served until ctrl-c")
+			stop()
+			<-done
+
+			said := out.String()
+			for _, want := range []string{"\x1b]8;;http://127.0.0.1:", test.says, "⣿⣿"} {
+				if !strings.Contains(said, want) {
+					t.Errorf("got %q, want %q in it", said, want)
+				}
+			}
+			if strings.Contains(said, "\x1b[2J") {
+				t.Errorf("got %q, want the name's escape escaped rather than obeyed", said)
+			}
+		})
+	}
+}
+
 // TestServeInterrupted covers the run that was stopped while it was still
 // walking: there is nothing to serve, and nothing is opened at it.
 func TestServeInterrupted(t *testing.T) {
@@ -141,6 +184,19 @@ func (w *watched) String() string {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	return w.buf.String()
+}
+
+// until waits for a line the command writes once the server is up.
+func (w *watched) until(tb testing.TB, want string) {
+	tb.Helper()
+
+	for range 200 {
+		if strings.Contains(w.String(), want) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	tb.Fatalf("got %q, want %q in it", w.String(), want)
 }
 
 var addressRE = regexp.MustCompile(`http://[^\s]+/`)

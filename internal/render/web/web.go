@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -48,6 +49,10 @@ type Options struct {
 
 	// Scene serves the walk drawn in three dimensions rather than as a tree.
 	Scene bool
+
+	// Color is whether the address is announced with the mark beside it, or
+	// in the two plain lines a script reads it from.
+	Color tree.ColorMode
 
 	// Version is the build the page says it came from.
 	Version string
@@ -84,8 +89,7 @@ func Serve(ctx context.Context, out io.Writer, tr *trace.Trace, findings []expla
 	}
 
 	url := "http://" + listening(listener.Addr()).String() + "/"
-	fmt.Fprintln(out, "the walk is at "+url)
-	fmt.Fprintln(out, "it is served until this command is interrupted")
+	announce(out, url, tr, opts)
 
 	// The address the page is offered at is not the one it is bound to: a server
 	// bound to everything is offered on loopback, and is still on the network.
@@ -120,6 +124,39 @@ func Serve(ctx context.Context, out io.Writer, tr *trace.Trace, findings []expla
 	grace, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
 	defer cancel()
 	return server.Shutdown(grace)
+}
+
+// announce says where the page is. A terminal that wants colour gets the mark
+// with the address beside it, as something to click; anything else gets the
+// two lines it has always got, because a script waiting on the page reads the
+// address out of them.
+func announce(out io.Writer, url string, tr *trace.Trace, opts Options) {
+	if !tree.ColorEnabled(out, opts.Color) {
+		fmt.Fprintln(out, "the walk is at "+url)
+		fmt.Fprintln(out, "it is served until this command is interrupted")
+		return
+	}
+
+	// The name is somebody's input, and it is going to a terminal.
+	asked := "the walk"
+	if tr != nil {
+		question := tr.Question.Shown()
+		asked = question.Name + " " + question.Type
+	}
+	drawn := "drawn as a page to read"
+	if opts.Scene {
+		drawn = "drawn as a scene to turn around"
+	}
+
+	// OSC 8 makes the address a link in the terminals that know it, and is
+	// passed over by the ones that do not.
+	link := "\x1b]8;;" + url + "\x1b\\" + tree.MarkBlue + "\x1b[4m" + url + tree.MarkReset + "\x1b]8;;\x1b\\"
+
+	tree.WriteMark(out, tree.Unicode, []string{
+		tree.MarkBold + asked + tree.MarkReset + tree.MarkGrey + " · " + drawn + tree.MarkReset,
+		"the walk is at " + link,
+		tree.MarkGrey + "served until ctrl-c" + tree.MarkReset,
+	})
 }
 
 // onlyHere reports whether the page is bound where nothing else can reach it.
