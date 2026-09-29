@@ -1,6 +1,6 @@
 ---
 name: dnstree-audit
-description: Security and bug audit of dnstree — hostile DNS responses, resolver termination, DNSSEC validation integrity, resource leaks, races, and output injection — reported as verified findings with severity, location, a reproducing scenario and a fix. Use when asked to audit, security review, bug hunt or threat-model the repository or one of its packages. Takes an optional scope (a package path, an area name: wire, resolver, dnssec, transport, output, disk, concurrency, or `full` to ignore the coverage ledger and redo everything).
+description: Security and bug audit of dnstree — hostile DNS responses, resolver termination, DNSSEC validation integrity, resource leaks, races, and output injection — reported as verified findings with severity, location, a reproducing scenario and a fix. Use when asked to audit, security review, bug hunt or threat-model the repository or one of its packages. Takes an optional scope (a package path, an area name: wire, resolver, dnssec, transport, output, disk, concurrency, web, or `full` to ignore the coverage ledger and redo everything).
 ---
 
 # dnstree audit
@@ -18,6 +18,9 @@ finding even when nothing crashes.
 - **The user runs the CLI** and reads its output in a terminal, a browser
   (`--format web`), a JSON consumer or a Graphviz file. Record data is
   attacker text.
+- **dnstree-web serves strangers.** The name, type, path and headers a visitor
+  sends are attacker input, and every walk it runs must stay on public
+  addresses, whatever the glue says.
 - **Scripts trust the exit codes** (0–4). A wrong one is a security bug:
   `secure` or `insecure` where `bogus` belongs is a validation bypass.
 - `internal/testutil/fakens` is test code. Its bugs are Low at most, unless
@@ -110,6 +113,10 @@ Work through them in this order unless the scope names one.
    `Config.Asking` or the live tail reading the trace, AS lookups outliving the
    run, goroutines left blocked after ctx is cancelled, and shared state in
    `fakens`.
+8. **web: `internal/server`, `cmd/dnstree-web`.** Every transport a walk gets
+   goes through `transport.Guard`; redirects are rebuilt from the checked view,
+   name and type, never from the path; the client address is the header's last
+   entry; and the walk, per-client and timeout bounds hold.
 
 `internal/asn`, `internal/recursive`, `internal/cli` and `cmd/` are in scope too,
 at lower priority: config file parsing, and AS lookups that must never fail or

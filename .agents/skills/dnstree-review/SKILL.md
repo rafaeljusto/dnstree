@@ -55,6 +55,8 @@ change touches without a test holding it. The ones that regress most quietly:
   `Config.Asking` or the live tail reading the trace.
 - DNSSEC reaching `bogus` for something it couldn't check, `indeterminate`
   for a DS nobody signed, or `secure` because a record was absent.
+- A signature checked against the zone the walk was referred to rather than
+  the one its signer names.
 - Anything written to disk outside `internal/history`, or without `--diff`.
 - A name or wire text drawn without going through `Trace.Shown`.
 - A minimised hop (`Step.Minimised`) read as the answer.
@@ -121,7 +123,7 @@ page is generated, so don't ask for it.
 When the code is trusted, or the user has agreed:
 
 ```bash
-make check                      # what CI runs, less hadolint and the packaging dry run
+make check                      # what CI runs, less hadolint, the packaging dry run and the images
 
 go test -race -count=2 ./...    # when concurrency or fakens changed
 make goldens && git diff --stat # goldens stay put?

@@ -56,9 +56,9 @@ Check the docs against these, never against each other alone:
   `AGENTS.md`, the skills. A code the binary returns and a list leaves out is a
   finding in the list.
 - The install commands agree across the README, `packaging/install.md` and the
-  page's "Get it" section: package names, the tap, the container image, the
-  `go install` path, and placeholders like `@BARE@` that the release workflow
-  fills in.
+  page's "Get it" section: package names, the formula, the two container
+  images, the `go install` path, and placeholders like `@BARE@` that the release
+  workflow fills in.
 - `dnstreerc.example` uses real flag names in `name = value` form, and what its
   comments say a setting does matches the usage line.
 - Rules that live in two places say the same thing: `CONTRIBUTING.md` and
