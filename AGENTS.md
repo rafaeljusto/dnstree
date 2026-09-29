@@ -20,8 +20,8 @@ and the others do not.
 make check   # build, go vet, golangci-lint, go test -race ./..., govulncheck
 ```
 
-That is what CI runs, less hadolint (`make lint-docker`) and the packaging dry
-run (`make dist`). Two things it does not run:
+That is what CI runs, less hadolint (`make lint-docker`), the packaging dry
+run (`make dist`) and the two image builds. Two things it does not run:
 
 - `make live` goes out to the real root servers. It is never part of `check`;
   CI runs it weekly, because the embedded hints and trust anchors go stale
@@ -34,15 +34,17 @@ Renderer goldens are rewritten with `make goldens`.
 Read the diff before keeping it: those files are the user-visible output. The
 same command writes `docs/trace.schema.json`, the copy of the JSON Schema the
 pages workflow serves: that workflow uploads what is committed and builds
-nothing, so the copy is in the tree and a test fails when it and `--schema`
+nothing, beyond naming the latest release in the page's package lines, so the
+copy is in the tree and a test fails when it and `--schema`
 have drifted apart.
 
 ## Releasing
 
-`make dist` builds the whole release: the archives, a Debian, RPM and Alpine
-package per Linux architecture, the Homebrew formula and the checksums over all
-of them. It is the same target the release workflow runs, so what ships can be
-reproduced without a runner. [`packaging/README.md`](packaging/README.md) says
+`make dist` builds everything but the images: the archives, a Debian, RPM and
+Alpine package per Linux architecture, the Homebrew formula and the checksums
+over all of them. It is the same target the release workflow runs, so what ships
+can be reproduced without a runner. The two images come from `make image-push
+image-web-push`, in a job of their own. [`packaging/README.md`](packaging/README.md) says
 how the pieces fit; `nfpm`, like golangci-lint, comes from the PATH or is
 fetched at the version the Makefile pins, and is not a dependency of the module.
 
@@ -91,6 +93,12 @@ Each of these has been a bug, or would be a silent regression.
   `bogus`. Bogus is exit code 3 and has to keep meaning something. Only a
   record the zone above has signed can earn `indeterminate`: an unsigned DS is
   anyone's, whatever algorithm it names, and is `bogus`.
+- **A signed response is checked against the zone its signer names.** A server
+  serving both sides of a cut it never referred the walk across answers, and
+  refers, with the child's keys. The chain crosses into the signer's zone first,
+  with its DS asked of the same server and proved like any other, and only for a
+  signer between the answering zone and the name. Checked against the zone the
+  walk was referred to, every delegation below `net.br.` came out bogus.
 - **What a zone does not say is checked like what it does.** An insecure
   delegation, an NXDOMAIN, a NODATA and a wildcard all rest on a proof the zone
   signed, never on an absence: an absence is what anyone able to drop records
@@ -110,6 +118,12 @@ Each of these has been a bug, or would be a silent regression.
   comparison and says so in one line, never the resolution. What the file does
   not carry cannot be compared, which is what keeps a comparison from claiming
   to have watched something no walk recorded.
+- **dnstree-web runs walks for strangers.** Every transport it hands the
+  resolver goes through `transport.Guard` with `transport.Public`, and every
+  other resolver option stays at zero, so a new flag reaches the service only
+  on purpose. Redirects are rebuilt from the checked view, name and type, never
+  from the path asked, and a forwarded client address is the header's last
+  entry.
 - **The AS lookups are best effort.** They start as the walk discovers each
   server, are waited on briefly after it, and never fail a resolution. When they
   come back empty they say in one line which of the two things went wrong: the
@@ -175,8 +189,9 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   has a knob for each way a server misbehaves — silence, REFUSED, lameness,
   truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, six ways to
   break a chain of trust, signatures near expiry, NXDOMAIN for an empty
-  non-terminal, and broken cookies and CDS. A change to the way a delegation is followed belongs
-  with a scenario that reproduces it on purpose.
+  non-terminal, broken cookies and CDS, and zone transfers and recursion open
+  to strangers. A change to the way a delegation is followed belongs with a
+  scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
 - Table tests are keyed by a sentence that says what the case is, not by index.
 - `fakens` replaces its zone whole through an `atomic.Pointer`, serialises

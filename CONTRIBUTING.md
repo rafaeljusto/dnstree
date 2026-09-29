@@ -101,7 +101,7 @@ request, go through this checklist:
    changes against the `main` branch.
 3. Run `make check`. It builds, lints, runs the whole suite under `-race` and
    checks the dependencies for known vulnerabilities — what CI runs, less
-   hadolint and the packaging dry run.
+   hadolint, the packaging dry run and the image builds.
 4. Give the pull request title a descriptive prefix. See below: the pull
    request lands as one squashed commit under that title, and the release
    version is worked out from it.
@@ -172,7 +172,7 @@ on purpose — there is a knob for lame servers, truncation, out-of-bailiwick
 glue, broken signatures and more.
 
 ```bash
-make check    # what CI runs, less hadolint and the packaging dry run
+make check    # what CI runs, less hadolint, the packaging dry run and the images
 make goldens  # rewrite the renderer goldens and docs/trace.schema.json; read the diff
 make live     # goes out to the real root servers; never part of check
 ```

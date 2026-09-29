@@ -1,7 +1,7 @@
 # packaging
 
 What a release ships beyond the archives: a Debian, an RPM and an Alpine
-package per Linux architecture, and a Homebrew formula.
+package per Linux architecture, a Homebrew formula and two container images.
 
 ```bash
 make dist VERSION=v1.2.0   # everything, into dist/
@@ -76,6 +76,14 @@ A tap would make `brew install rafaeljusto/tap/dnstree` and `brew upgrade`
 work. It needs a `homebrew-tap` repository and a token that may push to it,
 since the release workflow's own `GITHUB_TOKEN` cannot reach another
 repository.
+
+## The container images
+
+One `Dockerfile` builds both: `ghcr.io/rafaeljusto/dnstree`, and with
+`--target web`, `ghcr.io/rafaeljusto/dnstree-web`. They are not part of `dist`.
+The release workflow's `image` job runs `make image-push image-web-push` beside
+it, tagging each with the version and `latest`, and CI builds both on every pull
+request. `make image` and `make image-web` build them for this machine.
 
 ## The release notes
 
