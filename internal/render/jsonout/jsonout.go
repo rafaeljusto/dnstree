@@ -66,6 +66,26 @@ type resolver struct {
 	// Match is how this answer stands against the one the walk found: "same",
 	// "differs", or absent where there was nothing to compare.
 	Match string `json:"match,omitempty"`
+
+	DDR *discovery `json:"ddr,omitempty"`
+}
+
+// discovery is what the resolver said of its encrypted selves (RFC 9462), none
+// of it verified.
+type discovery struct {
+	Rcode      string       `json:"rcode,omitempty"`
+	Error      string       `json:"error,omitempty"`
+	Designated []designated `json:"designated,omitempty"`
+}
+
+type designated struct {
+	Priority  uint16   `json:"priority"`
+	Target    string   `json:"target"`
+	Protocols []string `json:"protocols,omitempty"`
+	ALPN      []string `json:"alpn,omitempty"`
+	Port      uint16   `json:"port,omitempty"`
+	DoHPath   string   `json:"dohpath,omitempty"`
+	Hints     []string `json:"hints,omitempty"`
 }
 
 // extendedError is what a server said about its own answer (RFC 8914). withheld
@@ -285,7 +305,27 @@ func convertResolver(from *trace.Resolver) *resolver {
 		Extended:  convertExtended(from.Extended),
 		Subnet:    convertSubnet(from.Subnet),
 		Match:     string(from.Match),
+		DDR:       convertDiscovery(from.DDR),
 	}
+}
+
+func convertDiscovery(from *trace.Discovery) *discovery {
+	if from == nil {
+		return nil
+	}
+	to := &discovery{Rcode: from.Rcode, Error: from.Err}
+	for _, offer := range from.Designated {
+		converted := designated{
+			Priority: offer.Priority, Target: offer.Target,
+			Protocols: offer.Protocols, ALPN: offer.ALPN,
+			Port: offer.Port, DoHPath: offer.DoHPath,
+		}
+		for _, hint := range offer.Hints {
+			converted.Hints = append(converted.Hints, hint.String())
+		}
+		to.Designated = append(to.Designated, converted)
+	}
+	return to
 }
 
 func convertRecords(from []trace.RR) []record {

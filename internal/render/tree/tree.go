@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -125,6 +126,9 @@ func (r *renderer) render(tr *trace.Trace) {
 		r.children(tr.Root, "")
 	}
 	for _, line := range r.differences(tr) {
+		r.write(line + "\n")
+	}
+	for _, line := range r.designations(tr) {
 		r.write(line + "\n")
 	}
 	for _, warning := range tr.Warnings {
@@ -602,6 +606,63 @@ func (r *renderer) differences(tr *trace.Trace) []string {
 		}
 	}
 	return lines
+}
+
+// designations are what each resolver said of its encrypted selves, one line
+// each, and only where --ddr asked. None of it was connected to, and the line
+// says so: an offer is the plain resolver's claim.
+func (r *renderer) designations(tr *trace.Trace) []string {
+	var lines []string
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.DDR == nil {
+			continue
+		}
+		mark := "ddr: "
+		if r.glyphs.icons {
+			mark = spaced("🔐")
+		}
+		who, found := "the resolver", answer.DDR
+		if answer.Server.IP.IsValid() {
+			who = answer.Server.IP.String()
+		}
+		switch {
+		case found.Err != "":
+			lines = append(lines, r.paint.dim(mark+who+" could not be asked for its encrypted resolvers: "+found.Err))
+		case found.Rcode != "NOERROR" && found.Rcode != "NXDOMAIN":
+			lines = append(lines, r.paint.dim(mark+who+" would not say which encrypted resolvers it has: "+found.Rcode))
+		case len(found.Designated) == 0:
+			lines = append(lines, r.paint.dim(mark+who+" designates no encrypted resolver"))
+		default:
+			offers := make([]string, 0, len(found.Designated))
+			for _, offer := range found.Designated {
+				offers = append(offers, offered(offer)...)
+			}
+			lines = append(lines, r.paint.paint(mark+who+" offers "+strings.Join(offers, ", "), green)+
+				r.paint.dim(" (not verified)"))
+		}
+	}
+	return lines
+}
+
+// offered is one designation as a client would dial it, once per transport it
+// names. A record whose ALPN names none this build knows is drawn by its ALPN.
+func offered(offer trace.Designated) []string {
+	host := strings.TrimSuffix(offer.Target, ".")
+	if offer.Port != 0 {
+		host += ":" + strconv.Itoa(int(offer.Port))
+	}
+	if len(offer.Protocols) == 0 {
+		return []string{"alpn " + strings.Join(offer.ALPN, ",") + " at " + host}
+	}
+	spelled := make([]string, 0, len(offer.Protocols))
+	for _, proto := range offer.Protocols {
+		if proto == "doh" {
+			spelled = append(spelled, "doh at https://"+host+offer.DoHPath)
+			continue
+		}
+		spelled = append(spelled, proto+" at "+host)
+	}
+	return spelled
 }
 
 // difference is the one line for one resolver that did not answer as the walk

@@ -73,6 +73,54 @@
           "description": "How its answer stands against the one the walk found, absent where there was nothing to compare. The two are allowed to differ honestly: a name tailored to where it is asked from will, since the walk and the resolver are rarely in the same place.",
           "type": "string",
           "enum": ["same", "differs"]
+        },
+        "ddr": { "$ref": "#/$defs/discovery" }
+      }
+    },
+    "discovery": {
+      "description": "What the resolver answered for _dns.resolver.arpa (RFC 9462), present only where --ddr asked. Nothing connected to what it offers, so no offer here is verified.",
+      "type": "object",
+      "properties": {
+        "rcode": { "type": "string" },
+        "error": {
+          "description": "Why the question could not be asked at all.",
+          "type": "string"
+        },
+        "designated": {
+          "description": "The encrypted resolvers it designates, in the order they arrived. Absent for a resolver that answered and designates none.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/designated" }
+        }
+      }
+    },
+    "designated": {
+      "description": "One encrypted resolver a plain one points at.",
+      "type": "object",
+      "required": ["priority", "target"],
+      "properties": {
+        "priority": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "target": { "type": "string" },
+        "protocols": {
+          "description": "The transports its ALPN names, of dot, doh and doq. HTTP counts as doh only where a dohpath says where to send the queries.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "alpn": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "port": {
+          "description": "Absent where each protocol's default port applies.",
+          "type": "integer", "minimum": 1, "maximum": 65535
+        },
+        "dohpath": {
+          "description": "The URI template a doh offer is reached at.",
+          "type": "string"
+        },
+        "hints": {
+          "description": "The addresses the record says the target is at.",
+          "type": "array",
+          "items": { "type": "string" }
         }
       }
     },

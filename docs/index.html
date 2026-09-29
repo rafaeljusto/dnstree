@@ -850,6 +850,10 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
       which of them somebody gets depends on nothing but which resolver they use; the summary
       says how far apart they were and how many disagreed. With <code>--subnet</code> beside
       it, that is most of "does this name look the same from where my users are".</p>
+      <p class="section-lede"><code>--ddr</code> asks each of them whether it can be used
+      encrypted too (RFC&nbsp;9462), and says under the tree what it offers: DoT, DoH or DoQ,
+      at which name and port. It only asks, and connects to none of it, so every offer is
+      marked as not verified.</p>
 
       <h3 style="margin-top:2.2rem">Leave it running</h3>
       <p class="section-lede"><code>--watch 30s</code> draws the tree once and then keeps

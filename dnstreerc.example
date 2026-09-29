@@ -154,6 +154,11 @@
 # replaces every one of them.
 # resolver = 9.9.9.9
 
+# Ask each of those resolvers which encrypted resolvers stand for it (RFC
+# 9462), and say what they offer. It is a query per resolver, and nothing
+# connects to what comes back, so no offer is verified.
+# ddr = true
+
 
 # Where the walk starts
 

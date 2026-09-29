@@ -110,6 +110,7 @@ func Findings(tr *trace.Trace) []Finding {
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
 	}
+	findings = append(findings, designations(tr)...)
 	return findings
 }
 
@@ -731,6 +732,43 @@ func comparison(tr *trace.Trace) (Finding, bool) {
 	return Finding{Topic: Resolver, Level: Warn,
 		Text: list(differing) + " answered this question differently, " +
 			"which a name whose answer is tailored to where it is asked from does honestly, and nothing else should"}, true
+}
+
+// designations are what --ddr learned of each resolver. An offer is only a
+// claim until a client connects and finds the resolver's own address in the
+// certificate (RFC 9462), and nothing here connects, so it is said as a claim.
+// A resolver that could not be asked is on its own line under the tree.
+func designations(tr *trace.Trace) []Finding {
+	var findings []Finding
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.DDR == nil || answer.DDR.Err != "" {
+			continue
+		}
+		who := at2(answer.Server)
+		switch found := answer.DDR; {
+		case found.Rcode != "NOERROR" && found.Rcode != "NXDOMAIN":
+		case len(found.Designated) == 0:
+			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s designates no encrypted resolver, so what is asked of it crosses the network readable by anyone on the way",
+				who)})
+		default:
+			var protocols, targets []string
+			for _, offer := range found.Designated {
+				for _, proto := range offer.Protocols {
+					protocols = add(protocols, proto)
+				}
+				targets = add(targets, offer.Target)
+			}
+			offers := "something this build cannot name"
+			if len(protocols) > 0 {
+				offers = list(protocols)
+			}
+			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s says it can also be reached encrypted, over %s at %s; trust it only once the certificate there names %s, which --ddr does not check",
+				who, offers, list(targets), who)})
+		}
+	}
+	return findings
 }
 
 // aliases is how many times the walk followed an alias before it answered.

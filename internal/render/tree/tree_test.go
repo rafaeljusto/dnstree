@@ -335,3 +335,57 @@ func compare(tb testing.TB, name, got string) {
 			golden, got, want)
 	}
 }
+
+// designating is a walk timed against resolvers that were asked, with --ddr,
+// which encrypted resolvers stand for them.
+func designating() *trace.Trace {
+	tr := resolution()
+	at := func(ip string) trace.Server { return trace.Server{IP: netip.MustParseAddr(ip), Port: 53} }
+	tr.Resolvers = []*trace.Resolver{{
+		Server: at("192.0.2.53"), Rcode: "NOERROR",
+		DDR: &trace.Discovery{Rcode: "NOERROR", Designated: []trace.Designated{
+			{Priority: 1, Target: "dns.example.", Protocols: []string{"dot"}, ALPN: []string{"dot"}},
+			{Priority: 2, Target: "dns.example.", Protocols: []string{"doh"}, ALPN: []string{"h2"}, Port: 8443, DoHPath: "/dns-query{?dns}"},
+			{Priority: 3, Target: "dns.example.", ALPN: []string{"xyz"}},
+		}},
+	}, {
+		Server: at("192.0.2.54"), Rcode: "NOERROR",
+		DDR: &trace.Discovery{Rcode: "NXDOMAIN"},
+	}, {
+		Server: at("192.0.2.55"), Rcode: "REFUSED",
+		DDR: &trace.Discovery{Rcode: "REFUSED"},
+	}, {
+		Server: at("192.0.2.56"), Err: "i/o timeout",
+		DDR: &trace.Discovery{Err: "i/o timeout"},
+	}, {
+		// Asked for no designations: nothing to draw.
+		Server: at("192.0.2.57"), Rcode: "NOERROR",
+	}}
+	return tr
+}
+
+func TestRenderDesignations(t *testing.T) {
+	var out bytes.Buffer
+	if err := tree.Render(&out, designating(), tree.Options{Charset: tree.ASCII}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"ddr: 192.0.2.53 offers dot at dns.example, doh at https://dns.example:8443/dns-query{?dns}, alpn xyz at dns.example (not verified)\n",
+		"ddr: 192.0.2.54 designates no encrypted resolver\n",
+		"ddr: 192.0.2.55 would not say which encrypted resolvers it has: REFUSED\n",
+		"ddr: 192.0.2.56 could not be asked for its encrypted resolvers: i/o timeout\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("got no %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "192.0.2.57") {
+		t.Errorf("got a line for a resolver never asked for its designations:\n%s", got)
+	}
+	for i, r := range got {
+		if r > 127 {
+			t.Fatalf("got %q at byte %d, want ASCII only", r, i)
+		}
+	}
+}

@@ -507,6 +507,31 @@ func TestRunCompare(t *testing.T) {
 	}
 }
 
+// TestRunDDR asks the resolver the walk is timed against which encrypted
+// resolvers stand for it, and draws what it offers under the tree.
+func TestRunDDR(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone + `
+_dns.resolver.arpa. IN SVCB 1 dns.test. alpn=dot
+`})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", server.Addr.String(), "--resolver", server.Addr.String(),
+		"--ddr", "--explain", "--no-asn", "--color", "never", "--format", "ascii", ".", "NS",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if want := "ddr: 127.0.0.1 offers dot at dns.test (not verified)"; !strings.Contains(out, want) {
+		t.Errorf("got no %q:\n%s", want, out)
+	}
+	if want := "which --ddr does not check"; !strings.Contains(out, want) {
+		t.Errorf("got no %q in the explanation:\n%s", want, out)
+	}
+}
+
 // cymruZone answers for loopback the way Team Cymru answers for a real address.
 const cymruZone = `
 @         IN SOA  ns hostmaster 1 7200 3600 1209600 3600

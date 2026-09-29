@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -96,5 +97,93 @@ func TestSystemFrom(t *testing.T) {
 
 	if got := transport.SystemFrom(filepath.Join(t.TempDir(), "missing")); got.IsValid() {
 		t.Errorf("got %v, want nothing from a host that keeps no such file", got)
+	}
+}
+
+// ddrZone is a resolver designating itself the way the public ones do: over
+// TLS, over HTTPS at a path, and once with an ALPN that names no transport.
+// The last four are records no client can use: AliasMode, a key it must
+// understand and cannot, a target that is the owner name, and no ALPN at all.
+const ddrZone = `
+@     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
+@     IN NS   ns
+ns    IN A    127.0.0.1
+_dns  IN SVCB 1 dns.test. alpn=dot port=853 ipv4hint=192.0.2.53
+_dns  IN SVCB 2 dns.test. alpn=h2,h3 dohpath=/dns-query{?dns}
+_dns  IN SVCB 3 dns.test. alpn=h2
+_dns  IN SVCB 0 elsewhere.test.
+_dns  IN SVCB 4 dns.test. mandatory=key65000 alpn=dot key65000=x
+_dns  IN SVCB 5 . alpn=dot
+_dns  IN SVCB 6 dns.test. port=853
+`
+
+func TestDiscover(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "resolver.arpa.", Zone: ddrZone})
+	carrier := transport.NewUDP(transport.Config{})
+
+	found := transport.Discover(t.Context(), carrier, nil, server.Addr)
+	if found.Err != "" || found.Rcode != "NOERROR" {
+		t.Fatalf("got %+v, want the server to have answered", found)
+	}
+
+	byPriority := map[uint16]trace.Designated{}
+	for _, offer := range found.Designated {
+		byPriority[offer.Priority] = offer
+	}
+	if len(byPriority) != 3 {
+		t.Fatalf("got %d offers, want the three in ServiceMode: %+v", len(byPriority), found.Designated)
+	}
+
+	dot := byPriority[1]
+	if !slices.Equal(dot.Protocols, []string{"dot"}) || dot.Port != 853 || dot.Target != "dns.test." {
+		t.Errorf("got %+v, want dot at dns.test.:853", dot)
+	}
+	if !slices.Equal(dot.Hints, []netip.Addr{netip.MustParseAddr("192.0.2.53")}) {
+		t.Errorf("got hints %v, want the address the record gave", dot.Hints)
+	}
+	if doh := byPriority[2]; !slices.Equal(doh.Protocols, []string{"doh"}) || doh.DoHPath != "/dns-query{?dns}" {
+		t.Errorf("got %+v, want doh at its path", doh)
+	}
+	// HTTP with nowhere to send the query is not a DoH offer (RFC 9461).
+	if bare := byPriority[3]; len(bare.Protocols) != 0 || !slices.Equal(bare.ALPN, []string{"h2"}) {
+		t.Errorf("got %+v, want the ALPN kept and no protocol read into it", bare)
+	}
+}
+
+// TestDiscoverNothing covers a resolver that answers and designates nothing,
+// which is the common case and is not a failure.
+func TestDiscoverNothing(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "test.", Zone: recursiveZone})
+	carrier := transport.NewUDP(transport.Config{})
+
+	found := transport.Discover(t.Context(), carrier, nil, server.Addr)
+	if found.Err != "" || len(found.Designated) != 0 || found.Rcode == "" {
+		t.Errorf("got %+v, want an rcode and no offers", found)
+	}
+}
+
+func TestDiscoverSilent(t *testing.T) {
+	carrier := transport.NewUDP(transport.Config{Timeout: 200 * time.Millisecond})
+	if found := transport.Discover(t.Context(), carrier, nil, netip.MustParseAddrPort("127.0.0.1:1")); found.Err == "" {
+		t.Errorf("got %+v, want the silence carried in the result", found)
+	}
+}
+
+// TestDiscoverTruncated covers an answer too big for a datagram. Read as it
+// came, the offers that did not fit would be offers never made, so it is asked
+// again over TCP, and without TCP it says it could not tell.
+func TestDiscoverTruncated(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "resolver.arpa.", Zone: ddrZone,
+		Behaviour: fakens.Behaviour{TruncateUDP: true}})
+	carrier := transport.NewUDP(transport.Config{})
+
+	found := transport.Discover(t.Context(), carrier, transport.NewTCP(transport.Config{}), server.Addr)
+	if found.Err != "" || len(found.Designated) != 3 {
+		t.Errorf("got %+v, want the three offers asked again over tcp", found)
+	}
+
+	found = transport.Discover(t.Context(), carrier, nil, server.Addr)
+	if found.Err == "" || len(found.Designated) != 0 {
+		t.Errorf("got %+v, want the truncation said rather than read as no offers", found)
 	}
 }

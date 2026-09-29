@@ -70,6 +70,43 @@ type Resolver struct {
 	// Match is how its answer stands against the walk's, empty when there was
 	// nothing to compare.
 	Match Match
+
+	// DDR is what the server said of its encrypted selves, nil where --ddr did
+	// not ask.
+	DDR *Discovery
+}
+
+// Discovery is the answer to _dns.resolver.arpa (RFC 9462): the encrypted
+// resolvers a plain one designates. Nothing here connects to them, so none of
+// it is verified; an offer is only what the plain server claimed.
+type Discovery struct {
+	Rcode string
+	Err   string
+
+	// Designated are the offers in the order they arrived, empty for a server
+	// that answered and offers none.
+	Designated []Designated
+}
+
+// Designated is one encrypted resolver a plain one points at.
+type Designated struct {
+	Priority uint16
+	Target   string
+
+	// Protocols are the transports the ALPN names, as the flags spell them:
+	// dot, doh and doq. ALPN is kept beside it, since an identifier this build
+	// does not know is still something the server offered.
+	Protocols []string
+	ALPN      []string
+
+	// Port is zero where the record leaves it to each protocol's default.
+	Port uint16
+
+	// DoHPath is the URI template a doh offer is reached at.
+	DoHPath string
+
+	// Hints are the addresses the record says the target is at.
+	Hints []netip.Addr
 }
 
 // Match is how a recursive server's answer stands against the one the walk

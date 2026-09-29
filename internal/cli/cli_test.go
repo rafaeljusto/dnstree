@@ -141,6 +141,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--qmin", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Minimise: true},
 		},
+		"a walk that asks the resolvers what encrypted resolvers they designate": {
+			args: []string{"--ddr", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", DDR: true},
+		},
 		"a walk that sends each server a cookie": {
 			args: []string{"--cookie", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Cookie: true},
@@ -282,6 +286,8 @@ func TestParseRejects(t *testing.T) {
 		"a reverse lookup and a type":        {"-x", "192.0.2.1", "A"},
 		"a reverse lookup of a saved walk":   {"--from", "walk.json", "-x", "192.0.2.1"},
 		"a request weighed unsigned":         {"--check-ds", "example.com"},
+		"designations asked of no resolver":  {"--ddr", "--no-compare", "example.com"},
+		"a walk already made, asked for ddr": {"--from", "walk.json", "--ddr"},
 		"an unknown colour":                  {"--color", "sometimes", "example.com"},
 		"a timeout of nothing":               {"--timeout", "0", "example.com"},
 		"a negative retry count":             {"--retries", "-1", "example.com"},

@@ -47,6 +47,25 @@ func TestReadRoundTrip(t *testing.T) {
 					NSEC3: &trace.NSEC3{Zone: "example.", Iterations: 10, Salt: "aabbccdd"}},
 			}}},
 		},
+		"a resolver asked which encrypted resolvers it designates": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+				Rcode:  "NOERROR",
+				DDR: &trace.Discovery{Rcode: "NOERROR", Designated: []trace.Designated{{
+					Priority: 1, Target: "dns.example.", Protocols: []string{"dot"}, ALPN: []string{"dot"},
+					Port: 853, Hints: []netip.Addr{netip.MustParseAddr("192.0.2.53"), netip.MustParseAddr("2001:db8::53")},
+				}, {
+					Priority: 2, Target: "dns.example.", Protocols: []string{"doh"}, ALPN: []string{"h2"},
+					DoHPath: "/dns-query{?dns}",
+				}}},
+			}, {
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.54"), Port: 53},
+				Err:    "i/o timeout",
+				DDR:    &trace.Discovery{Err: "i/o timeout"},
+			}},
+		},
 		"a walk that kept when each query went out": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Timed:    true,

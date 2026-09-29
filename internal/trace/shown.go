@@ -50,6 +50,7 @@ func (t *Trace) Shown() *Trace {
 		r.Rcode, r.Err = Shown(r.Rcode), Shown(r.Err)
 		r.Records = shownRecords(r.Records)
 		r.Extended = shownExtended(r.Extended)
+		r.DDR = resolver.DDR.Shown()
 		shown.Resolvers = append(shown.Resolvers, &r)
 	}
 	return &shown
@@ -110,6 +111,22 @@ func (s *Step) Shown() *Step {
 	shown.Children = nil
 	for _, child := range s.Children {
 		shown.Children = append(shown.Children, child.Shown())
+	}
+	return &shown
+}
+
+// Shown is the discovery with every name and word the server chose escaped.
+func (d *Discovery) Shown() *Discovery {
+	if d == nil {
+		return nil
+	}
+	shown := *d
+	shown.Rcode, shown.Err = Shown(d.Rcode), Shown(d.Err)
+	shown.Designated = nil
+	for _, offer := range d.Designated {
+		offer.Target, offer.DoHPath = Shown(offer.Target), Shown(offer.DoHPath)
+		offer.Protocols, offer.ALPN = shownAll(offer.Protocols), shownAll(offer.ALPN)
+		shown.Designated = append(shown.Designated, offer)
 	}
 	return &shown
 }

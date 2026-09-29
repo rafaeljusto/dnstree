@@ -529,6 +529,7 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 
 	question := trace.Question{Name: cfg.Name, Type: cfg.Type, Class: "IN"}
 	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
+	fallback := transport.NewTCP(transport.Config{Timeout: cfg.Timeout})
 
 	timed := make(chan []*trace.Resolver, 1)
 	go func() {
@@ -537,8 +538,12 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		// They are asked together and kept in the order they were named, so
 		// that the same command draws the same line twice running.
 		answers := make([]*trace.Resolver, len(servers))
+		discovered := make([]*trace.Discovery, len(servers))
 		var wait sync.WaitGroup
 		for i, server := range servers {
+			if cfg.DDR {
+				wait.Go(func() { discovered[i] = transport.Discover(ctx, carrier, fallback, server) })
+			}
 			wait.Go(func() {
 				answer, err := transport.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
 				if err != nil {
@@ -555,6 +560,11 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 			})
 		}
 		wait.Wait()
+		for i, answer := range answers {
+			if answer != nil {
+				answer.DDR = discovered[i]
+			}
+		}
 
 		// A server that could not be asked at all leaves no room of its own:
 		// what there is to say about it was said on stderr with --debug, and a

@@ -48,6 +48,7 @@ script is asked in punycode, the way the DNS holds it.
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
+  --ddr                   ask each resolver which encrypted resolvers stand for it
   --format FORMAT         how to draw the walk: tree, waterfall, json, web; see below
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
@@ -237,6 +238,14 @@ once. Each server gets a client cookie of its own, made fresh for the run. It
 rides along on queries over udp and tcp, which are the ones it protects, and
 costs none of its own.
 
+--ddr asks every resolver the question is timed against which encrypted
+resolvers stand for it (RFC 9462), and says under the tree what each one
+offers: dot, doh or doq, at which name and port. It is how to learn whether a
+resolver handed out as a bare address could have been used encrypted. Nothing
+connects to what is offered, so no certificate is checked and an offer is only
+what the plain resolver claims. It costs a query per resolver, and needs the
+comparison that --no-compare turns off.
+
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
 where that is unset), then ~/.dnstreerc. Each line of it is a long flag name and
@@ -272,6 +281,7 @@ type Config struct {
 	Minimise bool
 	ASN      bool
 	Compare  bool
+	DDR      bool
 	Format   string
 	Live     bool
 	Explain  bool
@@ -405,6 +415,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
+	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
 	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, json, dot, mermaid, openmetrics, web or web-3d")
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
@@ -610,6 +621,16 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Roots = roots.servers; len(cfg.Roots) > 0 && cfg.RootHints != "" {
 		return nil, fmt.Errorf("%w: --root and --root-hints both say where the walk starts", ErrUsage)
 	}
+	if cfg.DDR && !cfg.Compare {
+		// As with --check-ds, a default from the file is heeded only by the runs
+		// it applies to, and typed out the contradiction is a mistake.
+		named := false
+		scan(flags, args, func(name, _ string) { named = named || name == "ddr" })
+		if named {
+			return nil, fmt.Errorf("%w: --ddr asks the resolvers --no-compare leaves unasked", ErrUsage)
+		}
+		cfg.DDR = false
+	}
 	if cfg.Resolvers = resolvers.servers; len(cfg.Resolvers) > 0 && !cfg.ASN && !cfg.Compare {
 		return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
 	}
@@ -628,7 +649,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "nsid": true, "cookie": true, "qmin": true,
-	"subnet": true, "no-asn": true, "no-compare": true, "timeout": true, "retries": true,
+	"subnet": true, "no-asn": true, "no-compare": true, "ddr": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
 	"tls-ca": true, "tls-insecure": true,

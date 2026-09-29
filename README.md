@@ -113,6 +113,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | `--subnet` | ask as though from this client subnet, and say what each server made of it |
 | `--no-asn` | skip the origin AS lookups |
 | `--no-compare` | skip the question put to a recursive resolver, and the comparison with it |
+| `--ddr` | ask each resolver which encrypted resolvers stand for it (RFC 9462), and say what they offer |
 | `--format` | `tree` (the default), `ascii`, `emoji`, `waterfall`, `waterfall-ascii`, `waterfall-mermaid`, `json`, `dot`, `mermaid`, `openmetrics`, `web` or `web-3d` |
 | `--web-addr`, `--no-browser` | where `--format web` and `web-3d` serve the page, and whether a browser is opened at it |
 | `--live` | draw the tree as the walk makes it, hop by hop |
@@ -804,6 +805,34 @@ ask rather than a poll. There is deliberately no shorthand for "the public
 resolvers" — that would put a list of somebody else's addresses in the binary
 and send the name being looked up to all of them. A set worth having every day
 belongs in the file of defaults, which may carry a `resolver` line for each.
+
+### Whether a resolver can be used encrypted
+
+A resolver handed out by the network is a bare address, and a bare address
+speaks plain DNS: every name asked of it crosses the network readable, and
+changeable, by anyone on the way. `--ddr` asks each resolver the question is
+timed against whether it has an encrypted version too (RFC 9462), and draws
+what it offers under the tree:
+
+```
+$ dnstree --ddr --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 9.9.9.9 --explain www.isc.org
+...
+🔐 1.1.1.1 offers doh at https://one.one.one.one:443/dns-query{?dns}, dot at one.one.one.one:853 (not verified)
+🔐 8.8.8.8 offers dot at dns.google, doh at https://dns.google/dns-query{?dns} (not verified)
+🔐 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
+✔ answered in 2.8s · resolvers in 242ms-373ms · 6 queries · 3 servers
+...
+· 1.1.1.1 says it can also be reached encrypted, over doh and dot at one.one.one.one.; trust it only once the certificate there names 1.1.1.1, which --ddr does not check
+```
+
+It is one query per resolver, for `_dns.resolver.arpa`, and it only asks: it
+does not connect to what is offered. A client is meant to use an offer only once
+the certificate it finds there names the plain resolver's own address, since
+otherwise whoever answered the plain question could point it anywhere. That
+check is not made here, which is why every offer is marked as not verified.
+A resolver that designates nothing says so, and one that cannot be asked says
+why. Without `--resolver` the question goes to the host's own resolver;
+`--no-compare` leaves nothing to ask.
 
 ### Asking rather than reading
 

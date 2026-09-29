@@ -205,6 +205,32 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 	if to.Subnet, err = readSubnet(from.Subnet); err != nil {
 		return nil, err
 	}
+	if to.DDR, err = readDiscovery(from.DDR); err != nil {
+		return nil, err
+	}
+	return to, nil
+}
+
+func readDiscovery(from *discovery) (*trace.Discovery, error) {
+	if from == nil {
+		return nil, nil
+	}
+	to := &trace.Discovery{Rcode: from.Rcode, Err: from.Error}
+	for _, offer := range from.Designated {
+		read := trace.Designated{
+			Priority: offer.Priority, Target: offer.Target,
+			Protocols: offer.Protocols, ALPN: offer.ALPN,
+			Port: offer.Port, DoHPath: offer.DoHPath,
+		}
+		for _, hint := range offer.Hints {
+			addr, err := netip.ParseAddr(hint)
+			if err != nil {
+				return nil, fmt.Errorf("jsonout: %q is not an address a designated resolver can be at", hint)
+			}
+			read.Hints = append(read.Hints, addr)
+		}
+		to.Designated = append(to.Designated, read)
+	}
 	return to, nil
 }
 

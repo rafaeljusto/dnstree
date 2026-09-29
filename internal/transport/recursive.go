@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsconf"
 	"codeberg.org/miekg/dns/dnsutil"
+	"codeberg.org/miekg/dns/rdata"
+	"codeberg.org/miekg/dns/svcb"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -103,4 +106,112 @@ func recursiveRecords(rrs []dns.RR) []trace.RR {
 		})
 	}
 	return records
+}
+
+// DDRName is where a resolver says which encrypted resolvers stand for it
+// (RFC 9462).
+const DDRName = "_dns.resolver.arpa."
+
+// Discover asks server which encrypted resolvers it designates. It is best
+// effort like Ask: a server that will not say leaves the reason in the result.
+// Nothing is connected to, so an offer is a claim and not a verified one.
+//
+// A truncated answer is asked again over fallback. Read as it stands, the
+// records that did not fit would be offers the server never made.
+func Discover(ctx context.Context, carrier, fallback Transport, server netip.AddrPort) *trace.Discovery {
+	req, err := NewQuery(DDRName, dns.TypeSVCB, DefaultUDPSize, false)
+	if err != nil {
+		return &trace.Discovery{Err: trace.Printable(err.Error(), trace.MaxErr)}
+	}
+	req.RecursionDesired = true
+
+	resp, _, err := carrier.Exchange(ctx, req, server, "")
+	if err == nil && resp.Truncated {
+		if fallback == nil {
+			return &trace.Discovery{Err: "the answer was truncated, and nothing could ask again over tcp"}
+		}
+		resp, _, err = fallback.Exchange(ctx, req, server, "")
+		if err == nil && resp.Truncated {
+			return &trace.Discovery{Err: "the answer was truncated over tcp as well"}
+		}
+	}
+	if err != nil {
+		return &trace.Discovery{Err: trace.Printable(err.Error(), trace.MaxErr)}
+	}
+	found := &trace.Discovery{Rcode: dnsutil.RcodeToString(resp.Rcode)}
+	for _, rr := range resp.Answer {
+		// Only the records at the name asked: an alias to somewhere else is
+		// not a designation, and AliasMode is not one either (RFC 9462 §4).
+		record, ok := rr.(*dns.SVCB)
+		if !ok || !strings.EqualFold(rr.Header().Name, DDRName) || record.Priority == 0 {
+			continue
+		}
+		if offer, ok := designated(record.SVCB); ok {
+			found.Designated = append(found.Designated, offer)
+		}
+	}
+	return found
+}
+
+// understood are the keys a designation is read by. A record that makes any
+// other key mandatory is one a client has to drop (RFC 9460 §8).
+var understood = []uint16{svcb.KeyAlpn, svcb.KeyPort, svcb.KeyIPv4Hint, svcb.KeyIPv6Hint, svcb.KeyDohPath}
+
+// designated decodes one ServiceMode record into what a client would dial, and
+// reports false for one no client could use: a key it must understand and
+// does not, no ALPN to say what is spoken, or a target of "." — the owner
+// name, which for _dns.resolver.arpa is nowhere to connect to.
+func designated(data rdata.SVCB) (trace.Designated, bool) {
+	offer := trace.Designated{Priority: data.Priority, Target: dnsutil.Fqdn(data.Target)}
+	if offer.Target == "." {
+		return offer, false
+	}
+	for _, pair := range data.Value {
+		switch pair := pair.(type) {
+		case *svcb.MANDATORY:
+			for _, key := range pair.Key {
+				if !slices.Contains(understood, key) {
+					return offer, false
+				}
+			}
+		case *svcb.ALPN:
+			offer.ALPN = pair.Alpn
+		case *svcb.PORT:
+			offer.Port = pair.Port
+		case *svcb.DOHPATH:
+			offer.DoHPath = pair.Template
+		case *svcb.IPV4HINT:
+			offer.Hints = append(offer.Hints, pair.Hint...)
+		case *svcb.IPV6HINT:
+			offer.Hints = append(offer.Hints, pair.Hint...)
+		}
+	}
+	if len(offer.ALPN) == 0 {
+		return offer, false
+	}
+	offer.Protocols = protocols(offer.ALPN, offer.DoHPath != "")
+	return offer, true
+}
+
+// protocols reads the ALPN as transports (RFC 9461). HTTP is DoH only with a
+// path to send the queries to, which is what the RFC requires of a DoH offer.
+func protocols(alpn []string, path bool) []string {
+	var named []string
+	for _, id := range alpn {
+		var proto string
+		switch id {
+		case "dot":
+			proto = "dot"
+		case "doq":
+			proto = "doq"
+		case "h2", "h3":
+			if path {
+				proto = "doh"
+			}
+		}
+		if proto != "" && !slices.Contains(named, proto) {
+			named = append(named, proto)
+		}
+	}
+	return named
 }

@@ -760,6 +760,42 @@ func TestSeveralResolvers(t *testing.T) {
 	}
 }
 
+// TestDesignations covers what --ddr learned of each resolver. An offer is
+// said as the claim it is, since nothing connected to check its certificate,
+// and a resolver that could not be asked is left to the line under the tree.
+func TestDesignations(t *testing.T) {
+	resolver := func(ip string, found *trace.Discovery) *trace.Resolver {
+		return &trace.Resolver{Server: trace.Server{IP: netip.MustParseAddr(ip), Port: 53}, Rcode: "NOERROR", DDR: found}
+	}
+
+	tr := walk(answered(300))
+	tr.Resolvers = []*trace.Resolver{
+		resolver("192.0.2.53", &trace.Discovery{Rcode: "NOERROR", Designated: []trace.Designated{
+			{Priority: 1, Target: "dns.test.", Protocols: []string{"dot"}},
+			{Priority: 2, Target: "dns.test.", Protocols: []string{"doh"}, DoHPath: "/dns-query{?dns}"},
+		}}),
+		resolver("192.0.2.54", &trace.Discovery{Rcode: "NXDOMAIN"}),
+		resolver("192.0.2.55", &trace.Discovery{Err: "i/o timeout"}),
+		resolver("192.0.2.56", &trace.Discovery{Rcode: "REFUSED"}),
+		resolver("192.0.2.57", nil),
+	}
+
+	got := said(tr)
+	for _, want := range []string{
+		"192.0.2.53 says it can also be reached encrypted, over dot and doh at dns.test.; trust it only once the certificate there names 192.0.2.53, which --ddr does not check",
+		"192.0.2.54 designates no encrypted resolver",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("got %q, want it to say %q", got, want)
+		}
+	}
+	for _, unsaid := range []string{"192.0.2.55", "192.0.2.56", "192.0.2.57"} {
+		if strings.Contains(got, unsaid) {
+			t.Errorf("got %q, want nothing about %s", got, unsaid)
+		}
+	}
+}
+
 // dangling is a walk ending on a hop that showed a name left pointing at
 // something nobody holds.
 func dangling(kind trace.StepKind, left *trace.Dangling) *trace.Trace {
