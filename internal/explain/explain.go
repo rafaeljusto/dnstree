@@ -27,6 +27,7 @@ const (
 	Outcome  Topic = iota // what the walk came to
 	Cache                 // how long a cache may go on serving it
 	Trust                 // the chain of trust over it
+	Takeover              // what somebody else could take the name over with
 	Spread                // what the nameservers of the zone have in common
 	Servers               // the servers that made the walk harder
 	Resolver              // what an ordinary resolution made of the same question
@@ -41,6 +42,8 @@ func (t Topic) String() string {
 		return "cache"
 	case Trust:
 		return "trust"
+	case Takeover:
+		return "takeover"
 	case Spread:
 		return "spread"
 	case Servers:
@@ -100,6 +103,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, cache(tr)...)
 	findings = append(findings, trust(tr)...)
 	findings = append(findings, hashing(tr)...)
+	findings = append(findings, takeover(tr)...)
 	findings = append(findings, spread(tr)...)
 	findings = append(findings, servers(tr)...)
 	findings = append(findings, cookies(tr)...)
@@ -392,6 +396,65 @@ func hashing(tr *trace.Trace) []Finding {
 			hashed.Zone, plural(int(hashed.Iterations), "extra time", "extra times"), salted)})
 	}
 	return findings
+}
+
+// takeover is every name the walk found left pointing at something nobody
+// holds. Each says what the walk saw and what somebody would have to create to
+// take the name over, never that they can: a zone halfway through a move looks
+// the same, and so does a service that does not let strangers in.
+func takeover(tr *trace.Trace) []Finding {
+	var (
+		findings []Finding
+		seen     = make(map[trace.Dangling]bool)
+	)
+	for step := range tr.Steps() {
+		dangling := step.Dangling
+		if dangling == nil || seen[*dangling] {
+			continue
+		}
+		seen[*dangling] = true
+
+		var text string
+		switch dangling.Kind {
+		case trace.DanglingNameserver:
+			text = fmt.Sprintf("%s is delegated to %s, and %s: %s can answer for %s; take it out of the delegation",
+				dangling.Name, dangling.Target, gone(dangling), whoever(dangling), dangling.Name)
+		case trace.DanglingAlias:
+			text = fmt.Sprintf("%s is an alias for %s, and %s: %s can answer for %s; remove the alias, or create its target again",
+				dangling.Name, dangling.Target, gone(dangling), whoever(dangling), dangling.Name)
+		case trace.DanglingLame:
+			text = fmt.Sprintf("every nameserver of %s answered without authority for it, which is how a hosting service answers for a zone nobody has created there: where anybody can create one, whoever does can answer for %s; take the delegation away, or create the zone there again",
+				dangling.Name, dangling.Name)
+		default:
+			continue
+		}
+		findings = append(findings, Finding{Topic: Takeover, Level: Warn, Text: text})
+	}
+	return findings
+}
+
+// gone is who says what is missing.
+func gone(dangling *trace.Dangling) string {
+	return fmt.Sprintf("%s says %s does not exist", named(dangling.Zone), dangling.Missing)
+}
+
+// whoever is who would have to create the missing name. A name missing above
+// the one pointed at is a domain, which is registered; one missing where it is
+// pointed at is a name inside a zone that exists, created by whoever that
+// zone lets create one.
+func whoever(dangling *trace.Dangling) string {
+	if !strings.EqualFold(dangling.Missing, dangling.Target) {
+		return "whoever registers " + dangling.Missing
+	}
+	return "whoever can create it in " + named(dangling.Zone)
+}
+
+// named is a zone as a sentence names it.
+func named(zone string) string {
+	if zone == "." {
+		return "the root"
+	}
+	return zone
 }
 
 // zoneOf is the zone a verdict is about, which the walk recorded on the verdict

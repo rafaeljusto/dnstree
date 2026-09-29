@@ -101,6 +101,12 @@ func (s *Step) Shown() *Step {
 		}
 		shown.DNSSEC = &d
 	}
+	if s.Dangling != nil {
+		d := *s.Dangling
+		d.Name, d.Target = Shown(d.Name), Shown(d.Target)
+		d.Missing, d.Zone = Shown(d.Missing), Shown(d.Zone)
+		shown.Dangling = &d
+	}
 	shown.Children = nil
 	for _, child := range s.Children {
 		shown.Children = append(shown.Children, child.Shown())

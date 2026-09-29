@@ -73,7 +73,8 @@ type Config struct {
 	Anchors roothints.Anchors
 
 	// All asks every nameserver of a zone instead of stopping at the first one
-	// that answers. The walk still follows a single path down.
+	// that answers, looking up every one named outside the zone to do it. The
+	// walk still follows a single path down.
 	All bool
 
 	// Family restricts the walk to IPv4 (4) or IPv6 (6) servers. Zero uses
@@ -218,6 +219,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		cfg:      r.cfg,
 		counters: newCounters(r.cfg.Budget),
 		chased:   map[string]bool{dnsutil.Canonical(qname): true},
+		missing:  map[*trace.Step]*trace.Dangling{},
 		trace: &trace.Trace{
 			Question: trace.Question{Name: qname, Type: qtype, Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -253,6 +255,10 @@ type run struct {
 	// chased are the names a CNAME has already pointed at, so that a chain
 	// cannot bite its own tail.
 	chased map[string]bool
+
+	// missing is what each NXDOMAIN a walk ended on says is not there, until
+	// the walk that asked for a nameserver or an alias target claims it.
+	missing map[*trace.Step]*trace.Dangling
 
 	// secret is what the client cookies of this run are derived from, and
 	// cookies the server cookies handed out so far, by address.
@@ -294,6 +300,11 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 	// has gone on to ask about in full to see whether that was so.
 	var denied *trace.Step
 
+	// pending are the nameservers of the zone named outside it that have not
+	// been looked up yet, which are what is left to try once every server
+	// found so far has failed.
+	var pending []string
+
 	for depth := 0; ; {
 		if depth >= r.counters.max.MaxDepth {
 			return r.fail(parent, zone, fmt.Sprintf("gave up after %d zone cuts", r.counters.max.MaxDepth))
@@ -307,7 +318,13 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		}
 
 		hop := r.queryZone(ctx, zone, servers, parent, asked, askedType, minimised)
+		if hop == nil && len(pending) > 0 {
+			if servers, pending = r.resolveNames(ctx, referred, pending, side); len(servers) > 0 {
+				continue
+			}
+		}
 		if hop == nil {
+			abandoned(referred, parent, zone)
 			r.warnf("no server answered for %s", zone)
 			return nil
 		}
@@ -359,6 +376,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			if crossed := r.verify(ctx, chain, hop, qname, qtype); crossed != nil {
 				last = *crossed
 			}
+			r.denial(hop, zone, qname)
 			if side == 0 {
 				r.checkECH(step)
 				r.checkSubnet(step)
@@ -370,11 +388,12 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 
 		}
 
-		next := r.nextServers(ctx, step, side)
+		next, rest := r.nextServers(ctx, step, side)
 		if len(next) == 0 {
 			r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
 			return step
 		}
+		pending = rest
 		zone, servers, parent, referred = step.Delegation.Zone, next, step, step
 		reach, entered = r.reach(zone, qname), false
 		depth++
@@ -887,32 +906,45 @@ func (r *run) remember(server netip.Addr, resp *dns.Msg) {
 
 // nextServers is where the walk goes after a referral: the glue when there is
 // any, and otherwise the addresses of the nameservers named outside the zone,
-// resolved on their own.
-func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) []trace.Server {
+// resolved on their own. It hands back the names it has not looked up yet, for
+// the walk to try if every server it has so far fails. All looks them all up
+// at once, since it asks every nameserver there is.
+func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]trace.Server, []string) {
 	delegation := step.Delegation
 
 	if len(delegation.GlueLess) > 0 {
 		r.warnf("%s delegates to %s inside the zone, with no glue to reach them",
 			delegation.Zone, strings.Join(delegation.GlueLess, ", "))
 	}
-	if servers := glueServers(delegation); len(servers) > 0 {
-		return servers
-	}
-	if len(delegation.OutOfBailiwick) == 0 {
-		return nil
+	servers, pending := glueServers(delegation), delegation.OutOfBailiwick
+	if len(pending) == 0 {
+		return servers, nil
 	}
 	if side >= maxSideResolution {
-		r.warnf("the nameservers of %s are named too far away to keep chasing", delegation.Zone)
-		return nil
+		if len(servers) == 0 {
+			r.warnf("the nameservers of %s are named too far away to keep chasing", delegation.Zone)
+		}
+		return servers, nil
 	}
+	if len(servers) > 0 && !r.cfg.All {
+		return servers, pending
+	}
+	resolved, pending := r.resolveNames(ctx, step, pending, side)
+	return append(servers, resolved...), pending
+}
 
+// resolveNames looks up the addresses of nameservers named outside the zone
+// they serve, each with a walk of its own under the referral that named them.
+// It stops at the first that has any unless All is set, and hands back the
+// names it did not get to.
+func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string, side int) ([]trace.Server, []string) {
 	rrtype, typeName := uint16(dns.TypeA), "A"
 	if r.cfg.Family == 6 {
 		rrtype, typeName = dns.TypeAAAA, "AAAA"
 	}
 
 	var servers []trace.Server
-	for _, name := range delegation.OutOfBailiwick {
+	for i, name := range names {
 		root := &trace.Step{Zone: ".", Kind: trace.KindZone, Aside: true,
 			Notes: []string{"resolving " + name}}
 		r.attach(step, root)
@@ -921,6 +953,7 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) []tra
 		if result == nil {
 			continue
 		}
+		claim(result, r.orphan(result), trace.DanglingNameserver, step.Delegation.Zone, step.Delegation.Zone)
 		for _, record := range result.Records {
 			// A server may answer with more than was asked for. Only the
 			// records the name itself owns are addresses of that nameserver.
@@ -932,11 +965,11 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) []tra
 				servers = append(servers, trace.Server{Name: name, IP: addr})
 			}
 		}
-		if len(servers) > 0 {
-			return servers // one nameserver we can reach is enough to go on
+		if len(servers) > 0 && !r.cfg.All {
+			return servers, names[i+1:] // one nameserver we can reach is enough to go on
 		}
 	}
-	return servers
+	return servers, nil
 }
 
 // chaseCNAME starts again from the root for the name the alias points at, as a
@@ -960,7 +993,11 @@ func (r *run) chaseCNAME(ctx context.Context, step *trace.Step, qname string, qt
 
 	root := &trace.Step{Zone: ".", Kind: trace.KindZone, Notes: []string{"resolving " + target}}
 	r.attach(step, root)
-	return r.walk(ctx, target, qtype, root, side)
+	result := r.walk(ctx, target, qtype, root, side)
+	if result != nil {
+		claim(result, r.orphan(result), trace.DanglingAlias, qname, step.Zone)
+	}
+	return result
 }
 
 // checkECH warns when an answer publishes an encrypted client hello that

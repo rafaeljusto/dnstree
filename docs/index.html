@@ -463,8 +463,8 @@ footer a:hover{color:var(--ink)}
       <h2>Or have it say what happened</h2>
       <p class="section-lede">
         <code>--explain</code> writes the walk out in sentences under the tree: what it came
-        to, how long it stays cached, whether the chain of trust held, and whether a
-        resolver agreed.
+        to, how long it stays cached, whether the chain of trust held, whether a name
+        points at something nobody holds, and whether a resolver agreed.
       </p>
 
       <div class="term">
@@ -492,6 +492,9 @@ footer a:hover{color:var(--ink)}
         and <code>openmetrics</code> refuse the flag — all five are read by a program, which has the same facts in fields
         already. A chain whose signatures are late in the life they were made for is said too,
         with how long it has left: a zone whose signer stopped validates to the last second.
+        So is a name somebody else could take over: a nameserver or an alias target that does
+        not exist, or a zone every one of whose nameservers turns it away, the way a hosting
+        service answers for a zone nobody has created there.
       </p>
     </section>
 

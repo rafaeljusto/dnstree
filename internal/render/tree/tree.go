@@ -245,6 +245,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if flags := r.flags(step.Flags); flags != "" {
 		fields = append(fields, flags)
 	}
+	if dangling := r.dangling(step.Dangling); dangling != "" {
+		fields = append(fields, dangling)
+	}
 	if subnet := r.subnet(step.Subnet); subnet != "" {
 		fields = append(fields, subnet)
 	}
@@ -510,6 +513,21 @@ func (r *renderer) size(step *trace.Step) string {
 		return ""
 	}
 	return r.paint.paint(fmt.Sprintf("%d of %d bytes", step.Size, step.Limit), yellow)
+}
+
+// dangling marks the hop that showed a name left pointing at something nobody
+// holds. What it would take to claim is --explain's to say.
+func (r *renderer) dangling(dangling *trace.Dangling) string {
+	if dangling == nil {
+		return ""
+	}
+	switch dangling.Kind {
+	case trace.DanglingNameserver, trace.DanglingAlias:
+		return r.paint.paint(fmt.Sprintf("dangling %s: %s is missing", dangling.Kind, dangling.Missing), yellow)
+	case trace.DanglingLame:
+		return r.paint.paint("dangling: every nameserver lame", yellow)
+	}
+	return ""
 }
 
 func (r *renderer) subnet(subnet *trace.Subnet) string {

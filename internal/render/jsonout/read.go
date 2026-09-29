@@ -145,6 +145,9 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	if to.DNSSEC, err = readDNSSEC(from.DNSSEC); err != nil {
 		return nil, err
 	}
+	if to.Dangling, err = readDangling(from.Dangling); err != nil {
+		return nil, err
+	}
 	for _, child := range from.Children {
 		read, err := readStep(child, depth+1)
 		if err != nil {
@@ -266,6 +269,19 @@ func readExtended(from []extendedError) []trace.ExtendedError {
 		extended = append(extended, trace.ExtendedError{Code: ede.Code, Reason: ede.Reason, Text: unescape(ede.Text)})
 	}
 	return extended
+}
+
+func readDangling(from *dangling) (*trace.Dangling, error) {
+	if from == nil {
+		return nil, nil
+	}
+	kind := trace.DanglingKind(from.Kind)
+	switch kind {
+	case trace.DanglingNameserver, trace.DanglingAlias, trace.DanglingLame:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not a way to be left dangling", from.Kind)
+	}
+	return &trace.Dangling{Kind: kind, Name: from.Name, Target: from.Target, Missing: from.Missing, Zone: from.Zone}, nil
 }
 
 func readDelegation(from *delegation) (*trace.Delegation, error) {

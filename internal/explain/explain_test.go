@@ -759,3 +759,79 @@ func TestSeveralResolvers(t *testing.T) {
 		t.Errorf("got %q, want nothing about the resolver that agreed and had nothing cached", got)
 	}
 }
+
+// dangling is a walk ending on a hop that showed a name left pointing at
+// something nobody holds.
+func dangling(kind trace.StepKind, left *trace.Dangling) *trace.Trace {
+	step := hop(kind, "ns.test.")
+	step.Dangling = left
+	return walk(step)
+}
+
+func TestFindingsTakeover(t *testing.T) {
+	tests := map[string]struct {
+		trace *trace.Trace
+		want  []string
+	}{
+		"a nameserver under a domain nobody registered": {
+			trace: dangling(trace.KindNXDomain, &trace.Dangling{Kind: trace.DanglingNameserver,
+				Name: "example.org.", Target: "ns1.gone.com.", Missing: "gone.com.", Zone: "com."}),
+			want: []string{"example.org. is delegated to ns1.gone.com., and com. says gone.com. does not exist: whoever registers gone.com. can answer for example.org."},
+		},
+		"a nameserver missing from a domain that exists": {
+			trace: dangling(trace.KindNXDomain, &trace.Dangling{Kind: trace.DanglingNameserver,
+				Name: "example.org.", Target: "ns1.host.net.", Missing: "ns1.host.net.", Zone: "host.net."}),
+			want: []string{"whoever can create it in host.net. can answer for example.org."},
+		},
+		"an alias for a name nobody created": {
+			trace: dangling(trace.KindNXDomain, &trace.Dangling{Kind: trace.DanglingAlias,
+				Name: "shop.example.com.", Target: "myshop.cloud.test.", Missing: "myshop.cloud.test.", Zone: "cloud.test."}),
+			want: []string{"shop.example.com. is an alias for myshop.cloud.test., and cloud.test. says myshop.cloud.test. does not exist", "remove the alias"},
+		},
+		"a name the root says is not there": {
+			trace: dangling(trace.KindNXDomain, &trace.Dangling{Kind: trace.DanglingNameserver,
+				Name: "example.org.", Target: "ns.nowhere.", Missing: "nowhere.", Zone: "."}),
+			want: []string{"the root says nowhere. does not exist"},
+		},
+		"a zone every nameserver refused": {
+			trace: dangling(trace.KindReferral, &trace.Dangling{Kind: trace.DanglingLame, Name: "example.org."}),
+			want:  []string{"every nameserver of example.org. answered without authority for it", "where anybody can create one"},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var takeover []explain.Finding
+			for _, finding := range explain.Findings(test.trace) {
+				if finding.Topic == explain.Takeover {
+					takeover = append(takeover, finding)
+				}
+			}
+			if len(takeover) != 1 || takeover[0].Level != explain.Warn {
+				t.Fatalf("got %+v, want one warning about the takeover", takeover)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(takeover[0].Text, want) {
+					t.Errorf("got\n%s\nwant it to carry %q", takeover[0].Text, want)
+				}
+			}
+		})
+	}
+}
+
+func TestFindingsTakeoverOnce(t *testing.T) {
+	left := trace.Dangling{Kind: trace.DanglingNameserver,
+		Name: "example.org.", Target: "ns1.gone.com.", Missing: "gone.com.", Zone: "com."}
+	tr := dangling(trace.KindNXDomain, &left)
+	again := left
+	tr.Root.Children = append(tr.Root.Children, dangling(trace.KindNXDomain, &again).Root.Children...)
+
+	var count int
+	for _, finding := range explain.Findings(tr) {
+		if finding.Topic == explain.Takeover {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("got %d findings, want the same name said once however many hops showed it", count)
+	}
+}

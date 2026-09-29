@@ -155,6 +155,7 @@
         },
         "delegation": { "$ref": "#/$defs/delegation" },
         "dnssec": { "$ref": "#/$defs/dnssec" },
+        "dangling": { "$ref": "#/$defs/dangling" },
         "error": { "type": "string" },
         "children": {
           "description": "The hops this one led to, in the order they were made.",
@@ -346,6 +347,33 @@
         },
         "signal": { "$ref": "#/$defs/signal" },
         "nsec3": { "$ref": "#/$defs/nsec3" }
+      }
+    },
+    "dangling": {
+      "description": "Set on the hop that showed a name left pointing at something that is not there, which whoever creates that thing first can answer for. It says what the walk saw: a zone halfway through a move looks the same.",
+      "type": "object",
+      "required": ["kind", "name"],
+      "properties": {
+        "kind": {
+          "description": "nameserver: a nameserver whose name does not exist. alias: an alias whose target does not exist. lame: every nameserver of the zone answered without authority for it, which is how a hosting service answers for a zone nobody has created there.",
+          "enum": ["nameserver", "alias", "lame"]
+        },
+        "name": {
+          "description": "What was left pointing: the zone delegated, or the alias.",
+          "type": "string"
+        },
+        "target": {
+          "description": "What it points at: the nameserver, or the alias's target. Absent for lame.",
+          "type": "string"
+        },
+        "missing": {
+          "description": "The name zone says does not exist: target or the ancestor of it directly below zone, and what somebody else would have to create there. Absent for lame.",
+          "type": "string"
+        },
+        "zone": {
+          "description": "The zone whose denial says missing does not exist. Absent for lame.",
+          "type": "string"
+        }
       }
     },
     "nsec3": {

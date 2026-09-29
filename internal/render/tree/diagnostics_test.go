@@ -342,3 +342,37 @@ func TestRenderSignal(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderDangling(t *testing.T) {
+	tests := map[string]struct {
+		kind     trace.StepKind
+		dangling *trace.Dangling
+		want     string
+	}{
+		"a nameserver names what is missing": {
+			kind: trace.KindNXDomain,
+			dangling: &trace.Dangling{Kind: trace.DanglingNameserver,
+				Name: "example.org.", Target: "ns1.gone.com.", Missing: "gone.com.", Zone: "com."},
+			want: "dangling nameserver: gone.com. is missing",
+		},
+		"an alias names what is missing": {
+			kind: trace.KindNXDomain,
+			dangling: &trace.Dangling{Kind: trace.DanglingAlias,
+				Name: "shop.test.", Target: "x.cloud.test.", Missing: "x.cloud.test.", Zone: "cloud.test."},
+			want: "dangling alias: x.cloud.test. is missing",
+		},
+		"a zone every nameserver refused": {
+			kind:     trace.KindReferral,
+			dangling: &trace.Dangling{Kind: trace.DanglingLame, Name: "example.org."},
+			want:     "dangling: every nameserver lame",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := draw(t, oneHop(&trace.Step{Kind: test.kind, Dangling: test.dangling}))
+			if !strings.Contains(got, test.want) {
+				t.Errorf("got\n%s\nwant the hop marked %q", got, test.want)
+			}
+		})
+	}
+}

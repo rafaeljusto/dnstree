@@ -122,6 +122,7 @@ type step struct {
 	Minimised  bool            `json:"minimised,omitempty"`
 	Delegation *delegation     `json:"delegation,omitempty"`
 	DNSSEC     *dnssec         `json:"dnssec,omitempty"`
+	Dangling   *dangling       `json:"dangling,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	Children   []*step         `json:"children,omitempty"`
 }
@@ -197,6 +198,15 @@ type dnssec struct {
 	NSEC3      *nsec3      `json:"nsec3,omitempty"`
 }
 
+// dangling is a name left pointing at something that is not there.
+type dangling struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Target  string `json:"target,omitempty"`
+	Missing string `json:"missing,omitempty"`
+	Zone    string `json:"zone,omitempty"`
+}
+
 // nsec3 is how the zone that denied something hashes its names.
 type nsec3 struct {
 	Zone       string `json:"zone"`
@@ -247,6 +257,7 @@ func convert(from *trace.Step, timed bool) *step {
 		Minimised:  from.Minimised,
 		Delegation: convertDelegation(from.Delegation),
 		DNSSEC:     convertDNSSEC(from.DNSSEC),
+		Dangling:   convertDangling(from.Dangling),
 		Error:      from.Err,
 	}
 	// Written wherever it is known, a start of zero included: the first query
@@ -382,6 +393,13 @@ func convertDelegation(from *trace.Delegation) *delegation {
 		}
 	}
 	return to
+}
+
+func convertDangling(from *trace.Dangling) *dangling {
+	if from == nil {
+		return nil
+	}
+	return &dangling{Kind: string(from.Kind), Name: from.Name, Target: from.Target, Missing: from.Missing, Zone: from.Zone}
 }
 
 func convertDNSSEC(from *trace.DNSSECStatus) *dnssec {

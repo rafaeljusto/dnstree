@@ -296,6 +296,10 @@ type Step struct {
 	// DNSSEC is the state of the chain at this zone cut.
 	DNSSEC *DNSSECStatus
 
+	// Dangling is set on the hop that showed a name left pointing at
+	// something nobody holds.
+	Dangling *Dangling
+
 	Children []*Step
 	Err      string
 }
@@ -427,6 +431,37 @@ type Delegation struct {
 	// DSPresent reports whether the parent signed the delegation.
 	DSPresent bool
 }
+
+// Dangling is a name left pointing at something that is not there, which
+// whoever creates that thing first can answer for. It says what the walk saw
+// and no more: a zone halfway through a move looks the same, and so does a
+// hosting service that will not let a stranger create the zone.
+type Dangling struct {
+	Kind DanglingKind
+
+	// Name is what was left pointing: the zone delegated, or the alias.
+	Name string
+
+	// Target is what it points at: the nameserver or the alias target. Empty
+	// for a zone every server of which answered without authority.
+	Target string
+
+	// Missing is the name Zone said does not exist. It is Target itself or
+	// one of its ancestors, the one directly below Zone, and it is what
+	// somebody else would have to create in Zone to take Name over.
+	Missing string
+	Zone    string
+}
+
+// DanglingKind is what a name was left pointing at.
+type DanglingKind string
+
+// What a name can be left pointing at.
+const (
+	DanglingNameserver DanglingKind = "nameserver" // a nameserver whose name does not exist
+	DanglingAlias      DanglingKind = "alias"      // an alias whose target does not exist
+	DanglingLame       DanglingKind = "lame"       // nameservers that all answered without authority
+)
 
 // DNSSECState is how far the chain of trust got.
 type DNSSECState string

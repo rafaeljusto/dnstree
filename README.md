@@ -875,8 +875,9 @@ either would go looking in the wrong place.
 
 `--explain` writes a handful of sentences under the tree: what the walk came
 to, how long it goes on being served after it changes, what the chain of trust
-made of it, what the zone's nameservers have in common, which servers made it
-harder, and whether a recursive resolver agreed.
+made of it, whether a name points at something nobody holds, what the zone's
+nameservers have in common, which servers made it harder, and whether a
+recursive resolver agreed.
 
 ```
 $ dnstree --explain www.example.com
@@ -947,6 +948,24 @@ that was never asked, or one the AS lookups did not answer for, leaves the whole
 question unanswered rather than half answered. The address families are read off
 the parent's glue instead, which is whole whether or not the servers were asked,
 so a zone with no IPv4 anywhere in its delegation is named without `--all`.
+
+A name left pointing at something that is not there can be taken over by whoever
+creates that thing first, without touching the owner's account. Three kinds
+are said, and the hop that showed each is marked `dangling` in the tree:
+
+- a nameserver whose name does not exist. The name that is missing is the one
+  directly below the zone that denied it, so `ns1.gone.com` denied by `com.`
+  names `gone.com` as the domain whoever registers it can answer with;
+- an alias whose target does not exist, in a zone other than the alias's own,
+  such as a cloud resource deleted from under a `CNAME`;
+- a zone every one of whose nameservers answered without authority for it,
+  which is how a hosting service answers for a zone nobody has created there.
+
+None of them is a claim that the name can be taken, only what the walk saw:
+a zone halfway through a move looks the same, and so does a service that does
+not let strangers in. No list of risky services is carried, since it would go
+stale. A walk stops looking up nameservers named outside a zone at the first
+that has an address, so it takes `--all` to find a dangling one listed after it.
 
 `--format json`, `dot`, `mermaid`, `waterfall-mermaid` and `openmetrics` refuse
 `--explain`, `--diff` and `--against`: all five are read by a program, which

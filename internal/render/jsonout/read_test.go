@@ -59,6 +59,14 @@ func TestReadRoundTrip(t *testing.T) {
 				}},
 			}}},
 		},
+		"a nameserver whose name does not exist": {
+			Question: trace.Question{Name: "ns1.gone.com.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "com.", Kind: trace.KindNXDomain,
+				Dangling: &trace.Dangling{Kind: trace.DanglingNameserver,
+					Name: "example.org.", Target: "ns1.gone.com.", Missing: "gone.com.", Zone: "com."},
+			}}},
+		},
 		"nothing walked at all": {Question: trace.Question{Name: "example.", Type: "A", Class: "IN"}},
 		"a time a float cannot hold exactly": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
@@ -185,6 +193,11 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure", "signal": {"state": "granted"}}}}`,
 			want: `"granted"`,
+		},
+		"a way to be left dangling nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "dangling": {"kind": "adrift", "name": "x."}}]}}`,
+			want: `"adrift"`,
 		},
 		"a way to answer a cookie nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
