@@ -2,11 +2,11 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `499eefc`
-- **Date**: 2026-09-28
-- **Scope**: the twenty-five commits since `f57b93b` (`--format waterfall`,
-  `waterfall-mermaid`, `openmetrics`, `web-3d`, the NSEC3 hashing and shared
-  network findings, the ANY/AXFR/IXFR refusal, `Trace.Chain`, the `/v2` move)
+- **Commit**: `cc0837f`
+- **Date**: 2026-09-29
+- **Scope**: the eighteen commits since `499eefc` (dnstree-web and
+  `internal/server`, `transport.Guard`, `--against`, IDN names, dangling names,
+  DDR, open transfer and recursion probes, the hidden zone cut referral)
 
 ## Open findings
 
@@ -110,3 +110,34 @@ None.
 - The served address is announced with the question shown, never raw.
 - ANY, AXFR, IXFR and the meta types are refused; `TYPE255` is not in the
   codec's type map either.
+- dnstree-web: both transports guarded by `Public`; exposure probes, DDR, AS
+  lookups and the comparison are off; nothing but the question reaches the
+  resolver.
+- dnstree-web: `asked` and `drawn` redirect through `path()` (literal view,
+  `PathEscape`); `canonical` refuses `/`, `\`, whitespace and over 253 bytes;
+  CR/LF never reaches a header.
+- dnstree-web: assets are a fixed embedded map, `failed.html` gets fixed text
+  through `html/template`, hostile text reaches the page only as JSON.
+- dnstree-web: 4 walks at once, 5 s queue, 15 s per walk on `WithoutCancel`;
+  kept walks capped at 32 MiB and 1 MiB each; the limiter clears every window.
+- Probes (AXFR, recursion): one length-prefixed message read, spent from
+  `counters.query()` before fan-out, `Aside` so no verdict or exit code reads
+  them, attached after `wait.Wait()`.
+- `crossReferral`: the cut is strictly between the answering zone and the
+  delegation, budgeted, and its DS goes through `enterZone`/`provesNoDS`.
+- Pending nameserver names shrink every pass and stay inside the query budget.
+- `unowned` is bounded by `len(Answer)`; dangling and DDR strings go through
+  `Shown`; DDR drops AliasMode, `.` targets and unknown mandatory keys.
+- `idn.ASCII` runs only on user input; `terse` always goes deeper and terminates.
+- `--against`: the saved file goes through `saved()` limits and `history.Of`;
+  `Against` indexes nothing; a fuzz of Read, Against, Findings and every
+  renderer found no panic and no raw escape.
+- The trace reflection test reaches `Dangling`, `DDR` and `Designated`; `Probe`
+  holds validated enums only.
+- dnstree-web redirects are all rebuilt through `path()`, the bare route too;
+  the mux's own cleaning keeps `%5C` escaped (`TestRoutes`).
+- `--client-header` reads the last entry, the one the proxy wrote, and falls
+  back to the connection when it is no address (`TestPerClientForwarded`).
+- `Public` refuses IPv4-compatible, SIIT, Teredo, site-local and the 6to4
+  relays (`TestPublic`).
+- Every finding's text is checked for ASCII in the explain table tests.
