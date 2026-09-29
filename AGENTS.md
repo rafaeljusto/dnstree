@@ -204,8 +204,10 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
 A new flag or format shows up in four places, and missing one is the usual
 review comment: the usage string in `internal/cli/cli.go`, the flag table in
 `README.md`, the landing page in `docs/` (published by the pages workflow), and
-the tests. Every example in the README and on the page is real output, pasted
-from an actual run — regenerate it rather than editing it by hand.
+the tests. A flag that needs more than a row is explained in `docs/guide/`, and
+its row links there. Every example in the README, the guide and on the page is
+real output, pasted from an actual run — regenerate it rather than editing it by
+hand.
 
 The man page is not a fifth place. `cmd/mkman` renders it from `cli.Usage` in
 `make man`, which CI's packaging job runs on every pull request, and refuses to

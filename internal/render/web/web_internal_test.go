@@ -330,7 +330,7 @@ func TestIconsMatchDocs(t *testing.T) {
 	}
 }
 
-// TestPagesFetchNothing holds both pages to what the README says of them: the
+// TestPagesFetchNothing holds both pages to what the guide says of them: the
 // page is in the binary, and nothing it is made of is fetched from anywhere.
 // The only address either may name is the one SVG is written in.
 func TestPagesFetchNothing(t *testing.T) {

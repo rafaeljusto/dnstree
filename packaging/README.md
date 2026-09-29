@@ -20,6 +20,19 @@ make dist VERSION=v1.2.0   # everything, into dist/
 `build/` is scratch and never published; `dist/` is what the release uploads.
 Both are removed by `make clean`, which `dist` runs first.
 
+## Cutting a release
+
+A release is cut by running the `release` workflow from `main`: it reads the
+commits since the last tag, works out the version their prefixes ask for,
+creates the tag, and publishes the archives alongside two multi-architecture
+images on `ghcr.io`, `dnstree` and `dnstree-web`. The same commits become the
+changelog, carried by both the annotated tag and the release notes. `dry_run`
+reports the version it would pick without tagging anything, and `bump`
+overrides it. See [cmd/next-version](../cmd/next-version/) for how a subject
+earns a bump. A package `ghcr.io` has not seen before starts out private: the
+first release to publish one has to be followed by making it public in the
+package's settings.
+
 ## The man page
 
 [`cmd/mkman`](../cmd/mkman) renders `dnstree.1` from `cli.Usage` — the same

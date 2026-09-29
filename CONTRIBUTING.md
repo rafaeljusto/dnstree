@@ -7,6 +7,7 @@
 - [Contribute code](#contribute-code)
   - [Commit subjects decide the version](#commit-subjects-decide-the-version)
   - [Testing](#testing)
+  - [Demos](#demos)
   - [Working with forks](#working-with-forks)
 - [Disclosing vulnerabilities](#disclosing-vulnerabilities)
 - [Code style](#code-style)
@@ -172,16 +173,37 @@ on purpose — there is a knob for lame servers, truncation, out-of-bailiwick
 glue, broken signatures and more.
 
 ```bash
-make check    # what CI runs, less hadolint, the packaging dry run and the images
-make goldens  # rewrite the renderer goldens and docs/trace.schema.json; read the diff
-make live     # goes out to the real root servers; never part of check
+make check        # what CI runs, less hadolint, the packaging dry run and the images
+make lint         # go vet and golangci-lint
+make lint-docker  # hadolint against the Dockerfile
+make vuln         # govulncheck against the vulnerability database
+make goldens      # rewrite the renderer goldens and docs/trace.schema.json; read the diff
+make live         # goes out to the real root servers; never part of check
+make demos        # re-record the terminal demos in docs/ from tapes/, and the 3d still
+make demo-3d      # take only the still of --format web-3d in docs/
+make roothints    # refresh the embedded root hints and trust anchors
+make dist         # cross compile a release into dist/
+make image        # build the container image for this machine
+make image-web    # build the dnstree-web image for this machine
 ```
 
 After touching anything concurrent or `fakens`, run
 `go test -race -count=2 ./...`: races here have only shown up on the second
 run. Tests that need the internet go behind `//go:build live`. A new flag goes
 in the usage string in `internal/cli/cli.go`, the README flag table,
-`docs/index.html` and the tests.
+`docs/index.html` and the tests; a flag that needs more than a row gets a
+section in [`docs/guide/`](docs/guide/), linked from the row.
+
+### Demos
+
+The recordings under `docs/` are written by [vhs](https://github.com/charmbracelet/vhs)
+from the tapes in [tapes/](tapes/), one per scene. `make demos` rebuilds the
+binary and records all four; it needs `ttyd` and `ffmpeg` on the PATH, and it
+walks the real root servers, so the timings in a recording are whatever the
+link gave that day. It then takes the still of `--format web-3d` with
+[scripts/demo-3d.sh](scripts/demo-3d.sh), which serves a fresh walk and has
+headless Chrome draw it without a GPU; `CHROME` names the browser when the
+script cannot find it. `make check` leaves them alone.
 
 ### Working with forks
 
