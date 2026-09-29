@@ -32,6 +32,10 @@ contents:
   - src: ./README.md
     dst: /usr/share/doc/dnstree/README.md
 
+  - src: ./docs/guide
+    dst: /usr/share/doc/dnstree/guide
+    type: tree
+
   - src: ./dnstreerc.example
     dst: /usr/share/doc/dnstree/dnstreerc.example
 
