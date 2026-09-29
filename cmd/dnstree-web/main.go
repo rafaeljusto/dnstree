@@ -45,7 +45,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	walks := flags.Int("walks", server.DefaultWalks, "how many walks run at once")
 	perClient := flags.Int("per-client", server.DefaultPerClient, "how many walks one client may start in a minute")
 	keep := flags.Duration("keep", server.DefaultKeep, "how long a finished walk is served again")
-	clientHeader := flags.String("client-header", "", "the header a proxy in front puts the client's address in, such as Fly-Client-IP; only set it when every request comes through that proxy, since anyone else can send it")
+	clientHeader := flags.String("client-header", "", "the header a proxy in front puts the client's address in, such as Fly-Client-IP; the last address in it is read, since the proxy wrote that one; only set it when every request comes through that proxy, since anyone else can send it")
 	if err := flags.Parse(args); err != nil {
 		return 1
 	}

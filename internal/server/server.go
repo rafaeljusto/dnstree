@@ -166,8 +166,25 @@ func (s *Server) routes() {
 		s.mux.Handle("GET /"+name, s.pages[false])
 	}
 
+	// The path is rebuilt rather than sent back: a browser reads a backslash
+	// as a slash, so /\evil.example/x/A would go to another site.
 	s.mux.HandleFunc("GET /{view}/{name}/{type}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+		scene, ok := views[r.PathValue("view")]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		name, ok := canonical(r.PathValue("name"))
+		if !ok {
+			s.failed(w, http.StatusBadRequest, "that is not a name that can be walked to")
+			return
+		}
+		qtype, ok := known(r.PathValue("type"))
+		if !ok {
+			s.failed(w, http.StatusBadRequest, "that is not one of the types this page walks")
+			return
+		}
+		http.Redirect(w, r, path(scene, name, qtype), http.StatusMovedPermanently)
 	})
 	s.mux.HandleFunc("GET /{view}/{name}/{type}/{file...}", s.drawn)
 }
@@ -311,24 +328,35 @@ func (s *Server) walk(ctx context.Context, name, qtype string) (*walked, error) 
 // client is who a request counts against. An IPv6 client is counted by its
 // /64, since that is the least a network hands out and all of it is theirs.
 func (s *Server) client(r *http.Request) string {
-	from := r.RemoteAddr
+	addr, ok := address(r.RemoteAddr)
 	if s.cfg.ClientHeader != "" {
-		if header := r.Header.Get(s.cfg.ClientHeader); header != "" {
-			from = strings.TrimSpace(strings.Split(header, ",")[0])
+		// A proxy appends the address it saw, so only the last entry is its
+		// own: anything before it is whatever the client chose to send.
+		if values := r.Header.Values(s.cfg.ClientHeader); len(values) > 0 {
+			entries := strings.Split(values[len(values)-1], ",")
+			if proxied, proxiedOK := address(entries[len(entries)-1]); proxiedOK {
+				addr, ok = proxied, true
+			}
 		}
 	}
-	if host, _, err := net.SplitHostPort(from); err == nil {
-		from = host
-	}
-	addr, err := netip.ParseAddr(from)
-	if err != nil {
-		return from
+	if !ok {
+		return r.RemoteAddr
 	}
 	addr = addr.Unmap()
 	if addr.Is6() {
 		return netip.PrefixFrom(addr, 64).Masked().String()
 	}
 	return addr.String()
+}
+
+// address reads an address with or without a port after it.
+func address(from string) (netip.Addr, bool) {
+	from = strings.TrimSpace(from)
+	if host, _, err := net.SplitHostPort(from); err == nil {
+		from = host
+	}
+	addr, err := netip.ParseAddr(from)
+	return addr, err == nil
 }
 
 func (s *Server) failed(w http.ResponseWriter, status int, message string) {

@@ -140,6 +140,15 @@ func TestRoutes(t *testing.T) {
 		"an address without the slash": {
 			path: "/3d/www.example.com/A", wantStatus: http.StatusMovedPermanently, wantAt: "/3d/www.example.com/A/",
 		},
+		"an address without the slash, spelled another way": {
+			path: "/tree/WWW.Example.COM./a", wantStatus: http.StatusMovedPermanently, wantAt: "/tree/www.example.com/A/",
+		},
+		"an address without the slash pointing at another site": {
+			path: "/%5Cevil.example/x/A", wantStatus: http.StatusNotFound,
+		},
+		"an address without the slash and a name that is not one": {
+			path: "/tree/%5Cevil.example/A", wantStatus: http.StatusBadRequest,
+		},
 		"a name typed in another script, walked in punycode": {
 			path: "/3d/b%C3%BCcher.example/A/page.json", wantStatus: http.StatusOK, wantContent: `"xn--bcher-kva.example."`,
 		},
@@ -247,6 +256,30 @@ func TestPerClient(t *testing.T) {
 	}
 	if got := get(t, served, "/3d/example.com/SOA/", other); got.Code != http.StatusOK {
 		t.Errorf("got %d for somebody else, want the walk made", got.Code)
+	}
+}
+
+// TestPerClientForwarded covers a proxy that appends to what the client sent:
+// only the entry the proxy wrote counts, and a client naming itself afresh
+// before it is still the same client.
+func TestPerClientForwarded(t *testing.T) {
+	served, _ := internet(t, anywhere, server.Config{PerClient: 1, ClientHeader: "X-Forwarded-For"})
+
+	forged := http.Header{"X-Forwarded-For": {"203.0.113.1, 198.51.100.9"}}
+	again := http.Header{"X-Forwarded-For": {"203.0.113.2, 198.51.100.9"}}
+	unreadable := http.Header{"X-Forwarded-For": {"nobody"}}
+
+	if got := get(t, served, "/3d/www.example.com/A/", forged); got.Code != http.StatusOK {
+		t.Fatalf("got %d for the first walk, want it made", got.Code)
+	}
+	if got := get(t, served, "/3d/example.com/NS/", again); got.Code != http.StatusTooManyRequests {
+		t.Errorf("got %d for a client naming itself afresh, want %d", got.Code, http.StatusTooManyRequests)
+	}
+	if got := get(t, served, "/3d/example.com/SOA/", unreadable); got.Code != http.StatusOK {
+		t.Errorf("got %d for a header that is no address, want the connection's own counted", got.Code)
+	}
+	if got := get(t, served, "/3d/example.com/MX/", unreadable); got.Code != http.StatusTooManyRequests {
+		t.Errorf("got %d for the connection again, want %d", got.Code, http.StatusTooManyRequests)
 	}
 }
 

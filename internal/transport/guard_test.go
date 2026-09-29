@@ -34,6 +34,11 @@ func TestPublic(t *testing.T) {
 		"the broadcast address":             {"255.255.255.255", false},
 		"multicast":                         {"224.0.0.251", false},
 		"a public address mapped into IPv6": {"::ffff:198.41.0.4", true},
+		"loopback compatible with IPv6":     {"::127.0.0.1", false},
+		"loopback translated by SIIT":       {"::ffff:0:127.0.0.1", false},
+		"a private network behind Teredo":   {"2001:0:a00:1::1", false},
+		"a site-local IPv6 address":         {"fec0::1", false},
+		"the 6to4 relays":                   {"192.88.99.1", false},
 	}
 
 	for name, test := range tests {
