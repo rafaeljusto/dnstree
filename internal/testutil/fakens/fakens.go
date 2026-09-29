@@ -24,6 +24,7 @@ import (
 	"codeberg.org/miekg/dns/dnshttp"
 	"codeberg.org/miekg/dns/dnstest"
 	"codeberg.org/miekg/dns/dnsutil"
+	"codeberg.org/miekg/dns/rdata"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -93,6 +94,19 @@ type Behaviour struct {
 	// Cookies is how the server answers a DNS cookie (RFC 7873). The zero
 	// value ignores it, the way a server that does not support them does.
 	Cookies Cookies
+
+	// OpenTransfer hands the whole zone to anyone who asks for an AXFR over
+	// TCP. Without it a transfer is refused, as it should be.
+	OpenTransfer bool
+
+	// ResetTransfer resets the TCP connection an AXFR arrives on instead of
+	// answering it, the way Route 53 refuses a transfer.
+	ResetTransfer bool
+
+	// OpenRecursion answers a question outside the zone that asks for
+	// recursion, the way an open resolver does: the root's NS set, with RA
+	// and without AA. Without it such a question is refused.
+	OpenRecursion bool
 }
 
 // Cookies is how a server answers a DNS cookie.
@@ -396,6 +410,15 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		}
 	}
 
+	if s.behaviour.ResetTransfer && qtype == dns.TypeAXFR {
+		if conn, ok := w.Conn().(*net.TCPConn); ok {
+			w.Hijack()
+			_ = conn.SetLinger(0) // close with RST
+			_ = conn.Close()
+			return
+		}
+	}
+
 	reply := dnsutil.SetReply(new(dns.Msg), req)
 	reply.UDPSize = req.UDPSize
 	s.echo(reply, req)
@@ -410,6 +433,14 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		reply.Rcode = dns.RcodeRefused
 	case s.behaviour.Lame:
 		// NOERROR, no AA, nothing to follow: the server is not serving this zone.
+	case qtype == dns.TypeAXFR:
+		s.transfer(reply, name, dnsutil.Network(w))
+	case req.RecursionDesired && s.behaviour.OpenRecursion && !dnsutil.IsBelow(s.origin, name):
+		reply.RecursionAvailable = true
+		reply.Answer = []dns.RR{&dns.NS{
+			Hdr: dns.Header{Name: ".", Class: dns.ClassINET, TTL: 518400},
+			NS:  rdata.NS{Ns: "a.root-servers.net."},
+		}}
 	default:
 		s.respond(reply, name, qtype)
 		if req.Security {
@@ -421,6 +452,24 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		dnsutil.Truncate(reply)
 	}
 	_, _ = reply.WriteTo(w)
+}
+
+// transfer answers an AXFR the way a server does in one message: the SOA, the
+// rest of the zone, and the SOA again. Only over TCP, and only for the apex.
+func (s *Server) transfer(reply *dns.Msg, name, network string) {
+	if !s.behaviour.OpenTransfer || network != "tcp" || !dns.EqualName(name, s.origin) {
+		reply.Rcode = dns.RcodeRefused
+		return
+	}
+	reply.Authoritative = true
+	apex := s.soa()
+	reply.Answer = append(reply.Answer, apex...)
+	for _, rr := range s.records() {
+		if dns.RRToType(rr) != dns.TypeSOA {
+			reply.Answer = append(reply.Answer, rr)
+		}
+	}
+	reply.Answer = append(reply.Answer, apex...)
 }
 
 // echo puts the EDNS0 options the server was set up to answer with into the

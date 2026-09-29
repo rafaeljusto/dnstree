@@ -389,3 +389,40 @@ func TestRenderDesignations(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderProbes covers the asides --check-axfr and --check-recursion leave.
+// Each says what the server gave, and only an open one is coloured as a fault.
+func TestRenderProbes(t *testing.T) {
+	probe := func(kind trace.ProbeKind, state trace.ProbeState) *trace.Step {
+		return &trace.Step{
+			Zone: "example.com.", Kind: trace.KindAnswer, Aside: true, Rcode: "NOERROR",
+			Server: trace.Server{Name: "ns1.example.com.", IP: netip.MustParseAddr("192.0.2.5"), Port: 53},
+			Probe:  &trace.Probe{Kind: kind, State: state},
+		}
+	}
+	tr := resolution()
+	answer := tr.Result()
+	answer.Children = append(answer.Children,
+		probe(trace.ProbeTransfer, trace.ProbeOpen),
+		probe(trace.ProbeTransfer, trace.ProbeClosed),
+		probe(trace.ProbeRecursion, trace.ProbeUnchecked),
+	)
+
+	var out bytes.Buffer
+	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, want := range []string{"axfr open", "axfr closed", "recursion unchecked"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("got no %q in:\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorAlways}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out.String(), "\x1b[31maxfr open") {
+		t.Errorf("got no open transfer painted as a fault:\n%q", out.String())
+	}
+}

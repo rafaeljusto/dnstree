@@ -423,11 +423,15 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		CheckNS:   cfg.CheckNS,
 		CheckDS:   cfg.CheckDS,
 		Serial:    cfg.Serial,
-		NSID:      cfg.NSID,
-		Cookie:    cfg.Cookie,
-		Minimise:  cfg.Minimise,
-		Subnet:    cfg.Subnet,
-		Retries:   cfg.Retries,
+
+		CheckTransfer:  cfg.CheckAXFR,
+		CheckRecursion: cfg.CheckRecursion,
+
+		NSID:     cfg.NSID,
+		Cookie:   cfg.Cookie,
+		Minimise: cfg.Minimise,
+		Subnet:   cfg.Subnet,
+		Retries:  cfg.Retries,
 		Budget: resolver.Budget{
 			MaxDepth:   cfg.MaxDepth,
 			MaxQueries: cfg.MaxQueries,

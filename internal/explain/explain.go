@@ -107,6 +107,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, spread(tr)...)
 	findings = append(findings, servers(tr)...)
 	findings = append(findings, cookies(tr)...)
+	findings = append(findings, exposure(tr)...)
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
 	}
@@ -710,6 +711,64 @@ func cookies(tr *trace.Trace) []Finding {
 		if servers := said[about.state]; len(servers) > 0 {
 			findings = append(findings, Finding{Topic: Servers, Level: about.level, Text: fmt.Sprintf(
 				"%s %s: %s", plural(len(servers), "server", "servers"), about.text, list(servers))})
+		}
+	}
+	return findings
+}
+
+// exposure is what --check-axfr and --check-recursion found, one kind at a
+// time. An open server is named with what to do about it; a sweep that found
+// every server closed says so once, since that is what was being asked; and a
+// server that could not be asked is named as unchecked, never as closed.
+func exposure(tr *trace.Trace) []Finding {
+	type about struct {
+		zone string
+		kind trace.ProbeKind
+	}
+	var (
+		order []about
+		held  = make(map[about]map[trace.ProbeState][]string)
+	)
+	for step := range tr.Steps() {
+		if step.Probe == nil {
+			continue
+		}
+		key := about{step.Zone, step.Probe.Kind}
+		if held[key] == nil {
+			order = append(order, key)
+			held[key] = make(map[trace.ProbeState][]string)
+		}
+		held[key][step.Probe.State] = add(held[key][step.Probe.State], at(step))
+	}
+
+	var findings []Finding
+	for _, key := range order {
+		states := held[key]
+		open, unchecked := states[trace.ProbeOpen], states[trace.ProbeUnchecked]
+		asked := "a zone transfer"
+		if key.kind == trace.ProbeRecursion {
+			asked = "recursion"
+		}
+		switch {
+		case len(open) > 0 && key.kind == trace.ProbeTransfer:
+			findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: fmt.Sprintf(
+				"zone transfers of %s are open to anyone at %s, which lists every name in the zone to whoever asks; allow them only to the zone's own secondaries",
+				key.zone, list(open))})
+		case len(open) > 0:
+			findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: fmt.Sprintf(
+				"recursion is open to anyone at %s, which makes an open resolver of a nameserver of %s that can be pointed at somebody else to flood them; turn recursion off there, or allow it only to your own clients",
+				list(open), key.zone)})
+		case len(unchecked) == 0 && key.kind == trace.ProbeTransfer:
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+				"no nameserver of %s handed the zone to a stranger", key.zone)})
+		case len(unchecked) == 0:
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+				"no nameserver of %s looked up another name for a stranger", key.zone)})
+		}
+		if len(unchecked) > 0 {
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+				"%s could not be asked for %s, so whether %s is open there is unknown",
+				list(unchecked), asked, asked)})
 		}
 	}
 	return findings

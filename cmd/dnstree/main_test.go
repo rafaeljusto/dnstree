@@ -414,6 +414,40 @@ func TestRunRoot(t *testing.T) {
 	}
 }
 
+// TestRunExposure asks the zone's nameserver for the whole zone and for a
+// lookup it should not do. The transfer is open, and the tree and the
+// explanation both say so; the zone itself is never drawn.
+func TestRunExposure(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+	child := fakens.New(t, fakens.Config{Name: "ns.test.", Origin: "test.", Zone: splitChildZone,
+		Behaviour: fakens.Behaviour{OpenTransfer: true}})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())),
+		"--check-axfr", "--check-recursion", "--explain",
+		"--no-asn", "--no-compare", "--color", "never", "--format", "ascii", "www.test", "A",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"axfr open", "recursion closed",
+		"zone transfers of test. are open to anyone at ns.test.",
+		"no nameserver of test. looked up another name for a stranger",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("got no %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "hostmaster") {
+		t.Errorf("got the transferred zone drawn:\n%s", out)
+	}
+}
+
 // TestRunRootWithoutName leaves the name off, which is all a walk needs when
 // nothing has to verify a certificate.
 func TestRunRootWithoutName(t *testing.T) {

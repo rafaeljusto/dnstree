@@ -148,6 +148,9 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	if to.Dangling, err = readDangling(from.Dangling); err != nil {
 		return nil, err
 	}
+	if to.Probe, err = readProbe(from.Probe); err != nil {
+		return nil, err
+	}
 	for _, child := range from.Children {
 		read, err := readStep(child, depth+1)
 		if err != nil {
@@ -295,6 +298,24 @@ func readExtended(from []extendedError) []trace.ExtendedError {
 		extended = append(extended, trace.ExtendedError{Code: ede.Code, Reason: ede.Reason, Text: unescape(ede.Text)})
 	}
 	return extended
+}
+
+func readProbe(from *probe) (*trace.Probe, error) {
+	if from == nil {
+		return nil, nil
+	}
+	kind, state := trace.ProbeKind(from.Kind), trace.ProbeState(from.State)
+	switch kind {
+	case trace.ProbeTransfer, trace.ProbeRecursion:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not something a nameserver can be asked for", from.Kind)
+	}
+	switch state {
+	case trace.ProbeOpen, trace.ProbeClosed, trace.ProbeUnchecked:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not what can come of asking a nameserver", from.State)
+	}
+	return &trace.Probe{Kind: kind, State: state}, nil
 }
 
 func readDangling(from *dangling) (*trace.Dangling, error) {

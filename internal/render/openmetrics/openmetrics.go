@@ -46,6 +46,9 @@ func Render(w io.Writer, tr *trace.Trace) error {
 			continue
 		}
 		queries++
+		if step.Probe != nil && step.Probe.State != trace.ProbeUnchecked {
+			continue // a server that refused a probe did its job
+		}
 		switch step.Kind {
 		case trace.KindTimeout, trace.KindError, trace.KindLame:
 			failed++
@@ -101,6 +104,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 	}
 
+	probes(m, tr)
 	resolvers(m, tr.Resolvers)
 
 	m.family("dnstree_warnings", "", "what the walk could not do")
@@ -108,6 +112,29 @@ func Render(w io.Writer, tr *trace.Trace) error {
 
 	m.write("# EOF\n")
 	return out.Flush()
+}
+
+// probes writes what --check-axfr and --check-recursion found, one sample per
+// nameserver and check. A server that could not be asked is left out: a zero
+// for it would read as one that refused.
+func probes(m *metrics, tr *trace.Trace) {
+	var found []*trace.Step
+	for step := range tr.Steps() {
+		if step.Probe != nil && step.Probe.State != trace.ProbeUnchecked {
+			found = append(found, step)
+		}
+	}
+	if len(found) == 0 {
+		return
+	}
+	m.family("dnstree_open", "", "whether a nameserver of the zone gave a stranger what it should not: the whole zone (transfer), or a lookup of another name (recursion)")
+	for _, step := range found {
+		m.sample("dnstree_open", flag(step.Probe.State == trace.ProbeOpen),
+			label{"check", string(step.Probe.Kind)},
+			label{"zone", step.Zone},
+			label{"server", step.Server.Name},
+			label{"address", address(step.Server)})
+	}
 }
 
 // resolvers writes what the recursive servers made of the question, leaving

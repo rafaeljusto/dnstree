@@ -42,6 +42,8 @@ script is asked in punycode, the way the DNS holds it.
   --check-ns              ask the zone that answered for its NS set and compare
   --check-ds              ask the zone for its CDS and CDNSKEY and compare
   --serial                ask every nameserver of the zone which copy it serves
+  --check-axfr            ask each nameserver of the zone to hand over all of it
+  --check-recursion       ask each nameserver of the zone to resolve another name
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
@@ -210,6 +212,23 @@ a zone transfer is invisible to everything else here: it answers the question
 correctly, out of an older zone. It costs a query per nameserver, and which of
 the serials is the newer one is not claimed, because serial arithmetic wraps.
 
+--check-axfr asks every nameserver of the zone the walk ends in for the whole
+zone (AXFR), the way anybody could, and says on each which of them hand it
+over. A transfer lists every name in the zone, and is meant for the zone's own
+secondaries. Only the start of the reply is read, and nothing of it is kept or
+drawn. It needs tcp, so --doh cannot ask it, and --dot asks it over tls.
+
+--check-recursion asks each of them to look up a name outside its zones, and
+says which of them do: an authoritative server that resolves for anyone is an
+open resolver, which floods whoever an attacker points it at. It goes by what
+comes back rather than by the flag that says a server recurses, which servers
+set without doing it.
+
+Both cost a query per nameserver and are off unless asked for: a transfer
+refused still shows up in the server's logs, so they are for zones you run or
+have been asked to check. The root is never asked either, since its servers
+hand out the root zone on purpose.
+
 --all sees the other half of the same thing without being asked to: where it
 puts the question itself to every nameserver of a zone, it says so when they do
 not all answer it alike.
@@ -276,6 +295,10 @@ type Config struct {
 	CheckNS  bool
 	CheckDS  bool
 	Serial   bool
+
+	CheckAXFR      bool
+	CheckRecursion bool
+
 	NSID     bool
 	Cookie   bool
 	Minimise bool
@@ -409,6 +432,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
 	flags.BoolVar(&cfg.CheckDS, "check-ds", false, "compare the zone's CDS and CDNSKEY with its DS")
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
+	flags.BoolVar(&cfg.CheckAXFR, "check-axfr", false, "ask every nameserver of the zone for all of it")
+	flags.BoolVar(&cfg.CheckRecursion, "check-recursion", false, "ask every nameserver of the zone to look up somebody else's name")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
@@ -648,7 +673,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "no-asn": true, "no-compare": true, "ddr": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

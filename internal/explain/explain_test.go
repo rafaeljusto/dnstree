@@ -871,3 +871,67 @@ func TestFindingsTakeoverOnce(t *testing.T) {
 		t.Errorf("got %d findings, want the same name said once however many hops showed it", count)
 	}
 }
+
+// TestExposure covers what --check-axfr and --check-recursion found. An open
+// server is named with what to do about it, a sweep that found all of them
+// closed says so, and a server that could not be asked is never called closed.
+func TestExposure(t *testing.T) {
+	probe := func(server string, kind trace.ProbeKind, state trace.ProbeState) *trace.Step {
+		step := hop(trace.KindAnswer, server)
+		step.Aside, step.Probe = true, &trace.Probe{Kind: kind, State: state}
+		return step
+	}
+
+	for name, tt := range map[string]struct {
+		probes []*trace.Step
+		want   []string
+		unsaid []string
+	}{
+		"a secondary that hands the zone to anyone": {
+			probes: []*trace.Step{
+				probe("ns1.test.", trace.ProbeTransfer, trace.ProbeClosed),
+				probe("ns2.test.", trace.ProbeTransfer, trace.ProbeOpen),
+			},
+			want:   []string{"zone transfers of test. are open to anyone at ns2.test., which lists every name in the zone"},
+			unsaid: []string{"ns1.test.", "no nameserver"},
+		},
+		"a server that resolves for anyone": {
+			probes: []*trace.Step{probe("ns1.test.", trace.ProbeRecursion, trace.ProbeOpen)},
+			want:   []string{"recursion is open to anyone at ns1.test.", "turn recursion off there"},
+		},
+		"every server keeps both to itself": {
+			probes: []*trace.Step{
+				probe("ns1.test.", trace.ProbeTransfer, trace.ProbeClosed),
+				probe("ns1.test.", trace.ProbeRecursion, trace.ProbeClosed),
+			},
+			want: []string{
+				"no nameserver of test. handed the zone to a stranger",
+				"no nameserver of test. looked up another name for a stranger",
+			},
+		},
+		"a server that could not be asked": {
+			probes: []*trace.Step{
+				probe("ns1.test.", trace.ProbeTransfer, trace.ProbeClosed),
+				probe("ns2.test.", trace.ProbeTransfer, trace.ProbeUnchecked),
+			},
+			want:   []string{"ns2.test. could not be asked for a zone transfer, so whether a zone transfer is open there is unknown"},
+			unsaid: []string{"no nameserver"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			answer := answered(300)
+			answer.Children = tt.probes
+			got := said(walk(answer))
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("got %q, want it to say %q", got, want)
+				}
+			}
+			for _, unsaid := range tt.unsaid {
+				if strings.Contains(got, unsaid) {
+					t.Errorf("got %q, want nothing about %q", got, unsaid)
+				}
+			}
+		})
+	}
+}

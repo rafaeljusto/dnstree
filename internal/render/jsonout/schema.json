@@ -204,6 +204,7 @@
         "delegation": { "$ref": "#/$defs/delegation" },
         "dnssec": { "$ref": "#/$defs/dnssec" },
         "dangling": { "$ref": "#/$defs/dangling" },
+        "probe": { "$ref": "#/$defs/probe" },
         "error": { "type": "string" },
         "children": {
           "description": "The hops this one led to, in the order they were made.",
@@ -395,6 +396,23 @@
         },
         "signal": { "$ref": "#/$defs/signal" },
         "nsec3": { "$ref": "#/$defs/nsec3" }
+      }
+    },
+    "probe": {
+      "description": "Set on the aside that asked a nameserver of the zone the walk ended in for what it should keep from strangers, with --check-axfr or --check-recursion. Nothing of what it gave is kept.",
+      "type": "object",
+      "required": ["kind", "state"],
+      "properties": {
+        "kind": {
+          "description": "transfer is the whole zone asked for by AXFR; recursion is a name outside its zones asked with recursion desired.",
+          "type": "string",
+          "enum": ["transfer", "recursion"]
+        },
+        "state": {
+          "description": "open where the server gave it, closed where it did not, and unchecked where it could not be asked, which says nothing either way.",
+          "type": "string",
+          "enum": ["open", "closed", "unchecked"]
+        }
       }
     },
     "dangling": {

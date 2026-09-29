@@ -145,6 +145,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--ddr", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DDR: true},
 		},
+		"a zone's nameservers asked for what they should keep": {
+			args: []string{"--check-axfr", "--check-recursion", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", CheckAXFR: true, CheckRecursion: true},
+		},
 		"a walk that sends each server a cookie": {
 			args: []string{"--cookie", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Cookie: true},
@@ -280,6 +284,7 @@ func TestParseRejects(t *testing.T) {
 		"a walk already made, re-checked":    {"--dnssec", "--from", "walk.json"},
 		"a walk already made, re-asked":      {"--from", "walk.json", "--qmin", "--timeout", "3s"},
 		"a walk already made, sent cookies":  {"--from", "walk.json", "--cookie"},
+		"a walk already made, probed":        {"--from", "walk.json", "--check-axfr"},
 		"a lifetime that is not one":         {"--expect", "fresh:soon", "example.com"},
 		"a reverse lookup of no address":     {"-x", "example.com"},
 		"a reverse lookup and a name":        {"-x", "192.0.2.1", "example.com"},

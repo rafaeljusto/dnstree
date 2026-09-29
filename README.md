@@ -107,6 +107,8 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | `--check-ns` | ask the zone that answered for its own NS set, and compare it with the delegation |
 | `--check-ds` | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS |
 | `--serial` | ask every nameserver of the zone which copy of it they serve, and compare |
+| `--check-axfr` | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over |
+| `--check-recursion` | ask every nameserver of the zone to look up somebody else's name, and say which do |
 | `--nsid` | ask each server which of itself answered, and draw it beside the address |
 | `--cookie` | send each server a DNS cookie (RFC 7873), and say how it answered |
 | `--qmin` | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
@@ -591,6 +593,54 @@ between one question and the next is not a nameserver that disagrees. A real
 difference is not by itself a fault — a zone served by something that answers by
 where the question came from will do this honestly, and so will an RRset caught
 halfway through a change — but nothing else in a trace says it at all.
+
+### What they give a stranger
+
+Two old mistakes let a zone's nameservers give anybody more than answers about
+the zone: handing over the whole zone, which lists every name in it, and looking
+up other people's names, which makes an open resolver somebody can point at a
+victim. `--check-axfr` asks every nameserver of the zone the walk ends in for a
+zone transfer, and `--check-recursion` asks each of them to look up a name
+outside its zones:
+
+```
+$ dnstree --check-axfr --check-recursion --explain --no-asn --no-compare zonetransfer.me
+...
+│   │       ├── 🎯  nsztm2.digi.ninja. 5.196.105.10  485ms  NOERROR  AA  axfr open
+│   │       └── 🎯  nsztm2.digi.ninja. 5.196.105.10  248ms  REFUSED  recursion closed
+...
+· zone transfers of zonetransfer.me. are open to anyone at nsztm2.digi.ninja., which lists every name in the zone to whoever asks; allow them only to the zone's own secondaries
+· no nameserver of zonetransfer.me. looked up another name for a stranger
+```
+
+`zonetransfer.me` is left open on purpose, as a demonstration. A zone that keeps
+both to itself says so once for each check:
+
+```
+$ dnstree --check-axfr --check-recursion --explain --no-asn --no-compare www.isc.org
+...
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  🐢 756ms  REFUSED  axfr closed
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  371ms  REFUSED  recursion closed
+...
+· no nameserver of isc.org. handed the zone to a stranger
+· no nameserver of isc.org. looked up another name for a stranger
+```
+
+Only the start of a transfer is read, and nothing of the zone is kept or drawn.
+A transfer needs TCP: over `--dot` it is asked over TLS (RFC 9103), and `--doh`
+cannot ask it at all. Recursion is judged by what comes back, the root's NS set
+from a server that does not serve the root, rather than by the flag that says a
+server recurses, which plenty of servers set without doing it. A server that
+takes the connection and resets it once the transfer is asked for, the way
+Route 53 refuses one, is `closed`; one that cannot be reached at all is
+`unchecked`, never `closed`.
+
+Each costs a query per nameserver and is off unless asked for. A refused
+transfer still lands in the server's logs, so these are for zones you run or
+have been asked to check. The root is never asked: its servers hand out the
+root zone on purpose (RFC 8806). Like `--serial`, only the nameservers the walk
+found an address for are asked. `--format json` carries each check as a `probe`
+on its hop, and `--format openmetrics` as `dnstree_open`.
 
 ### Which machine answered
 

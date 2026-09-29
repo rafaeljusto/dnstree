@@ -337,6 +337,10 @@ type Step struct {
 	// something nobody holds.
 	Dangling *Dangling
 
+	// Probe is set on the aside that asked a nameserver for something it
+	// should keep from strangers, and says whether it gave it.
+	Probe *Probe
+
 	Children []*Step
 	Err      string
 }
@@ -498,6 +502,33 @@ const (
 	DanglingNameserver DanglingKind = "nameserver" // a nameserver whose name does not exist
 	DanglingAlias      DanglingKind = "alias"      // an alias whose target does not exist
 	DanglingLame       DanglingKind = "lame"       // nameservers that all answered without authority
+)
+
+// Probe is a nameserver asked, as a stranger, for what it should keep to the
+// zone's own: the whole zone, or a lookup of a name it does not serve.
+type Probe struct {
+	Kind  ProbeKind
+	State ProbeState
+}
+
+// ProbeKind is what a nameserver was asked for.
+type ProbeKind string
+
+// What a nameserver can be asked for.
+const (
+	ProbeTransfer  ProbeKind = "transfer"  // the whole zone, by AXFR
+	ProbeRecursion ProbeKind = "recursion" // a name outside its zones, looked up for us
+)
+
+// ProbeState is what came of it. Unchecked is a server that could not be
+// asked, which says nothing either way.
+type ProbeState string
+
+// What can come of a probe.
+const (
+	ProbeOpen      ProbeState = "open"
+	ProbeClosed    ProbeState = "closed"
+	ProbeUnchecked ProbeState = "unchecked"
 )
 
 // DNSSECState is how far the chain of trust got.

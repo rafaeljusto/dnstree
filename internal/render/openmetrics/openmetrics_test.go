@@ -167,6 +167,46 @@ func TestRenderMinimised(t *testing.T) {
 	}
 }
 
+// TestRenderProbes covers what --check-axfr and --check-recursion found. A
+// server that could not be asked has no sample, since a zero would read as a
+// server that refused; and a refusal that came as a reset is not a failed
+// query, since the server did its job.
+func TestRenderProbes(t *testing.T) {
+	probe := func(ip string, kind trace.ProbeKind, state trace.ProbeState, how trace.StepKind) *trace.Step {
+		return &trace.Step{
+			Zone: "test.", Kind: how, Aside: true,
+			Server: trace.Server{Name: "ns.test.", IP: netip.MustParseAddr(ip)},
+			Probe:  &trace.Probe{Kind: kind, State: state},
+		}
+	}
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
+			probe("192.0.2.5", trace.ProbeTransfer, trace.ProbeOpen, trace.KindAnswer),
+			probe("192.0.2.5", trace.ProbeRecursion, trace.ProbeClosed, trace.KindAnswer),
+			probe("192.0.2.6", trace.ProbeTransfer, trace.ProbeUnchecked, trace.KindTimeout),
+			probe("192.0.2.7", trace.ProbeTransfer, trace.ProbeClosed, trace.KindError),
+		}},
+	}
+
+	out := render(t, tr)
+	valid(t, out)
+	for _, want := range []string{
+		`dnstree_open{name="www.test.",type="A",check="transfer",zone="test.",server="ns.test.",address="192.0.2.5"} 1`,
+		`dnstree_open{name="www.test.",type="A",check="recursion",zone="test.",server="ns.test.",address="192.0.2.5"} 0`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("got\n%s\nwant %s", out, want)
+		}
+	}
+	if !strings.Contains(out, `dnstree_failed_queries{name="www.test.",type="A"} 1`) {
+		t.Errorf("got\n%s\nwant only the silent server counted as failed", out)
+	}
+	if strings.Contains(out, "192.0.2.6") {
+		t.Errorf("got\n%s\nwant no sample for the server that could not be asked", out)
+	}
+}
+
 // TestRenderEscapes covers names the servers wrote, which must not be able to
 // end a label value early or start a line of their own.
 func TestRenderEscapes(t *testing.T) {

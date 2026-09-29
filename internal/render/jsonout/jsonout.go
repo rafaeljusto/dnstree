@@ -143,6 +143,7 @@ type step struct {
 	Delegation *delegation     `json:"delegation,omitempty"`
 	DNSSEC     *dnssec         `json:"dnssec,omitempty"`
 	Dangling   *dangling       `json:"dangling,omitempty"`
+	Probe      *probe          `json:"probe,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	Children   []*step         `json:"children,omitempty"`
 }
@@ -218,6 +219,19 @@ type dnssec struct {
 	NSEC3      *nsec3      `json:"nsec3,omitempty"`
 }
 
+// probe is a nameserver asked for what it should keep from strangers.
+type probe struct {
+	Kind  string `json:"kind"`
+	State string `json:"state"`
+}
+
+func convertProbe(from *trace.Probe) *probe {
+	if from == nil {
+		return nil
+	}
+	return &probe{Kind: string(from.Kind), State: string(from.State)}
+}
+
 // dangling is a name left pointing at something that is not there.
 type dangling struct {
 	Kind    string `json:"kind"`
@@ -278,6 +292,7 @@ func convert(from *trace.Step, timed bool) *step {
 		Delegation: convertDelegation(from.Delegation),
 		DNSSEC:     convertDNSSEC(from.DNSSEC),
 		Dangling:   convertDangling(from.Dangling),
+		Probe:      convertProbe(from.Probe),
 		Error:      from.Err,
 	}
 	// Written wherever it is known, a start of zero included: the first query

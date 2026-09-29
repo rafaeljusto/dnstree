@@ -252,6 +252,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if dangling := r.dangling(step.Dangling); dangling != "" {
 		fields = append(fields, dangling)
 	}
+	if probe := r.probe(step.Probe); probe != "" {
+		fields = append(fields, probe)
+	}
 	if subnet := r.subnet(step.Subnet); subnet != "" {
 		fields = append(fields, subnet)
 	}
@@ -532,6 +535,26 @@ func (r *renderer) dangling(dangling *trace.Dangling) string {
 		return r.paint.paint("dangling: every nameserver lame", yellow)
 	}
 	return ""
+}
+
+// probe is what a nameserver gave when asked for what it should keep from
+// strangers. Only an open one is worth the colour of a fault.
+func (r *renderer) probe(probe *trace.Probe) string {
+	if probe == nil {
+		return ""
+	}
+	label := "axfr "
+	if probe.Kind == trace.ProbeRecursion {
+		label = "recursion "
+	}
+	label += string(probe.State)
+	switch probe.State {
+	case trace.ProbeOpen:
+		return r.paint.paint(label, red)
+	case trace.ProbeUnchecked:
+		return r.paint.paint(label, yellow)
+	}
+	return r.paint.dim(label)
 }
 
 func (r *renderer) subnet(subnet *trace.Subnet) string {

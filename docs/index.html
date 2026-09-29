@@ -390,6 +390,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--serial</code> asks every nameserver of the zone which copy it is serving. A secondary a transfer left behind is reachable, authoritative, and answering correctly out of an older zone, and a walk that stops at the first server to answer never sees it.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">exposed</span>
+          <h3>Nameservers that give strangers too much</h3>
+          <p><code>--check-axfr</code> asks every nameserver of the zone for the whole of it, and <code>--check-recursion</code> asks each to look up somebody else's name. A transfer lists every name in the zone, and a nameserver that resolves for anyone is an open resolver. Only the start of a transfer is read, and none of it is kept.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">disagreeing</span>
           <h3>A delegation the zone does not recognise</h3>
           <p><code>--check-ns</code> asks the zone the walk ends in for its own NS records and holds them against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed: a nameserver the parent still delegates to, or one the zone lists that nobody is told about, is named either way. With <code>--explain</code> it also says how long a change of nameservers takes, where the two keep them for different times.</p>

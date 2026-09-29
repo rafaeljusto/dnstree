@@ -47,6 +47,18 @@ func TestReadRoundTrip(t *testing.T) {
 					NSEC3: &trace.NSEC3{Zone: "example.", Iterations: 10, Salt: "aabbccdd"}},
 			}}},
 		},
+		"nameservers asked for what they should keep from strangers": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindAnswer, Aside: true, Rcode: "NOERROR",
+				Asked: trace.Question{Name: "example.", Type: "AXFR"},
+				Probe: &trace.Probe{Kind: trace.ProbeTransfer, State: trace.ProbeOpen},
+			}, {
+				Zone: "example.", Kind: trace.KindTimeout, Aside: true,
+				Asked: trace.Question{Name: ".", Type: "NS"},
+				Probe: &trace.Probe{Kind: trace.ProbeRecursion, State: trace.ProbeUnchecked},
+			}}},
+		},
 		"a resolver asked which encrypted resolvers it designates": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -217,6 +229,16 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "dangling": {"kind": "adrift", "name": "x."}}]}}`,
 			want: `"adrift"`,
+		},
+		"a probe of something nothing here asks for": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "version", "state": "open"}}]}}`,
+			want: `"version"`,
+		},
+		"a probe that came to something nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "transfer", "state": "ajar"}}]}}`,
+			want: `"ajar"`,
 		},
 		"a way to answer a cookie nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
