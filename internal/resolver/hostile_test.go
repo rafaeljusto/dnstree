@@ -510,6 +510,52 @@ func TestForgedSignerCannotChooseTheCut(t *testing.T) {
 	}
 }
 
+// TestForgedSignerCannotChooseTheReferralCut covers a referral stripped of its
+// DS and handed a signature naming a zone to cross into first. Only a zone
+// between the one asked and the one delegated can be a cut the referral came
+// across, so any other name is refused and the missing DS stays unproven.
+func TestForgedSignerCannotChooseTheReferralCut(t *testing.T) {
+	for name, signer := range map[string]string{
+		"a zone outside the delegation": "unsigned.com.",
+		"the delegation itself":         "example.com.",
+		"a zone above the one asked":    ".",
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+			junk := mustRR(t, "example.com. 3600 IN RRSIG DS 13 2 3600 20300101000000 20200101000000 1 "+signer+" AAAA")
+			cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(_, resp *dns.Msg) {
+				if resp.Authoritative || !delegates(resp, "example.com.") {
+					return
+				}
+				kept := resp.Ns[:0:0]
+				for _, rr := range resp.Ns {
+					switch rr.(type) {
+					case *dns.DS, *dns.RRSIG:
+						continue
+					}
+					kept = append(kept, rr)
+				}
+				kept = append(kept, junk)
+				resp.Ns = kept
+			}}
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			for step := range tr.Steps() {
+				if len(step.Notes) > 0 && strings.HasPrefix(step.Notes[0], "DS of ") {
+					t.Errorf("crossed into %s on the forger's word: %s", step.Notes[0], format(steps(tr)))
+				}
+			}
+			answer := tr.Result()
+			if answer == nil || answer.DNSSEC == nil || answer.DNSSEC.State != trace.Bogus {
+				t.Fatalf("got %+v, want the stripped DS bogus: %s", answer, format(steps(tr)))
+			}
+		})
+	}
+}
+
 // TestUnusableNSEC3IsNotAnExcuse covers a stripped DS replaced by one unsigned
 // NSEC3 nothing here can hash. Unknown hashes are ignored, not trusted (RFC
 // 5155 section 8.1), so what is left is a parent that proved nothing.

@@ -388,6 +388,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 
 		}
 
+		r.crossReferral(ctx, chain, hop)
 		next, rest := r.nextServers(ctx, step, side)
 		if len(next) == 0 {
 			r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
@@ -460,11 +461,28 @@ func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname s
 	if chain == nil || hop.resp == nil {
 		return nil
 	}
-	crossed := r.crossCut(ctx, chain, hop, qname)
+	crossed := r.crossCut(ctx, chain, hop, signerOf(hop.resp, qname), qname)
 	// The authority section comes too: an answer with no records is denied
 	// there rather than answered, and the denial is what makes it checkable.
 	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, hop.resp.Ns, hop.resp.Rcode, qname, qtype)
 	return crossed
+}
+
+// crossReferral enters the zone a referral came from when the walk was never
+// referred to it: a server holding both br. and net.br. hands out the
+// delegations of net.br., signed with its keys, to a walk still holding those
+// of br.
+func (r *run) crossReferral(ctx context.Context, chain *dnssec.Chain, hop *hop) {
+	if chain == nil || hop.resp == nil || hop.step.Delegation == nil {
+		return
+	}
+	// The delegation's own name is the child's word; crossCut turns away
+	// anything below it.
+	cut, delegated := referralSigner(hop.resp), hop.step.Delegation.Zone
+	if cut == "" || dns.EqualName(cut, delegated) {
+		return
+	}
+	r.crossCut(ctx, chain, hop, cut, delegated)
 }
 
 // crossCut enters a zone the walk was never referred to. A server authoritative
@@ -472,12 +490,11 @@ func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname s
 // without a referral, which leaves the chain holding the parent's keys and the
 // answer signed with the child's. The signatures name the zone to enter, and
 // its DS comes from the same server, which serves the parent side of the cut.
-func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, qname string) *zoneCut {
+func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, cut, qname string) *zoneCut {
 	if chain.State() != trace.Secure {
 		return nil
 	}
 	zone := hop.step.Zone
-	cut := signerOf(hop.resp, qname)
 	if cut == "" || dns.EqualName(cut, zone) || !dnsutil.IsBelow(zone, cut) {
 		return nil
 	}
@@ -531,6 +548,22 @@ func signerOf(resp *dns.Msg, qname string) string {
 	}
 	for _, rr := range resp.Ns {
 		if signature, ok := rr.(*dns.RRSIG); ok && signature.TypeCovered == dns.TypeSOA {
+			return dnsutil.Fqdn(signature.SignerName)
+		}
+	}
+	return ""
+}
+
+// referralSigner is the zone that made a referral. The DS it carries, or the
+// denial of one, is signed on the parent side of the cut.
+func referralSigner(resp *dns.Msg) string {
+	for _, rr := range resp.Ns {
+		signature, ok := rr.(*dns.RRSIG)
+		if !ok {
+			continue
+		}
+		switch signature.TypeCovered {
+		case dns.TypeDS, dns.TypeNSEC, dns.TypeNSEC3:
 			return dnsutil.Fqdn(signature.SignerName)
 		}
 	}

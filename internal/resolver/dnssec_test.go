@@ -167,6 +167,104 @@ func TestDNSSECHiddenCut(t *testing.T) {
 	}
 }
 
+// delegatingZone is a hosted zone that delegates further down, the way net.br.
+// sits on the servers of br. and hands its own domains to theirs.
+const delegatingZone = `
+@          IN SOA ns.com. hostmaster 1 7200 3600 1209600 3600
+@          IN NS  ns.com.
+sub        IN NS  ns.sub
+ns.sub     IN A   192.0.2.4
+`
+
+const subZone = `
+@   IN SOA ns hostmaster 1 7200 3600 1209600 3600
+@   IN NS  ns
+ns  IN A   192.0.2.4
+www IN A   192.0.2.12
+`
+
+// TestDNSSECHiddenCutReferral covers a referral made across a zone cut no
+// referral crossed. The server of the parent answers for the hosted zone, so
+// what reaches the walk is the hosted zone's referral, signed with its keys,
+// and checking it against the parent's calls an honest delegation bogus.
+func TestDNSSECHiddenCutReferral(t *testing.T) {
+	tests := map[string]struct {
+		sub      fakens.Behaviour
+		minimise bool
+		state    trace.DNSSECState
+	}{
+		"the delegation is signed": {
+			state: trace.Secure,
+		},
+		"the delegation is insecure": {
+			sub:   fakens.Behaviour{NoDS: true},
+			state: trace.Insecure,
+		},
+		// Minimising asks the hidden zone about itself first, and that NODATA
+		// is never verified, so the referral is still where the cut is found.
+		"the delegation is signed and the walk minimises": {
+			minimise: true,
+			state:    trace.Secure,
+		},
+		"the delegation is insecure and the walk minimises": {
+			sub:      fakens.Behaviour{NoDS: true},
+			minimise: true,
+			state:    trace.Insecure,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+			h.hierarchy.Add(fakens.Config{
+				Name: "ns.com.", Origin: "hosted.com.", Zone: delegatingZone, Declared: "192.0.2.2",
+				DNSSEC: true,
+			})
+			h.hierarchy.Add(fakens.Config{
+				Name: "ns.sub.hosted.com.", Origin: "sub.hosted.com.", Zone: subZone, Declared: "192.0.2.4",
+				DNSSEC: true, Behaviour: test.sub,
+			})
+			cfg.Minimise = test.minimise
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.sub.hosted.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			answer := tr.Result()
+			if answer == nil || answer.Kind != trace.KindAnswer {
+				t.Fatalf("got %+v, want an answer: %s", answer, format(steps(tr)))
+			}
+			if answer.DNSSEC == nil || answer.DNSSEC.State != test.state {
+				t.Fatalf("got %+v on the answer, want %s: %s", answer.DNSSEC, test.state, format(steps(tr)))
+			}
+
+			// The hidden cut is crossed under the referral that came from
+			// beyond it, and holds on its own.
+			var referral, ds *trace.Step
+			for step := range tr.Steps() {
+				if step.Kind == trace.KindReferral && step.Delegation.Zone == "sub.hosted.com." {
+					referral = step
+				}
+				if len(step.Notes) > 0 && step.Notes[0] == "DS of hosted.com." {
+					ds = step
+				}
+			}
+			if referral == nil || ds == nil {
+				t.Fatalf("got referral %v and DS query %v, want both: %s", referral, ds, format(steps(tr)))
+			}
+			if !slices.Contains(referral.Children, ds) {
+				t.Errorf("the DS of hosted.com. hangs elsewhere than under the referral it explains")
+			}
+			if ds.DNSSEC == nil || ds.DNSSEC.State != trace.Secure {
+				t.Errorf("got %+v on the hidden cut, want it secure", ds.DNSSEC)
+			}
+			if referral.DNSSEC == nil || referral.DNSSEC.State != test.state || referral.DNSSEC.Zone != "sub.hosted.com." {
+				t.Errorf("got %+v on the referral, want %s for sub.hosted.com.", referral.DNSSEC, test.state)
+			}
+		})
+	}
+}
+
 // TestDNSSECBroken covers one broken link at a time, each of which has its own
 // verdict: a missing DS is not a failure, a missing key set is not a forgery,
 // and a signature that does not verify is.
