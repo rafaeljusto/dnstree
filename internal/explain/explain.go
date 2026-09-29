@@ -673,7 +673,7 @@ func servers(tr *trace.Trace) []Finding {
 	}
 	if len(tight) > 0 {
 		text := fmt.Sprintf(
-			"%s answered with almost nothing left of the datagram the answer had to fit in — %s — so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it",
+			"%s answered with almost nothing left of the datagram the answer had to fit in (%s), so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it",
 			plural(len(tight), "server", "servers"), list(tight))
 		if unsigned {
 			// The walk saw what it asked for. A resolver that validates asks

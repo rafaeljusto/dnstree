@@ -284,6 +284,13 @@ func TestFindings(t *testing.T) {
 					t.Errorf("got\n%s\nwant nothing in it saying %q", got, avoid)
 				}
 			}
+			// --format ascii prints the findings as they are.
+			for _, r := range got {
+				if r > 127 {
+					t.Errorf("got %q in\n%s\nwant nothing --format ascii cannot print", r, got)
+					break
+				}
+			}
 		})
 	}
 }
@@ -520,6 +527,13 @@ func TestFindingsSpread(t *testing.T) {
 			for _, avoid := range test.avoid {
 				if strings.Contains(got, avoid) {
 					t.Errorf("got\n%s\nwant nothing in it saying %q", got, avoid)
+				}
+			}
+			// --format ascii prints the findings as they are.
+			for _, r := range got {
+				if r > 127 {
+					t.Errorf("got %q in\n%s\nwant nothing --format ascii cannot print", r, got)
+					break
 				}
 			}
 		})
