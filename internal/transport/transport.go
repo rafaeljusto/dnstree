@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -284,9 +285,53 @@ func exchange(ctx context.Context, proto string, cfg Config, tlsConfig *tls.Conf
 		if ctx.Err() != nil {
 			err = ctx.Err()
 		}
-		return nil, rtt, fmt.Errorf("%s %s: %w", proto, server, err)
+		return nil, rtt, fmt.Errorf("%s %s: %w", proto, server, terse(err))
 	}
 	return resp, rtt, nil
+}
+
+// terse keeps what went wrong and drops the socket errors wrapped around it,
+// which each spell out both ends of the connection again: the prefix above
+// already names the server. The chain stays whole underneath, for IsTimeout.
+func terse(err error) error {
+	// Only a socket error that is the whole of the message is peeled: one
+	// wrapped in words of our own, such as the datagrams a silence ignored,
+	// keeps them.
+	inner := err
+	for {
+		var (
+			op  *net.OpError
+			sys *os.SyscallError
+		)
+		switch {
+		case errors.As(inner, &op) && op.Err != nil && op.Error() == inner.Error():
+			inner = op.Err
+		case errors.As(inner, &sys) && sys.Err != nil && sys.Error() == inner.Error():
+			inner = sys.Err
+		case inner.Error() == err.Error():
+			return err
+		default:
+			return &shortened{text: inner.Error(), err: err}
+		}
+	}
+}
+
+type shortened struct {
+	text string
+	err  error
+}
+
+func (s *shortened) Error() string { return s.text }
+func (s *shortened) Unwrap() error { return s.err }
+
+// IsReset reports whether a server that had taken the connection reset it,
+// rather than refusing it in the first place.
+func IsReset(err error) bool {
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "dial" {
+		return false
+	}
+	return errors.Is(err, resetErrno)
 }
 
 // roundTrip sends req and reads its reply. The connection is closed the moment

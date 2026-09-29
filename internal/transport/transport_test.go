@@ -292,3 +292,50 @@ func query(tb testing.TB, name string, qtype uint16) *dns.Msg {
 	}
 	return req
 }
+
+// TestReset covers a server that takes the connection and resets it once the
+// query is in, which is how some of them refuse a zone transfer. The error
+// says so without the socket errors around it spelling out both ends again.
+func TestReset(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		_, _ = conn.Read(make([]byte, 512))
+		_ = conn.(*net.TCPConn).SetLinger(0) // close with RST
+		_ = conn.Close()
+	}()
+
+	server := netip.MustParseAddrPort(listener.Addr().String())
+	_, _, err = transport.NewTCP(transport.Config{Timeout: time.Second}).
+		Exchange(t.Context(), dns.NewMsg("example.com.", dns.TypeAXFR), server, "")
+	if !transport.IsReset(err) {
+		t.Fatalf("got %v, want a reset", err)
+	}
+	if want := "tcp " + server.String() + ": "; !strings.HasPrefix(err.Error(), want) || strings.Count(err.Error(), server.String()) != 1 {
+		t.Errorf("got %q, want the server named once, after %q", err, want)
+	}
+}
+
+// TestResetIsNotRefused covers a connection never taken. Nothing was asked, so
+// it says nothing about what the server would have done with a question.
+func TestResetIsNotRefused(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	server := netip.MustParseAddrPort(listener.Addr().String())
+	listener.Close()
+
+	_, _, err = transport.NewTCP(transport.Config{Timeout: time.Second}).
+		Exchange(t.Context(), dns.NewMsg("example.com.", dns.TypeAXFR), server, "")
+	if err == nil || transport.IsReset(err) {
+		t.Errorf("got %v, want a refused connection that is not a reset", err)
+	}
+}
