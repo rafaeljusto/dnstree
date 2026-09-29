@@ -143,8 +143,9 @@ dnstree kept when each query started cannot be drawn this way, and is refused.
 
 --format openmetrics writes the walk as numbers for a monitoring system: how
 it ended, what it and each hop on the path took, the chain of trust, the time
-left on the signatures, what --check-ds found and what the resolvers answered,
-each labelled with the question. Run from cron into the directory of
+left on the signatures, what --check-ds found, which nameservers the
+--check-axfr and --check-recursion probes found open and what the resolvers
+answered, each labelled with the question. Run from cron into the directory of
 node_exporter's textfile collector, it is what Prometheus alerts on.
 
 --from reads a walk that --format json wrote, from FILE or from - for the

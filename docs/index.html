@@ -889,11 +889,11 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
 
     <section id="install">
       <h2>Get it</h2>
-      <p class="section-lede">One static binary, two dependencies, no runtime to install.</p>
+      <p class="section-lede">One static binary, no runtime to install.</p>
 
       <!-- A row whose command names a version carries the template too: the
-      markup ships the release that was current when the page was written, and
-      the script at the foot refreshes it. Both spellings appear, because the
+      pages workflow writes the latest release into the markup on every deploy,
+      and the script at the foot refreshes it. Both spellings appear, because the
       tag keeps its v and the packages drop it. The host is only dimmed, never
       dropped: what is copied has to be what is read. -->
       <div class="installs">
@@ -908,23 +908,28 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd">
+          <span class="what">web</span>
+          <code>docker run --rm -p 8080:8080 ghcr.io/rafaeljusto/dnstree-web</code>
+          <button class="copy" type="button">copy</button>
+        </div>
+        <div class="cmd">
           <span class="what">brew</span>
           <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/latest/download/</span>dnstree.rb &amp;&amp; brew install --formula ./dnstree.rb</code>
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd" data-versioned="curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree_{v}_amd64.deb &amp;&amp; sudo dpkg -i dnstree_{v}_amd64.deb">
           <span class="what">deb</span>
-          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.4.0/</span>dnstree_1.4.0_amd64.deb &amp;&amp; sudo dpkg -i dnstree_1.4.0_amd64.deb</code>
+          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v2.5.0/</span>dnstree_2.5.0_amd64.deb &amp;&amp; sudo dpkg -i dnstree_2.5.0_amd64.deb</code>
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd" data-versioned="sudo rpm -i https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree-{v}-1.x86_64.rpm">
           <span class="what">rpm</span>
-          <code>sudo rpm -i <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.4.0/</span>dnstree-1.4.0-1.x86_64.rpm</code>
+          <code>sudo rpm -i <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v2.5.0/</span>dnstree-2.5.0-1.x86_64.rpm</code>
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd" data-versioned="curl -LO https://github.com/rafaeljusto/dnstree/releases/download/v{v}/dnstree_{v}_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_{v}_x86_64.apk">
           <span class="what">apk</span>
-          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v1.4.0/</span>dnstree_1.4.0_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_1.4.0_x86_64.apk</code>
+          <code>curl -LO <span class="host">https://github.com/rafaeljusto/dnstree/releases/download/v2.5.0/</span>dnstree_2.5.0_x86_64.apk &amp;&amp; sudo apk add --allow-untrusted dnstree_2.5.0_x86_64.apk</code>
           <button class="copy" type="button">copy</button>
         </div>
         <div class="cmd">
@@ -934,8 +939,7 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
       </div>
 
       <p class="section-lede" style="margin-top:1.2rem">The three package lines
-      are filled in with the latest release from GitHub; without it they show an
-      older one. Every release carries the same
+      name the latest release. Every release carries the same
       packages for arm64 and 32-bit arm, each with a man page, and a
       <code>checksums.txt</code> over every file.</p>
 
@@ -970,7 +974,7 @@ timeout = 3s</pre>
 
   <footer>
     <div class="foot-row">
-      <div>MIT licensed · built with two dependencies</div>
+      <div>MIT licensed</div>
       <div class="foot-links">
         <a href="https://github.com/rafaeljusto/dnstree">Repository</a>
         <a href="https://github.com/rafaeljusto/dnstree/blob/main/CONTRIBUTING.md">Contributing</a>
@@ -1093,7 +1097,7 @@ timeout = 3s</pre>
 
 // The package filenames carry the version, so those rows cannot point at
 // /releases/latest/download the way the formula does. The markup ships the
-// release that was current when the page was written — already a command that
+// release that was current when the page was deployed — already a command that
 // runs — and this only moves it forward once a newer one exists. Anything less
 // than an answer that parses leaves the page as it stands.
 (function () {

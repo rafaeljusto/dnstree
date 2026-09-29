@@ -31,6 +31,10 @@ from that, and both are worth knowing when judging a report:
   cannot make dnstree run forever. A report showing otherwise is a
   vulnerability.
 
+dnstree-web runs those walks for strangers. A way to make it query a private,
+loopback or link-local address, redirect off its own host, or get round its
+per-client limits is a vulnerability.
+
 The DNSSEC verdicts are diagnostic: dnstree reports what it found so you can see
 a broken chain, and exits 3 when one is bogus. It is not a validating resolver
 and nothing should be routed through it as though it were.

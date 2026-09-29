@@ -226,8 +226,8 @@ and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
-`no-config`, `version`, `schema`, `from` and `x`: those six ask something of the
-run rather than set a default for it.
+`no-config`, `version`, `schema`, `from`, `against` and `x`: those seven ask
+something of the run rather than set a default for it.
 
 > [!NOTE]
 > A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be
@@ -358,8 +358,8 @@ A registry that serves its own domains from the machines of its ccTLD answers
 for a child zone with no referral to it, so the cut is invisible from the walk.
 The signatures name the zone that made them, and the same server holds the
 parent side of the cut, so it is asked for the child's DS — an aside reading
-`(DS of registro.br.)` — and the chain crosses the cut before the answer is
-checked.
+`(DS of registro.br.)` — and the chain crosses the cut before the answer, or a
+referral the same server hands out from below it, is checked.
 
 A chain that holds today can stop holding on a schedule. Every signature is
 made to last a while, and a zone whose signer has stopped goes on validating
@@ -606,10 +606,12 @@ outside its zones:
 ```
 $ dnstree --check-axfr --check-recursion --explain --no-asn --no-compare zonetransfer.me
 ...
-│   │       ├── 🎯  nsztm2.digi.ninja. 5.196.105.10  485ms  NOERROR  AA  axfr open
-│   │       └── 🎯  nsztm2.digi.ninja. 5.196.105.10  248ms  REFUSED  recursion closed
+│   │   └── nsztm1.digi.ninja. 81.4.108.41  310ms  NOERROR  AA  ede Prohibited (18)
+│   │       ├── zonetransfer.me. 7200 A 5.196.105.14
+│   │       ├── nsztm1.digi.ninja. 81.4.108.41  514ms  NOERROR  AA  axfr open
+│   │       └── nsztm1.digi.ninja. 81.4.108.41  248ms  REFUSED  recursion closed
 ...
-· zone transfers of zonetransfer.me. are open to anyone at nsztm2.digi.ninja., which lists every name in the zone to whoever asks; allow them only to the zone's own secondaries
+· zone transfers of zonetransfer.me. are open to anyone at nsztm1.digi.ninja., which lists every name in the zone to whoever asks; allow them only to the zone's own secondaries
 · no nameserver of zonetransfer.me. looked up another name for a stranger
 ```
 
@@ -619,8 +621,11 @@ both to itself says so once for each check:
 ```
 $ dnstree --check-axfr --check-recursion --explain --no-asn --no-compare www.isc.org
 ...
-│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  🐢 756ms  REFUSED  axfr closed
-│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  371ms  REFUSED  recursion closed
+│   │   ├── ns1.isc.org. 149.20.2.26  478ms  NOERROR  AA
+│   │   │   ├── www.isc.org. 300 A 151.101.131.42
+...
+│   │   │   ├── ns1.isc.org. 149.20.2.26  736ms  REFUSED  axfr closed
+│   │   │   ├── ns1.isc.org. 149.20.2.26  367ms  REFUSED  recursion closed
 ...
 · no nameserver of isc.org. handed the zone to a stranger
 · no nameserver of isc.org. looked up another name for a stranger
@@ -635,7 +640,8 @@ takes the connection and resets it once the transfer is asked for, the way
 Route 53 refuses one, is `closed`; one that cannot be reached at all is
 `unchecked`, never `closed`.
 
-Each costs a query per nameserver and is off unless asked for. A refused
+Each costs a query per nameserver, is off unless asked for, and leaves the exit
+code alone. A refused
 transfer still lands in the server's logs, so these are for zones you run or
 have been asked to check. The root is never asked: its servers hand out the
 root zone on purpose (RFC 8806). Like `--serial`, only the nameservers the walk
@@ -867,10 +873,10 @@ what it offers under the tree:
 ```
 $ dnstree --ddr --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 9.9.9.9 --explain www.isc.org
 ...
-🔐 1.1.1.1 offers doh at https://one.one.one.one:443/dns-query{?dns}, dot at one.one.one.one:853 (not verified)
-🔐 8.8.8.8 offers dot at dns.google, doh at https://dns.google/dns-query{?dns} (not verified)
-🔐 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
-✔ answered in 2.8s · resolvers in 242ms-373ms · 6 queries · 3 servers
+ddr: 1.1.1.1 offers doh at https://one.one.one.one:443/dns-query{?dns}, dot at one.one.one.one:853 (not verified)
+ddr: 8.8.8.8 offers dot at dns.google, doh at https://dns.google/dns-query{?dns} (not verified)
+ddr: 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
+✔ answered in 1.1s · resolvers in 348ms-348ms · 3 queries · 3 servers
 ...
 · 1.1.1.1 says it can also be reached encrypted, over doh and dot at one.one.one.one.; trust it only once the certificate there names 1.1.1.1, which --ddr does not check
 ```
@@ -930,8 +936,8 @@ $ echo $?
 ```
 
 Addresses are compared as addresses and names the way DNS compares names, so
-`2001:0db8::1` finds a record written `2001:db8::1` and the case of a name does
-not matter. An expectation about the chain of trust is met only by a walk that
+`2001:0db8::1` finds a record written `2001:db8::1`, the case of a name does not
+matter, and a name typed in another script finds the punycode the zone holds. An expectation about the chain of trust is met only by a walk that
 followed one: a run that forgot `--dnssec` checked nothing, and reading that as
 `secure` would be the tool claiming more than it did.
 
@@ -1481,8 +1487,9 @@ no binary to hand.
 [OpenMetrics](https://prometheus.io/docs/specs/om/open_metrics_spec/) text
 format, each labelled with the question: how it ended, how long it and each hop
 on the path took, how many queries failed, the chain of trust, the time left on
-the first signature to run out, what `--check-ds` found, and how long each
-resolver took and whether it agreed. Only gauges are used, so the older
+the first signature to run out, what `--check-ds` found, which nameservers
+`--check-axfr` and `--check-recursion` found open, and how long each resolver
+took and whether it agreed. Only gauges are used, so the older
 Prometheus text format reads it too. A family the walk has nothing to say about
 is left out rather than written as zero: a walk without `--dnssec` says nothing
 about trust.
@@ -1617,7 +1624,8 @@ at the network it runs on. Walks for the same question are made once and kept
 for a minute, and `-walks`, `-per-client` and `-timeout` bound how many run,
 how many one client starts, and how long each may take. It listens on `$PORT`
 when the host sets one; behind a proxy, `-client-header` names the header that
-carries the visitor's address. The host needs UDP and TCP out to port 53, and
+carries the visitor's address, and the last address in it, the one the proxy
+wrote, is the one counted. The host needs UDP and TCP out to port 53, and
 IPv6 to reach the servers that only have it.
 
 ## How it walks
