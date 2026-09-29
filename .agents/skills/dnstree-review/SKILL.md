@@ -75,12 +75,13 @@ A new or changed flag or format has to reach four places, and missing one is
 the usual comment:
 
 1. the usage string in `internal/cli/cli.go`
-2. the flag table in `README.md`
+2. the flag table in `README.md`, and a section in `docs/guide/` linked from
+   its row when one line does not explain it
 3. the landing page in `docs/index.html`
 4. the tests
 
 Also check `dnstreerc.example` for flags worth setting every day. Examples in the
-README and on the page must be real output: an example that doesn't match what
+README, the guide and on the page must be real output: an example that doesn't match what
 the code now prints means it was edited by hand, or not regenerated. The man
 page is generated, so don't ask for it.
 

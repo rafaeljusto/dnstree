@@ -39,7 +39,7 @@ Write the messages for the maintainer to apply. Print them, don't run them.
    | `feat:` (or `feature:`) | minor | a new flag, format, output or behaviour users see |
    | `fix:` | patch | a bug, including a security fix |
    | `perf:` | patch | faster, same output |
-   | `docs:` | patch | README, `docs/`, contributor docs |
+   | `docs:` | patch | README, `docs/` (the page and the guide), contributor docs |
    | `refactor:` | patch | no behaviour change |
    | `test:` | patch | tests only, `fakens` knobs included |
    | `build:`, `ci:` | patch | `Makefile`, packaging, `go.mod`, workflows |

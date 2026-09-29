@@ -1,6 +1,6 @@
 ---
 name: dnstree-docs
-description: Review dnstree's documentation as a whole — README, the landing page in docs/index.html, CONTRIBUTING, AGENTS, SECURITY, the packaging and next-version READMEs, install.md, dnstreerc.example and the project skills — against the code and against each other. Finds contradictions, flags or behaviour nobody documented, stale examples, broken links, and prose that is longer than it needs to be. Use when asked to review, audit, proofread or tidy the docs, or before a release. Takes an optional scope (a file, or an area name: flags, examples, install, contributor, page). Findings only; edits nothing unless asked.
+description: Review dnstree's documentation as a whole — README, the guide, the landing page in docs/index.html, CONTRIBUTING, AGENTS, SECURITY, the packaging and next-version READMEs, install.md, dnstreerc.example and the project skills — against the code and against each other. Finds contradictions, flags or behaviour nobody documented, stale examples, broken links, and prose that is longer than it needs to be. Use when asked to review, audit, proofread or tidy the docs, or before a release. Takes an optional scope (a file, or an area name: flags, examples, install, contributor, page). Findings only; edits nothing unless asked.
 ---
 
 # dnstree docs review
@@ -14,8 +14,10 @@ are held to.
 
 | File | Reader | Holds |
 | --- | --- | --- |
-| `README.md` | users | the full reference: flag table, one section per feature |
-| `docs/index.html` | users | the landing page: the pitch, shorter than the README |
+| `README.md` | users | the front door: install, flag table, exit codes |
+| `docs/guide/*.md` | users | the full reference: one section per feature |
+| `docs/README.md` | contributors | what in `docs/` is the page and what is the guide |
+| `docs/index.html` | users | the landing page: the pitch, shorter than the guide |
 | `dnstreerc.example` | users | a menu of settings worth making every day |
 | `packaging/install.md` | users | the install section appended to release notes |
 | `SECURITY.md` | users, reporters | supported versions, reporting, what the tool trusts |
@@ -49,8 +51,8 @@ Check the docs against these, never against each other alone:
 - Every flag in `Usage` appears in the README flag table with the same meaning
   and default, and every row in the table is a flag that still exists. Start
   with the mechanical pass below, then read the rows against the usage lines.
-- Features the page names exist in the README, and the page doesn't promise
-  anything the README or the code doesn't. Section counts on the page (the
+- Features the page names exist in the guide, and the page doesn't promise
+  anything the guide or the code doesn't. Section counts on the page (the
   "… ways out" heading, "One line, six facts") still match what follows them.
 - Exit codes agree everywhere they are listed: README, page, `SECURITY.md`,
   `AGENTS.md`, the skills. A code the binary returns and a list leaves out is a
@@ -67,13 +69,15 @@ Check the docs against these, never against each other alone:
   skills copy invariants, so they drift first.
 - Every `make` target, file path, package, test name and workflow a doc names
   exists. Every relative link and `#anchor` resolves, including images, GIFs
-  and videos on the page and in the README.
+  and videos on the page, in the README and in the guide. Every flag-table link
+  lands on a heading in `docs/guide/`, and `docs/guide/README.md` lists every
+  guide page.
 - One spelling throughout. The repository writes British English ("colour",
   "licence", "recognise"), except where it quotes a flag or keyword.
 
 ### 2. Missing documentation
 
-- A flag with no README row, or a row with no section where the flag's
+- A flag with no README row, or a row with no guide section where the flag's
   behaviour isn't obvious from one line (anything that changes the exit code,
   writes to disk, opens a port or talks to a third party).
 - A behaviour users hit with no mention: the file of defaults and its lookup
@@ -83,8 +87,8 @@ Check the docs against these, never against each other alone:
 - A decision in the code a maintainer would need and `AGENTS.md` doesn't have.
   Only raise one that has bitten or would regress silently: that file is for
   the non-obvious, not for everything.
-- A `make` target or workflow a contributor needs that the README's
-  "Developing" section or `CONTRIBUTING.md` doesn't mention.
+- A `make` target or workflow a contributor needs that `CONTRIBUTING.md`
+  doesn't mention.
 - A new flag worth setting every day that isn't in `dnstreerc.example`. That
   file is a menu, so a missing one-off flag is not a finding.
 
@@ -110,15 +114,16 @@ which ones need it and, only if the user agrees, run them.
 ### 4. Length and tone
 
 The house style is in `AGENTS.md`: plain, short, says what happens, doesn't
-apologise. The README is the reference, so a section can be as long as the
-behaviour needs. The page sells, so it should be shorter than the README on
+apologise. The guide is the reference, so a section can be as long as the
+behaviour needs. The README is the way in, so it stays short and points at the
+guide. The page sells, so it should be shorter than the guide on
 every topic.
 
 Flag, with a rewrite:
 
 - A paragraph that restates the usage line or the table row above it.
-- The same explanation in two README sections, or copied word for word from
-  the README onto the page.
+- The same explanation in two sections, or copied word for word from the
+  guide onto the page.
 - Hedging and filler: "simply", "just", "basically", "note that", "it is
   worth mentioning", "in order to", nested asides.
 - A sentence that explains DNS in general where the reader needs to know what
@@ -161,11 +166,11 @@ for f in $(awk '/^const Usage = `/,/^`/' internal/cli/cli.go \
 done
 
 # Flags the docs name that the usage doesn't.
-grep -ohE -- '--[a-z][a-z0-9-]+' README.md docs/index.html dnstreerc.example \
+grep -ohE -- '--[a-z][a-z0-9-]+' README.md docs/guide/*.md docs/index.html dnstreerc.example \
   tapes/*.tape | sort -u
 
 # make targets the docs name.
-grep -ohE '(`|^|<code>)make [a-z-]+' *.md packaging/*.md docs/index.html \
+grep -ohE '(`|^|<code>)make [a-z-]+' *.md docs/guide/*.md packaging/*.md docs/index.html \
   | grep -oE 'make [a-z-]+' | sort -u
 grep -oE '^[a-z-]+:' Makefile
 ```
@@ -198,8 +203,8 @@ git log --format='%h %s' -S'<phrase>' -- <file>
 ## Method
 
 - For a whole review, if your agent can run subagents, give the user-facing
-  set (README, page, install, `dnstreerc.example`, `SECURITY.md`) to one and
-  the contributor set (`CONTRIBUTING.md`, `AGENTS.md`, the packaging and
+  set (README, guide, page, install, `dnstreerc.example`, `SECURITY.md`) to one
+  and the contributor set (`CONTRIBUTING.md`, `AGENTS.md`, the packaging and
   next-version READMEs, the PR template, the skills) to another, in parallel.
   Give each the sources of truth above. Do the cross-set checks yourself (exit
   codes, commit prefixes, install commands), and verify what comes back:
