@@ -206,6 +206,18 @@ link gave that day. It then takes the still of `--format web-3d` with
 headless Chrome draw it without a GPU; `CHROME` names the browser when the
 script cannot find it. `make check` leaves them alone.
 
+The film of `--format web-3d` on the page, `docs/demo-3d.mp4`, is taken by
+hand, since it needs a real GPU to run smoothly: serve a walk of
+`www.example.com`, press `c`, and bring the download to the page's size and
+shape, the same as the still's:
+
+```bash
+ffmpeg -i dnstree-www.example.com-A.webm \
+  -vf "crop='min(iw,ih*12/7)':'min(ih,iw*7/12)',scale=1200:700:flags=lanczos,fps=30" \
+  -c:v libx264 -crf 24 -preset slow -pix_fmt yuv420p -movflags +faststart -an \
+  docs/demo-3d.mp4
+```
+
 ### Working with forks
 
 ```bash
