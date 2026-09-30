@@ -363,8 +363,10 @@ vec3 drift(vec3 p, float phase) {
 float grow(float at) {
   float k = clamp((uTime - at) / 0.55, 0.0, 1.0);
   if (k <= 0.0) return 0.0;
-  float c1 = 1.70158, c3 = c1 + 1.0;
-  return 1.0 + c3 * pow(k - 1.0, 3.0) + c1 * pow(k - 1.0, 2.0);
+  // Multiplied out: pow() of a negative number is undefined, and some cards
+  // draw the hop enormous for it.
+  float c1 = 1.70158, c3 = c1 + 1.0, m = k - 1.0;
+  return 1.0 + c3 * m * m * m + c1 * m * m;
 }
 float flash(float at) { return uTime > at ? exp(-(uTime - at) * 2.4) : 0.0; }
 `;
@@ -1003,12 +1005,12 @@ if (walk.warnings?.length) {
 
 // The legend names only what this walk has in it.
 const seen = new Set(hops.map((hop) => hop.step.kind));
-$("legend").append(
+$("legend").append(...[
   ...Object.entries(KINDS).filter(([name]) => seen.has(name)).map(([name, kind]) =>
     el("li", { style: `color:${toCss(TONES[kind.tone])}` }, el("i"), el("span", { class: "dim", text: name }))),
   chain ? el("li", { style: `color:${toCss(TONES[trustTone(chain)])}` }, el("i", { style: "border-radius:50%;rotate:0deg" }),
     el("span", { class: "dim", text: "chain of trust" })) : null,
-);
+].filter(Boolean));
 
 if (page.findings?.length) {
   const button = $("c-findings");
