@@ -274,6 +274,7 @@
     .glyph { font-size: 15px; line-height: 1; }
     &:hover { color: var(--ink); background: oklch(1 0 0 / 0.06); }
     &:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+    &#c-film[aria-pressed="true"] .glyph { color: var(--tone-bad); animation: rec 1s steps(2) infinite; }
     &[aria-pressed="true"] {
       color: var(--accent);
       border-color: color-mix(in oklch, var(--accent) 45%, transparent);
@@ -542,6 +543,8 @@
     max-height: 46dvh;
   }
 }
+
+@keyframes rec { 50% { opacity: 0.25; } }
 
 @layer motion {
   @media (prefers-reduced-motion: reduce) {

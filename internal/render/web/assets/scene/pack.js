@@ -30,7 +30,7 @@ export function nodesOf(hops, glowOf) {
   return { byShape, halos };
 }
 
-export function wiresOf(hops, { onPath, result, floor }) {
+export function wiresOf(hops, { onPath, result, floor, landing = [] }) {
   const edges = [];
   const packets = [];
   for (const hop of hops.slice(1)) {
@@ -58,6 +58,9 @@ export function wiresOf(hops, { onPath, result, floor }) {
         packets.push(...hop.pos, hop.phase, ...to, -1, ...TONES.bad, 0.45, hop.at + 0.2, 1.4 + (i % 3) * 0.3, (i + 1) / 8);
       }
     }
+  }
+  for (const leg of landing) {
+    packets.push(...leg.from.pos, leg.from.phase, ...leg.to.pos, leg.to.phase, ...TONES.ok, 1.1, leg.leave, leg.travel, 0);
   }
   // A beam under the answer, down to the floor.
   if (result) {

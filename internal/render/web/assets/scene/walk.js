@@ -238,6 +238,16 @@ export function rideAt(trail, t, time, motion) {
   };
 }
 
+// When the answer arrives, a bead runs back up the trail to the root, one hop
+// after another and in about a second however deep the walk went. Each leg
+// goes from a hop to the one that sent the walk to it.
+export function landingOf(trail) {
+  if (!trail.length) return [];
+  const travel = Math.min(0.25, 0.9 / (trail.length - 1));
+  const start = trail.at(-1).at + 0.15;
+  return trail.slice(1).reverse().map((hop, i) => ({ from: hop, to: hop.parent, leave: start + i * travel, travel }));
+}
+
 // The yaw that puts the camera behind something going this way.
 export const behind = ([x, , z]) => Math.atan2(-x, -z);
 

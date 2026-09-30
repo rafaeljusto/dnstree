@@ -204,6 +204,7 @@ var (
 		"walk.js":   "text/javascript; charset=utf-8",
 		"space.js":  "text/javascript; charset=utf-8",
 		"pack.js":   "text/javascript; charset=utf-8",
+		"film.js":   "text/javascript; charset=utf-8",
 	}}
 )
 

@@ -323,11 +323,13 @@ clicking a hop says what the server said. Queries the walk had out at once are
 in flight at once, and the line over the controls holds the replay or winds it
 back. A name left pointing at nothing hangs a snapped thread, and a server that
 hands its zone or its recursion to strangers throws off sparks. `f` rides along
-with the question, from the root down to the answer. Sound is off until asked
-for, and is placed where the hops are, so that turning the scene turns it too.
-It is WebGL2 and nothing else: a browser without it is pointed back at
-`--format web`, and one asking for reduced motion gets the walk already
-assembled and standing still.
+with the question, from the root down to the answer. When the answer arrives, a
+bead runs back up the trail to the root. `c` films the replay, the name and the
+labels with it, and saves the film: it is made in the browser and goes nowhere
+else. Sound is off until asked for, and is placed where the hops are, so that
+turning the scene turns it too. It is WebGL2 and nothing else: a browser without
+it is pointed back at `--format web`, and one asking for reduced motion gets the
+walk already assembled and standing still.
 
 ![dnstree --format web-3d on www.example.com: the hops in a cone from the root down, the chain of trust ringed round each cut and the answer lit green](../demo-3d.png)
 

@@ -6,9 +6,10 @@
 import {
   TONES, KINDS, kindOf, trustTone, took, clamp, flatten, asked, resultOf, verdictOf, chainState,
   layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom, leaks,
-  trailOf, rideAt, behind, around,
+  trailOf, rideAt, behind, around, landingOf,
 } from "./walk.js";
 import { STRIDE, nodesOf, wiresOf } from "./pack.js";
+import { formatFor, framed, filmLength, filmName } from "./film.js";
 import { SHAPES, sub, add, scale, cross, norm, mix, perspective, lookAt, multiply, project } from "./space.js";
 
 const toCss = ([r, g, b]) => `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
@@ -483,6 +484,8 @@ const NOTES = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25, 78
 class Sound {
   #ctx = null;
   #master = null;
+  #out = null;
+  #tap = null;
   #beacon = null;
   on = false;
 
@@ -502,7 +505,7 @@ class Sound {
 
   #start(beaconAt) {
     const ctx = this.#ctx = new AudioContext();
-    const squash = new DynamicsCompressorNode(ctx, { threshold: -18, ratio: 4 });
+    const squash = this.#out = new DynamicsCompressorNode(ctx, { threshold: -18, ratio: 4 });
     squash.connect(ctx.destination);
     this.#master = new GainNode(ctx, { gain: 0 });
     this.#master.connect(squash);
@@ -603,6 +606,37 @@ class Sound {
     osc.connect(gain);
     osc.start(t);
     osc.stop(t + 0.06);
+  }
+
+  // The answer landing: a soft note at each hop as the bead reaches it, rising
+  // as it climbs. They are all set going at once, timed from where the replay
+  // is now.
+  land(legs, at) {
+    if (!this.on) return;
+    const ctx = this.#ctx;
+    const now = ctx.currentTime;
+    legs.forEach((leg, i) => {
+      const t = now + Math.max(0, leg.leave + leg.travel - at);
+      const envelope = new GainNode(ctx, { gain: 0 });
+      envelope.gain.setValueAtTime(0, t);
+      envelope.gain.linearRampToValueAtTime(0.06, t + 0.005);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+      envelope.connect(this.#panner(leg.to.pos)).connect(this.#master);
+      const osc = new OscillatorNode(ctx, { frequency: NOTES[Math.min(i + 4, NOTES.length - 1)], type: "sine" });
+      osc.connect(envelope);
+      osc.start(t);
+      osc.stop(t + 0.65);
+    });
+  }
+
+  // What is heard, for a film to carry; nothing while the sound is off.
+  stream() {
+    if (!this.on) return null;
+    if (!this.#tap) {
+      this.#tap = new MediaStreamAudioDestinationNode(this.#ctx);
+      this.#out.connect(this.#tap);
+    }
+    return this.#tap.stream;
   }
 
   sweep() {
@@ -802,7 +836,7 @@ function upload() {
 }
 
 function wire() {
-  const { edges, packets } = wiresOf(hops, { onPath, result, floor: bounds.floor });
+  const { edges, packets } = wiresOf(hops, { onPath, result, floor: bounds.floor, landing });
   renderer.edges(edges);
   renderer.packets(packets);
 }
@@ -813,12 +847,17 @@ function wire() {
 const replay = { at: 0, end: 0, held: false };
 let arrivals = [];
 let heard = 0;
+let landing = [];
+let landed = false;
 function play() {
   schedule(hops);
   arrivals = [...hops].sort((a, b) => a.at - b.at);
-  replay.end = arrivals.at(-1).at + 0.6;
+  landing = landingOf(trail);
+  const lands = landing.at(-1) ? landing.at(-1).leave + landing.at(-1).travel : 0;
+  replay.end = Math.max(arrivals.at(-1).at, lands) + 0.6;
   replay.at = motion ? 0 : replay.end + 3;
   heard = motion ? 0 : arrivals.length;
+  landed = !motion;
   upload();
   wire();
   marks();
@@ -839,6 +878,7 @@ function wind(to) {
   replay.at = clamp(to, 0, replay.end);
   heard = arrivals.findIndex((hop) => hop.at > replay.at);
   if (heard === -1) heard = arrivals.length;
+  landed = !landing.length || replay.at >= landing[0].leave;
   if (motion && !state.picked && replay.at < replay.end) follow = { until: replay.end + 0.6 };
   stale = true;
 }
@@ -1086,8 +1126,8 @@ canvas.addEventListener("wheel", (event) => {
 }, { passive: false });
 
 const controls = {
-  replay: $("c-replay"), orbit: $("c-orbit"), ride: $("c-ride"), sound: $("c-sound"), reset: $("c-reset"),
-  findings: $("c-findings"),
+  replay: $("c-replay"), orbit: $("c-orbit"), ride: $("c-ride"), sound: $("c-sound"), film: $("c-film"),
+  reset: $("c-reset"), findings: $("c-findings"),
 };
 controls.ride.hidden = !motion || !trail.length;
 // A click leaves the focus where it was, so that the keys go on meaning what
@@ -1115,6 +1155,7 @@ controls.sound.addEventListener("click", async () => {
     controls.sound.title = "this browser cannot make sound";
   }
 });
+controls.film.addEventListener("click", () => filming(!film.recorder));
 controls.findings.addEventListener("click", () => {
   const panel = $("findings");
   panel.hidden = !panel.hidden;
@@ -1152,6 +1193,7 @@ addEventListener("keydown", (event) => {
     o: () => controls.orbit.click(),
     f: () => !controls.ride.hidden && controls.ride.click(),
     m: () => controls.sound.click(),
+    c: () => !controls.film.hidden && controls.film.click(),
     r: () => reset(),
     e: () => !controls.findings.hidden && controls.findings.click(),
     "?": () => $("help").togglePopover(),
@@ -1172,12 +1214,99 @@ reduced.addEventListener("change", () => {
   motion = reduced.matches ? 0 : 1;
   if (!motion) {
     if (ride.on) reset();
+    filming(false);
     play();
   }
   controls.ride.hidden = !motion || !trail.length;
+  controls.film.hidden = !motion || !format;
   orbiting = orbiting && !reduced.matches;
   controls.orbit.setAttribute("aria-pressed", String(orbiting));
 });
+
+/* ── filming ───────────────────────────────────────────────────────────── */
+
+// A film is the replay recorded as it plays, from the start, with whatever the
+// camera does meanwhile: orbiting, riding, or being turned by hand. The name
+// and the labels live on the page rather than the canvas, so each frame is
+// drawn again onto one of its own with them over it. Nothing leaves the
+// browser; the film is handed to the viewer as a download.
+const format = typeof MediaRecorder === "undefined" || !HTMLCanvasElement.prototype.captureStream
+  ? null
+  : formatFor((type) => MediaRecorder.isTypeSupported(type));
+controls.film.hidden = !motion || !format;
+const film = { recorder: null, timer: 0, frame: null, pen: null, w: 0, h: 0 };
+
+function filming(on) {
+  if (!on) {
+    clearTimeout(film.timer);
+    if (film.recorder?.state === "recording") film.recorder.stop();
+    return;
+  }
+  if (film.recorder || !format || !motion) return;
+  const [width, height] = framed(canvas.width, canvas.height);
+  film.frame = Object.assign(document.createElement("canvas"), { width, height });
+  film.pen = film.frame.getContext("2d");
+  const stream = film.frame.captureStream(30);
+  for (const track of sound.stream()?.getAudioTracks() ?? []) stream.addTrack(track);
+
+  const chunks = [];
+  const recorder = film.recorder = new MediaRecorder(stream, { mimeType: format.type, videoBitsPerSecond: 8e6 });
+  recorder.addEventListener("dataavailable", (event) => event.data.size && chunks.push(event.data));
+  recorder.addEventListener("stop", () => {
+    film.recorder = null;
+    controls.film.setAttribute("aria-pressed", "false");
+    const link = el("a", { href: URL.createObjectURL(new Blob(chunks, { type: format.type })), download: filmName(walk.question, format) });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
+  });
+  play();
+  film.w = sized.w;
+  film.h = sized.h;
+  // A timer rather than the frames: a tab in the background draws none, and
+  // the recorder would go on filming the last one until it came back.
+  film.timer = setTimeout(() => filming(false), filmLength(replay.end) * 1000);
+  recorder.start(1000);
+  controls.film.setAttribute("aria-pressed", "true");
+}
+
+// One frame of the film: the scene as just drawn, the labels where the page
+// has them, and the question in the corner.
+function shoot() {
+  // The frame was cut to the window's shape when the film began; a window
+  // that changes shape would come out squashed, so the film ends there.
+  if (sized.w !== film.w || sized.h !== film.h) {
+    filming(false);
+    return;
+  }
+  const { frame, pen } = film;
+  pen.drawImage(canvas, 0, 0, frame.width, frame.height);
+  pen.save();
+  pen.scale(frame.width / sized.w, frame.height / sized.h);
+  pen.textBaseline = "middle";
+  for (const hop of hops) {
+    if (!hop.place || hop.place.o < 0.03) continue;
+    const { x, y, o } = hop.place;
+    pen.globalAlpha = o;
+    pen.font = "600 12px ui-monospace, Menlo, monospace";
+    pen.fillStyle = toCss(TONES[hop.tone]);
+    pen.fillText(hop.tag.firstChild.textContent, x, y - 7);
+    pen.font = "11px ui-monospace, Menlo, monospace";
+    pen.fillStyle = "rgb(150 165 190)";
+    pen.fillText(hop.tag.lastChild.textContent, x, y + 8);
+  }
+  pen.globalAlpha = 1;
+  pen.textBaseline = "alphabetic";
+  pen.fillStyle = "rgb(120 140 170)";
+  pen.font = "12px ui-monospace, Menlo, monospace";
+  pen.fillText("dnstree//3d", 28, 38);
+  pen.fillStyle = "rgb(230 238 248)";
+  pen.font = "300 34px ui-monospace, Menlo, monospace";
+  pen.fillText(walk.question.name, 28, 78);
+  pen.fillStyle = toCss(TONES.info);
+  pen.font = "13px ui-monospace, Menlo, monospace";
+  pen.fillText(`${walk.question.type} ${walk.question.class}`, 28, 102);
+  pen.restore();
+}
 
 /* ── every frame ───────────────────────────────────────────────────────── */
 
@@ -1295,6 +1424,13 @@ function tick() {
   };
   renderer.draw(frame);
   placeTags(viewProj, now, sized.w, sized.h, pixels);
+  // Drawn straight after the scene, before the browser clears what it drew.
+  if (film.recorder) shoot();
+
+  if (!landed && landing.length && replay.at >= landing[0].leave) {
+    landed = true;
+    if (!replay.held && replay.at - landing[0].leave < 0.25) sound.land(landing, replay.at);
+  }
 
   // A note for each hop that has arrived since the last frame.
   while (heard < arrivals.length && arrivals[heard].at <= replay.at) {

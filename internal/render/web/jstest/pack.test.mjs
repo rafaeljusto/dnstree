@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { KINDS, flatten, resultOf, layout, schedule } from "../assets/scene/walk.js";
+import { KINDS, TONES, flatten, resultOf, layout, schedule, trailOf, landingOf } from "../assets/scene/walk.js";
 import { STRIDE, nodesOf, wiresOf } from "../assets/scene/pack.js";
 import { golden, zone, step } from "./fixtures.mjs";
 
@@ -71,6 +71,19 @@ test("a thread for each hop but the root, a packet for each query, and a beam un
   assert.equal(packets.length / STRIDE.packet, walk.hops.length - 1 - unasked);
   const beam = edges.slice(-STRIDE.edge);
   assert.equal(beam[5], walk.floor, "the beam ends on the floor");
+});
+
+test("the landing is a packet for each leg back up the trail, in the answer's colour", () => {
+  const walk = prepared(golden().root);
+  const landing = landingOf(trailOf(walk.result));
+  const without = wiresOf(walk.hops, walk).packets;
+  const packets = wiresOf(walk.hops, { ...walk, landing }).packets;
+  assert.equal((packets.length - without.length) / STRIDE.packet, landing.length);
+  const first = packets.slice(without.length, without.length + STRIDE.packet);
+  assert.deepEqual(first.slice(0, 3), landing[0].from.pos);
+  assert.deepEqual(first.slice(4, 7), landing[0].to.pos);
+  assert.deepEqual(first.slice(8, 11), TONES.ok);
+  assert.deepEqual(first.slice(12), [landing[0].leave, landing[0].travel, 0]);
 });
 
 test("a dangling name snaps a thread in two, and an open server throws sparks", () => {

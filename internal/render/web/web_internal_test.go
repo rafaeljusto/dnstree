@@ -209,6 +209,10 @@ func TestHandler(t *testing.T) {
 			pages: scene, path: "/pack.js", wantStatus: http.StatusOK,
 			wantType: "text/javascript; charset=utf-8", wantContent: "export const STRIDE",
 		},
+		"how a film of the scene is made": {
+			pages: scene, path: "/film.js", wantStatus: http.StatusOK,
+			wantType: "text/javascript; charset=utf-8", wantContent: "export function filmName",
+		},
 		"what the scene is laid over": {
 			pages: scene, path: "/scene.css", wantStatus: http.StatusOK, wantType: "text/css; charset=utf-8", wantContent: "@layer",
 		},

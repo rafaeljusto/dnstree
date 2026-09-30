@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   KINDS, TONES, kindOf, took, flatten, asked, resultOf, verdictOf, chainState, widthOf,
   layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom,
-  trailOf, rideAt, behind, around,
+  trailOf, rideAt, behind, around, landingOf,
 } from "../assets/scene/walk.js";
 import { golden, zone, step, chain } from "./fixtures.mjs";
 
@@ -310,6 +310,27 @@ test("the ride floats with the hops it rides between", () => {
   const hop = trail.at(-1);
   const r = rideAt(trail, 99, 3.7, 1);
   assert.ok(near(r.at, drift(hop.pos, hop.phase, 3.7, 1)));
+});
+
+test("when the answer arrives a bead runs back up the trail, hop by hop, to the root", () => {
+  const { trail } = ridden(golden().root);
+  const legs = landingOf(trail);
+  assert.deepEqual(legs.map((leg) => [leg.from.id, leg.to.id]), [[4, 3], [3, 1], [1, 0]]);
+  assert.ok(legs[0].leave > trail.at(-1).at, "not before the answer is in");
+  for (const [before, after] of legs.slice(0, -1).map((leg, i) => [leg, legs[i + 1]])) {
+    assert.ok(Math.abs(after.leave - (before.leave + before.travel)) < 1e-9, "each leg starts as the one before ends");
+  }
+  assert.deepEqual(landingOf([]), [], "nothing lands when nothing answered");
+});
+
+test("the bead takes about a second however deep the walk went", () => {
+  for (const depth of [1, 3, 12]) {
+    const legs = landingOf(ridden(chain(depth)).trail);
+    const last = legs.at(-1);
+    const runs = last.leave + last.travel - legs[0].leave;
+    assert.equal(legs.length, depth);
+    assert.ok(runs <= 0.9 + 1e-9 && legs.every((leg) => leg.travel <= 0.25), `${depth} deep runs ${runs}`);
+  }
 });
 
 test("the camera sits behind the way the question is going", () => {
