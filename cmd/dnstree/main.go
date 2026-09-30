@@ -28,6 +28,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/recursive"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/markdown"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/mermaid"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/openmetrics"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
@@ -159,6 +160,20 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			Version: version,
 		}
 		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, reference, stderr), options); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		return outcome(cfg, tr, stderr)
+	}
+
+	// A report carries its summary and its sentences inside it, and it always
+	// says what the walk came to, asked to explain or not.
+	if cfg.Format == "markdown" {
+		findings := readings(cfg, tr, reference, stderr)
+		if !cfg.Explain {
+			findings = append(explain.Findings(tr), findings...)
+		}
+		if err := markdown.Render(stdout, tr, findings); err != nil {
 			fmt.Fprintln(stderr, err)
 			return exitUsage
 		}

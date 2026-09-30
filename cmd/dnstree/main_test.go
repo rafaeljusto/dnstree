@@ -114,6 +114,12 @@ func TestRun(t *testing.T) {
 				tb.Errorf("got %q, want a gantt chart and no summary under it", out)
 			}
 		}},
+		"markdown": {format: "markdown", check: func(tb testing.TB, out string) {
+			if !strings.HasPrefix(out, "### `. NS`: answered\n") || strings.Count(out, "answered in") != 1 ||
+				!strings.Contains(out, "**what happened**") {
+				tb.Errorf("got %q, want a report, explained, with the summary in it once", out)
+			}
+		}},
 		"openmetrics": {format: "openmetrics", check: func(tb testing.TB, out string) {
 			if !strings.HasSuffix(out, "\n# EOF\n") || strings.Contains(out, "answered in") {
 				tb.Errorf("got %q, want metrics and no summary under them", out)
@@ -904,6 +910,10 @@ func TestRunFrom(t *testing.T) {
 			args: []string{"--from", path, "--format", "waterfall-ascii"},
 			code: exitAnswer, want: "a.root-servers.net.",
 		},
+		"written up as a report": {
+			args: []string{"--from", path, "--format", "markdown"},
+			code: exitAnswer, want: "- . NS is a.root-servers.net.",
+		},
 		"drawn as a gantt chart": {
 			args: []string{"--from", path, "--format", "waterfall-mermaid"},
 			code: exitAnswer, want: "\ngantt\n",
@@ -1077,6 +1087,7 @@ func TestRunFromHostile(t *testing.T) {
 		{"--format", "waterfall", "--color", "always"},
 		{"--format", "waterfall-ascii", "--explain"},
 		{"--format", "waterfall-mermaid"},
+		{"--format", "markdown"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			previous := stdin

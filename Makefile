@@ -104,9 +104,10 @@ live:
 
 # Rewrites the renderer goldens, and docs/trace.schema.json with them. go test
 # refuses a flag a package does not define, and only the packages with goldens
-# define -update, so those are the ones asked.
+# define -update, so those are the ones asked. One at a time and in order, since
+# the markdown golden is drawn from the json one.
 goldens:
-	$(GO) test $$(grep -l 'flag.Bool("update"' internal/render/*/*_test.go | \
+	$(GO) test -p 1 $$(grep -l 'flag.Bool("update"' internal/render/*/*_test.go | \
 		xargs -n1 dirname | sort -u | sed 's|^|./|') -update
 
 # dist builds a whole release: an archive per platform, a native package per

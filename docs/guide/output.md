@@ -259,6 +259,65 @@ $ dnstree --format emoji --live www.example.com
 
 </details>
 
+`--format markdown` writes the walk as a report to paste into a ticket, an
+incident write-up or a pull request: a heading that says what it came to and
+when it was made, the tree and its summary in a code fence, the sentences
+`--explain` would write, and a table of what the resolvers answered. It always
+explains; `--diff` and `--against` add what changed. Everything a server wrote
+is escaped, so a name or a record cannot open a link or a table cell of its
+own. With `--from`, a walk saved during an incident becomes a report
+afterwards.
+
+<details>
+<summary>A report, as it is pasted</summary>
+
+````
+$ dnstree --format markdown --dnssec www.example.com
+### `www.example.com. A`: answered, secure
+
+walked on 2026-09-30 21:05 UTC
+
+```
+. (root)  [secure RSASHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  AS19836  258ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  AS19836  782ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
+│   ├── l.gtld-servers.net. 192.41.162.30  AS19836  259ms  NOERROR  DO  referral → example.com.  [secure ECDSAP256SHA256/SHA256]
+│   │   ├── l.gtld-servers.net. 192.41.162.30  AS19836  255ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  AS13335  242ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   ├── www.example.com. 300 A 172.66.147.243
+│   │   │   ├── www.example.com. 300 A 104.20.23.154
+│   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  AS13335  231ms  NOERROR  AA DO  (DNSKEY of example.com.)
+│   │   ├── hera.ns.cloudflare.com. 172.64.32.162  (not queried)
+│   │   ├── hera.ns.cloudflare.com. 173.245.58.162  (not queried)
+│   │   ├── hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
+│   │   └── (and 8 more not queried)
+│   ├── l.gtld-servers.net. 2001:500:d937::30  (not queried)
+│   ├── j.gtld-servers.net. 192.48.79.30  (not queried)
+│   ├── j.gtld-servers.net. 2001:502:7094::30  (not queried)
+│   └── (and 22 more not queried)
+├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── b.root-servers.net. 170.247.170.2  (not queried)
+├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── (and 22 more not queried)
+✔ answered in 2s · resolver in 251ms · 6 queries · 3 servers
+```
+
+**what happened**
+
+- www.example.com. A is 104.20.23.154 and 172.66.147.243, answered by hera.ns.cloudflare.com. for example.com.
+- a cache may hold this answer for 5 minutes, and the delegation to example.com. for 2 days
+- the chain of trust holds from the root to example.com., signed with ECDSAP256SHA256
+- ⚠ 1 server answered with almost nothing left of the datagram the answer had to fit in (a.root-servers.net. with 1175 of 1232 bytes), so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it
+
+**resolvers**
+
+| resolver | answer | time |
+| --- | --- | --- |
+| 8.8.8.8 | agrees | 251ms |
+````
+
+</details>
+
 `--format web` draws nothing in the terminal at all. It serves the finished walk
 as a page on this machine and opens a browser at it:
 

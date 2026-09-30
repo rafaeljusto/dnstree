@@ -100,7 +100,7 @@ poll. One --resolver on the command line replaces every one the file of defaults
 chose, rather than adding to them.
 
 FORMAT is one of tree (the default), ascii, emoji, waterfall, waterfall-ascii,
-waterfall-mermaid, json, dot, mermaid, openmetrics, web or web-3d.
+waterfall-mermaid, markdown, json, dot, mermaid, openmetrics, web or web-3d.
 
 --format web draws nothing in the terminal. It serves the finished walk as a
 page instead, on this machine and on whatever port is free, and opens a browser
@@ -140,6 +140,14 @@ The asides are drawn lighter than the walk's own queries. waterfall-ascii
 draws it with # and . for pasting into a document, and waterfall-mermaid
 writes it as a Mermaid gantt chart. A walk saved with --format json before
 dnstree kept when each query started cannot be drawn this way, and is refused.
+
+--format markdown writes the walk as a report to paste into a ticket, an
+incident write-up or a pull request: a heading that says what the walk came to
+and when it was made, the tree in a code fence, what --explain would say about
+it, and a table of what the resolvers answered. It always explains, and takes
+--diff and --against to add what changed. Everything a server wrote is escaped,
+so a name or a record cannot turn into a link or a table cell of its own. With
+--from, a walk saved during an incident becomes a report afterwards.
 
 --format openmetrics writes the walk as numbers for a monitoring system: how
 it ended, what it and each hop on the path took, the chain of trust, the time
@@ -442,7 +450,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, json, dot, mermaid, openmetrics, web or web-3d")
+	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, markdown, json, dot, mermaid, openmetrics, web or web-3d")
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
@@ -503,7 +511,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch format {
-	case "tree", "ascii", "emoji", "waterfall", "waterfall-ascii", "waterfall-mermaid",
+	case "tree", "ascii", "emoji", "waterfall", "waterfall-ascii", "waterfall-mermaid", "markdown",
 		"json", "dot", "mermaid", "openmetrics", "web", "web-3d":
 		cfg.Format = format
 	default:
@@ -683,9 +691,11 @@ var walkFlags = map[string]bool{
 
 // once reports whether a format is written once, at the end, which leaves
 // nothing to draw live and nothing to watch change. A waterfall is one of them
-// because its scale is the whole walk, which is not known until it is over.
+// because its scale is the whole walk, which is not known until it is over, and
+// a report because it is pasted whole.
 func once(format string) bool {
-	return Programs(format) || Serves(format) || format == "waterfall" || format == "waterfall-ascii"
+	return Programs(format) || Serves(format) ||
+		format == "waterfall" || format == "waterfall-ascii" || format == "markdown"
 }
 
 // Serves reports whether a format is a page served to a browser rather than

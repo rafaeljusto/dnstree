@@ -844,6 +844,12 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
       </p>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        <code>--format markdown</code> writes the walk as a report to paste into a ticket or an
+        incident write-up: what it came to, the tree in a code fence, the sentences
+        <code>--explain</code> would say, and what the resolvers answered.
+      </p>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
         <code>--from walk.json</code> draws a walk <code>--format json</code> saved, in any of
         these, without asking any server anything: a walk made from a machine nobody else can
         reach can be drawn, explained and checked with <code>--expect</code> somewhere else.

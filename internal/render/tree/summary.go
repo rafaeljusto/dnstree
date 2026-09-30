@@ -31,17 +31,7 @@ func Summary(w io.Writer, tr *trace.Trace, opts Options) {
 func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 	charset Charset, elapsed time.Duration, counts []string) {
 
-	mark, verdict, color := "✔", "answered", green
-	switch {
-	case bogus(tr):
-		mark, verdict, color = "✘", "bogus", red
-	case tr.Result() == nil && tr.Filtered() != nil:
-		// Not the same as nothing answering: something did answer, and what it
-		// answered was that it would not.
-		mark, verdict, color = "✘", "filtered", red
-	case tr.Result() == nil:
-		mark, verdict, color = "✘", "no answer", yellow
-	}
+	mark, verdict, color := outcome(tr)
 	if charset == ASCII {
 		mark = ""
 	}
@@ -57,6 +47,28 @@ func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 		line = paint.paint(mark, color) + " " + line
 	}
 	_, _ = io.WriteString(w, line+"\n")
+}
+
+// Verdict is the word the summary opens with: answered, bogus, filtered or no
+// answer. Anything else that names the outcome uses it, so that it and the
+// summary cannot come to disagree.
+func Verdict(tr *trace.Trace) string {
+	_, verdict, _ := outcome(tr)
+	return verdict
+}
+
+func outcome(tr *trace.Trace) (mark, verdict string, color string) {
+	switch {
+	case bogus(tr):
+		return "✘", "bogus", red
+	case tr.Result() == nil && tr.Filtered() != nil:
+		// Not the same as nothing answering: something did answer, and what it
+		// answered was that it would not.
+		return "✘", "filtered", red
+	case tr.Result() == nil:
+		return "✘", "no answer", yellow
+	}
+	return "✔", "answered", green
 }
 
 // resolverField is what a recursive server made of the same question, empty

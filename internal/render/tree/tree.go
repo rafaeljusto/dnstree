@@ -705,7 +705,7 @@ func (r *renderer) difference(result *trace.Step, answer *trace.Resolver, qtype 
 			who, answer.Rcode, result.Rcode)
 	default:
 		text = fmt.Sprintf("%s answers %s, the walk found %s",
-			who, list(theirs), list(ours))
+			who, List(theirs), List(ours))
 	}
 
 	mark := "differs: "
@@ -715,9 +715,9 @@ func (r *renderer) difference(result *trace.Step, answer *trace.Resolver, qtype 
 	return r.paint.paint(mark+text, yellow)
 }
 
-// list is a set of rdata as a reader wants it, kept short: a round robin of a
+// List is a set of rdata as a reader wants it, kept short: a round robin of a
 // dozen addresses says nothing more than the first few of them and a count.
-func list(data []string) string {
+func List(data []string) string {
 	const most = 3
 	if len(data) == 0 {
 		return "nothing"

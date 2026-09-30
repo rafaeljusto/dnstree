@@ -1,0 +1,35 @@
+### `www.example.com. A`: answered, secure
+
+walked on 2026-09-24 12:00 UTC
+
+```
+. (root)
+└── a.root-servers.net. 198.41.0.4  @fra2  12ms  NOERROR  referral → com.  cookie  [insecure]
+    ├── b.gtld-servers.net. 192.33.14.30  2s  timeout
+    └── a.gtld-servers.net. 192.5.6.30  18ms  NOERROR  referral → example.com.  [secure ECDSAP256SHA256/SHA256]  (truncated over udp)
+        ├── a.iana-servers.net. 199.43.135.53  AS10745  9.4ms  1187 of 1232 bytes  NOERROR  AA DO  [secure ECDSAP256SHA256]
+        │   ├── www.example.com. 3600 A 93.184.216.34
+        │   └── a.iana-servers.net. 199.43.135.53  8ms  NOERROR  AA  (DNSKEY of example.com.)
+        └── b.iana-servers.net. 199.43.133.53  (not queried)
+differs: 198.51.100.53 answers 198.51.100.1, 198.51.100.2, 198.51.100.3 (and 1 more), the walk found 93.184.216.34
+warning: the delegation to example.com. lists a nameserver the zone does not
+✔ answered in 42ms · resolvers in 9ms-23ms (1 of 3 differ, 1 did not answer) · 5 queries · 4 servers
+```
+
+**what happened**
+
+- www.example.com. A is 93.184.216.34, answered by a.iana-servers.net. for example.com.
+- a cache may hold this answer for 1 hour, and the delegation to example.com. for 2 days
+- 198.51.100.53 is answering this from its cache, with 1 minute left on the copy it is serving
+- the chain of trust holds from the root to example.com., signed with ECDSAP256SHA256
+- ⚠ 1 server did not answer in time: b.gtld-servers.net.
+- ⚠ 1 server answered with almost nothing left of the datagram the answer had to fit in (a.iana-servers.net. with 1187 of 1232 bytes), so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it
+- ⚠ 198.51.100.53 answered this question differently, which a name whose answer is tailored to where it is asked from does honestly, and nothing else should
+
+**resolvers**
+
+| resolver | answer | time |
+| --- | --- | --- |
+| 192.0.2.53 | agrees | 23ms |
+| 198.51.100.53:5353 | differs: 198.51.100.1, 198.51.100.2, 198.51.100.3 (and 1 more) | 9ms |
+| 203.0.113.53 | did not answer | - |
