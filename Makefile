@@ -1,4 +1,6 @@
 GO ?= go
+# node runs the pages' tests, and needs to be 22 or later.
+NODE ?= node
 
 # golangci-lint comes from the PATH when it is there, and is fetched at the
 # pinned version when it is not.
@@ -53,7 +55,7 @@ MAN_DATE ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +'%Y-%m-%d')
 # read, and the man page. Only finished artefacts reach dist.
 BUILD := build
 
-.PHONY: all build install test race lint lint-docker vuln check live goldens dist man \
+.PHONY: all build install test race js lint lint-docker vuln check live goldens dist man \
 	archives packages formula checksums image image-push image-web image-web-push clean roothints demos demo-3d
 
 # The stages of dist read each other's output, so they run one after another
@@ -74,6 +76,11 @@ test:
 race:
 	$(GO) test -race ./...
 
+# The pages' own logic, under node's built-in test runner: nothing is
+# installed, and nothing but node is needed.
+js:
+	$(NODE) --test 'internal/render/web/jstest/*.test.mjs'
+
 # go vet is not covered by golangci-lint: its bundled govet ships a different
 # set of analysers, and misses appends and slog among others.
 lint:
@@ -89,7 +96,7 @@ lint-docker:
 vuln:
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-check: build lint race vuln
+check: build lint race js vuln
 
 # Goes out to the real root servers, so it is never part of check.
 live:

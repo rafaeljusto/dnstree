@@ -25,6 +25,19 @@ jobs:
       - run: go build ./...
       - run: go test -race ./...
 
+  # The pages' logic, under node's own test runner. There is no package.json:
+  # the tests import nothing that node does not ship.
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: make js
+
   # Its own job, so that the linter's cache is not shared with the build's.
   lint:
     runs-on: ubuntu-latest

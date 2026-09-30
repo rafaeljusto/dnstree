@@ -175,6 +175,7 @@ glue, broken signatures and more.
 ```bash
 make check        # what CI runs, less hadolint, the packaging dry run and the images
 make lint         # go vet and golangci-lint
+make js           # the pages' own logic, under node's built-in test runner (node 22 or later)
 make lint-docker  # hadolint against the Dockerfile
 make vuln         # govulncheck against the vulnerability database
 make goldens      # rewrite the renderer goldens and docs/trace.schema.json; read the diff

@@ -17,7 +17,7 @@ and the others do not.
 ## Before handing work back
 
 ```bash
-make check   # build, go vet, golangci-lint, go test -race ./..., govulncheck
+make check   # build, go vet, golangci-lint, go test -race ./..., the pages' tests under node, govulncheck
 ```
 
 That is what CI runs, less hadolint (`make lint-docker`), the packaging dry
@@ -193,6 +193,13 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   to strangers. A change to the way a delegation is followed belongs with a
   scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
+- The pages' logic lives in `walk.js` beside each page (and `space.js` and
+  `pack.js` beside the scene), which touch neither the DOM nor WebGL; the page
+  scripts only draw what those return. `internal/render/web/jstest` tests them
+  with node's own runner and the JSON golden as the walk, and there is no
+  `package.json`: the tests import nothing node does not ship. A new module
+  goes in the file list in `internal/render/web/web.go`, or
+  `TestImportsAreServed` fails.
 - Table tests are keyed by a sentence that says what the case is, not by index.
 - `fakens` replaces its zone whole through an `atomic.Pointer`, serialises
   signing behind a mutex and signs copies of the zone's records, because
