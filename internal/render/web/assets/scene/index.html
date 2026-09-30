@@ -51,6 +51,10 @@
 </section>
 
 <nav class="hud dock" aria-label="controls">
+  <div class="scrub">
+    <div id="s-marks" class="marks" aria-hidden="true"></div>
+    <input type="range" id="s-time" min="0" max="1000" value="0" aria-label="where the replay is" title="hold it, or wind the walk back">
+  </div>
   <button class="key" type="button" id="c-replay" title="replay the walk (space)"><span class="glyph">&#8634;</span><span>replay</span></button>
   <button class="key" type="button" id="c-orbit" aria-pressed="true" title="turn on its own (o)"><span class="glyph">&#10227;</span><span>orbit</span></button>
   <button class="key" type="button" id="c-sound" aria-pressed="false" title="sound (m)"><span class="glyph">&#9835;</span><span>sound</span></button>
@@ -74,6 +78,7 @@
     <dt><kbd>&#8592;</kbd><kbd>&#8593;</kbd><kbd>&#8594;</kbd><kbd>&#8595;</kbd></dt><dd>turn it from the keyboard</dd>
     <dt><kbd>n</kbd> <kbd>p</kbd></dt><dd>the next hop, or the one before</dd>
     <dt><kbd>space</kbd></dt><dd>replay the walk</dd>
+    <dt>the line over the controls</dt><dd>hold the replay, or wind it back</dd>
     <dt><kbd>o</kbd></dt><dd>let it turn on its own</dd>
     <dt><kbd>m</kbd></dt><dd>sound</dd>
     <dt><kbd>r</kbd></dt><dd>back to where it started</dd>
@@ -81,7 +86,8 @@
   </dl>
   <p class="note">the walk assembles in the order it was made, each hop taking as long as
   its server did. the brighter trail is the way to the answer; the rings are the chain of
-  trust at each cut. sound is placed where the hops are: turn the scene and it turns with it.</p>
+  trust at each cut. a snapped thread is a name left pointing at nothing, and sparks are a
+  server handing out to strangers what it should not. sound is placed where the hops are: turn the scene and it turns with it.</p>
   <button class="key" type="button" popovertarget="help" popovertargetaction="hide">close</button>
 </div>
 

@@ -186,26 +186,36 @@ const drift = (pos, phase, time, motion) => [
 
 /* ── when each hop arrives ─────────────────────────────────────────────── */
 
-// The walk is replayed in the order it was made, each query taking a time in
-// proportion to what the server took, squeezed so that a slow walk still
-// assembles in a few seconds.
-function schedule(hops, now, instant) {
-  if (instant) {
-    for (const hop of hops) Object.assign(hop, { leave: now - 20, travel: 0.01, at: now - 20 });
-    return;
-  }
-  const total = hops.filter((hop) => asked(hop.step)).reduce((sum, hop) => sum + (hop.step.rtt_ms ?? 0), 0);
-  const perMs = Math.min(0.0028, 7.5 / Math.max(total, 1));
+// The walk is replayed as it was made, each query leaving when it left and
+// taking as long as its server took, squeezed so that a slow walk still
+// assembles in a few seconds: queries that were out at once are in flight at
+// once. A failure has no start of its own, so it stands where the last thing
+// before it finished, as it does on the waterfall. A walk saved before steps
+// carried their start is replayed one query after another. The times are on
+// the replay's own clock, which starts at 0.
+function schedule(hops) {
+  const queries = hops.filter((hop) => asked(hop.step));
+  const timed = queries.some((hop) => hop.step.start_ms !== undefined);
+  const span = timed
+    ? Math.max(...queries.map((hop) => (hop.step.start_ms ?? 0) + (hop.step.rtt_ms ?? 0)))
+    : queries.reduce((sum, hop) => sum + (hop.step.rtt_ms ?? 0), 0);
+  const perMs = Math.min(0.0028, 7.5 / Math.max(span, 1));
 
-  let clock = now + 0.9;
-  hops[0].leave = now;
+  let clock = 0.9;
+  let latest = clock;
+  hops[0].leave = 0;
   hops[0].travel = 0.01;
-  hops[0].at = now + 0.3;
+  hops[0].at = 0.3;
   for (const hop of hops.slice(1)) {
     if (asked(hop.step)) {
       hop.travel = clamp((hop.step.rtt_ms ?? 0) * perMs, 0.16, 1.3);
-      hop.leave = Math.max(clock, hop.parent.at);
+      const started = timed && hop.step.start_ms !== undefined;
+      const left = started ? 0.9 + hop.step.start_ms * perMs : timed ? latest : clock;
+      // Squeezing stretches the quick queries, so a hop may not leave before
+      // the one that sent it has visibly arrived.
+      hop.leave = Math.max(left, hop.parent.at);
       clock = hop.at = hop.leave + hop.travel;
+      latest = Math.max(latest, hop.at);
     } else {
       const sibling = hop.parent.kids.indexOf(hop);
       hop.travel = 0.4;
@@ -223,6 +233,7 @@ const scale = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const norm = (a) => scale(a, 1 / (Math.hypot(...a) || 1));
+const mix = (a, b, k) => add(a, scale(sub(b, a), k));
 
 function perspective(fovy, aspect, near, far) {
   const f = 1 / Math.tan(fovy / 2);
@@ -352,6 +363,7 @@ const COMMON = `#version 300 es
 precision highp float;
 uniform mat4 uViewProj;
 uniform float uTime;
+uniform float uReplay;
 uniform float uMotion;
 uniform float uPixels;
 uniform float uMaxPoint;
@@ -361,14 +373,14 @@ vec3 drift(vec3 p, float phase) {
   return p + uMotion * vec3(cos(uTime * 0.53 + phase * 1.7) * 0.06, sin(uTime * 0.9 + phase) * 0.16, sin(uTime * 0.61 + phase * 2.3) * 0.06);
 }
 float grow(float at) {
-  float k = clamp((uTime - at) / 0.55, 0.0, 1.0);
+  float k = clamp((uReplay - at) / 0.55, 0.0, 1.0);
   if (k <= 0.0) return 0.0;
   // Multiplied out: pow() of a negative number is undefined, and some cards
   // draw the hop enormous for it.
   float c1 = 1.70158, c3 = c1 + 1.0, m = k - 1.0;
   return 1.0 + c3 * m * m * m + c1 * m * m;
 }
-float flash(float at) { return uTime > at ? exp(-(uTime - at) * 2.4) : 0.0; }
+float flash(float at) { return uReplay > at ? exp(-(uReplay - at) * 2.4) : 0.0; }
 `;
 
 const NODE_VS = `${COMMON}
@@ -418,7 +430,7 @@ out vec3 vColor; out float vGlow;
 void main() {
   vec4 clip = uViewProj * vec4(drift(aPlace.xyz, aMotion.x), 1.0);
   float g = aColor.a + flash(aMotion.y);
-  float grown = clamp((uTime - aMotion.y) / 0.55, 0.0, 1.0);
+  float grown = clamp((uReplay - aMotion.y) / 0.55, 0.0, 1.0);
   gl_Position = clip;
   gl_PointSize = clip.w > 0.0 ? min(uMaxPoint, aPlace.w * (3.0 + g * 2.5) * uPixels / clip.w) * grown : 0.0;
   vColor = aColor.rgb;
@@ -454,8 +466,8 @@ void main() {
   vec4 c = mix(ca, cb, aCorner.x);
   c.xy += vec2(-dir.y, dir.x) * aCorner.y * iTiming.z * uDpr / uHalf * c.w;
   gl_Position = c;
-  float k = clamp((uTime - iTiming.x) / max(iTiming.y, 1e-3), 0.0, 1.0);
-  vProgress = uTime < iTiming.x ? -1.0 : k * k * (3.0 - 2.0 * k);
+  float k = clamp((uReplay - iTiming.x) / max(iTiming.y, 1e-3), 0.0, 1.0);
+  vProgress = uReplay < iTiming.x ? -1.0 : k * k * (3.0 - 2.0 * k);
   vT = aCorner.x;
   vSide = aCorner.y;
   vColor = iColor.rgb;
@@ -482,15 +494,18 @@ const PACKET_VS = `${COMMON}
 layout(location = 0) in vec4 aA;
 layout(location = 1) in vec4 aB;
 layout(location = 2) in vec4 aColor;
-layout(location = 3) in vec2 aTiming;
+layout(location = 3) in vec3 aTiming;
 out vec3 vColor;
 void main() {
-  float k = (uTime - aTiming.x) / aTiming.y;
-  if (k < 0.0 || k > 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
-  float e = k * k * (3.0 - 2.0 * k);
+  // A packet with an offset goes round again for as long as the page is open,
+  // fading as it goes: a server giving away what it should not.
+  bool loops = aTiming.z > 0.0;
+  float k = loops ? fract(uTime * uMotion / aTiming.y + aTiming.z) : (uReplay - aTiming.x) / aTiming.y;
+  if (uReplay < aTiming.x || k < 0.0 || k > 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+  float e = loops ? k : k * k * (3.0 - 2.0 * k);
   vec4 clip = uViewProj * vec4(mix(drift(aA.xyz, aA.w), drift(aB.xyz, aB.w), e), 1.0);
   gl_Position = clip;
-  gl_PointSize = clip.w > 0.0 ? min(uMaxPoint, aColor.a * uPixels / clip.w) : 0.0;
+  gl_PointSize = clip.w > 0.0 ? min(uMaxPoint, aColor.a * uPixels / clip.w) * (loops ? 1.0 - k : 1.0) : 0.0;
   vColor = aColor.rgb;
 }`;
 
@@ -595,7 +610,7 @@ class Renderer {
     }
 
     this.#halo = this.#points([[0, 4, 0], [1, 4, 16], [2, 2, 32]], 40);
-    this.#packets = this.#points([[0, 4, 0], [1, 4, 16], [2, 4, 32], [3, 2, 48]], 56);
+    this.#packets = this.#points([[0, 4, 0], [1, 4, 16], [2, 4, 32], [3, 3, 48]], 60);
 
     const corners = new Float32Array([0, -1, 1, -1, 1, 1, 0, -1, 1, 1, 0, 1]);
     const vao = gl.createVertexArray();
@@ -680,7 +695,7 @@ class Renderer {
   }
   halos(data) { this.#halo.count = data.length / 10; this.#fill(this.#halo.buffer, new Float32Array(data)); }
   edges(data) { this.#edges.count = data.length / 16; this.#fill(this.#edges.instances, new Float32Array(data)); }
-  packets(data) { this.#packets.count = data.length / 14; this.#fill(this.#packets.buffer, new Float32Array(data)); }
+  packets(data) { this.#packets.count = data.length / 15; this.#fill(this.#packets.buffer, new Float32Array(data)); }
 
   stars(count) {
     const data = new Float32Array(count * 4);
@@ -732,6 +747,7 @@ class Renderer {
       const set = (key, fn, ...value) => uniforms[key] && gl[fn](uniforms[key], ...value);
       set("uViewProj", "uniformMatrix4fv", false, frame.viewProj);
       set("uTime", "uniform1f", frame.time);
+      set("uReplay", "uniform1f", frame.replay);
       set("uMotion", "uniform1f", frame.motion);
       set("uPixels", "uniform1f", frame.pixels);
       set("uMaxPoint", "uniform1f", this.maxPoint);
@@ -949,6 +965,13 @@ for (const hop of hops) {
 
 const bounds = layout(hops);
 
+// A name left pointing at nothing hangs a snapped thread off the hop that
+// showed it, down and out, clear of the ring below.
+for (const hop of hops) {
+  if (hop.step.dangling) hop.shard = add(hop.pos, add(scale(norm([hop.pos[0], 0, hop.pos[2]]), 0.7), [0, -1.9, 0]));
+}
+const leaks = (hop) => hop.step.probe?.state === "open";
+
 /* ── the HUD ──────────────────────────────────────────────────────────── */
 
 document.title = `${walk.question.name} ${walk.question.type} · dnstree 3d`;
@@ -1010,6 +1033,10 @@ $("legend").append(...[
     el("li", { style: `color:${toCss(TONES[kind.tone])}` }, el("i"), el("span", { class: "dim", text: name }))),
   chain ? el("li", { style: `color:${toCss(TONES[trustTone(chain)])}` }, el("i", { style: "border-radius:50%;rotate:0deg" }),
     el("span", { class: "dim", text: "chain of trust" })) : null,
+  hops.some((hop) => hop.shard) ? el("li", { style: `color:${toCss(TONES.warn)}` }, el("i", { style: "width:1px;rotate:20deg" }),
+    el("span", { class: "dim", text: "dangling" })) : null,
+  hops.some(leaks) ? el("li", { style: `color:${toCss(TONES.bad)}` }, el("i", { style: "width:4px;height:4px;border-radius:50%" }),
+    el("span", { class: "dim", text: "open to strangers" })) : null,
 ].filter(Boolean));
 
 if (page.findings?.length) {
@@ -1086,6 +1113,11 @@ function facts(step) {
   if (step.subnet) row("subnet", `${step.subnet.prefix} /${step.subnet.scope}`);
   if (step.soa) row("soa serial", String(step.soa.serial));
   for (const e of step.extended ?? []) row("ede", [e.reason || e.code, e.text].filter(Boolean).join(": "), e.withheld ? "warn" : null);
+  const d = step.dangling;
+  if (d) row(d.kind === "lame" ? "dangling" : `dangling ${d.kind}`, d.kind === "lame" ? "every nameserver lame" : `${d.missing} is missing`, "warn");
+  if (step.probe) {
+    row(step.probe.kind === "recursion" ? "recursion" : "axfr", step.probe.state, { open: "bad", unchecked: "warn" }[step.probe.state]);
+  }
   row("error", step.error, "bad");
   row("notes", step.notes?.join("; "));
   return rows;
@@ -1158,6 +1190,7 @@ function upload() {
       const ring = TONES[trustTone(hop.step.dnssec.state)];
       (byShape.ring ??= []).push(...hop.pos, hop.size * 1.75, ...ring, glow * 0.5, hop.phase, 0.9, hop.at + 0.25, 1.15);
     }
+    if (hop.shard) (byShape.tetra ??= []).push(...hop.shard, 0.17, ...TONES.warn, glow * 0.5, hop.phase, 2.4, hop.at + 0.6, 0.6);
     halos.push(...hop.pos, hop.size, ...color, glow, hop.phase, hop.at);
   }
   renderer.nodes(byShape);
@@ -1175,7 +1208,23 @@ function wire() {
     const width = path ? 2.6 : skipped ? 0.9 : 1.5;
     edges.push(...hop.parent.pos, hop.parent.phase, ...hop.pos, hop.phase, ...color, strength,
       hop.leave, hop.travel, width, path ? 0.35 : 0);
-    if (!skipped) packets.push(...hop.parent.pos, hop.parent.phase, ...hop.pos, hop.phase, ...color, path ? 0.9 : 0.6, hop.leave, hop.travel);
+    if (!skipped) packets.push(...hop.parent.pos, hop.parent.phase, ...hop.pos, hop.phase, ...color, path ? 0.9 : 0.6, hop.leave, hop.travel, 0);
+  }
+  for (const hop of hops) {
+    // The thread breaks short of its shard, and something drains down it.
+    if (hop.shard) {
+      edges.push(...hop.pos, hop.phase, ...mix(hop.pos, hop.shard, 0.6), hop.phase, ...TONES.warn, 0.5, hop.at + 0.1, 0.5, 1.1, 0.5);
+      edges.push(...mix(hop.pos, hop.shard, 0.76), hop.phase, ...hop.shard, hop.phase, ...TONES.warn, 0.35, hop.at + 0.45, 0.3, 0.8, 0);
+    }
+    // Sparks thrown off a server that hands out its zone, or looks names up,
+    // for anyone who asks.
+    if (leaks(hop)) {
+      for (let i = 0; i < 7; i++) {
+        const a = hop.phase + i * 2.399963;
+        const to = add(hop.pos, scale(norm([Math.cos(a), (i % 3) * 0.35 - 0.1, Math.sin(a)]), 1.5));
+        packets.push(...hop.pos, hop.phase, ...to, -1, ...TONES.bad, 0.45, hop.at + 0.2, 1.4 + (i % 3) * 0.3, (i + 1) / 8);
+      }
+    }
   }
   // A beam under the answer, down to the floor.
   if (result) {
@@ -1186,15 +1235,49 @@ function wire() {
   renderer.packets(packets);
 }
 
+// The replay runs on a clock of its own, which the scrubber can hold or wind
+// back while the scene goes on floating. Without motion it stands at the end,
+// and only the scrubber moves it.
+const replay = { at: 0, end: 0, held: false };
 let arrivals = [];
 let heard = 0;
 function play() {
-  schedule(hops, clock(), motion === 0);
-  heard = 0;
+  schedule(hops);
   arrivals = [...hops].sort((a, b) => a.at - b.at);
+  replay.end = arrivals.at(-1).at + 0.6;
+  replay.at = motion ? 0 : replay.end + 3;
+  heard = motion ? 0 : arrivals.length;
   upload();
   wire();
-  follow = motion ? { until: arrivals.at(-1).at + 1.2 } : null;
+  marks();
+  follow = motion ? { until: replay.end + 0.6 } : null;
+}
+
+const scrub = $("s-time");
+function marks() {
+  $("s-marks").replaceChildren(...hops.filter((hop) => asked(hop.step)).map((hop) => el("i", {
+    class: onPath.has(hop) ? "path" : null,
+    style: `left:${(hop.at / replay.end * 100).toFixed(2)}%;--tone:${toCss(TONES[hop.tone])}`,
+  })));
+}
+
+// Notes already behind the replay are not played again, and the camera leans
+// towards whichever hop the replay is at.
+function wind(to) {
+  replay.at = clamp(to, 0, replay.end);
+  heard = arrivals.findIndex((hop) => hop.at > replay.at);
+  if (heard === -1) heard = arrivals.length;
+  if (motion && !state.picked && replay.at < replay.end) follow = { until: replay.end + 0.6 };
+  stale = true;
+}
+scrub.addEventListener("input", () => wind(scrub.value / 1000 * replay.end));
+scrub.addEventListener("pointerdown", () => { replay.held = true; });
+for (const type of ["pointerup", "pointercancel"]) {
+  addEventListener(type, () => {
+    if (!replay.held) return;
+    replay.held = false;
+    scrub.blur();
+  });
 }
 
 /* ── the camera ────────────────────────────────────────────────────────── */
@@ -1234,10 +1317,10 @@ function step(dt, now) {
 
   // While the walk is being replayed the camera leans towards the hop that
   // just arrived, unless somebody has taken hold of it.
-  if (follow && now < follow.until && idle) {
-    const latest = arrivals.findLast((hop) => hop.at <= now && asked(hop.step));
+  if (follow && replay.at < follow.until && idle) {
+    const latest = arrivals.findLast((hop) => hop.at <= replay.at && asked(hop.step));
     if (latest) goal.target = add(home.target, scale(sub(latest.pos, home.target), 0.35));
-  } else if (follow && now >= follow.until) {
+  } else if (follow && replay.at >= follow.until) {
     if (!state.picked) goal.target = [...home.target];
     follow = null;
   }
@@ -1279,7 +1362,7 @@ function hopAt(x, y) {
   let best = null;
   let bestDepth = Infinity;
   for (const hop of hops) {
-    if (hop.at > now) continue;
+    if (hop.at > frame.replay) continue;
     const [cx, cy, w] = project(frame.viewProj, drift(hop.pos, hop.phase, now, motion));
     if (w <= 0) continue;
     const sx = (cx / w * 0.5 + 0.5) * frame.cssWidth;
@@ -1434,6 +1517,7 @@ addEventListener("keydown", (event) => {
     return;
   }
   if (event.target instanceof HTMLButtonElement && (event.key === " " || event.key === "Enter")) return;
+  if (event.target === scrub && event.key.startsWith("Arrow")) return;
   const turn = 0.12;
   const keys = {
     ArrowLeft: () => { camera.yaw += turn; },
@@ -1467,6 +1551,7 @@ addEventListener("keydown", (event) => {
 
 reduced.addEventListener("change", () => {
   motion = reduced.matches ? 0 : 1;
+  if (!motion) wind(replay.end);
   orbiting = orbiting && !reduced.matches;
   controls.orbit.setAttribute("aria-pressed", String(orbiting));
 });
@@ -1508,7 +1593,7 @@ function rankOf(hop) {
   if (hop === result) return 2;
   if (hop.step.kind === "zone") return 3;
   if (onPath.has(hop)) return 4;
-  if (hop.tone === "bad" || hop.tone === "warn") return 5;
+  if (hop.tone === "bad" || hop.tone === "warn" || hop.shard || leaks(hop)) return 5;
   return hop.step.aside ? 7 : hop.step.kind === "skipped" ? 8 : 6;
 }
 
@@ -1518,7 +1603,7 @@ function placeTags(viewProj, now, width, height, pixels) {
   const showing = [];
   for (const hop of hops) {
     hop.place = null;
-    const wanted = hop.at <= now && (hop.step.kind !== "skipped" || hop === state.hovered || hop === state.picked);
+    const wanted = hop.at <= replay.at && (hop.step.kind !== "skipped" || hop === state.hovered || hop === state.picked);
     if (!wanted) continue;
     const [cx, cy, w] = project(viewProj, drift(hop.pos, hop.phase, now, motion));
     if (w <= 0.5) continue;
@@ -1565,10 +1650,14 @@ function placeTags(viewProj, now, width, height, pixels) {
 // does to save a battery, is not struggling.
 let last = clock();
 let fastest = Infinity;
+let shownAt = -1;
 function tick() {
   requestAnimationFrame(tick);
   const now = clock();
   const dt = Math.min(now - last, 0.1);
+  // The replay keeps to the wall clock, so a slow card drops frames rather
+  // than slowing the walk down.
+  if (motion && !replay.held) replay.at += now - last;
   last = now;
 
   if (dt > 0) fastest = Math.min(fastest, dt);
@@ -1589,17 +1678,21 @@ function tick() {
   const viewProj = multiply(proj, lookAt(eye, camera.target, [0, 1, 0]));
   const pixels = canvas.height * proj[5] * 0.5;
   frame = {
-    viewProj, eye, time: now, dt, motion, pixels, dpr,
+    viewProj, eye, time: now, replay: replay.at, dt, motion, pixels, dpr,
     width: canvas.width, height: canvas.height, cssWidth: sized.w, cssHeight: sized.h, floorY: bounds.floor,
   };
   renderer.draw(frame);
   placeTags(viewProj, now, sized.w, sized.h, pixels);
 
   // A note for each hop that has arrived since the last frame.
-  while (heard < arrivals.length && arrivals[heard].at <= now) {
+  while (heard < arrivals.length && arrivals[heard].at <= replay.at) {
     const hop = arrivals[heard++];
-    if (now - hop.at < 0.25) sound.arrive(hop, hop.tone, hop === result);
+    if (!replay.held && replay.at - hop.at < 0.25) sound.arrive(hop, hop.tone, hop === result);
   }
+  const at = Math.round(clamp(replay.at / replay.end, 0, 1) * 1000);
+  if (!replay.held && Number(scrub.value) !== at) scrub.value = String(at);
+  if (at !== shownAt) scrub.parentElement.style.setProperty("--at", `${at / 10}%`);
+  shownAt = at;
   if (sound.on) {
     const forward = norm(sub(camera.target, eye));
     sound.listen(eye, forward, cross(norm(cross(forward, [0, 1, 0])), forward));

@@ -319,7 +319,10 @@ The hops float in a cone that opens downwards, one ring a zone cut, and the walk
 assembles in the order it was made, each query taking as long in the replay as
 its server took. The shape of a hop says what it came to, the rings round it are
 the chain of trust at that cut, and the brighter trail is the way to the answer;
-clicking a hop says what the server said. Sound is off until asked for, and is
+clicking a hop says what the server said. Queries the walk had out at once are
+in flight at once, and the line over the controls holds the replay or winds it
+back. A name left pointing at nothing hangs a snapped thread, and a server that
+hands its zone or its recursion to strangers throws off sparks. Sound is off until asked for, and is
 placed where the hops are, so that turning the scene turns it too. It is WebGL2
 and nothing else: a browser without it is pointed back at `--format web`, and
 one asking for reduced motion gets the walk already assembled and standing still.
