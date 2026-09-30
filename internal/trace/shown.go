@@ -100,6 +100,15 @@ func (s *Step) Shown() *Step {
 			nsec3.Zone, nsec3.Salt = Shown(nsec3.Zone), Shown(nsec3.Salt)
 			d.NSEC3 = &nsec3
 		}
+		d.Keys = slices.Clone(d.Keys)
+		for i := range d.Keys {
+			d.Keys[i].Algorithm = Shown(d.Keys[i].Algorithm)
+		}
+		d.DS = slices.Clone(d.DS)
+		for i := range d.DS {
+			ds := &d.DS[i]
+			ds.Algorithm, ds.Digest, ds.Match = Shown(ds.Algorithm), Shown(ds.Digest), DSMatch(Shown(string(ds.Match)))
+		}
 		shown.DNSSEC = &d
 	}
 	if s.Dangling != nil {

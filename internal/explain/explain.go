@@ -103,6 +103,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, cache(tr)...)
 	findings = append(findings, trust(tr)...)
 	findings = append(findings, hashing(tr)...)
+	findings = append(findings, setup(tr)...)
 	findings = append(findings, takeover(tr)...)
 	findings = append(findings, spread(tr)...)
 	findings = append(findings, servers(tr)...)
@@ -396,6 +397,120 @@ func hashing(tr *trace.Trace) []Finding {
 		findings = append(findings, Finding{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
 			"the NSEC3 records of %s hash each name %s%s, where RFC 9276 asks for no extra iterations and no salt: it costs every validator work, adds little against listing the zone, and a validator may stop trusting the proofs as the count grows; set the iterations to 0",
 			hashed.Zone, plural(int(hashed.Iterations), "extra time", "extra times"), salted)})
+	}
+	return findings
+}
+
+// Where the advice comes from. It moves as the RFCs are updated, so each rule
+// names its source in the sentence it writes.
+var (
+	// retired are the signing algorithms RFC 8624 says zones should no longer
+	// sign with. The ones it forbids outright are not here: nothing here
+	// validates them, so a zone signed with one is never secure.
+	retired = map[string]bool{"RSASHA1": true, "RSASHA1-NSEC3-SHA1": true}
+
+	// withdrawn are the DS digests RFC 8624 says a parent must not publish.
+	withdrawn = map[string]bool{"SHA1": true, "GOST94": true}
+)
+
+// shortRSA is the length NIST has asked of an RSA signing key since 2013 (SP
+// 800-131A).
+const shortRSA = 2048
+
+// setup is how each secure zone the walk entered is set up, where that falls
+// short of the current advice. None of it is a verdict: the chain holds, and
+// each sentence says what the walk saw rather than whose doing it is, since a
+// zone at a hosting provider often cannot choose its algorithm, and a DS or a
+// key with nothing to do is how a planned rollover looks halfway through.
+func setup(tr *trace.Trace) []Finding {
+	var (
+		findings []Finding
+		seen     = make(map[string]bool)
+	)
+	for step := range tr.Steps() {
+		status := step.DNSSEC
+		if status == nil || status.State != trace.Secure || len(status.Keys) == 0 {
+			continue
+		}
+		// A walk always names the zone a verdict is about; a file that does not
+		// leaves nothing for the sentences to be about.
+		zone := status.Zone
+		if zone == "" || seen[strings.ToLower(zone)] {
+			continue
+		}
+		seen[strings.ToLower(zone)] = true
+
+		var algorithms, lengths, short, idle []string
+		for _, key := range status.Keys {
+			if key.Revoked {
+				continue
+			}
+			if retired[key.Algorithm] {
+				algorithms = add(algorithms, key.Algorithm)
+			}
+			if key.Bits > 0 && key.Bits < shortRSA {
+				lengths = add(lengths, strconv.Itoa(key.Bits))
+				short = append(short, strconv.Itoa(int(key.Tag)))
+			}
+			if key.SEP && !key.Pointed && !key.Signs {
+				idle = append(idle, strconv.Itoa(int(key.Tag)))
+			}
+		}
+		if len(algorithms) > 0 {
+			findings = append(findings, Finding{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
+				"%s signs with %s, which RFC 8624 says zones should no longer sign with and some validators already read as unsigned; rolling the zone to ECDSAP256SHA256 or ED25519 keeps it validated",
+				zone, list(algorithms))})
+		}
+		// Short keys are common, and a zone that rolls them often is doing what
+		// the advice of a decade ago asked: worth knowing, not a warning.
+		if len(short) > 0 {
+			keys, tags := "RSA keys", "tags"
+			if len(short) == 1 {
+				keys, tags = "an RSA key", "tag"
+			}
+			findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+				"%s signs with %s of %s bits (%s %s), shorter than the %d bits NIST has asked of a signing key since 2013; the next rollover can make them longer",
+				zone, keys, list(lengths), tags, list(short), shortRSA)})
+		}
+		findings = append(findings, digests(zone, status.DS)...)
+		if len(idle) > 0 {
+			findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+				"%s publishes a key signing key that no DS points at and that signs none of its keys (tag %s): one waiting to be rolled in, or left by a rollover that never finished",
+				zone, list(idle))})
+		}
+	}
+	return findings
+}
+
+// digests is what the parent's DS records for a zone say about how it is set
+// up: a digest RFC 8624 withdrew, and records that match none of the zone's
+// keys. One whose digest could not be computed here is neither.
+func digests(zone string, records []trace.DS) []Finding {
+	var (
+		findings  []Finding
+		unmatched []string
+	)
+	for _, ds := range records {
+		if ds.Match == trace.DSUnmatched {
+			unmatched = add(unmatched, strconv.Itoa(int(ds.Tag)))
+		}
+		if !withdrawn[ds.Digest] {
+			continue
+		}
+		fix := "; a SHA256 one in its place is what the advice asks for"
+		if beside := slices.IndexFunc(records, func(other trace.DS) bool {
+			return other.Tag == ds.Tag && other.Match == trace.DSMatched && !withdrawn[other.Digest]
+		}); beside >= 0 {
+			fix = fmt.Sprintf("; the %s one beside it is enough on its own", records[beside].Digest)
+		}
+		findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+			"the parent of %s publishes a %s DS for it (tag %d), which RFC 8624 says a parent must not publish%s",
+			zone, ds.Digest, ds.Tag, fix)})
+	}
+	if len(unmatched) > 0 {
+		findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+			"the parent of %s holds a DS that matches none of its keys (tag %s): left from an earlier key, or published ahead of one to come; it does no harm while another DS holds",
+			zone, list(unmatched))})
 	}
 	return findings
 }

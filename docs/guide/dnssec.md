@@ -70,6 +70,28 @@ then. The time left is read against when the walk was made, which is also what
 a walk drawn again with `--from` reads it against. `--expect fresh` holds a
 script to the same thing; see [Asking rather than reading](scripting.md#asking-rather-than-reading).
 
+A chain that holds can still be set up the way the advice has moved on from, and
+`--explain` says so under the verdict, which it never changes: a zone signing
+with RSASHA1, which RFC 8624 says zones should no longer sign with and some
+validators already read as unsigned; RSA keys under 2048 bits; a SHA-1 DS at the
+parent; a DS that matches none of the zone's keys; and a key signing key that no
+DS points at and that signs nothing. The last two are how a planned rollover
+looks halfway through, so they are said as what the walk saw, not as mistakes.
+Every zone on the way down is read, since a weak link above a zone weakens it
+too:
+
+```
+$ dnstree --dnssec --explain isc.org SOA
+...
+✔ answered in 2.8s · resolver in 254ms · 6 queries · 3 servers
+
+· isc.org. SOA is ns-int.isc.org. hostmaster.isc.org. 2026092822 7200 3600 24796800 3600, answered by ns1.isc.org. for isc.org.
+· a cache may hold this answer for 2 hours, and the delegation to isc.org. for 1 hour
+· the chain of trust holds from the root to isc.org., signed with ECDSAP256SHA256
+· org. signs with RSA keys of 1024 bits (tags 11859, 24060 and 25488), shorter than the 2048 bits NIST has asked of a signing key since 2013; the next rollover can make them longer
+· org. publishes a key signing key that no DS points at and that signs none of its keys (tag 725): one waiting to be rolled in, or left by a rollover that never finished
+```
+
 ## What the zone asks its parent
 
 A zone changes the DS that vouches for it by asking: it publishes the DS it

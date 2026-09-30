@@ -81,7 +81,14 @@ func resolution() *trace.Trace {
 			OutOfBailiwick: []string{"ns.outside.example."},
 			DSPresent:      true,
 		},
-		DNSSEC:   &trace.DNSSECStatus{State: trace.Secure, Algorithm: "ECDSAP256SHA256", Digest: "SHA256"},
+		DNSSEC: &trace.DNSSECStatus{
+			State: trace.Secure, Algorithm: "ECDSAP256SHA256", Digest: "SHA256",
+			Keys: []trace.Key{
+				{Tag: 31589, Algorithm: "ECDSAP256SHA256", SEP: true, Pointed: true, Signs: true},
+				{Tag: 20757, Algorithm: "RSASHA256", Bits: 2048},
+			},
+			DS: []trace.DS{{Tag: 31589, Algorithm: "ECDSAP256SHA256", Digest: "SHA256", Match: trace.DSMatched}},
+		},
 		Children: []*trace.Step{answer, skipped},
 	}
 	timeout := &trace.Step{

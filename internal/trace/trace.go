@@ -572,7 +572,49 @@ type DNSSECStatus struct {
 	// the records that answered. A zone that stops being re-signed goes on
 	// validating until the first of them runs out, and then fails all at once.
 	Signatures []Lifetime
+
+	// Keys are the zone's DNSKEY set and DS the records its parent signed for
+	// it, set only where the chain entered the zone and it held. They say how
+	// the zone is set up rather than whether it validates: an algorithm the
+	// advice has moved on from, a short key, a DS left from an earlier key.
+	// The root's DS are the trust anchors, and are not repeated here.
+	Keys []Key
+	DS   []DS
 }
+
+// Key is one zone key of a zone's DNSKEY set.
+type Key struct {
+	Tag       uint16
+	Algorithm string
+	SEP       bool // flagged as a key signing key
+	Revoked   bool // revoked (RFC 5011), which leaves it with nothing to do
+
+	// Bits is the length of an RSA modulus, zero for any other algorithm.
+	Bits int
+
+	// Pointed is whether a DS of the parent digests to this key, and Signs
+	// whether a signature over the key set names it.
+	Pointed bool
+	Signs   bool
+}
+
+// DS is one DS record a parent publishes for a zone.
+type DS struct {
+	Tag       uint16
+	Algorithm string
+	Digest    string // the digest type, e.g. SHA256
+	Match     DSMatch
+}
+
+// DSMatch is whether a DS digests one of the zone's keys.
+type DSMatch string
+
+// Whether a DS digests one of the zone's keys.
+const (
+	DSMatched   DSMatch = "matched"
+	DSUnmatched DSMatch = "unmatched" // no key of the zone has this digest
+	DSUnchecked DSMatch = "unchecked" // a digest type this build cannot compute
+)
 
 // Signal is what a zone's CDS and CDNSKEY records ask of its parent (RFC 7344,
 // RFC 8078), held against the DS the parent publishes. A zone rolls its key by

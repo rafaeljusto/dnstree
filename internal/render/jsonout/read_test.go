@@ -225,6 +225,12 @@ func TestReadRefuses(t *testing.T) {
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure", "signal": {"state": "granted"}}}}`,
 			want: `"granted"`,
 		},
+		"a DS that came to something nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure",
+				"ds": [{"tag": 1, "algorithm": "ED25519", "digest": "SHA256", "match": "probably"}]}}}`,
+			want: `"probably"`,
+		},
 		"a way to be left dangling nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "dangling": {"kind": "adrift", "name": "x."}}]}}`,

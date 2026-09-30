@@ -395,7 +395,65 @@
           "items": { "$ref": "#/$defs/signature" }
         },
         "signal": { "$ref": "#/$defs/signal" },
-        "nsec3": { "$ref": "#/$defs/nsec3" }
+        "nsec3": { "$ref": "#/$defs/nsec3" },
+        "keys": {
+          "description": "The zone keys of the zone's DNSKEY set, on a secure verdict about entering the zone. They say how it is set up rather than whether it validates.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/key" }
+        },
+        "ds": {
+          "description": "The DS records the parent signed for the zone, on a secure verdict about entering it, each held against the zone's keys. Absent for the root, whose DS are the trust anchors.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/ds" }
+        }
+      }
+    },
+    "key": {
+      "description": "One zone key of a DNSKEY set.",
+      "type": "object",
+      "required": ["tag", "algorithm"],
+      "properties": {
+        "tag": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "algorithm": { "type": "string" },
+        "sep": {
+          "description": "Flagged as a key signing key.",
+          "type": "boolean"
+        },
+        "revoked": {
+          "description": "Revoked (RFC 5011).",
+          "type": "boolean"
+        },
+        "bits": {
+          "description": "The length of an RSA modulus. Absent for any other algorithm.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "pointed": {
+          "description": "A DS of the parent digests to this key.",
+          "type": "boolean"
+        },
+        "signs": {
+          "description": "A signature over the DNSKEY set names this key.",
+          "type": "boolean"
+        }
+      }
+    },
+    "ds": {
+      "description": "One DS record a parent publishes for a zone.",
+      "type": "object",
+      "required": ["tag", "algorithm", "digest", "match"],
+      "properties": {
+        "tag": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "algorithm": { "type": "string" },
+        "digest": {
+          "description": "The digest type, such as SHA256.",
+          "type": "string"
+        },
+        "match": {
+          "description": "matched where it digests one of the zone's keys, unmatched where it digests none, and unchecked where its digest type cannot be computed here, which says nothing either way.",
+          "type": "string",
+          "enum": ["matched", "unmatched", "unchecked"]
+        }
       }
     },
     "probe": {

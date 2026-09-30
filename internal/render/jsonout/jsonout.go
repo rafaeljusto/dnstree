@@ -217,6 +217,27 @@ type dnssec struct {
 	Signatures []signature `json:"signatures,omitempty"`
 	Signal     *signal     `json:"signal,omitempty"`
 	NSEC3      *nsec3      `json:"nsec3,omitempty"`
+	Keys       []key       `json:"keys,omitempty"`
+	DS         []ds        `json:"ds,omitempty"`
+}
+
+// key is one zone key of a secure zone's DNSKEY set.
+type key struct {
+	Tag       uint16 `json:"tag"`
+	Algorithm string `json:"algorithm"`
+	SEP       bool   `json:"sep,omitempty"`
+	Revoked   bool   `json:"revoked,omitempty"`
+	Bits      int    `json:"bits,omitempty"`
+	Pointed   bool   `json:"pointed,omitempty"`
+	Signs     bool   `json:"signs,omitempty"`
+}
+
+// ds is one DS record the parent of a secure zone publishes for it.
+type ds struct {
+	Tag       uint16 `json:"tag"`
+	Algorithm string `json:"algorithm"`
+	Digest    string `json:"digest"`
+	Match     string `json:"match"`
 }
 
 // probe is a nameserver asked for what it should keep from strangers.
@@ -475,6 +496,13 @@ func convertDNSSEC(from *trace.DNSSECStatus) *dnssec {
 	}
 	if from.NSEC3 != nil {
 		to.NSEC3 = &nsec3{Zone: from.NSEC3.Zone, Iterations: from.NSEC3.Iterations, Salt: from.NSEC3.Salt}
+	}
+	for _, k := range from.Keys {
+		to.Keys = append(to.Keys, key{Tag: k.Tag, Algorithm: k.Algorithm, SEP: k.SEP, Revoked: k.Revoked,
+			Bits: k.Bits, Pointed: k.Pointed, Signs: k.Signs})
+	}
+	for _, d := range from.DS {
+		to.DS = append(to.DS, ds{Tag: d.Tag, Algorithm: d.Algorithm, Digest: d.Digest, Match: string(d.Match)})
 	}
 	for _, lifetime := range from.Signatures {
 		to.Signatures = append(to.Signatures, signature{

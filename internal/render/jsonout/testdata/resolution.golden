@@ -100,7 +100,29 @@
             "dnssec": {
               "state": "secure",
               "algorithm": "ECDSAP256SHA256",
-              "digest": "SHA256"
+              "digest": "SHA256",
+              "keys": [
+                {
+                  "tag": 31589,
+                  "algorithm": "ECDSAP256SHA256",
+                  "sep": true,
+                  "pointed": true,
+                  "signs": true
+                },
+                {
+                  "tag": 20757,
+                  "algorithm": "RSASHA256",
+                  "bits": 2048
+                }
+              ],
+              "ds": [
+                {
+                  "tag": 31589,
+                  "algorithm": "ECDSAP256SHA256",
+                  "digest": "SHA256",
+                  "match": "matched"
+                }
+              ]
             },
             "children": [
               {

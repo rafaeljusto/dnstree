@@ -391,6 +391,19 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 	if from.NSEC3 != nil {
 		to.NSEC3 = &trace.NSEC3{Zone: from.NSEC3.Zone, Iterations: from.NSEC3.Iterations, Salt: from.NSEC3.Salt}
 	}
+	for _, k := range from.Keys {
+		to.Keys = append(to.Keys, trace.Key{Tag: k.Tag, Algorithm: k.Algorithm, SEP: k.SEP, Revoked: k.Revoked,
+			Bits: k.Bits, Pointed: k.Pointed, Signs: k.Signs})
+	}
+	for _, d := range from.DS {
+		match := trace.DSMatch(d.Match)
+		switch match {
+		case trace.DSMatched, trace.DSUnmatched, trace.DSUnchecked:
+		default:
+			return nil, fmt.Errorf("jsonout: %q is not what a DS can come to against the keys", d.Match)
+		}
+		to.DS = append(to.DS, trace.DS{Tag: d.Tag, Algorithm: d.Algorithm, Digest: d.Digest, Match: match})
+	}
 	for _, signed := range from.Signatures {
 		inception, err := moment(signed.Inception)
 		if err != nil {

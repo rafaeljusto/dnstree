@@ -1073,8 +1073,12 @@ func TestRunFromHostile(t *testing.T) {
 			"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53},
 			"records": [{"name": "x.", "ttl": 60, "type": "A\u001b[8m", "data": "192.0.2.1"}],
 			"extended": [{"code": 15, "reason": "Blocked\u001b[5m\u00e9"}],
-			"dnssec": {"state": "secure", "algorithm": "ED25519\u001b[41m", "digest": "ab\u001b[0m",
-				"signal": {"state": "pending", "reason": "x\u001b[7m"}}}]}}`
+			"dnssec": {"state": "secure", "zone": ".", "algorithm": "ED25519\u001b[41m", "digest": "ab\u001b[0m",
+				"signal": {"state": "pending", "reason": "x\u001b[7m"},
+				"keys": [{"tag": 1, "algorithm": "RSASHA1\u001b[41m", "sep": true, "bits": 1024}],
+				"ds": [{"tag": 2, "algorithm": "ED25519\u001b[41m", "digest": "SHA1\u001b[0m", "match": "unmatched"},
+					{"tag": 3, "algorithm": "ED25519", "digest": "SHA1", "match": "matched"},
+					{"tag": 3, "algorithm": "ED25519", "digest": "SHA256\u001b[41m", "match": "matched"}]}}]}}`
 
 	for _, args := range [][]string{
 		{"--color", "never", "--explain"},

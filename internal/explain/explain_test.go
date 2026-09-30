@@ -613,6 +613,126 @@ func TestFindingsHashing(t *testing.T) {
 	}
 }
 
+// entered is a walk that entered test. and found it secure, set up this way.
+func entered(keys []trace.Key, ds []trace.DS) *trace.Trace {
+	step := hop(trace.KindReferral, "a.root-servers.net.")
+	step.Zone = "."
+	step.DNSSEC = &trace.DNSSECStatus{State: trace.Secure, Zone: "test.", Keys: keys, DS: ds}
+	return walk(step)
+}
+
+// signing is the one key a zone set up as the advice asks signs with.
+var signing = trace.Key{Tag: 100, Algorithm: "ECDSAP256SHA256", SEP: true, Pointed: true, Signs: true}
+
+// pointing is the DS that points at it.
+var pointing = trace.DS{Tag: 100, Algorithm: "ECDSAP256SHA256", Digest: "SHA256", Match: trace.DSMatched}
+
+// TestFindingsSetup covers how a secure zone is set up, held against the
+// advice: said beside the verdict, and never instead of it.
+func TestFindingsSetup(t *testing.T) {
+	tests := map[string]struct {
+		trace *trace.Trace
+		level explain.Level
+		want  []string
+	}{
+		"a zone set up as the advice asks says nothing about it": {
+			trace: entered([]trace.Key{signing, {Tag: 200, Algorithm: "RSASHA256", Bits: 2048, Signs: true}},
+				[]trace.DS{pointing}),
+		},
+		"a retired algorithm is worth a look": {
+			trace: entered([]trace.Key{{Tag: 100, Algorithm: "RSASHA1-NSEC3-SHA1", SEP: true, Bits: 2048, Pointed: true, Signs: true}},
+				[]trace.DS{{Tag: 100, Algorithm: "RSASHA1-NSEC3-SHA1", Digest: "SHA256", Match: trace.DSMatched}}),
+			level: explain.Warn,
+			want:  []string{"test. signs with RSASHA1-NSEC3-SHA1, which RFC 8624 says", "ECDSAP256SHA256 or ED25519"},
+		},
+		"a short RSA key is worth knowing": {
+			trace: entered([]trace.Key{signing, {Tag: 200, Algorithm: "RSASHA256", Bits: 1024}}, []trace.DS{pointing}),
+			level: explain.Note,
+			want:  []string{"test. signs with an RSA key of 1024 bits (tag 200), shorter than the 2048 bits NIST has asked"},
+		},
+		"short keys of two lengths are said together": {
+			trace: entered([]trace.Key{signing, {Tag: 200, Algorithm: "RSASHA256", Bits: 1024},
+				{Tag: 201, Algorithm: "RSASHA256", Bits: 1280}, {Tag: 202, Algorithm: "RSASHA256", Bits: 1024}},
+				[]trace.DS{pointing}),
+			level: explain.Note,
+			want:  []string{"RSA keys of 1024 and 1280 bits (tags 200, 201 and 202)"},
+		},
+		"a SHA-1 DS beside a SHA-256 one can simply go": {
+			trace: entered([]trace.Key{signing},
+				[]trace.DS{pointing, {Tag: 100, Algorithm: "ECDSAP256SHA256", Digest: "SHA1", Match: trace.DSMatched}}),
+			level: explain.Note,
+			want:  []string{"the parent of test. publishes a SHA1 DS for it (tag 100)", "the SHA256 one beside it is enough on its own"},
+		},
+		"a SHA-1 DS alone wants one in its place": {
+			trace: entered([]trace.Key{signing},
+				[]trace.DS{{Tag: 100, Algorithm: "ECDSAP256SHA256", Digest: "SHA1", Match: trace.DSMatched}}),
+			level: explain.Note,
+			want:  []string{"a SHA256 one in its place"},
+		},
+		"a DS for no key is said without calling it a mistake": {
+			trace: entered([]trace.Key{signing},
+				[]trace.DS{pointing, {Tag: 300, Algorithm: "ECDSAP256SHA256", Digest: "SHA256", Match: trace.DSUnmatched}}),
+			level: explain.Note,
+			want:  []string{"a DS that matches none of its keys (tag 300)", "published ahead of one to come"},
+		},
+		"a DS nothing here can digest is not said to match nothing": {
+			trace: entered([]trace.Key{signing},
+				[]trace.DS{pointing, {Tag: 100, Algorithm: "ECDSAP256SHA256", Digest: "digest 99", Match: trace.DSUnchecked}}),
+		},
+		"a key signing key with nothing to do is a rollover halfway": {
+			trace: entered([]trace.Key{signing, {Tag: 400, Algorithm: "ECDSAP256SHA256", SEP: true}}, []trace.DS{pointing}),
+			level: explain.Note,
+			want:  []string{"test. publishes a key signing key that no DS points at and that signs none of its keys (tag 400)"},
+		},
+		"a verdict that names no zone has nothing to be about": {
+			trace: func() *trace.Trace {
+				tr := entered([]trace.Key{signing, {Tag: 200, Algorithm: "RSASHA256", Bits: 1024}}, []trace.DS{pointing})
+				tr.Root.Children[0].DNSSEC.Zone = ""
+				return tr
+			}(),
+		},
+		"a revoked key is left out of all of it": {
+			trace: entered([]trace.Key{signing, {Tag: 400, Algorithm: "RSASHA1", SEP: true, Revoked: true, Bits: 1024}},
+				[]trace.DS{pointing}),
+		},
+		"a zone is named once however many times it was entered": {
+			trace: func() *trace.Trace {
+				keys := []trace.Key{signing, {Tag: 200, Algorithm: "RSASHA256", Bits: 1024}}
+				tr := entered(keys, []trace.DS{pointing})
+				tr.Root.Children = append(tr.Root.Children, entered(keys, []trace.DS{pointing}).Root.Children...)
+				return tr
+			}(),
+			level: explain.Note,
+			want:  []string{"of 1024 bits (tag 200)"},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var setup []explain.Finding
+			for _, finding := range explain.Findings(test.trace) {
+				if finding.Topic == explain.Trust && !strings.HasPrefix(finding.Text, "the chain of trust") {
+					setup = append(setup, finding)
+				}
+			}
+			if len(test.want) == 0 {
+				if len(setup) > 0 {
+					t.Errorf("got %+v, want nothing said about how the zone is set up", setup)
+				}
+				return
+			}
+			if len(setup) != 1 || setup[0].Level != test.level {
+				t.Fatalf("got %+v, want one finding about how the zone is set up, at %s", setup, test.level)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(setup[0].Text, want) {
+					t.Errorf("got %q, want it to carry %q", setup[0].Text, want)
+				}
+			}
+		})
+	}
+}
+
 // cut is a walk that was told where test. lives before it got there, so
 // that the delegation carries a lifetime of its own.
 func cut(ttl uint32, answer *trace.Step) *trace.Trace {

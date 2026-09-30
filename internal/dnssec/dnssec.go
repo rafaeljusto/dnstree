@@ -3,9 +3,12 @@
 package dnssec
 
 import (
+	"cmp"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"slices"
 	"strings"
 	"time"
@@ -159,7 +162,95 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 
 	status.Algorithm = algorithm(signature.Algorithm)
 	status.KeyTags = []uint16{signature.KeyTag}
+	status.Keys, status.DS = setupOf(keys, signatures, delegated)
+	if zone == "." {
+		status.DS = nil
+	}
 	return c.settleAs(status, trace.Secure, "", keys)
+}
+
+// setupOf is the zone's keys and its parent's DS records as the trace keeps
+// them. A key counts as pointed at where any DS digests to it, usable here or
+// not, and as signing where a signature over the set names it: only one of
+// those signatures had to hold for the set to, and this says how the zone is
+// set up, not what it proved. Each tag is worked out once and a key is digested
+// only for a DS that names it, since both sets can be as large as a zone likes.
+func setupOf(keys []*dns.DNSKEY, signatures []*dns.RRSIG, delegated []*dns.DS) ([]trace.Key, []trace.DS) {
+	tags := make([]uint16, len(keys))
+	for i, key := range keys {
+		tags[i] = key.KeyTag()
+	}
+
+	matches := make([]trace.DSMatch, len(delegated))
+	pointed := make([]bool, len(keys))
+	for d, ds := range delegated {
+		matches[d] = trace.DSUnmatched
+		for k, key := range keys {
+			if tags[k] != ds.KeyTag || key.Algorithm != ds.Algorithm {
+				continue
+			}
+			switch digested := key.ToDS(ds.DigestType); {
+			case digested == nil:
+				if matches[d] == trace.DSUnmatched {
+					matches[d] = trace.DSUnchecked
+				}
+			case strings.EqualFold(digested.Digest, ds.Digest):
+				matches[d], pointed[k] = trace.DSMatched, true
+			}
+		}
+	}
+
+	var set []trace.Key
+	for k, key := range keys {
+		if key.Flags&dns.FlagZONE == 0 {
+			continue
+		}
+		set = append(set, trace.Key{
+			Tag:       tags[k],
+			Algorithm: algorithm(key.Algorithm),
+			SEP:       key.Flags&dns.FlagSEP != 0,
+			Revoked:   key.Flags&dns.FlagREVOKE != 0,
+			Bits:      rsaBits(key),
+			Pointed:   pointed[k],
+			Signs: slices.ContainsFunc(signatures, func(signature *dns.RRSIG) bool {
+				return signature.KeyTag == tags[k] && signature.Algorithm == key.Algorithm
+			}),
+		})
+	}
+	records := make([]trace.DS, 0, len(delegated))
+	for d, ds := range delegated {
+		records = append(records, trace.DS{
+			Tag: ds.KeyTag, Algorithm: algorithm(ds.Algorithm), Digest: digest(ds.DigestType), Match: matches[d],
+		})
+	}
+
+	// A server is free to rotate a set, and the same zone should be recorded
+	// the same way twice running.
+	slices.SortStableFunc(set, func(a, b trace.Key) int { return cmp.Compare(a.Tag, b.Tag) })
+	slices.SortStableFunc(records, func(a, b trace.DS) int {
+		return cmp.Or(cmp.Compare(a.Tag, b.Tag), cmp.Compare(a.Digest, b.Digest))
+	})
+	return set, records
+}
+
+// rsaBits is the length of an RSA key's modulus (RFC 3110 2), zero for a key of
+// any other algorithm or one too short to hold a modulus at all.
+func rsaBits(key *dns.DNSKEY) int {
+	switch key.Algorithm {
+	case dns.RSAMD5, dns.RSASHA1, dns.RSASHA1NSEC3SHA1, dns.RSASHA256, dns.RSASHA512:
+	default:
+		return 0
+	}
+	raw, err := base64.StdEncoding.DecodeString(key.PublicKey)
+	if err != nil || len(raw) < 3 {
+		return 0
+	}
+	exponent, offset := int(raw[0]), 1
+	if exponent == 0 {
+		exponent, offset = int(raw[1])<<8|int(raw[2]), 3
+	}
+	modulus := raw[min(offset+exponent, len(raw)):]
+	return new(big.Int).SetBytes(modulus).BitLen()
 }
 
 // Unchecked stops the chain where a link could not be fetched at all, which is
