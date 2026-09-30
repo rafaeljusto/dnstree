@@ -278,7 +278,8 @@ footer a:hover{color:var(--ink)}
       <p class="lede">
         dnstree resolves a name the way a resolver does — one hop at a time, from the
         root servers down — and draws the path it took, with what each hop cost and
-        whether it can be trusted.
+        whether it can be trusted. Where a resolver says SERVFAIL, dnstree shows the
+        hop that caused it.
       </p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="#install">Install it</a>
@@ -365,7 +366,8 @@ footer a:hover{color:var(--ink)}
       <h2>It is loudest when something is wrong</h2>
       <p class="section-lede">
         A resolver hides all of this and hands you an answer or a SERVFAIL. dnstree
-        keeps going and shows the parts a working answer papers over.
+        keeps going and shows the parts a working answer papers over. The flags
+        below are each explained in <a href="https://github.com/rafaeljusto/dnstree/tree/main/docs/guide">the guide</a>.
       </p>
 
       <div class="findings">
@@ -387,32 +389,32 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">out of date</span>
           <h3>Nameservers holding different zones</h3>
-          <p><code>--serial</code> asks every nameserver of the zone which copy it is serving. A secondary a transfer left behind is reachable, authoritative, and answering correctly out of an older zone, and a walk that stops at the first server to answer never sees it.</p>
+          <p><code>--serial</code> asks every nameserver of the zone which copy it is serving. A secondary a transfer left behind answers with authority, out of an older zone.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">exposed</span>
           <h3>Nameservers that give strangers too much</h3>
-          <p><code>--check-axfr</code> asks every nameserver of the zone for the whole of it, and <code>--check-recursion</code> asks each to look up somebody else's name. A transfer lists every name in the zone, and a nameserver that resolves for anyone is an open resolver. Only the start of a transfer is read, and none of it is kept.</p>
+          <p><code>--check-axfr</code> asks every nameserver for the whole zone, and <code>--check-recursion</code> asks each to look up somebody else's name. Only the start of a transfer is read, and none of it is kept.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">disagreeing</span>
           <h3>A delegation the zone does not recognise</h3>
-          <p><code>--check-ns</code> asks the zone the walk ends in for its own NS records and holds them against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed: a nameserver the parent still delegates to, or one the zone lists that nobody is told about, is named either way. With <code>--explain</code> it also says how long a change of nameservers takes, where the two keep them for different times.</p>
+          <p><code>--check-ns</code> holds the zone's own NS records against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">no room left</span>
           <h3>An answer that barely fits</h3>
-          <p>Every hop records the bytes that came back against the room the query allowed. A datagram nearly full is one record from truncating, which costs every resolver a retry over TCP. It is drawn only where the room has run out; the figures are in <code>--format json</code>.</p>
+          <p>Every hop records the bytes that came back against the room the query allowed. A datagram nearly full is one record from truncating, which costs every resolver a retry over TCP.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">stuck</span>
           <h3>A key rollover waiting on the parent</h3>
-          <p><code>--check-ds</code> reads the CDS and CDNSKEY a zone publishes to ask its parent for a new DS, checks they are signed by the zone's own keys, and holds them against the DS the parent hands out. A request nobody acted on is a rollover stuck halfway, under a chain that is secure all the while.</p>
+          <p><code>--check-ds</code> holds the CDS and CDNSKEY a zone publishes against the DS its parent hands out. A request nobody acted on is a rollover stuck halfway, under a chain that reads secure all the while.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">minimised</span>
           <h3>A name denied for being empty</h3>
-          <p><code>--qmin</code> asks each zone for one label more than it has, the way resolvers do now. A server that answers NXDOMAIN for a name only because nothing is at it yet stops such a resolver dead, and a walk asking the whole name never sees it; this one asks again in full and names the server.</p>
+          <p><code>--qmin</code> asks each zone for one label more than it has, the way resolvers do now. A server that answers NXDOMAIN for an empty name stops such a resolver dead; the walk asks again in full and names the server.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">running out</span>
@@ -445,7 +447,7 @@ footer a:hover{color:var(--ink)}
       <ul class="states">
         <li class="state is-ok"><b>secure</b> — every link from the anchor down verified</li>
         <li class="state is-warn"><b>insecure</b> — the parent proved it has no DS</li>
-        <li class="state is-bad"><b>bogus</b> — a DS with no matching key, or a signature that fails</li>
+        <li class="state is-bad"><b>bogus</b> — a DS with no matching key, or a signature that fails; the command exits <code>3</code></li>
         <li class="state"><b>indeterminate</b> — an algorithm this build cannot check</li>
       </ul>
 
@@ -972,6 +974,25 @@ timeout = 3s</pre>
       value.
       <a href="https://github.com/rafaeljusto/dnstree/blob/main/dnstreerc.example">dnstreerc.example</a>
       carries every setting worth making, annotated and commented out.</p>
+    </section>
+
+    <section id="try">
+      <h2>Point it at something broken</h2>
+      <p class="section-lede">A resolver says SERVFAIL. dnstree says which link of
+      the chain broke and why, and how long a cache may hold what it was given.</p>
+
+      <div class="installs">
+        <div class="cmd">
+          <span class="what">try</span>
+          <code>dnstree --dnssec --explain dnssec-failed.org</code>
+          <button class="copy" type="button">copy</button>
+        </div>
+      </div>
+
+      <div class="hero-actions" style="margin-top:1.5rem">
+        <a class="btn btn-primary" href="#install">Install it</a>
+        <a class="btn btn-ghost" href="https://github.com/rafaeljusto/dnstree/tree/main/docs/guide">Read the guide</a>
+      </div>
     </section>
   </main>
 
