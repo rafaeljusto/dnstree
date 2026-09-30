@@ -99,7 +99,9 @@ func (r *Resolver) Start(ctx context.Context, addr netip.Addr) {
 		r.log.Debug("looked up an origin AS",
 			"address", addr, "took", time.Since(started), "found", info != nil, "error", err)
 
-		if err != nil {
+		// A lookup cut short by our own deadline did not fail: Annotate says
+		// so as running out of time.
+		if err != nil && ctx.Err() == nil {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			// One address nobody can answer for says nothing about the next.
