@@ -65,6 +65,10 @@ a{color:var(--accent); text-underline-offset:.2em}
 a:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:3px}
 code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
 p{max-width:var(--text)}
+/* A flag broken at its hyphens reads as two words, or as -doh. The narrowest
+   screens have no room for the longest path, and a break beats a clipped end. */
+:is(p,li,figcaption) code{white-space:nowrap}
+@media (max-width:340px){ :is(p,li,figcaption) code{white-space:normal} }
 
 /* ── masthead ─────────────────────────────────────────────────────────── */
 .masthead{
@@ -150,7 +154,7 @@ h3{font-size:1rem; margin:0 0 .35rem; font-weight:600}
 .demo figcaption{margin:.8rem 0 0; font-size:.86rem; color:var(--faint)}
 
 /* ── the exploded hop ─────────────────────────────────────────────────── */
-.dissect{background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px; padding:1.4rem 0 .4rem; margin-top:1.6rem; overflow-x:auto}
+.dissect{background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px; padding:1.4rem 0 .4rem; margin-top:1.6rem; overflow-x:auto; width:fit-content; max-width:100%}
 .dissect-inner{min-width:60rem; padding-inline:1.4rem; position:relative}
 .dissect pre{font-size:14px}
 /* The callouts are drawn, not positioned: one elbow per column, rightmost
