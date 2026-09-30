@@ -67,8 +67,8 @@ code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,mon
 p{max-width:var(--text)}
 /* A flag broken at its hyphens reads as two words, or as -doh. The narrowest
    screens have no room for the longest path, and a break beats a clipped end. */
-:is(p,li,figcaption) code{white-space:nowrap}
-@media (max-width:340px){ :is(p,li,figcaption) code{white-space:normal} }
+:is(p,li,figcaption,td) code{white-space:nowrap}
+@media (max-width:340px){ :is(p,li,figcaption,td) code{white-space:normal} }
 
 /* ── masthead ─────────────────────────────────────────────────────────── */
 .masthead{
@@ -121,7 +121,11 @@ h1 .arrow{color:var(--accent)}
 .term-title{
   margin-left:.4rem; font-family:"IBM Plex Mono",monospace; font-size:.74rem;
   color:var(--term-dim); letter-spacing:.02em;
+  /* A command, so it scrolls like the body below it rather than wrapping at a hyphen. */
+  white-space:nowrap; overflow-x:auto; min-width:0; scrollbar-width:none;
 }
+/* A caption, not a command: it wraps at its spaces, and has no hyphens to split. */
+#format-title{white-space:normal}
 .term-body{padding:1rem 1.1rem 1.2rem; overflow-x:auto}
 pre{
   margin:0; font-family:"IBM Plex Mono",monospace; font-size:clamp(11px,1.45vw,13.5px);
