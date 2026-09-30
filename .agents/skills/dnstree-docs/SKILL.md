@@ -117,7 +117,7 @@ The house style is in `AGENTS.md`: plain, short, says what happens, doesn't
 apologise. The guide is the reference, so a section can be as long as the
 behaviour needs. The README is the way in, so it stays short and points at the
 guide. The page sells, so it should be shorter than the guide on
-every topic.
+every topic: a card on it makes one claim, and leaves the rest to the guide.
 
 Flag, with a rewrite:
 
@@ -147,7 +147,8 @@ reshuffle.
 - Tabs and panels line up: each tab's `aria-controls` names a panel that
   exists, and each panel shows the format its tab names.
 - No version numbers, dates or counts that go stale without anyone noticing.
-- Links to the repository, releases and the schema are absolute and correct.
+- Links to the repository, releases, the guide and the schema are absolute
+  and correct. The relative-link check does not reach them.
 
 ## Mechanical pass
 
