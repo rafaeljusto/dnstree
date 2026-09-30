@@ -109,7 +109,10 @@ h1 .arrow{color:var(--accent)}
 .term{
   background:var(--term-bg); border:1px solid var(--term-line); border-radius:10px;
   margin-top:2rem; overflow:hidden; box-shadow:0 18px 40px -28px rgba(0,0,0,.65);
+  width:fit-content; max-width:100%;
 }
+/* Full width: fitted to the tab showing, it would change size on every click. */
+.term:has([role=tabpanel]){width:auto}
 .term-bar{
   display:flex; align-items:center; gap:.5rem; padding:.6rem .9rem;
   border-bottom:1px solid var(--term-line); background:rgba(255,255,255,.02);
