@@ -3,42 +3,12 @@
 // fetched, and it works nothing out about the DNS for itself: every shape,
 // colour and sound stands for something the trace already records.
 
-/* ── the vocabulary of a trace ─────────────────────────────────────────── */
-
-// Linear RGB, since everything is added together on a dark screen.
-const TONES = {
-  info:  [0.30, 0.78, 1.00],
-  ok:    [0.32, 1.00, 0.66],
-  warn:  [1.00, 0.70, 0.24],
-  bad:   [1.00, 0.28, 0.42],
-  quiet: [0.42, 0.52, 0.72],
-};
-
-const KINDS = {
-  zone:     { shape: "ico",    size: 1.05, tone: "info",  says: "the zone a walk starts from" },
-  referral: { shape: "octa",   size: 0.62, tone: "info",  says: "sent the walk one zone further down" },
-  answer:   { shape: "sphere", size: 0.68, tone: "ok",    says: "answered the question" },
-  cname:    { shape: "torus",  size: 0.62, tone: "info",  says: "an alias, chased from here" },
-  nodata:   { shape: "cube",   size: 0.52, tone: "warn",  says: "the name exists, the type does not" },
-  nxdomain: { shape: "cube",   size: 0.52, tone: "warn",  says: "the name does not exist" },
-  lame:     { shape: "tetra",  size: 0.6,  tone: "warn",  says: "not serving the zone it was asked about" },
-  filtered: { shape: "tetra",  size: 0.6,  tone: "bad",   says: "an answer somebody decided, not one served" },
-  timeout:  { shape: "tetra",  size: 0.6,  tone: "bad",   says: "said nothing in time" },
-  error:    { shape: "tetra",  size: 0.6,  tone: "bad",   says: "could not be asked" },
-  skipped:  { shape: "octa",   size: 0.2,  tone: "quiet", says: "known, never queried" },
-};
-const kindOf = (kind) => KINDS[kind] ?? { shape: "tetra", size: 0.5, tone: "quiet", says: kind };
-
-const TRUST = { secure: "ok", insecure: "warn", bogus: "bad", indeterminate: "quiet" };
-const trustTone = (state) => TRUST[state] ?? "quiet";
-
-const COOKIES = {
-  supported: "answered our client cookie with one of its own",
-  absent:    "answered without a cookie, which is allowed",
-  mismatch:  "answered with a client cookie other than the one sent",
-  malformed: "answered with a cookie of a length no cookie has",
-  rejected:  "answered BADCOOKIE even to the cookie it handed out",
-};
+import {
+  TONES, KINDS, kindOf, trustTone, took, clamp, flatten, asked, resultOf, verdictOf, chainState,
+  layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom, leaks,
+} from "./walk.js";
+import { STRIDE, nodesOf, wiresOf } from "./pack.js";
+import { SHAPES, sub, add, scale, cross, norm, perspective, lookAt, multiply, project } from "./space.js";
 
 const toCss = ([r, g, b]) => `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
 for (const [name, rgb] of Object.entries(TONES)) {
@@ -62,300 +32,7 @@ const el = (tag, props = {}, ...kids) => {
   return node;
 };
 
-const took = (ms) => {
-  if (ms === undefined || ms === null) return "";
-  if (ms >= 1000) return `${(ms / 1000).toFixed(2)} s`;
-  if (ms >= 10) return `${Math.round(ms)} ms`;
-  return `${ms.toFixed(ms < 1 ? 2 : 1)} ms`;
-};
-
-const flagsOf = (flags) => Object.entries(flags ?? {}).filter(([, on]) => on).map(([f]) => f.toUpperCase());
-const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-
-/* ── the walk, flattened ───────────────────────────────────────────────── */
-
-// Every hop in the order the walk made it, which is also the order the scene
-// assembles in.
-function flatten(root) {
-  const hops = [];
-  const visit = (step, parent, depth) => {
-    if (!step) return;
-    const hop = { id: hops.length, step, parent, depth, kids: [] };
-    hops.push(hop);
-    parent?.kids.push(hop);
-    for (const child of step.children ?? []) visit(child, hop, depth + 1);
-  };
-  visit(root, null, 0);
-  return hops;
-}
-
-const asked = (step) => step.kind !== "zone" && step.kind !== "skipped";
-
-// resultOf is read the way the trace defines it: the deepest hop that is
-// neither an aside nor a minimised one.
-function resultOf(hop) {
-  if (!hop || hop.step.aside) return null;
-  let found = !hop.step.minimised && ["answer", "cname", "nodata", "nxdomain"].includes(hop.step.kind) ? hop : null;
-  for (const kid of hop.kids) found = resultOf(kid) ?? found;
-  return found;
-}
-
-function verdictOf(hops, result) {
-  if (hops.some((hop) => hop.step.dnssec?.state === "bogus")) return { text: "bogus", tone: "bad" };
-  if (!result && hops.some((hop) => hop.step.kind === "filtered")) return { text: "filtered", tone: "bad" };
-  if (!result) return { text: "no answer", tone: "warn" };
-  return { text: "answered", tone: "ok" };
-}
-
-// The chain is only as good as its worst cut.
-function chainState(hops) {
-  const states = hops.map((hop) => hop.step.dnssec?.state).filter(Boolean);
-  return ["bogus", "indeterminate", "insecure", "secure"].find((state) => states.includes(state));
-}
-
-/* ── where each hop floats ─────────────────────────────────────────────── */
-
-// A cone that opens downwards: each zone cut is a level lower and a ring wider.
-// Every hop is given a slice of its parent's in proportion to the angle its
-// subtree needs at its most crowded ring, so a deep subtree cannot squeeze its
-// shallow siblings together; when the whole circle is not enough, the rings
-// grow until it is.
-const LEVEL = 2.7;
-const RING = 2.6;
-
-const widthOf = (step) => step.dnssec ? 2.5 : step.kind === "skipped" ? 0.6 : step.aside ? 1.2 : 1.7;
-
-function layout(hops) {
-  const depths = Math.max(...hops.map((hop) => hop.depth)) + 1;
-  let radii = Array.from({ length: depths }, (_, depth) => depth * RING);
-
-  const measure = (hop) => {
-    const own = hop.depth ? widthOf(hop.step) / radii[hop.depth] : 0;
-    hop.need = Math.max(own, hop.kids.reduce((sum, kid) => sum + measure(kid), 0));
-    return hop.need;
-  };
-  // The levels grow with the rings, though by less, so that a crowded walk is
-  // still a cone rather than a plate.
-  const grown = Math.max(1, measure(hops[0]) / (Math.PI * 2));
-  if (grown > 1) {
-    radii = radii.map((r) => r * grown);
-    measure(hops[0]);
-  }
-  const level = LEVEL * Math.sqrt(grown);
-
-  const place = (hop, from, to) => {
-    const angle = (from + to) / 2;
-    const radius = radii[hop.depth];
-    hop.pos = [radius * Math.cos(angle), -hop.depth * level, radius * Math.sin(angle)];
-    const total = hop.kids.reduce((sum, kid) => sum + kid.need, 0);
-    let at = from;
-    for (const kid of hop.kids) {
-      const span = (to - from) * kid.need / total;
-      place(kid, at, at + span);
-      at += span;
-    }
-  };
-  place(hops[0], -Math.PI / 2, Math.PI * 1.5);
-
-  const lowest = -(depths - 1) * level;
-  for (const hop of hops) hop.pos[1] -= lowest / 2;
-
-  // The camera is aimed at where the hops are, which is not the middle of the
-  // rings when most of the walk went one way.
-  const xs = hops.map((hop) => hop.pos[0]);
-  const zs = hops.map((hop) => hop.pos[2]);
-  const centre = [(Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...zs) + Math.max(...zs)) / 2];
-  return {
-    radius: radii.at(-1),
-    centre,
-    spread: Math.max(...hops.map((hop) => Math.hypot(hop.pos[0] - centre[0], hop.pos[2] - centre[2]))),
-    height: -lowest,
-    floor: lowest / 2 - 2.2,
-  };
-}
-
-// Where a hop is at a moment: floating about the place it was given. The
-// shaders do the same sums, so that the labels and the picking agree with what
-// is drawn.
-const drift = (pos, phase, time, motion) => [
-  pos[0] + motion * Math.cos(time * 0.53 + phase * 1.7) * 0.06,
-  pos[1] + motion * Math.sin(time * 0.9 + phase) * 0.16,
-  pos[2] + motion * Math.sin(time * 0.61 + phase * 2.3) * 0.06,
-];
-
-/* ── when each hop arrives ─────────────────────────────────────────────── */
-
-// The walk is replayed as it was made, each query leaving when it left and
-// taking as long as its server took, squeezed so that a slow walk still
-// assembles in a few seconds: queries that were out at once are in flight at
-// once. A failure has no start of its own, so it stands where the last thing
-// before it finished, as it does on the waterfall. A walk saved before steps
-// carried their start is replayed one query after another. The times are on
-// the replay's own clock, which starts at 0.
-function schedule(hops) {
-  const queries = hops.filter((hop) => asked(hop.step));
-  const timed = queries.some((hop) => hop.step.start_ms !== undefined);
-  const span = timed
-    ? Math.max(...queries.map((hop) => (hop.step.start_ms ?? 0) + (hop.step.rtt_ms ?? 0)))
-    : queries.reduce((sum, hop) => sum + (hop.step.rtt_ms ?? 0), 0);
-  const perMs = Math.min(0.0028, 7.5 / Math.max(span, 1));
-
-  let clock = 0.9;
-  let latest = clock;
-  hops[0].leave = 0;
-  hops[0].travel = 0.01;
-  hops[0].at = 0.3;
-  for (const hop of hops.slice(1)) {
-    if (asked(hop.step)) {
-      hop.travel = clamp((hop.step.rtt_ms ?? 0) * perMs, 0.16, 1.3);
-      const started = timed && hop.step.start_ms !== undefined;
-      const left = started ? 0.9 + hop.step.start_ms * perMs : timed ? latest : clock;
-      // Squeezing stretches the quick queries, so a hop may not leave before
-      // the one that sent it has visibly arrived.
-      hop.leave = Math.max(left, hop.parent.at);
-      clock = hop.at = hop.leave + hop.travel;
-      latest = Math.max(latest, hop.at);
-    } else {
-      const sibling = hop.parent.kids.indexOf(hop);
-      hop.travel = 0.4;
-      hop.leave = hop.parent.at + 0.05 + sibling * 0.025;
-      hop.at = hop.leave + hop.travel;
-    }
-  }
-}
-
-/* ── matrices ──────────────────────────────────────────────────────────── */
-
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-const scale = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
-const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm = (a) => scale(a, 1 / (Math.hypot(...a) || 1));
-const mix = (a, b, k) => add(a, scale(sub(b, a), k));
-
-function perspective(fovy, aspect, near, far) {
-  const f = 1 / Math.tan(fovy / 2);
-  const nf = 1 / (near - far);
-  return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
-}
-
-function lookAt(eye, center, up) {
-  const z = norm(sub(eye, center));
-  const x = norm(cross(up, z));
-  const y = cross(z, x);
-  return new Float32Array([
-    x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0,
-    -dot(x, eye), -dot(y, eye), -dot(z, eye), 1,
-  ]);
-}
-
-function multiply(a, b) {
-  const out = new Float32Array(16);
-  for (let col = 0; col < 4; col++) {
-    for (let row = 0; row < 4; row++) {
-      let sum = 0;
-      for (let k = 0; k < 4; k++) sum += a[row + 4 * k] * b[k + 4 * col];
-      out[row + 4 * col] = sum;
-    }
-  }
-  return out;
-}
-
-const project = (m, p) => [
-  m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
-  m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
-  m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15],
-];
-
-/* ── shapes ────────────────────────────────────────────────────────────── */
-
-// Every shape is a list of faces, each drawn with its own normal and with
-// barycentric coordinates the fragment shader turns into its outline. The
-// diagonals a polygon is cut into triangles along are marked as inside, so a
-// cube is drawn with four edges a face rather than five.
-function solid(verts, faces) {
-  const out = [];
-  for (const face of faces) {
-    const p = face.map((i) => verts[i]);
-    const centre = scale(p.reduce(add, [0, 0, 0]), 1 / p.length);
-    let n = norm(cross(sub(p[1], p[0]), sub(p[2], p[0])));
-    if (dot(n, centre) < 0) n = scale(n, -1);
-    for (let i = 1; i < p.length - 1; i++) {
-      const hideY = i + 1 !== p.length - 1 ? 1 : 0;
-      const hideZ = i !== 1 ? 1 : 0;
-      const bary = [[1, hideY, hideZ], [0, 1, hideZ], [0, hideY, 1]];
-      [p[0], p[i], p[i + 1]].forEach((v, k) => out.push(...v, ...n, ...bary[k]));
-    }
-  }
-  return new Float32Array(out);
-}
-
-const PHI = (1 + Math.sqrt(5)) / 2;
-const ICO_VERTS = [
-  [-1, PHI, 0], [1, PHI, 0], [-1, -PHI, 0], [1, -PHI, 0],
-  [0, -1, PHI], [0, 1, PHI], [0, -1, -PHI], [0, 1, -PHI],
-  [PHI, 0, -1], [PHI, 0, 1], [-PHI, 0, -1], [-PHI, 0, 1],
-].map(norm);
-const ICO_FACES = [
-  [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-  [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
-];
-
-function geodesic() {
-  const verts = [...ICO_VERTS];
-  const cache = new Map();
-  const middle = (a, b) => {
-    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-    if (!cache.has(key)) cache.set(key, verts.push(norm(scale(add(verts[a], verts[b]), 0.5)) ) - 1);
-    return cache.get(key);
-  };
-  const faces = ICO_FACES.flatMap(([a, b, c]) => {
-    const ab = middle(a, b), bc = middle(b, c), ca = middle(c, a);
-    return [[a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]];
-  });
-  return solid(verts, faces);
-}
-
-function torus(major, minor, segments, sides) {
-  const verts = [];
-  const faces = [];
-  for (let i = 0; i < segments; i++) {
-    const u = (i / segments) * Math.PI * 2;
-    for (let j = 0; j < sides; j++) {
-      const v = (j / sides) * Math.PI * 2;
-      const r = major + minor * Math.cos(v);
-      verts.push([r * Math.cos(u), minor * Math.sin(v), r * Math.sin(u)]);
-    }
-  }
-  const at = (i, j) => (i % segments) * sides + (j % sides);
-  for (let i = 0; i < segments; i++) {
-    for (let j = 0; j < sides; j++) faces.push([at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)]);
-  }
-  // A torus is not convex, so the outward test in solid() is wrong for half of
-  // it; the shader lights both sides alike, which makes that harmless.
-  return solid(verts, faces);
-}
-
-const SHAPES = {
-  ico: solid(ICO_VERTS, ICO_FACES),
-  sphere: geodesic(),
-  octa: solid(
-    [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]],
-    [[0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2], [1, 4, 2], [1, 3, 4], [1, 5, 3], [1, 2, 5]],
-  ),
-  tetra: solid(
-    [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map(norm),
-    [[0, 1, 2], [0, 3, 1], [0, 2, 3], [1, 3, 2]],
-  ),
-  cube: solid(
-    [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]].map((v) => scale(v, 0.62)),
-    [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [1, 2, 6, 5], [0, 4, 7, 3]],
-  ),
-  torus: torus(0.8, 0.28, 20, 8),
-  ring: torus(1, 0.025, 56, 3),
-};
 
 /* ── shaders ───────────────────────────────────────────────────────────── */
 
@@ -603,14 +280,14 @@ class Renderer {
       this.#attrib(2, 3, 36, 24);
       const instances = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, instances);
-      this.#attrib(3, 4, 48, 0, 1);
-      this.#attrib(4, 4, 48, 16, 1);
-      this.#attrib(5, 4, 48, 32, 1);
+      this.#attrib(3, 4, STRIDE.node * 4, 0, 1);
+      this.#attrib(4, 4, STRIDE.node * 4, 16, 1);
+      this.#attrib(5, 4, STRIDE.node * 4, 32, 1);
       this.#shapes[name] = { vao, instances, vertices: data.length / 9, count: 0 };
     }
 
-    this.#halo = this.#points([[0, 4, 0], [1, 4, 16], [2, 2, 32]], 40);
-    this.#packets = this.#points([[0, 4, 0], [1, 4, 16], [2, 4, 32], [3, 3, 48]], 60);
+    this.#halo = this.#points([[0, 4, 0], [1, 4, 16], [2, 2, 32]], STRIDE.halo * 4);
+    this.#packets = this.#points([[0, 4, 0], [1, 4, 16], [2, 4, 32], [3, 3, 48]], STRIDE.packet * 4);
 
     const corners = new Float32Array([0, -1, 1, -1, 1, 1, 0, -1, 1, 1, 0, 1]);
     const vao = gl.createVertexArray();
@@ -619,7 +296,7 @@ class Renderer {
     this.#attrib(0, 2, 8, 0);
     const instances = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, instances);
-    for (let i = 0; i < 4; i++) this.#attrib(i + 1, 4, 64, i * 16, 1);
+    for (let i = 0; i < 4; i++) this.#attrib(i + 1, 4, STRIDE.edge * 4, i * 16, 1);
     this.#edges = { vao, instances, count: 0 };
 
     gl.bindVertexArray(null);
@@ -689,13 +366,13 @@ class Renderer {
   nodes(byShape) {
     for (const [name, shape] of Object.entries(this.#shapes)) {
       const data = byShape[name] ?? [];
-      shape.count = data.length / 12;
+      shape.count = data.length / STRIDE.node;
       this.#fill(shape.instances, new Float32Array(data));
     }
   }
-  halos(data) { this.#halo.count = data.length / 10; this.#fill(this.#halo.buffer, new Float32Array(data)); }
-  edges(data) { this.#edges.count = data.length / 16; this.#fill(this.#edges.instances, new Float32Array(data)); }
-  packets(data) { this.#packets.count = data.length / 15; this.#fill(this.#packets.buffer, new Float32Array(data)); }
+  halos(data) { this.#halo.count = data.length / STRIDE.halo; this.#fill(this.#halo.buffer, new Float32Array(data)); }
+  edges(data) { this.#edges.count = data.length / STRIDE.edge; this.#fill(this.#edges.instances, new Float32Array(data)); }
+  packets(data) { this.#packets.count = data.length / STRIDE.packet; this.#fill(this.#packets.buffer, new Float32Array(data)); }
 
   stars(count) {
     const data = new Float32Array(count * 4);
@@ -970,7 +647,6 @@ const bounds = layout(hops);
 for (const hop of hops) {
   if (hop.step.dangling) hop.shard = add(hop.pos, add(scale(norm([hop.pos[0], 0, hop.pos[2]]), 0.7), [0, -1.9, 0]));
 }
-const leaks = (hop) => hop.step.probe?.state === "open";
 
 /* ── the HUD ──────────────────────────────────────────────────────────── */
 
@@ -1048,80 +724,20 @@ if (page.findings?.length) {
 
 /* ── the labels ────────────────────────────────────────────────────────── */
 
-function titleOf(step) {
-  if (step.kind === "zone") return step.zone === "." ? ". root" : step.zone;
-  if (!step.server) return step.notes?.join("; ") ?? step.zone;
-  return step.server.name ?? step.server.ip;
-}
-
-function subtitleOf(hop) {
-  const { step } = hop;
-  if (step.kind === "zone") return "where the walk starts";
-  if (hop === result && step.records?.length) {
-    const first = step.records[0];
-    return `${first.type} ${first.data}${step.records.length > 1 ? ` +${step.records.length - 1}` : ""}`;
-  }
-  if (step.kind === "referral" && step.delegation?.zone) return `${step.zone} → ${step.delegation.zone} · ${took(step.rtt_ms)}`;
-  return [step.zone, step.aside ? "aside" : step.kind, took(step.rtt_ms)].filter(Boolean).join(" · ");
-}
-
 const tagLayer = $("tags");
 for (const hop of hops) {
   hop.tag = el("div", {
     class: `tag${hop.step.aside ? " aside" : ""}`,
     style: `--tone:${toCss(TONES[hop.tone])}`,
-  }, el("b", { text: titleOf(hop.step) }), el("span", { text: subtitleOf(hop) }));
+  }, el("b", { text: titleOf(hop.step) }), el("span", { text: subtitleOf(hop, result) }));
   hop.shown = { x: -1, y: -1, o: -1 };
   tagLayer.append(hop.tag);
 }
 
 /* ── the inspector ─────────────────────────────────────────────────────── */
 
-function facts(step) {
-  const rows = [];
-  const row = (term, value, tone) => value && rows.push(el("dt", { text: term }), el("dd", { class: tone ? `tone-${tone}` : null, text: value }));
-  row("zone", step.zone);
-  if (step.asked) row("asked", `${step.asked.name} ${step.asked.type}`);
-  if (step.minimised) row("minimised", "asked only enough to find the next cut");
-  row("over", step.proto);
-  row("took", took(step.rtt_ms), step.rtt_ms > 500 ? "warn" : null);
-  if (step.size_bytes) row("size", step.limit_bytes ? `${step.size_bytes} of ${step.limit_bytes} bytes` : `${step.size_bytes} bytes`, step.tight ? "warn" : null);
-  row("rcode", step.rcode, step.rcode && step.rcode !== "NOERROR" ? "warn" : null);
-  row("flags", flagsOf(step.flags).join(" "));
-  if (step.delegation) {
-    const d = step.delegation;
-    row("sends to", d.zone);
-    row("nameservers", `${d.ns?.length ?? 0}${d.glueless ? ", none with glue" : ""}`);
-    row("ds", d.ds_present ? "present" : "none", d.ds_present ? "ok" : null);
-  }
-  if (step.dnssec) {
-    const s = step.dnssec;
-    row("trust", s.state, trustTone(s.state));
-    row("algorithm", [s.algorithm, s.digest].filter(Boolean).join(" · "));
-    if (s.key_tags?.length) row("key tags", s.key_tags.join(", "));
-    const expires = s.signatures?.map((sig) => sig.expiration).sort()[0];
-    if (expires) row("signed until", new Date(expires).toLocaleString());
-    row("because", s.reason);
-  }
-  if (step.server?.asn) {
-    const as = step.server.asn;
-    row("network", `AS${as.number}`);
-    row("prefix", [as.prefix, as.country_code, as.registry].filter(Boolean).join(" · "));
-  }
-  row("instance", step.nsid);
-  if (step.cookie) row("cookie", `${step.cookie}: ${COOKIES[step.cookie] ?? ""}`, ["mismatch", "rejected"].includes(step.cookie) ? "bad" : null);
-  if (step.subnet) row("subnet", `${step.subnet.prefix} /${step.subnet.scope}`);
-  if (step.soa) row("soa serial", String(step.soa.serial));
-  for (const e of step.extended ?? []) row("ede", [e.reason || e.code, e.text].filter(Boolean).join(": "), e.withheld ? "warn" : null);
-  const d = step.dangling;
-  if (d) row(d.kind === "lame" ? "dangling" : `dangling ${d.kind}`, d.kind === "lame" ? "every nameserver lame" : `${d.missing} is missing`, "warn");
-  if (step.probe) {
-    row(step.probe.kind === "recursion" ? "recursion" : "axfr", step.probe.state, { open: "bad", unchecked: "warn" }[step.probe.state]);
-  }
-  row("error", step.error, "bad");
-  row("notes", step.notes?.join("; "));
-  return rows;
-}
+const facts = (step) => factsOf(step).flatMap(([term, value, tone]) =>
+  [el("dt", { text: term }), el("dd", { class: tone ? `tone-${tone}` : null, text: value })]);
 
 function inspect(hop) {
   const panel = $("inspector");
@@ -1179,58 +795,13 @@ function glowOf(hop) {
 // the floating and the arrival are worked out on the card.
 function upload() {
   stale = true;
-  const byShape = {};
-  const halos = [];
-  for (const hop of hops) {
-    const color = TONES[hop.tone].map((c) => c * hop.dim);
-    const glow = glowOf(hop);
-    const spin = hop.step.kind === "zone" ? 0.25 : 0.35 + (hop.id % 5) * 0.08;
-    (byShape[hop.kind.shape] ??= []).push(...hop.pos, hop.size, ...color, glow, hop.phase, spin, hop.at, 0.35);
-    if (hop.step.dnssec) {
-      const ring = TONES[trustTone(hop.step.dnssec.state)];
-      (byShape.ring ??= []).push(...hop.pos, hop.size * 1.75, ...ring, glow * 0.5, hop.phase, 0.9, hop.at + 0.25, 1.15);
-    }
-    if (hop.shard) (byShape.tetra ??= []).push(...hop.shard, 0.17, ...TONES.warn, glow * 0.5, hop.phase, 2.4, hop.at + 0.6, 0.6);
-    halos.push(...hop.pos, hop.size, ...color, glow, hop.phase, hop.at);
-  }
+  const { byShape, halos } = nodesOf(hops, glowOf);
   renderer.nodes(byShape);
   renderer.halos(halos);
 }
 
 function wire() {
-  const edges = [];
-  const packets = [];
-  for (const hop of hops.slice(1)) {
-    const path = onPath.has(hop);
-    const color = TONES[hop.tone];
-    const skipped = hop.step.kind === "skipped";
-    const strength = path ? 0.9 : skipped ? 0.14 : hop.step.aside ? 0.28 : 0.42;
-    const width = path ? 2.6 : skipped ? 0.9 : 1.5;
-    edges.push(...hop.parent.pos, hop.parent.phase, ...hop.pos, hop.phase, ...color, strength,
-      hop.leave, hop.travel, width, path ? 0.35 : 0);
-    if (!skipped) packets.push(...hop.parent.pos, hop.parent.phase, ...hop.pos, hop.phase, ...color, path ? 0.9 : 0.6, hop.leave, hop.travel, 0);
-  }
-  for (const hop of hops) {
-    // The thread breaks short of its shard, and something drains down it.
-    if (hop.shard) {
-      edges.push(...hop.pos, hop.phase, ...mix(hop.pos, hop.shard, 0.6), hop.phase, ...TONES.warn, 0.5, hop.at + 0.1, 0.5, 1.1, 0.5);
-      edges.push(...mix(hop.pos, hop.shard, 0.76), hop.phase, ...hop.shard, hop.phase, ...TONES.warn, 0.35, hop.at + 0.45, 0.3, 0.8, 0);
-    }
-    // Sparks thrown off a server that hands out its zone, or looks names up,
-    // for anyone who asks.
-    if (leaks(hop)) {
-      for (let i = 0; i < 7; i++) {
-        const a = hop.phase + i * 2.399963;
-        const to = add(hop.pos, scale(norm([Math.cos(a), (i % 3) * 0.35 - 0.1, Math.sin(a)]), 1.5));
-        packets.push(...hop.pos, hop.phase, ...to, -1, ...TONES.bad, 0.45, hop.at + 0.2, 1.4 + (i % 3) * 0.3, (i + 1) / 8);
-      }
-    }
-  }
-  // A beam under the answer, down to the floor.
-  if (result) {
-    edges.push(...result.pos, result.phase, result.pos[0], bounds.floor, result.pos[2], -1, ...TONES.ok, 0.3,
-      result.at, 0.8, 1.2, 0.5);
-  }
+  const { edges, packets } = wiresOf(hops, { onPath, result, floor: bounds.floor });
   renderer.edges(edges);
   renderer.packets(packets);
 }
@@ -1391,11 +962,7 @@ function pick(hop, { quiet = false } = {}) {
 
 // The hops worth stepping through, which leaves out the servers nobody asked.
 const stops = hops.filter((hop) => hop.step.kind !== "skipped");
-function stepThrough(by) {
-  const from = state.picked ? stops.indexOf(state.picked) : -1;
-  const at = from === -1 ? (by > 0 ? 0 : stops.length - 1) : (from + by + stops.length) % stops.length;
-  pick(stops[at]);
-}
+const stepThrough = (by) => pick(stepFrom(stops, state.picked, by));
 
 /* ── input ─────────────────────────────────────────────────────────────── */
 
@@ -1597,8 +1164,8 @@ function rankOf(hop) {
   return hop.step.aside ? 7 : hop.step.kind === "skipped" ? 8 : 6;
 }
 
-// Labels are laid down most important first, and one that would land on a
-// label already down is left out until the scene turns and there is room.
+// Every label follows its hop across the screen, as far as declutter leaves
+// room for it.
 function placeTags(viewProj, now, width, height, pixels) {
   const showing = [];
   for (const hop of hops) {
@@ -1617,18 +1184,7 @@ function placeTags(viewProj, now, width, height, pixels) {
     hop.place = { x, y, o, rank: rankOf(hop) };
     showing.push(hop);
   }
-  showing.sort((a, b) => a.place.rank - b.place.rank || a.id - b.id);
-
-  const taken = [];
-  for (const hop of showing) {
-    const { x, y, rank } = hop.place;
-    const box = [x - 16, y - hop.box.h / 2 - 2, x + hop.box.w + 4, y + hop.box.h / 2 + 2];
-    if (rank > 1 && taken.some((t) => box[0] < t[2] && box[2] > t[0] && box[1] < t[3] && box[3] > t[1])) {
-      hop.place.o = 0;
-    } else {
-      taken.push(box);
-    }
-  }
+  declutter(showing);
 
   for (const hop of hops) {
     const tag = hop.tag;

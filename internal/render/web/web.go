@@ -196,10 +196,14 @@ var (
 	flat = site{dir: "assets", files: map[string]string{
 		"app.css": "text/css; charset=utf-8",
 		"app.js":  "text/javascript; charset=utf-8",
+		"walk.js": "text/javascript; charset=utf-8",
 	}}
 	scene = site{dir: "assets/scene", files: map[string]string{
 		"scene.css": "text/css; charset=utf-8",
 		"scene.js":  "text/javascript; charset=utf-8",
+		"walk.js":   "text/javascript; charset=utf-8",
+		"space.js":  "text/javascript; charset=utf-8",
+		"pack.js":   "text/javascript; charset=utf-8",
 	}}
 )
 

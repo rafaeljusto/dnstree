@@ -185,6 +185,10 @@ func TestHandler(t *testing.T) {
 			pages: flat, path: "/trace.json", wantStatus: http.StatusOK,
 			wantType: "application/json; charset=utf-8", wantContent: `"www.example.com."`,
 		},
+		"what the page reads out of the walk": {
+			pages: flat, path: "/walk.js", wantStatus: http.StatusOK,
+			wantType: "text/javascript; charset=utf-8", wantContent: "export function chipsOf",
+		},
 		"nothing else is served": {pages: flat, path: "/etc/passwd", wantStatus: http.StatusNotFound},
 		"not even the directory": {pages: flat, path: "/assets/app.js", wantStatus: http.StatusNotFound},
 		"not the scene's files":  {pages: flat, path: "/scene.js", wantStatus: http.StatusNotFound},
@@ -192,6 +196,18 @@ func TestHandler(t *testing.T) {
 		"the scene itself": {
 			pages: scene, path: "/", wantStatus: http.StatusOK,
 			wantType: "text/html; charset=utf-8", wantContent: `<canvas id="scene"`,
+		},
+		"what the scene reads out of the walk": {
+			pages: scene, path: "/walk.js", wantStatus: http.StatusOK,
+			wantType: "text/javascript; charset=utf-8", wantContent: "export function layout",
+		},
+		"the sums the scene is drawn with": {
+			pages: scene, path: "/space.js", wantStatus: http.StatusOK,
+			wantType: "text/javascript; charset=utf-8", wantContent: "export const SHAPES",
+		},
+		"what the scene hands the card": {
+			pages: scene, path: "/pack.js", wantStatus: http.StatusOK,
+			wantType: "text/javascript; charset=utf-8", wantContent: "export const STRIDE",
 		},
 		"what the scene is laid over": {
 			pages: scene, path: "/scene.css", wantStatus: http.StatusOK, wantType: "text/css; charset=utf-8", wantContent: "@layer",
@@ -344,6 +360,64 @@ func TestPagesFetchNothing(t *testing.T) {
 			for _, found := range address.FindAllString(string(body), -1) {
 				if !strings.HasSuffix(found, "//www.w3.org") {
 					t.Errorf("%s/%s names %s, want nothing fetched", pages.dir, name, found)
+				}
+			}
+		}
+	}
+}
+
+// imported is every module a script names by a path relative to itself: the
+// ones it imports from, the ones it imports for what they do, and the ones it
+// loads later.
+var imported = regexp.MustCompile(`(?m)(?:^\s*import\s+|\bfrom\s+|\bimport\s*\(\s*)["']\./([^"']+)["']`)
+
+func imports(body string) []string {
+	var names []string
+	for _, match := range imported.FindAllStringSubmatch(body, -1) {
+		names = append(names, match[1])
+	}
+	return names
+}
+
+func TestImports(t *testing.T) {
+	tests := map[string]struct {
+		body string
+		want []string
+	}{
+		"names on one line":             {`import { a, b } from "./walk.js";`, []string{"walk.js"}},
+		"names over several lines":      {"import {\n  a,\n  b,\n} from './walk.js';", []string{"walk.js"}},
+		"a module for what it does":     {`import "./setup.js";`, []string{"setup.js"}},
+		"a module loaded later":         {`const m = await import("./late.js");`, []string{"late.js"}},
+		"names passed on":               {`export { a } from "./walk.js";`, []string{"walk.js"}},
+		"not a module of the page":      {`import { a } from "../other.js";`, nil},
+		"not a string that says import": {`el("p", { text: "import this from somewhere" });`, nil},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := imports(test.body); !slices.Equal(got, test.want) {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+// TestImportsAreServed keeps the list of files a page is made of in step with
+// its modules: a script split in two imports a file nobody serves unless it is
+// added to the list too, and the page then draws nothing.
+func TestImportsAreServed(t *testing.T) {
+	for _, pages := range []site{flat, scene} {
+		for _, name := range slices.Sorted(maps.Keys(pages.files)) {
+			if !strings.HasSuffix(name, ".js") {
+				continue
+			}
+			body, err := assets.ReadFile(pages.dir + "/" + name)
+			if err != nil {
+				t.Fatalf("%s/%s: %v", pages.dir, name, err)
+			}
+			for _, module := range imports(string(body)) {
+				if _, ok := pages.files[module]; !ok {
+					t.Errorf("%s/%s imports %s, want it among the files %s serves", pages.dir, name, module, pages.dir)
 				}
 			}
 		}
