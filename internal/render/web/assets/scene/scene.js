@@ -6,9 +6,10 @@
 import {
   TONES, KINDS, kindOf, trustTone, took, clamp, flatten, asked, resultOf, verdictOf, chainState,
   layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom, leaks,
+  trailOf, rideAt, behind, around,
 } from "./walk.js";
 import { STRIDE, nodesOf, wiresOf } from "./pack.js";
-import { SHAPES, sub, add, scale, cross, norm, perspective, lookAt, multiply, project } from "./space.js";
+import { SHAPES, sub, add, scale, cross, norm, mix, perspective, lookAt, multiply, project } from "./space.js";
 
 const toCss = ([r, g, b]) => `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
 for (const [name, rgb] of Object.entries(TONES)) {
@@ -832,7 +833,7 @@ function marks() {
   })));
 }
 
-// Notes already behind the replay are not played again, and the camera leans
+// Sounds already behind the replay are not played again, and the camera leans
 // towards whichever hop the replay is at.
 function wind(to) {
   replay.at = clamp(to, 0, replay.end);
@@ -876,6 +877,10 @@ function eyeOf() {
 }
 
 function step(dt, now) {
+  if (ride.on) {
+    rideAlong(dt, now);
+    return;
+  }
   const ease = 1 - Math.exp(-dt * 4);
   const idle = now - lastInput > 3;
 
@@ -906,6 +911,7 @@ function step(dt, now) {
 }
 
 function reset() {
+  riding(false);
   goal.dist = home.dist = fitFor(innerWidth / innerHeight);
   goal.target = [...home.target];
   // Back the short way round.
@@ -913,6 +919,40 @@ function reset() {
   goal.yaw = home.yaw + turns * Math.PI * 2;
   goal.pitch = home.pitch;
   pick(null);
+}
+
+/* ── riding along ──────────────────────────────────────────────────────── */
+
+// The camera can ride the question down the bright trail, behind it and a
+// little above, dipping into each cut as it reaches one and going slowly
+// round the answer at the end. Taking hold of the scene hands it back.
+const trail = trailOf(result);
+const ride = { on: false, turn: 0 };
+
+function riding(on) {
+  on = on && motion > 0 && trail.length > 0;
+  if (on === ride.on) return;
+  ride.on = on;
+  controls.ride.setAttribute("aria-pressed", String(on));
+  if (!on) return;
+  pick(null);
+  follow = null;
+  spin.yaw = spin.pitch = 0;
+  goal.yaw = goal.pitch = null;
+  goal.dist = 7;
+  ride.turn = 0;
+  if (replay.at >= replay.end) play();
+}
+
+function rideAlong(dt, now) {
+  const at = rideAt(trail, replay.at, now, motion);
+  ride.turn = at.done ? ride.turn + dt * 0.15 : 0;
+  const ease = 1 - Math.exp(-dt * 2.2);
+  camera.yaw += around(behind(at.heading) + ride.turn - camera.yaw) * ease;
+  camera.pitch += (0.42 - 0.14 * Math.exp(-at.since * 3) - camera.pitch) * ease;
+  camera.dist += (goal.dist - camera.dist) * ease;
+  camera.target = mix(camera.target, mix(at.at, at.ahead, 0.25), 1 - Math.exp(-dt * 5));
+  goal.target = [...camera.target];
 }
 
 function focus(hop) {
@@ -952,6 +992,7 @@ function pick(hop, { quiet = false } = {}) {
   state.picked?.tag.classList.remove("picked");
   state.picked = hop;
   hop?.tag.classList.add("picked");
+  if (hop) riding(false);
   inspect(hop);
   upload();
   if (hop) {
@@ -1006,6 +1047,9 @@ canvas.addEventListener("pointermove", (event) => {
     pressed.spread = spread;
     return;
   }
+  // Turning or moving the scene takes the camera back; a click, or a pinch
+  // that only zooms as the wheel does, leaves the ride going.
+  if (pressed.moved >= 6) riding(false);
   if (pressed.pan) {
     const eye = eyeOf();
     const forward = norm(sub(camera.target, eye));
@@ -1042,8 +1086,10 @@ canvas.addEventListener("wheel", (event) => {
 }, { passive: false });
 
 const controls = {
-  replay: $("c-replay"), orbit: $("c-orbit"), sound: $("c-sound"), reset: $("c-reset"), findings: $("c-findings"),
+  replay: $("c-replay"), orbit: $("c-orbit"), ride: $("c-ride"), sound: $("c-sound"), reset: $("c-reset"),
+  findings: $("c-findings"),
 };
+controls.ride.hidden = !motion || !trail.length;
 // A click leaves the focus where it was, so that the keys go on meaning what
 // they say rather than pressing the button last clicked.
 for (const button of document.querySelectorAll(".dock button")) {
@@ -1056,6 +1102,10 @@ controls.orbit.addEventListener("click", () => {
   controls.orbit.setAttribute("aria-pressed", String(orbiting));
 });
 controls.orbit.setAttribute("aria-pressed", String(orbiting));
+controls.ride.addEventListener("click", () => {
+  if (ride.on) reset();
+  else riding(true);
+});
 controls.sound.addEventListener("click", async () => {
   try {
     const on = await sound.toggle(result?.pos);
@@ -1100,6 +1150,7 @@ addEventListener("keydown", (event) => {
     k: () => stepThrough(-1),
     " ": () => play(),
     o: () => controls.orbit.click(),
+    f: () => !controls.ride.hidden && controls.ride.click(),
     m: () => controls.sound.click(),
     r: () => reset(),
     e: () => !controls.findings.hidden && controls.findings.click(),
@@ -1113,12 +1164,17 @@ addEventListener("keydown", (event) => {
   if (!act) return;
   event.preventDefault();
   lastInput = clock();
+  if (event.key.startsWith("Arrow")) riding(false);
   act();
 });
 
 reduced.addEventListener("change", () => {
   motion = reduced.matches ? 0 : 1;
-  if (!motion) wind(replay.end);
+  if (!motion) {
+    if (ride.on) reset();
+    play();
+  }
+  controls.ride.hidden = !motion || !trail.length;
   orbiting = orbiting && !reduced.matches;
   controls.orbit.setAttribute("aria-pressed", String(orbiting));
 });

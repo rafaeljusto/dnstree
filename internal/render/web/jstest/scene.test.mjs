@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   KINDS, TONES, kindOf, took, flatten, asked, resultOf, verdictOf, chainState, widthOf,
   layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom,
+  trailOf, rideAt, behind, around,
 } from "../assets/scene/walk.js";
 import { golden, zone, step, chain } from "./fixtures.mjs";
 
@@ -244,6 +245,91 @@ test("a server nobody asked appears just after the hop that named it", () => {
   const skipped = hops.find((hop) => hop.step.kind === "skipped");
   assert.ok(skipped.leave > skipped.parent.at && skipped.leave < skipped.parent.at + 0.2);
   assert.equal(skipped.travel, 0.4);
+});
+
+/* ── riding along ──────────────────────────────────────────────────────── */
+
+// A walk laid out and scheduled, standing still, as the ride reads it.
+const ridden = (root) => {
+  const { hops, result } = walked(root);
+  for (const hop of hops) hop.phase = 0;
+  layout(hops);
+  schedule(hops);
+  return { hops, trail: trailOf(result) };
+};
+const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+
+test("the ride follows the way to the answer, from the root down", () => {
+  const { hops, trail } = ridden(golden().root);
+  assert.deepEqual(trail.map((hop) => hop.id), [0, 1, 3, 4]);
+  assert.equal(trail.at(-1), resultOf(hops[0]));
+  assert.deepEqual(ridden(zone(step("referral", {}, step("timeout")))).trail, [], "nowhere to ride when nothing answered");
+});
+
+test("the question waits at the root, glides down each hop, and ends at the answer", () => {
+  const { trail } = ridden(chain(3));
+  const [root, first, , answer] = trail;
+  assert.ok(near(rideAt(trail, 0, 0, 0).at, root.pos), "before anything leaves");
+
+  const half = first.leave + first.travel / 2;
+  const midway = rideAt(trail, half, 0, 0).at;
+  assert.ok(near(midway, root.pos.map((v, i) => (v + first.pos[i]) / 2)), "halfway down the first hop");
+
+  const end = rideAt(trail, answer.at + 5, 0, 0);
+  assert.ok(near(end.at, answer.pos));
+  assert.equal(end.done, true);
+  assert.equal(rideAt(trail, answer.leave, 0, 0).done, false);
+});
+
+test("between two queries the question waits at the hop it reached, looking at the next", () => {
+  const { trail } = ridden(zone(
+    step("referral", { start_ms: 0, rtt_ms: 20 }, step("answer", { start_ms: 900, rtt_ms: 20 })),
+  ));
+  const [, referral, answer] = trail;
+  assert.ok(answer.leave > referral.at, "the answer went out well after the referral came back");
+  const waiting = rideAt(trail, (referral.at + answer.leave) / 2, 0, 0);
+  assert.ok(near(waiting.at, referral.pos));
+  assert.ok(near(waiting.ahead, answer.pos));
+  assert.deepEqual(waiting.heading, [answer.pos[0] - referral.pos[0], 0, answer.pos[2] - referral.pos[2]]);
+});
+
+test("the ride leans into a cut just reached, and never before the walk starts", () => {
+  const { trail } = ridden(chain(3));
+  assert.equal(rideAt(trail, 0, 0, 0).since, 0);
+  const first = trail[1];
+  assert.ok(rideAt(trail, first.at + 0.1, 0, 0).since < 0.1 + 1e-9);
+  for (let t = 0; t < 20; t += 0.05) {
+    const r = rideAt(trail, t, 0, 0);
+    assert.ok(r.since >= 0 && [...r.at, ...r.ahead, ...r.heading].every(Number.isFinite), `at ${t}`);
+    assert.equal(r.heading[1], 0);
+  }
+});
+
+test("the ride floats with the hops it rides between", () => {
+  const { trail } = ridden(chain(2));
+  const hop = trail.at(-1);
+  const r = rideAt(trail, 99, 3.7, 1);
+  assert.ok(near(r.at, drift(hop.pos, hop.phase, 3.7, 1)));
+});
+
+test("the camera sits behind the way the question is going", () => {
+  for (const heading of [[1, 0, 0], [0, 0, 1], [-3, 0, 4], [0.2, 0, -0.9]]) {
+    const yaw = behind(heading);
+    // The camera's eye sits at (sin yaw, cos yaw) from what it looks at.
+    const eye = [Math.sin(yaw), Math.cos(yaw)];
+    const len = Math.hypot(heading[0], heading[2]);
+    assert.ok(Math.abs(eye[0] + heading[0] / len) < 1e-9 && Math.abs(eye[1] + heading[2] / len) < 1e-9, String(heading));
+  }
+});
+
+test("the camera turns the short way round", () => {
+  const cases = {
+    "a small turn is left alone": [0.5, 0.5],
+    "most of a turn one way is a little the other": [2 * Math.PI - 0.25, -0.25],
+    "several turns come to the same": [6 * Math.PI + 1, 1],
+    "backwards too": [-2 * Math.PI - 1, -1],
+  };
+  for (const [name, [angle, want]] of Object.entries(cases)) assert.ok(Math.abs(around(angle) - want) < 1e-9, name);
 });
 
 /* ── what a hop is called ──────────────────────────────────────────────── */

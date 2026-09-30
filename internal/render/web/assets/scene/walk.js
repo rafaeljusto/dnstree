@@ -206,6 +206,44 @@ export function schedule(hops) {
   }
 }
 
+/* ── riding along ──────────────────────────────────────────────────────── */
+
+// The way from the root to where the walk ended, root first, which is what
+// the camera rides down. Empty when the walk came to nothing.
+export function trailOf(result) {
+  const trail = [];
+  for (let hop = result; hop; hop = hop.parent) trail.unshift(hop);
+  return trail.length > 1 ? trail : [];
+}
+
+// Where the question is on the trail at a moment of the replay: gliding
+// between two hops the way its packet does, or waiting at the last it reached.
+// heading is the way it is going, flat, and since how long ago it last reached
+// a hop, for the camera to lean into the cut.
+export function rideAt(trail, t, time, motion) {
+  let i = 1;
+  while (i < trail.length - 1 && trail[i].at <= t) i++;
+  const from = trail[i - 1];
+  const to = trail[i];
+  const k = clamp((t - to.leave) / to.travel, 0, 1);
+  const e = k * k * (3 - 2 * k);
+  const a = drift(from.pos, from.phase, time, motion);
+  const b = drift(to.pos, to.phase, time, motion);
+  return {
+    at: a.map((v, n) => v + (b[n] - v) * e),
+    ahead: b,
+    heading: [to.pos[0] - from.pos[0], 0, to.pos[2] - from.pos[2]],
+    since: Math.max(0, t - (k >= 1 ? to.at : from.at)),
+    done: t >= to.at && i === trail.length - 1,
+  };
+}
+
+// The yaw that puts the camera behind something going this way.
+export const behind = ([x, , z]) => Math.atan2(-x, -z);
+
+// An angle brought into (-π, π], so the camera turns the short way round.
+export const around = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
 /* ── what a hop is called ──────────────────────────────────────────────── */
 
 export function titleOf(step) {
