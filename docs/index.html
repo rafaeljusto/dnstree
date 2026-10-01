@@ -428,6 +428,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--qmin</code> asks each zone for one label more than it has, the way resolvers do now. A server that answers NXDOMAIN for an empty name stops such a resolver dead; the walk asks again in full and names the server.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">no backup</span>
+          <h3>A second nameserver that falls with the first</h3>
+          <p><code>--without</code> walks as though a nameserver, an address or a whole prefix were down. A backup whose own zone is served by the server it backs up stops answering along with it.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">running out</span>
           <h3>Signatures late in their life</h3>
           <p>A zone whose signer stopped validates to the last second and then fails all at once. A verdict resting on a signature with less than a fifth of its life left says when it runs out, while there is still time to re-sign.</p>

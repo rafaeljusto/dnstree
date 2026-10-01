@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,7 @@ script is asked in punycode, the way the DNS holds it.
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
+  --without SERVER        treat a nameserver, address or prefix as down; repeat it
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
@@ -359,6 +361,10 @@ type Config struct {
 	// value sends none.
 	Subnet netip.Prefix
 
+	// Without is what the walk treats as down, in the order it was named:
+	// the servers it may not ask, by name or by address.
+	Without []transport.Down
+
 	// WebAddr is where --format web and web-3d serve the page, and Browser whether one is
 	// opened at it. A walk names the servers it asked and the addresses they
 	// answered from, so the page stays on this machine unless it is moved.
@@ -427,6 +433,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		roots         rootList
 		wanted        expectList
 		resolvers     resolverList
+		without       downList
 	)
 	flags.StringVar(&reverse, "x", "", "resolve the PTR of this address")
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
@@ -447,6 +454,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
+	flags.Var(&without, "without", "walk as though this server or network were down")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
@@ -612,6 +620,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s between one walk and the next is too little; a second is the least",
 			ErrUsage, cfg.Watch)
 	}
+	if cfg.Diff && len(without.down) > 0 {
+		return nil, fmt.Errorf("%w: --diff remembers the walk, and one made --without part of the DNS is not what the name does", ErrUsage)
+	}
 	switch {
 	case cfg.Against != "" && cfg.Diff:
 		return nil, fmt.Errorf("%w: --against and --diff each hold the walk against another; ask for one", ErrUsage)
@@ -634,6 +645,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 	cfg.Port = uint16(port)
 	cfg.Expect = wanted.want
+	cfg.Without = without.down
 	cfg.ASN = !noASN
 	cfg.Compare = !noCompare
 	cfg.Browser = !noBrowser
@@ -683,7 +695,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "nsid": true, "cookie": true, "qmin": true,
-	"subnet": true, "no-asn": true, "no-compare": true, "ddr": true, "timeout": true, "retries": true,
+	"subnet": true, "without": true, "no-asn": true, "no-compare": true, "ddr": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
 	"tls-ca": true, "tls-insecure": true,
@@ -813,6 +825,70 @@ func (l *resolverList) Set(text string) error {
 	}
 	l.servers = append(l.servers, server)
 	return nil
+}
+
+// downList collects the --without flags in the order they were given.
+type downList struct{ down []transport.Down }
+
+func (l *downList) String() string {
+	named := make([]string, 0, len(l.down))
+	for _, down := range l.down {
+		named = append(named, down.String())
+	}
+	return strings.Join(named, ",")
+}
+
+// Set reads one --without: a prefix, an address, or the name of a nameserver.
+func (l *downList) Set(text string) error {
+	down, err := parseDown(text)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(l.down, down) {
+		l.down = append(l.down, down)
+	}
+	return nil
+}
+
+func parseDown(text string) (transport.Down, error) {
+	if prefix, err := netip.ParsePrefix(text); err == nil {
+		// The servers are held to their IPv4 address, so a prefix written over
+		// the IPv4 addresses mapped into IPv6 is held to the IPv4 part of it.
+		if prefix.Addr().Is4In6() {
+			if prefix.Bits() < 96 {
+				return transport.Down{}, fmt.Errorf("%q reaches past the IPv4 addresses it is written over", text)
+			}
+			prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+		}
+		return transport.Down{Prefix: prefix.Masked()}, nil
+	}
+	if addr, err := netip.ParseAddr(text); err == nil {
+		addr = addr.Unmap()
+		return transport.Down{Prefix: netip.PrefixFrom(addr, addr.BitLen())}, nil
+	}
+
+	switch {
+	case text == "" || text == ".":
+		return transport.Down{}, errors.New("names nothing to leave out")
+	case asNumber(text):
+		return transport.Down{}, fmt.Errorf("%q is a network by its AS, which cannot be left out yet; name its servers or a prefix", text)
+	case strings.ContainsAny(text, ":/@ \t"):
+		return transport.Down{}, fmt.Errorf("%q is neither an address, a prefix nor a name", text)
+	}
+	name, err := idn.ASCII(text)
+	if err != nil {
+		return transport.Down{}, err
+	}
+	return transport.Down{Name: fqdn(strings.ToLower(name))}, nil
+}
+
+// asNumber reports whether text names an autonomous system, as AS13335.
+func asNumber(text string) bool {
+	if len(text) < 3 || !strings.EqualFold(text[:2], "as") {
+		return false
+	}
+	_, err := strconv.ParseUint(text[2:], 10, 32)
+	return err == nil
 }
 
 // rootList collects the --root flags in the order they were given. The flag

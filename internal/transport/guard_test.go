@@ -68,3 +68,73 @@ func TestGuard(t *testing.T) {
 		t.Errorf("got %d queries at the server, want only the allowed one", got)
 	}
 }
+
+func TestWithout(t *testing.T) {
+	server := newServer(t, fakens.Behaviour{})
+	addr := server.Addr.Addr()
+
+	tests := map[string]struct {
+		down    transport.Down
+		name    string
+		removed bool
+	}{
+		"the server by its name": {
+			down: transport.Down{Name: "ns1.example.com."}, name: "ns1.example.com.", removed: true,
+		},
+		"the server by its name in another case and without the dot": {
+			down: transport.Down{Name: "ns1.example.com"}, name: "NS1.Example.COM.", removed: true,
+		},
+		"another server by name": {
+			down: transport.Down{Name: "ns2.example.com."}, name: "ns1.example.com.",
+		},
+		"a name where the server's is not known": {
+			down: transport.Down{Name: "ns1.example.com."},
+		},
+		"the server by its address": {
+			down: transport.Down{Prefix: netip.PrefixFrom(addr, addr.BitLen())}, removed: true,
+		},
+		"the network the server is in": {
+			down: transport.Down{Prefix: netip.MustParsePrefix("127.0.0.0/8")}, removed: true,
+		},
+		"another network": {
+			down: transport.Down{Prefix: netip.MustParsePrefix("192.0.2.0/24")},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			before := len(server.Queries())
+			var kept []transport.Down
+			down := transport.Without(transport.NewUDP(fastConfig), []transport.Down{test.down},
+				func(down transport.Down) { kept = append(kept, down) })
+			_, _, err := down.Exchange(t.Context(), query(t, "www.example.com.", dns.TypeA), server.Addr, test.name)
+
+			if test.removed != (len(kept) == 1) {
+				t.Errorf("got %v kept from the query, want it only when the server is left out", kept)
+			}
+			if test.removed {
+				if !errors.Is(err, transport.ErrDown) {
+					t.Fatalf("got %v, want %v", err, transport.ErrDown)
+				}
+				if got := len(server.Queries()) - before; got != 0 {
+					t.Errorf("got %d queries at the server, want none", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("got %v, want the server asked", err)
+			}
+		})
+	}
+}
+
+func TestWithoutMapped(t *testing.T) {
+	server := newServer(t, fakens.Behaviour{})
+	mapped := netip.AddrPortFrom(netip.AddrFrom16(server.Addr.Addr().As16()), server.Addr.Port())
+	down := transport.Without(transport.NewUDP(fastConfig), []transport.Down{{Prefix: netip.MustParsePrefix("127.0.0.0/8")}}, nil)
+
+	_, _, err := down.Exchange(t.Context(), query(t, "www.example.com.", dns.TypeA), mapped, "")
+	if !errors.Is(err, transport.ErrDown) {
+		t.Fatalf("got %v, want an IPv4 address mapped into IPv6 held to its IPv4 prefix", err)
+	}
+}

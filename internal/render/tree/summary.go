@@ -37,6 +37,11 @@ func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 	}
 
 	fields := []string{verdict + " in " + clock(elapsed)}
+	// Said beside the verdict, since an answer found with servers left out is a
+	// different claim from one found with all of them.
+	if len(tr.Without) > 0 {
+		fields = append(fields, "without "+strings.Join(tr.Without, ", "))
+	}
 	if timing := resolverField(tr.Resolvers); timing != "" {
 		fields = append(fields, timing)
 	}

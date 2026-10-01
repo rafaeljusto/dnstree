@@ -45,6 +45,11 @@ type Trace struct {
 
 	// Warnings are what the resolver could not do, in the order it found out.
 	Warnings []string
+
+	// Without is what the walk was told to treat as down, as --without named
+	// it. The servers inside it were never asked, so an answer the walk found
+	// is one the rest of the DNS gives on its own.
+	Without []string
 }
 
 // Resolver is what one recursive server made of the question. It is metadata,

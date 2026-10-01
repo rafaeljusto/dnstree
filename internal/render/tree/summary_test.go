@@ -169,3 +169,44 @@ func TestSummaryResolvers(t *testing.T) {
 		})
 	}
 }
+
+// TestSummaryWithout covers --without: the verdict is about the DNS with those
+// servers left out, and the line has to say so.
+func TestSummaryWithout(t *testing.T) {
+	tests := map[string]struct {
+		answered bool
+		without  []string
+		want     string
+	}{
+		"nothing left out says nothing": {
+			answered: true,
+			want:     "answered in 1.5s · 1 query",
+		},
+		"an answer found without a nameserver": {
+			answered: true,
+			without:  []string{"ns1.example.com."},
+			want:     "answered in 1.5s · without ns1.example.com. · 1 query",
+		},
+		"no answer without a network and a server": {
+			without: []string{"192.0.2.0/24", "ns2.example.net."},
+			want:    "no answer in 1.5s · without 192.0.2.0/24, ns2.example.net. · 1 query",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr := walk(1)
+			if test.answered {
+				tr.Root.Children[0].Kind = trace.KindAnswer
+			}
+			tr.Elapsed = 1500 * time.Millisecond
+			tr.Without = test.without
+
+			var buf bytes.Buffer
+			Summary(&buf, tr, Options{Color: ColorNever})
+			if got := buf.String(); !strings.Contains(got, test.want) {
+				t.Errorf("got %q, want it to carry %q", got, test.want)
+			}
+		})
+	}
+}

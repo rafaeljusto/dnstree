@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 	"time"
 
 	"codeberg.org/miekg/dns"
@@ -73,4 +74,69 @@ func Public(addr netip.Addr) bool {
 		}
 	}
 	return true
+}
+
+// ErrDown is what Without answers for a server it keeps a query from.
+var ErrDown = errors.New("left out")
+
+// Down is a part of the DNS a walk is to treat as unreachable: a nameserver by
+// name, or every address inside a prefix. A single address is a prefix of its
+// own length.
+type Down struct {
+	Name   string
+	Prefix netip.Prefix
+}
+
+// String is the part as --without spells it.
+func (d Down) String() string {
+	switch {
+	case d.Name != "":
+		return d.Name
+	case d.Prefix.IsSingleIP():
+		return d.Prefix.Addr().String()
+	}
+	return d.Prefix.String()
+}
+
+// Covers reports whether a server, by its address or its name, is inside the
+// part. An unknown name or an invalid address is inside nothing.
+func (d Down) Covers(addr netip.Addr, name string) bool {
+	if d.Name != "" {
+		return name != "" && strings.EqualFold(strings.TrimSuffix(name, "."), strings.TrimSuffix(d.Name, "."))
+	}
+	return d.Prefix.Contains(addr.Unmap())
+}
+
+// Without is inner, except that nothing it sends reaches the parts named down.
+// A query to one of them fails at once, the way a server that cannot be
+// reached fails, and nobody else is asked anything differently. kept, when it
+// is not nil, is handed each part a query was kept from, from as many
+// goroutines as are querying.
+func Without(inner Transport, down []Down, kept func(Down)) Transport {
+	if len(down) == 0 {
+		return inner
+	}
+	return &without{inner: inner, down: down, kept: kept}
+}
+
+type without struct {
+	inner Transport
+	down  []Down
+	kept  func(Down)
+}
+
+func (w *without) Proto() string { return w.inner.Proto() }
+
+func (w *without) Port() uint16 { return w.inner.Port() }
+
+func (w *without) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, name string) (*dns.Msg, time.Duration, error) {
+	for _, down := range w.down {
+		if down.Covers(server.Addr(), name) {
+			if w.kept != nil {
+				w.kept(down)
+			}
+			return nil, 0, fmt.Errorf("%w by --without %s", ErrDown, down)
+		}
+	}
+	return w.inner.Exchange(ctx, req, server, name)
 }

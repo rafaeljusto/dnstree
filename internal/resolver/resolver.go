@@ -159,6 +159,12 @@ type Config struct {
 	// asks the question.
 	Minimise bool
 
+	// Down says why a server is to be treated as unreachable, empty for one
+	// that is not. A server it names is drawn among its zone's but never
+	// asked, the way one of the wrong family is, and the walk goes wherever
+	// it would go next. Nil leaves every server up.
+	Down func(trace.Server) string
+
 	Budget Budget
 }
 
@@ -599,6 +605,14 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 			skipped.Notes = []string{fmt.Sprintf("no IPv%d address", r.cfg.Family)}
 			r.attach(parent, skipped)
 			continue
+		}
+		if r.cfg.Down != nil {
+			if why := r.cfg.Down(server); why != "" {
+				skipped := skipped(zone, server)
+				skipped.Notes = []string{why}
+				r.attach(parent, skipped)
+				continue
+			}
 		}
 		usable = append(usable, server)
 	}

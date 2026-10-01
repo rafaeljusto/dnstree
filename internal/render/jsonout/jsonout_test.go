@@ -126,6 +126,7 @@ func resolution() *trace.Trace {
 			Rcode:   "NOERROR",
 		}},
 		Warnings: []string{"the delegation to example.com. lists a nameserver the zone does not"},
+		Without:  []string{"ns1.example.com.", "192.0.2.0/24"},
 	}
 }
 

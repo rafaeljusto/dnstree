@@ -47,6 +47,7 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	tr := &trace.Trace{
 		Question: trace.Question{Name: doc.Question.Name, Type: doc.Question.Type, Class: doc.Question.Class},
 		Warnings: doc.Warnings,
+		Without:  doc.Without,
 	}
 	if tr.Elapsed, err = duration("elapsed_ms", doc.ElapsedMS); err != nil {
 		return nil, err

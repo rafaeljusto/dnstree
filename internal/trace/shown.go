@@ -39,6 +39,7 @@ func (t *Trace) Shown() *Trace {
 	shown.Question = t.Question.Shown()
 	shown.Root = t.Root.Shown()
 	shown.Warnings = shownAll(t.Warnings)
+	shown.Without = shownAll(t.Without)
 	shown.Resolvers = nil
 	for _, resolver := range t.Resolvers {
 		if resolver == nil {

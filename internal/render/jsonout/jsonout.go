@@ -35,6 +35,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 		document.Root = convert(tr.Root, tr.Timed)
 		document.Warnings = tr.Warnings
+		document.Without = tr.Without
 	}
 
 	encoder := json.NewEncoder(w)
@@ -50,6 +51,7 @@ type document struct {
 	Resolvers     []*resolver `json:"resolvers,omitempty"`
 	Root          *step       `json:"root,omitempty"`
 	Warnings      []string    `json:"warnings,omitempty"`
+	Without       []string    `json:"without,omitempty"`
 }
 
 // resolver is the same question put to a recursive server, for whatever reads

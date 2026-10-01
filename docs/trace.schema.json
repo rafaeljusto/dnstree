@@ -35,6 +35,11 @@
       "description": "What the resolver could not do, in the order it found out.",
       "type": "array",
       "items": { "type": "string" }
+    },
+    "without": {
+      "description": "What --without told the walk to treat as down: nameserver names, addresses and prefixes, as they were given. The servers inside them were never asked: the walk shows them as not queried, with a note saying which of these left them out, and a check that would have asked one carries an error saying so. An answer the walk found is one the rest of the DNS gives without them.",
+      "type": "array",
+      "items": { "type": "string" }
     }
   },
   "$defs": {

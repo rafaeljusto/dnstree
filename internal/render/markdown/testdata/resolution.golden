@@ -13,7 +13,7 @@ walked on 2026-09-24 12:00 UTC
         └── b.iana-servers.net. 199.43.133.53  (not queried)
 differs: 198.51.100.53 answers 198.51.100.1, 198.51.100.2, 198.51.100.3 (and 1 more), the walk found 93.184.216.34
 warning: the delegation to example.com. lists a nameserver the zone does not
-✔ answered in 42ms · resolvers in 9ms-23ms (1 of 3 differ, 1 did not answer) · 5 queries · 4 servers
+✔ answered in 42ms · without ns1.example.com., 192.0.2.0/24 · resolvers in 9ms-23ms (1 of 3 differ, 1 did not answer) · 5 queries · 4 servers
 ```
 
 **what happened**

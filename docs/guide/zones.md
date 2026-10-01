@@ -10,6 +10,7 @@ server says about its own answer.
 - [Which machine answered](#which-machine-answered)
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
 - [Asking only what each zone needs](#asking-only-what-each-zone-needs)
+- [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
 - [How much room an answer had](#how-much-room-an-answer-had)
 
 ## Whether the parent and the child agree
@@ -306,6 +307,68 @@ RFC 8020 reads as nothing being below it either. A resolver that minimises
 stops there; one that does not never asks the question. `--qmin` asks the whole
 name again when it meets one, the way resolvers fall back, and says under the
 tree which server did it and for which name.
+
+## Whether it still answers with a server down
+
+Every zone has more than one nameserver so that it keeps answering when one of
+them stops, but the only way to find out whether it does is to wait for that to
+happen. `--without` walks as though it already had. It takes a nameserver's
+name, an address or a prefix, as many times as needed. Every server inside it is
+drawn and never asked, and the walk goes wherever it would have gone next:
+
+```
+$ dnstree --no-asn --without hera.ns.cloudflare.com www.example.com A
+. (root)
+├── a.root-servers.net. 198.41.0.4  247ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  245ms  NOERROR  referral → example.com.
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  (not queried)  (left out by --without hera.ns.cloudflare.com.)
+│   │   ├── hera.ns.cloudflare.com. 172.64.32.162  (not queried)  (left out by --without hera.ns.cloudflare.com.)
+│   │   ├── hera.ns.cloudflare.com. 173.245.58.162  (not queried)  (left out by --without hera.ns.cloudflare.com.)
+│   │   ├── hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)  (left out by --without hera.ns.cloudflare.com.)
+│   │   ├── hera.ns.cloudflare.com. 2803:f800:50::6ca2:c0a2  (not queried)  (left out by --without hera.ns.cloudflare.com.)
+│   │   ├── hera.ns.cloudflare.com. 2a06:98c1:50::ac40:20a2  (not queried)  (left out by --without hera.ns.cloudflare.com.)
+│   │   ├── elliott.ns.cloudflare.com. 108.162.195.228  235ms  NOERROR  AA
+│   │   │   ├── www.example.com. 300 A 104.20.23.154
+│   │   │   └── www.example.com. 300 A 172.66.147.243
+│   │   ├── elliott.ns.cloudflare.com. 162.159.44.228  (not queried)
+│   │   ├── elliott.ns.cloudflare.com. 172.64.35.228  (not queried)
+│   │   ├── elliott.ns.cloudflare.com. 2606:4700:58::a29f:2ce4  (not queried)
+│   │   └── (and 2 more not queried)
+│   ├── l.gtld-servers.net. 2001:500:d937::30  (not queried)
+│   ├── j.gtld-servers.net. 192.48.79.30  (not queried)
+│   ├── j.gtld-servers.net. 2001:502:7094::30  (not queried)
+│   └── (and 22 more not queried)
+├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── b.root-servers.net. 170.247.170.2  (not queried)
+├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── (and 22 more not queried)
+✔ answered in 728ms · without hera.ns.cloudflare.com. · resolver in 243ms · 3 queries · 3 servers
+```
+
+Take the other one away as well and the line under the tree says so, and the
+run exits 2:
+
+```
+✘ no answer in 494ms · without hera.ns.cloudflare.com., elliott.ns.cloudflare.com. · resolver in 235ms · 2 queries · 2 servers
+```
+
+The backup that is not one is what this finds. A second nameserver with
+another provider is no help if the zone its own name lives in is served by the
+first, and taking the first one's address away shows that. A prefix takes a
+whole network away at once: `--without 192.0.2.0/24`.
+
+The servers are left out of everything the walk asks, the `--serial` and
+exposure checks included, and nothing else is asked any differently, so it is
+safe to point at anybody's zone. The comparison with a resolver and the AS
+lookups are not part of the walk and are left alone. A `--without` that matched
+no server the walk came to is said under the tree, since a misspelled name
+otherwise reads as a zone that survived the outage. `--diff` is refused beside
+it, because the walk it remembers would be one with part of the DNS missing.
+With `--expect answer` it is a check for CI.
+
+It shows the path dnstree would take, which is not every path. A resolver that
+has already learned which servers are slow keeps away from them, and dnstree
+starts afresh every time. Leaving out a network by its AS is not there yet.
 
 ## How much room an answer had
 

@@ -420,6 +420,58 @@ func TestRunRoot(t *testing.T) {
 	}
 }
 
+// TestRunWithout leaves a nameserver out. The zone's only one leaves nothing
+// to answer, whatever transport is there to fall back on; one the walk never
+// needed is said to have changed nothing, which is what a misspelled name looks
+// like.
+func TestRunWithout(t *testing.T) {
+	tests := map[string]struct {
+		without string
+		code    int
+		want    []string
+	}{
+		"the zone's only nameserver": {
+			without: "ns.test",
+			code:    exitNoAnswer,
+			want:    []string{"left out by --without ns.test.", "no answer in", "without ns.test."},
+		},
+		"a nameserver the walk never needed": {
+			without: "ns.example.com",
+			code:    exitAnswer,
+			want: []string{"answered in", "without ns.example.com.",
+				"--without ns.example.com. left nothing out: the walk came to no server by that name or address"},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+			child := fakens.New(t, fakens.Config{Name: "ns.test.", Origin: "test.", Zone: splitChildZone})
+
+			var stdout, stderr bytes.Buffer
+			code := run(t.Context(), []string{
+				"--root", "a.root-servers.net@" + root.Addr.String(),
+				"--port", strconv.Itoa(int(child.Addr.Port())),
+				"--tcp", "--fallback", "--without", test.without,
+				"--no-asn", "--no-compare", "--color", "never", "www.test", "A",
+			}, &stdout, &stderr)
+
+			if code != test.code {
+				t.Fatalf("got exit %d, want %d\n%s%s", code, test.code, stdout.String(), stderr.String())
+			}
+			out := stdout.String() + stderr.String()
+			for _, want := range test.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("got no %q:\n%s", want, out)
+				}
+			}
+			if test.code == exitNoAnswer && len(child.Queries()) > 0 {
+				t.Errorf("got %d queries at ns.test., which was left out", len(child.Queries()))
+			}
+		})
+	}
+}
+
 // TestRunExposure asks the zone's nameserver for the whole zone and for a
 // lookup it should not do. The transfer is open, and the tree and the
 // explanation both say so; the zone itself is never drawn.

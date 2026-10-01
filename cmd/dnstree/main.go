@@ -429,8 +429,9 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	}
 
 	carrier := transport.Config{Timeout: cfg.Timeout, Port: cfg.Port, TLS: tlsConfig}
+	outage := newOutage(cfg.Without)
 	config := resolver.Config{
-		Transport: carry(cfg.Proto, carrier),
+		Transport: outage.carry(carry(cfg.Proto, carrier)),
 		Roots:     roots,
 		DNSSEC:    cfg.DNSSEC,
 		All:       cfg.All,
@@ -454,6 +455,9 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		},
 	}
 	config.Log = log
+	if len(cfg.Without) > 0 {
+		config.Down = outage.left
+	}
 	if lookups != nil {
 		config.Discovered = func(addr netip.Addr) { lookups.Start(ctx, addr) }
 	}
@@ -465,10 +469,10 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	// Only a datagram can be truncated, and only plain DNS is worth falling
 	// back to.
 	if cfg.Proto == "udp" {
-		config.TCP = transport.NewTCP(carrier)
+		config.TCP = outage.carry(transport.NewTCP(carrier))
 	}
 	if cfg.Fallback {
-		config.Fallback = transport.NewUDP(carrier)
+		config.Fallback = outage.carry(transport.NewUDP(carrier))
 	}
 	if cfg.TrustAnchors != "" {
 		if config.Anchors, err = roothints.LoadAnchorsFile(cfg.TrustAnchors); err != nil {
@@ -480,7 +484,65 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	if err != nil {
 		return nil, err
 	}
-	return engine.Resolve(ctx, cfg.Name, cfg.Type)
+	tr, err := engine.Resolve(ctx, cfg.Name, cfg.Type)
+	outage.record(tr)
+	return tr, err
+}
+
+// outage is what --without leaves out of a walk, and which of it the walk
+// would have asked had it been there.
+type outage struct {
+	down []transport.Down
+
+	mu   sync.Mutex
+	kept map[transport.Down]bool
+}
+
+func newOutage(down []transport.Down) *outage {
+	return &outage{down: down, kept: make(map[transport.Down]bool)}
+}
+
+// left is why the walk may not ask a server, empty when it may. The walk
+// draws the server it names as one nobody asked.
+func (o *outage) left(server trace.Server) string {
+	for _, down := range o.down {
+		if down.Covers(server.IP, server.Name) {
+			o.keep(down)
+			return "left out by --without " + down.String()
+		}
+	}
+	return ""
+}
+
+// carry is inner with the outage in front of it. The walk skips what is down
+// before it asks; this keeps everything else it asks — the zone's own NS set,
+// --serial, the exposure checks, a retry over TCP or the fallback — from
+// reaching it either.
+func (o *outage) carry(inner transport.Transport) transport.Transport {
+	return transport.Without(inner, o.down, o.keep)
+}
+
+func (o *outage) keep(down transport.Down) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.kept[down] = true
+}
+
+// record writes the outage into the trace. A part the walk never tried to ask
+// changed nothing, and an answer would otherwise read as surviving it.
+func (o *outage) record(tr *trace.Trace) {
+	if tr == nil || len(o.down) == 0 {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, down := range o.down {
+		tr.Without = append(tr.Without, down.String())
+		if !o.kept[down] {
+			tr.Warnings = append(tr.Warnings, "--without "+down.String()+
+				" left nothing out: the walk came to no server by that name or address, so check the spelling if it should have")
+		}
+	}
 }
 
 // rootServers is where the walk starts: the servers --root named, the hints
