@@ -190,6 +190,12 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 	default:
 		return nil, fmt.Errorf("jsonout: %q is not how a resolver's answer can match", from.Match)
 	}
+	kept := trace.Kept(from.Kept)
+	switch kept {
+	case "", trace.KeptLonger, trace.KeptStale:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not what a resolver's TTL can say", from.Kept)
+	}
 
 	to := &trace.Resolver{
 		Rcode:    from.Rcode,
@@ -197,6 +203,7 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 		Records:  readRecords(from.Records),
 		Extended: readExtended(from.Extended),
 		Match:    match,
+		Kept:     kept,
 	}
 	var err error
 	if to.Elapsed, err = duration("elapsed_ms", from.ElapsedMS); err != nil {

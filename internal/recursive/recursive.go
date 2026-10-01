@@ -68,7 +68,51 @@ func compare(tr *trace.Trace, result *trace.Step, answer *trace.Resolver) {
 	}
 	if slices.Equal(ours, theirs) {
 		answer.Match = trace.MatchSame
+		if trace.TTL(answer.Records, tr.Question.Type) > tr.Allowed() {
+			answer.Kept = trace.KeptLonger
+		}
 		return
 	}
 	answer.Match = trace.MatchDiffers
+	if stale(tr, answer, theirs) {
+		answer.Kept = trace.KeptStale
+	}
+}
+
+// staleTTL is the TTL RFC 8767 suggests a stale answer goes out with. It is a
+// suggestion and not a rule, which is why an answer carrying it only looks
+// stale, and only when nothing the zone said accounts for it.
+const staleTTL = 30
+
+// stale is whether a differing answer looks served past its life: no
+// authoritative server the walk asked gave any of it, and it carries what
+// serve-stale hands out on a name whose own TTL is longer than that. A CDN
+// answering by place differs too, but out of records some server of its zone
+// does give.
+func stale(tr *trace.Trace, answer *trace.Resolver, theirs []string) bool {
+	if len(theirs) == 0 {
+		return false
+	}
+	cached := trace.TTL(answer.Records, tr.Question.Type)
+	if cached == 0 || cached > staleTTL || tr.Allowed() <= staleTTL {
+		return false
+	}
+
+	// Every server --all asked is a place the zone could have given it from.
+	// The asides answered other questions, a nameserver's address among them.
+	served := make(map[string]bool)
+	for step := range tr.Mainline() {
+		if step.Minimised || (step.Kind != trace.KindAnswer && step.Kind != trace.KindCNAME) {
+			continue
+		}
+		for _, data := range trace.Answers(step.Records, tr.Question.Type) {
+			served[data] = true
+		}
+	}
+	for _, data := range theirs {
+		if served[data] {
+			return false
+		}
+	}
+	return true
 }

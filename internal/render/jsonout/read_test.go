@@ -78,6 +78,19 @@ func TestReadRoundTrip(t *testing.T) {
 				DDR:    &trace.Discovery{Err: "i/o timeout"},
 			}},
 		},
+		"resolvers whose TTLs said something of their copies": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+				Rcode:  "NOERROR", Match: trace.MatchSame, Kept: trace.KeptLonger,
+				Records: []trace.RR{{Name: "example.", TTL: 3600, Type: "A", Data: "192.0.2.10"}},
+			}, {
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.54"), Port: 53},
+				Rcode:  "NOERROR", Match: trace.MatchDiffers, Kept: trace.KeptStale,
+				Records: []trace.RR{{Name: "example.", TTL: 30, Type: "A", Data: "198.51.100.1"}},
+			}},
+		},
 		"a walk that kept when each query went out": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Timed:    true,
@@ -250,6 +263,11 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "cookie": "crumbled"}]}}`,
 			want: `"crumbled"`,
+		},
+		"a resolver's TTL saying something nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "rcode": "NOERROR", "kept": "forever"}]}`,
+			want: `"forever"`,
 		},
 		"an address that is not one": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

@@ -4,6 +4,7 @@ Holding the walk against the recursive resolvers people actually use.
 
 - [Against your resolver](#against-your-resolver)
 - [Asking from several places at once](#asking-from-several-places-at-once)
+- [Keeping an answer longer than the zone allows](#keeping-an-answer-longer-than-the-zone-allows)
 - [Asking from somewhere else](#asking-from-somewhere-else)
 - [Whether a resolver can be used encrypted](#whether-a-resolver-can-be-used-encrypted)
 
@@ -70,6 +71,34 @@ ask rather than a poll. There is deliberately no shorthand for "the public
 resolvers" — that would put a list of somebody else's addresses in the binary
 and send the name being looked up to all of them. A set worth having every day
 belongs in the [file of defaults](configuring.md#defaults), which may carry a `resolver` line for each.
+
+## Keeping an answer longer than the zone allows
+
+The TTL a resolver hands its answer out with is read against the one the zone
+gives it. A resolver that raises short TTLs to a floor of its own is named on a
+line under the tree, because a change the zone means to take effect in a second
+takes as long as that floor for everybody using it:
+
+```
+$ dnstree --resolver 94.140.14.14 --explain news.ycombinator.com A
+...
+🧊 94.140.14.14 keeps this with ttl 60, the zone gives 1
+✔ answered in 2s · resolver in 249ms · 6 queries · 3 servers
+
+· news.ycombinator.com. A is 209.216.230.207, answered by ns-225.awsdns-28.com. for ycombinator.com.
+· a cache may hold this answer for 1 second, and the delegation to ycombinator.com. for 2 days
+· 94.140.14.14 keeps this for 1 minute where the zone allows 1 second, so a change to it takes that long to reach the clients using it
+```
+
+An answer that differs from the walk's, that no server of the zone gave it, and
+that carries 30 seconds or less on a name the zone keeps for longer, looks
+stale: 30 seconds is what a resolver serving past an answer's life hands out
+([RFC 8767](https://www.rfc-editor.org/rfc/rfc8767)). It is said as a look, not
+a finding — the number is a suggestion, not a rule — and with `--all` an
+answer any of the zone's servers gave the walk is not stale, only tailored.
+`--format openmetrics` carries both TTLs, `dnstree_answer_ttl_seconds` and
+`dnstree_resolver_ttl_seconds`, for a monitoring system to hold one against
+the other.
 
 ## Asking from somewhere else
 

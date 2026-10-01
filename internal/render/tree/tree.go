@@ -128,6 +128,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, line := range r.differences(tr) {
 		r.write(line + "\n")
 	}
+	for _, line := range r.kept(tr) {
+		r.write(line + "\n")
+	}
 	for _, line := range r.designations(tr) {
 		r.write(line + "\n")
 	}
@@ -627,6 +630,41 @@ func (r *renderer) differences(tr *trace.Trace) []string {
 		if answer.Match == trace.MatchDiffers {
 			lines = append(lines, r.difference(result, answer, tr.Question.Type))
 		}
+	}
+	return lines
+}
+
+// kept is what each resolver's TTL said of the copy it serves, one line each,
+// and only where it said something: a resolver holding the walk's answer longer
+// than the zone allows, or serving one that looks stale.
+func (r *renderer) kept(tr *trace.Trace) []string {
+	zone := tr.Allowed()
+
+	var lines []string
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Kept == "" {
+			continue
+		}
+		who := "the resolver"
+		if answer.Server.IP.IsValid() {
+			who = answer.Server.IP.String()
+		}
+		cached := trace.TTL(answer.Records, tr.Question.Type)
+
+		var text string
+		switch answer.Kept {
+		case trace.KeptLonger:
+			text = fmt.Sprintf("%s keeps this with ttl %d, the zone gives %d", who, cached, zone)
+		case trace.KeptStale:
+			text = fmt.Sprintf("%s looks stale: no server of the zone gave its answer, and ttl %d is what serve-stale hands out", who, cached)
+		default:
+			continue
+		}
+		mark := "ttl: "
+		if r.glyphs.icons {
+			mark = spaced("🧊")
+		}
+		lines = append(lines, r.paint.paint(mark+text, yellow))
 	}
 	return lines
 }

@@ -105,7 +105,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 	}
 
 	probes(m, tr)
-	resolvers(m, tr.Resolvers)
+	resolvers(m, tr)
 
 	m.family("dnstree_warnings", "", "what the walk could not do")
 	m.sample("dnstree_warnings", strconv.Itoa(len(tr.Warnings)))
@@ -139,15 +139,25 @@ func probes(m *metrics, tr *trace.Trace) {
 
 // resolvers writes what the recursive servers made of the question, leaving
 // out the ones that did not answer: a time for them would read as a fast one.
-func resolvers(m *metrics, answers []*trace.Resolver) {
-	var timed, compared []*trace.Resolver
-	for _, answer := range answers {
+func resolvers(m *metrics, tr *trace.Trace) {
+	// The zone's TTL is what a resolver's is read against: one above it is a
+	// resolver keeping the answer longer than the zone allows.
+	if zone := tr.Allowed(); zone > 0 {
+		m.family("dnstree_answer_ttl_seconds", "seconds", "the TTL the zone gives the answer")
+		m.sample("dnstree_answer_ttl_seconds", strconv.FormatUint(uint64(zone), 10))
+	}
+
+	var timed, compared, kept []*trace.Resolver
+	for _, answer := range tr.Resolvers {
 		if answer == nil || !answer.Server.IP.IsValid() || answer.Err != "" {
 			continue
 		}
 		timed = append(timed, answer)
 		if answer.Match != "" {
 			compared = append(compared, answer)
+		}
+		if trace.TTL(answer.Records, tr.Question.Type) > 0 {
+			kept = append(kept, answer)
 		}
 	}
 
@@ -161,6 +171,13 @@ func resolvers(m *metrics, answers []*trace.Resolver) {
 		m.family("dnstree_resolver_agrees", "", "whether each recursive server answered what the walk found")
 		for _, answer := range compared {
 			m.sample("dnstree_resolver_agrees", flag(answer.Match == trace.MatchSame), label{"resolver", answer.Server.IP.String()})
+		}
+	}
+	if len(kept) > 0 {
+		m.family("dnstree_resolver_ttl_seconds", "seconds", "the TTL each recursive server handed its answer out with")
+		for _, answer := range kept {
+			m.sample("dnstree_resolver_ttl_seconds", strconv.FormatUint(uint64(trace.TTL(answer.Records, tr.Question.Type)), 10),
+				label{"resolver", answer.Server.IP.String()})
 		}
 	}
 }

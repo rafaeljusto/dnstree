@@ -87,8 +87,14 @@ func resolution() *trace.Trace {
 		Elapsed:  2*time.Second + 41*time.Millisecond,
 		Started:  started,
 		Resolvers: []*trace.Resolver{
-			{Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53}, Elapsed: 23 * time.Millisecond, Match: trace.MatchSame},
-			{Server: trace.Server{IP: netip.MustParseAddr("192.0.2.54"), Port: 53}, Elapsed: 31 * time.Millisecond, Match: trace.MatchDiffers},
+			{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53}, Elapsed: 23 * time.Millisecond, Match: trace.MatchSame,
+				Records: []trace.RR{{Name: "www.example.com.", TTL: 3412, Type: "A", Data: "93.184.216.34"}},
+			},
+			{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.54"), Port: 53}, Elapsed: 31 * time.Millisecond, Match: trace.MatchDiffers,
+				Records: []trace.RR{{Name: "www.example.com.", TTL: 30, Type: "A", Data: "192.0.2.80"}}, Kept: trace.KeptStale,
+			},
 			{Server: trace.Server{IP: netip.MustParseAddr("192.0.2.55"), Port: 53}, Err: "i/o timeout"},
 		},
 		Warnings: []string{"the delegation to example.com. lists a nameserver the zone does not"},

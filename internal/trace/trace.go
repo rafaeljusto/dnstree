@@ -71,6 +71,10 @@ type Resolver struct {
 	// nothing to compare.
 	Match Match
 
+	// Kept is how long the resolver means to go on serving its copy against how
+	// long the zone allows, empty where the TTLs say nothing either way.
+	Kept Kept
+
 	// DDR is what the server said of its encrypted selves, nil where --ddr did
 	// not ask.
 	DDR *Discovery
@@ -120,6 +124,22 @@ type Match string
 const (
 	MatchSame    Match = "same"
 	MatchDiffers Match = "differs"
+)
+
+// Kept is what the resolver's TTL says about the copy it is serving. Like a
+// Match, it is a reading and not a verdict: nothing a resolver answers proves
+// why it answered so.
+type Kept string
+
+// What the TTLs came to.
+const (
+	// KeptLonger is the walk's own answer with a TTL above the zone's: a
+	// resolver raising short TTLs to a floor of its own.
+	KeptLonger Kept = "longer"
+
+	// KeptStale is an answer no server of the zone gave the walk, carrying the
+	// few seconds serve-stale hands out (RFC 8767).
+	KeptStale Kept = "stale"
 )
 
 // ExtendedError is what a server said about its own answer, in the codes of
@@ -849,6 +869,26 @@ func TTL(records []RR, qtype string) uint32 {
 		}
 	}
 	return shortest
+}
+
+// Allowed is the longest any server of the zone let the answer be cached, read
+// from every answer the walk took rather than the one it ended on: with --all,
+// servers partway through a change of TTL disagree, and a resolver holding what
+// one of them gave holds it no longer than that server allowed. A minimised hop
+// answered another question, and an aside another name.
+func (t *Trace) Allowed() uint32 {
+	var longest uint32
+	for step := range t.Mainline() {
+		if step.Minimised || (step.Kind != KindAnswer && step.Kind != KindCNAME) {
+			continue
+		}
+		for _, record := range step.Records {
+			if strings.EqualFold(record.Type, t.Question.Type) {
+				longest = max(longest, record.TTL)
+			}
+		}
+	}
+	return longest
 }
 
 // Trust is the step carrying the verdict the answer rests on: the one recorded

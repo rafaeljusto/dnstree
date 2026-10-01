@@ -74,6 +74,11 @@
           "type": "string",
           "enum": ["same", "differs"]
         },
+        "kept": {
+          "description": "What its TTL says of the copy it is serving, absent where it says nothing either way: longer, the walk's answer kept past the TTL the zone gives it; stale, an answer no server of the zone gave the walk, carrying the 30 seconds or less serve-stale hands out (RFC 8767). A reading, not a verdict.",
+          "type": "string",
+          "enum": ["longer", "stale"]
+        },
         "ddr": { "$ref": "#/$defs/discovery" }
       }
     },

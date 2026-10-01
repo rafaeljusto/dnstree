@@ -165,3 +165,108 @@ func TestCompareJudgesEachOnItsOwn(t *testing.T) {
 		}
 	}
 }
+
+// withTTL is the same records, every one of them kept for ttl seconds.
+func withTTL(records []trace.RR, ttl uint32) []trace.RR {
+	for i := range records {
+		records[i].TTL = ttl
+	}
+	return records
+}
+
+func TestCompareKept(t *testing.T) {
+	// zoneOf is a walk whose answer the zone gives with a TTL of 300, and
+	// asked is the resolver's answer with the TTL it handed out.
+	zoneOf := func(asked *trace.Resolver, data ...string) *trace.Trace {
+		tr := traceOf("NOERROR", data, asked)
+		withTTL(tr.Root.Children[0].Records, 300)
+		return tr
+	}
+	asked := func(ttl uint32, data ...string) *trace.Resolver {
+		answer := answerOf("NOERROR", data...)
+		withTTL(answer.Records, ttl)
+		return answer
+	}
+
+	for _, tt := range []struct {
+		name string
+		tr   *trace.Trace
+		kept trace.Kept
+	}{{
+		name: "the same answer with a TTL above the zone's",
+		tr:   zoneOf(asked(3600, "192.0.2.10"), "192.0.2.10"),
+		kept: trace.KeptLonger,
+	}, {
+		name: "the same answer fetched fresh",
+		tr:   zoneOf(asked(300, "192.0.2.10"), "192.0.2.10"),
+	}, {
+		// Less than the zone gives is a copy partway through its life, which is
+		// what a cache is for.
+		name: "the same answer partway through its life",
+		tr:   zoneOf(asked(120, "192.0.2.10"), "192.0.2.10"),
+	}, {
+		name: "an answer the zone does not give, with serve-stale's 30 seconds",
+		tr:   zoneOf(asked(30, "198.51.100.1"), "192.0.2.10"),
+		kept: trace.KeptStale,
+	}, {
+		name: "an answer the zone does not give, with a long TTL",
+		tr:   zoneOf(asked(3600, "198.51.100.1"), "192.0.2.10"),
+	}, {
+		// The walk gets the zone's whole TTL, so a few seconds left is a copy
+		// near its end, not a stale one, where the zone itself gives only 30.
+		name: "an answer the zone does not give, on a zone that keeps it 30 seconds",
+		tr: func() *trace.Trace {
+			tr := traceOf("NOERROR", []string{"192.0.2.10"}, asked(20, "198.51.100.1"))
+			withTTL(tr.Root.Children[0].Records, 30)
+			return tr
+		}(),
+	}, {
+		// With --all each server is a place to have been answered from: a CDN
+		// answering by place gives some resolver what one of them gave the walk.
+		name: "an answer another server of the zone gave the walk",
+		tr: func() *trace.Trace {
+			tr := zoneOf(asked(30, "198.51.100.1"), "192.0.2.10")
+			tr.Root.Children = append(tr.Root.Children, &trace.Step{
+				Zone: "test.", Kind: trace.KindAnswer, Rcode: "NOERROR",
+				Records: withTTL([]trace.RR{{Name: "www.test.", Type: "A", Data: "198.51.100.1"}}, 300),
+			})
+			return tr
+		}(),
+		kept: "",
+	}, {
+		// A nameserver's address looked up on the way answered another
+		// question, and giving the same address says nothing about this one.
+		name: "an answer only an aside gave",
+		tr: func() *trace.Trace {
+			tr := zoneOf(asked(30, "198.51.100.1"), "192.0.2.10")
+			tr.Root.Children = append(tr.Root.Children, &trace.Step{
+				Zone: "test.", Kind: trace.KindAnswer, Rcode: "NOERROR", Aside: true,
+				Records: withTTL([]trace.RR{{Name: "ns1.test.", Type: "A", Data: "198.51.100.1"}}, 300),
+			})
+			return tr
+		}(),
+		kept: trace.KeptStale,
+	}, {
+		// Two servers of the zone partway through a change of TTL: holding
+		// what the slower one gave is holding no longer than it allowed.
+		name: "the TTL another server of the zone gave the walk",
+		tr: func() *trace.Trace {
+			tr := zoneOf(asked(3000, "192.0.2.10"), "192.0.2.10")
+			tr.Root.Children = append([]*trace.Step{{
+				Zone: "test.", Kind: trace.KindAnswer, Rcode: "NOERROR",
+				Records: withTTL([]trace.RR{{Name: "www.test.", Type: "A", Data: "192.0.2.10"}}, 3600),
+			}}, tr.Root.Children...)
+			return tr
+		}(),
+	}, {
+		name: "the name gone for the resolver",
+		tr:   zoneOf(answerOf("NXDOMAIN"), "192.0.2.10"),
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			recursive.Compare(tt.tr)
+			if got := tt.tr.Resolvers[0].Kept; got != tt.kept {
+				t.Errorf("got %q, want %q", got, tt.kept)
+			}
+		})
+	}
+}

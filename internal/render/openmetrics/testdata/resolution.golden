@@ -41,6 +41,10 @@ dnstree_cds{name="www.example.com.",type="A",state="pending"} 1
 dnstree_cds{name="www.example.com.",type="A",state="delete"} 0
 dnstree_cds{name="www.example.com.",type="A",state="inconsistent"} 0
 dnstree_cds{name="www.example.com.",type="A",state="unchecked"} 0
+# TYPE dnstree_answer_ttl_seconds gauge
+# UNIT dnstree_answer_ttl_seconds seconds
+# HELP dnstree_answer_ttl_seconds the TTL the zone gives the answer
+dnstree_answer_ttl_seconds{name="www.example.com.",type="A"} 3600
 # TYPE dnstree_resolver_seconds gauge
 # UNIT dnstree_resolver_seconds seconds
 # HELP dnstree_resolver_seconds how long each recursive server took to answer the same question
@@ -50,6 +54,11 @@ dnstree_resolver_seconds{name="www.example.com.",type="A",resolver="192.0.2.54"}
 # HELP dnstree_resolver_agrees whether each recursive server answered what the walk found
 dnstree_resolver_agrees{name="www.example.com.",type="A",resolver="192.0.2.53"} 1
 dnstree_resolver_agrees{name="www.example.com.",type="A",resolver="192.0.2.54"} 0
+# TYPE dnstree_resolver_ttl_seconds gauge
+# UNIT dnstree_resolver_ttl_seconds seconds
+# HELP dnstree_resolver_ttl_seconds the TTL each recursive server handed its answer out with
+dnstree_resolver_ttl_seconds{name="www.example.com.",type="A",resolver="192.0.2.53"} 3412
+dnstree_resolver_ttl_seconds{name="www.example.com.",type="A",resolver="192.0.2.54"} 30
 # TYPE dnstree_warnings gauge
 # HELP dnstree_warnings what the walk could not do
 dnstree_warnings{name="www.example.com.",type="A"} 1

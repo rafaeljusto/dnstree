@@ -807,6 +807,31 @@ func TestCache(t *testing.T) {
 			}(),
 			avoid: []string{"from its cache"},
 		},
+		"a resolver keeping the answer past the zone's TTL says how much longer": {
+			trace: func() *trace.Trace {
+				tr := walk(answered(300))
+				tr.Resolvers = []*trace.Resolver{{
+					Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+					Records: []trace.RR{{Name: "www.test.", TTL: 3600, Type: "A", Data: "192.0.2.1"}},
+					Match:   trace.MatchSame, Kept: trace.KeptLonger,
+				}}
+				return tr
+			}(),
+			want: []string{"192.0.2.53 keeps this for 1 hour where the zone allows 5 minutes"},
+		},
+		"a resolver serving what looks stale says so, and not that it is caching": {
+			trace: func() *trace.Trace {
+				tr := walk(answered(300))
+				tr.Resolvers = []*trace.Resolver{{
+					Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+					Records: []trace.RR{{Name: "www.test.", TTL: 30, Type: "A", Data: "198.51.100.1"}},
+					Match:   trace.MatchDiffers, Kept: trace.KeptStale,
+				}}
+				return tr
+			}(),
+			want:  []string{"192.0.2.53 looks to be serving a stale answer", "30 seconds left is what serve-stale hands out"},
+			avoid: []string{"from its cache"},
+		},
 		"a walk that came to nothing has nothing to say about caches": {
 			trace: walk(hop(trace.KindTimeout, "ns.test.")),
 			avoid: []string{"a cache may hold"},

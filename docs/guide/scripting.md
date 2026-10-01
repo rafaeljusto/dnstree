@@ -257,7 +257,7 @@ dnstree_result{name="www.example.com.",type="A",kind="none"} 0
 # TYPE dnstree_walk_seconds gauge
 # UNIT dnstree_walk_seconds seconds
 # HELP dnstree_walk_seconds how long the walk took
-dnstree_walk_seconds{name="www.example.com.",type="A"} 2.247598709
+dnstree_walk_seconds{name="www.example.com.",type="A"} 1.9746477919999998
 # TYPE dnstree_queries gauge
 # HELP dnstree_queries the queries the walk sent
 dnstree_queries{name="www.example.com.",type="A"} 6
@@ -267,9 +267,9 @@ dnstree_failed_queries{name="www.example.com.",type="A"} 0
 # TYPE dnstree_hop_seconds gauge
 # UNIT dnstree_hop_seconds seconds
 # HELP dnstree_hop_seconds how long each query on the path took, a timeout included
-dnstree_hop_seconds{name="www.example.com.",type="A",zone=".",server="a.root-servers.net.",address="198.41.0.4",asked="www.example.com."} 0.353333417
-dnstree_hop_seconds{name="www.example.com.",type="A",zone="com.",server="l.gtld-servers.net.",address="192.41.162.30",asked="www.example.com."} 0.285808584
-dnstree_hop_seconds{name="www.example.com.",type="A",zone="example.com.",server="hera.ns.cloudflare.com.",address="108.162.192.162",asked="www.example.com."} 0.266672916
+dnstree_hop_seconds{name="www.example.com.",type="A",zone=".",server="a.root-servers.net.",address="198.41.0.4",asked="www.example.com."} 0.245787625
+dnstree_hop_seconds{name="www.example.com.",type="A",zone="com.",server="l.gtld-servers.net.",address="192.41.162.30",asked="www.example.com."} 0.244679917
+dnstree_hop_seconds{name="www.example.com.",type="A",zone="example.com.",server="hera.ns.cloudflare.com.",address="108.162.192.162",asked="www.example.com."} 0.232406958
 # TYPE dnstree_dnssec gauge
 # HELP dnstree_dnssec how far the chain of trust got, one of secure, insecure, bogus or indeterminate
 dnstree_dnssec{name="www.example.com.",type="A",state="secure"} 1
@@ -279,14 +279,22 @@ dnstree_dnssec{name="www.example.com.",type="A",state="indeterminate"} 0
 # TYPE dnstree_signature_left_seconds gauge
 # UNIT dnstree_signature_left_seconds seconds
 # HELP dnstree_signature_left_seconds how long the first signature to run out had left when the walk was made
-dnstree_signature_left_seconds{name="www.example.com.",type="A"} 90001.697257
+dnstree_signature_left_seconds{name="www.example.com.",type="A"} 90001.49201
+# TYPE dnstree_answer_ttl_seconds gauge
+# UNIT dnstree_answer_ttl_seconds seconds
+# HELP dnstree_answer_ttl_seconds the TTL the zone gives the answer
+dnstree_answer_ttl_seconds{name="www.example.com.",type="A"} 300
 # TYPE dnstree_resolver_seconds gauge
 # UNIT dnstree_resolver_seconds seconds
 # HELP dnstree_resolver_seconds how long each recursive server took to answer the same question
-dnstree_resolver_seconds{name="www.example.com.",type="A",resolver="8.8.8.8"} 0.352785333
+dnstree_resolver_seconds{name="www.example.com.",type="A",resolver="8.8.8.8"} 0.244470625
 # TYPE dnstree_resolver_agrees gauge
 # HELP dnstree_resolver_agrees whether each recursive server answered what the walk found
 dnstree_resolver_agrees{name="www.example.com.",type="A",resolver="8.8.8.8"} 1
+# TYPE dnstree_resolver_ttl_seconds gauge
+# UNIT dnstree_resolver_ttl_seconds seconds
+# HELP dnstree_resolver_ttl_seconds the TTL each recursive server handed its answer out with
+dnstree_resolver_ttl_seconds{name="www.example.com.",type="A",resolver="8.8.8.8"} 300
 # TYPE dnstree_warnings gauge
 # HELP dnstree_warnings what the walk could not do
 dnstree_warnings{name="www.example.com.",type="A"} 0

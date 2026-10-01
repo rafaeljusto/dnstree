@@ -67,6 +67,10 @@ type resolver struct {
 	// "differs", or absent where there was nothing to compare.
 	Match string `json:"match,omitempty"`
 
+	// Kept is what its TTL says of its copy: "longer" than the zone allows,
+	// "stale", or absent where it says nothing either way.
+	Kept string `json:"kept,omitempty"`
+
 	DDR *discovery `json:"ddr,omitempty"`
 }
 
@@ -341,6 +345,7 @@ func convertResolver(from *trace.Resolver) *resolver {
 		Extended:  convertExtended(from.Extended),
 		Subnet:    convertSubnet(from.Subnet),
 		Match:     string(from.Match),
+		Kept:      string(from.Kept),
 		DDR:       convertDiscovery(from.DDR),
 	}
 }

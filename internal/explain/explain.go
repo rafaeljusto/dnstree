@@ -283,10 +283,11 @@ func held(result *trace.Step, qtype string) (uint32, string) {
 }
 
 // leftover is the resolver's own copy, said only where it is older than the
-// zone would make it. A resolver that had to go and fetch the answer hands back
-// the zone's lifetime entire, which says nothing the line above it has not; one
-// that hands back less is answering from a cache, and how much less is how long
-// it will go on doing so.
+// zone would make it, or where the comparison read something in its TTL. A
+// resolver that had to go and fetch the answer hands back the zone's lifetime
+// entire, which says nothing the line above it has not; one that hands back
+// less is answering from a cache, and how much less is how long it will go on
+// doing so.
 func leftover(tr *trace.Trace) []Finding {
 	result := tr.Result()
 	if result == nil {
@@ -300,12 +301,21 @@ func leftover(tr *trace.Trace) []Finding {
 	var findings []Finding
 	for _, answer := range tr.Resolvers {
 		cached := trace.TTL(answer.Records, tr.Question.Type)
-		if cached == 0 || cached >= zone {
-			continue
+		switch {
+		case answer.Kept == trace.KeptLonger:
+			findings = append(findings, Finding{Topic: Cache, Level: Warn, Text: fmt.Sprintf(
+				"%s keeps this for %s where the zone allows %s, so a change to it takes that long to reach the clients using it",
+				answer.Server.IP, spell(cached), spell(tr.Allowed()))})
+		case answer.Kept == trace.KeptStale:
+			findings = append(findings, Finding{Topic: Cache, Level: Warn, Text: fmt.Sprintf(
+				"%s looks to be serving a stale answer: no server of the zone gave it to the walk, "+
+					"and %s left is what serve-stale hands out (RFC 8767); a resolver that cannot reach the zone does this",
+				answer.Server.IP, spell(cached))})
+		case cached != 0 && cached < zone:
+			findings = append(findings, Finding{Topic: Cache, Level: Note, Text: fmt.Sprintf(
+				"%s is answering this from its cache, with %s left on the copy it is serving",
+				answer.Server.IP, spell(cached))})
 		}
-		findings = append(findings, Finding{Topic: Cache, Level: Note, Text: fmt.Sprintf(
-			"%s is answering this from its cache, with %s left on the copy it is serving",
-			answer.Server.IP, spell(cached))})
 	}
 	return findings
 }

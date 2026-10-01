@@ -179,6 +179,50 @@ func TestRenderAgreementIsQuiet(t *testing.T) {
 	}
 }
 
+func TestRenderKept(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		tr   func() *trace.Trace
+		want string
+	}{{
+		name: "a resolver keeping the walk's answer past the zone's TTL",
+		tr: func() *trace.Trace {
+			tr := differing([]string{"192.0.2.10"}, []string{"192.0.2.10"}, "NOERROR")
+			tr.Resolvers[0].Match, tr.Resolvers[0].Kept = trace.MatchSame, trace.KeptLonger
+			tr.Resolvers[0].Records[0].TTL = 3600
+			return tr
+		},
+		want: "ttl: 192.168.1.1 keeps this with ttl 3600, the zone gives 300",
+	}, {
+		name: "a resolver serving what looks like a stale answer",
+		tr: func() *trace.Trace {
+			tr := differing([]string{"192.0.2.10"}, []string{"10.0.0.1"}, "NOERROR")
+			tr.Resolvers[0].Kept = trace.KeptStale
+			tr.Resolvers[0].Records[0].TTL = 30
+			return tr
+		},
+		want: "ttl: 192.168.1.1 looks stale: no server of the zone gave its answer, and ttl 30 is what serve-stale hands out",
+	}, {
+		name: "a resolver whose TTL said nothing",
+		tr: func() *trace.Trace {
+			return differing([]string{"192.0.2.10"}, []string{"10.0.0.1"}, "NOERROR")
+		},
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			out := draw(t, tt.tr())
+			if tt.want == "" {
+				if strings.Contains(out, "ttl:") {
+					t.Errorf("got %q, want nothing said about the TTL", out)
+				}
+				return
+			}
+			if !strings.Contains(out, tt.want) {
+				t.Errorf("got %q, want it to carry %q", out, tt.want)
+			}
+		})
+	}
+}
+
 // TestRenderDifferenceIsShortened covers a round robin big enough to push the
 // tree off the screen. The first few and a count say everything the reader
 // needs; the rest is in --format json.

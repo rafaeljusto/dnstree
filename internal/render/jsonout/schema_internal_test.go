@@ -115,6 +115,10 @@ func TestSchemaEnums(t *testing.T) {
 			def: "resolver", property: "match",
 			want: []string{string(trace.MatchSame), string(trace.MatchDiffers)},
 		},
+		"what a resolver's TTL said of its copy": {
+			def: "resolver", property: "kept",
+			want: []string{string(trace.KeptLonger), string(trace.KeptStale)},
+		},
 	}
 
 	for name, test := range tests {
