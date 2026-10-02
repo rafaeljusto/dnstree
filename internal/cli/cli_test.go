@@ -189,6 +189,21 @@ func TestParse(t *testing.T) {
 			args: []string{"--from", "after.json", "--against", "before.json"},
 			want: cli.Config{From: "after.json", Against: "before.json"},
 		},
+		"several types of one name": {
+			args: []string{"example.com", "a", "aaaa", "mx"},
+			want: cli.Config{Name: "example.com", Type: "A", More: []cli.Question{
+				{Name: "example.com", Type: "AAAA"}, {Name: "example.com", Type: "MX"},
+			}},
+		},
+		"several types, each remembered against its own last walk": {
+			args: []string{"--diff", "--live", "münchen.de", "A", "AAAA"},
+			want: cli.Config{Name: "xn--mnchen-3ya.de", Type: "A", Diff: true, Live: true,
+				More: []cli.Question{{Name: "xn--mnchen-3ya.de", Type: "AAAA"}}},
+		},
+		"names from a file": {
+			args: []string{"--names", "names.txt", "--format", "markdown"},
+			want: cli.Config{Names: "names.txt", Format: "markdown"},
+		},
 		"a walk made now, held against one saved": {
 			args: []string{"--against", "-", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Against: "-"},
@@ -244,67 +259,78 @@ func expectations(tb testing.TB, values ...string) []expect.Expectation {
 
 func TestParseRejects(t *testing.T) {
 	tests := map[string][]string{
-		"nothing to resolve":                 {},
-		"too many arguments":                 {"example.com", "A", "please"},
-		"two address families":               {"-4", "-6", "example.com"},
-		"a name no punycode can spell":       {"\u202eexample.com"},
-		"two transports":                     {"--udp", "--doh", "example.com"},
-		"an unknown format":                  {"--format", "runes", "example.com"},
-		"live json":                          {"--format", "json", "--live", "example.com"},
-		"live dot":                           {"--format", "dot", "--live", "example.com"},
-		"live web":                           {"--format", "web", "--live", "example.com"},
-		"watched json":                       {"--format", "json", "--watch", "30s", "example.com"},
-		"watched dot":                        {"--format", "dot", "--watch", "30s", "example.com"},
-		"watched web":                        {"--format", "web", "--watch", "30s", "example.com"},
-		"live web-3d":                        {"--format", "web-3d", "--live", "example.com"},
-		"watched web-3d":                     {"--format", "web-3d", "--watch", "30s", "example.com"},
-		"a watch tighter than a second":      {"--watch", "100ms", "example.com"},
-		"a watch of no time at all":          {"--watch", "-1s", "example.com"},
-		"a page nobody serves":               {"--web-addr", "127.0.0.1:8080", "example.com"},
-		"a browser for a tree":               {"--no-browser", "example.com"},
-		"explained json":                     {"--format", "json", "--explain", "example.com"},
-		"explained dot":                      {"--format", "dot", "--explain", "example.com"},
-		"compared json":                      {"--format", "json", "--diff", "example.com"},
-		"compared dot":                       {"--format", "dot", "--diff", "example.com"},
-		"live mermaid":                       {"--format", "mermaid", "--live", "example.com"},
-		"watched mermaid":                    {"--format", "mermaid", "--watch", "30s", "example.com"},
-		"explained mermaid":                  {"--format", "mermaid", "--explain", "example.com"},
-		"compared mermaid":                   {"--format", "mermaid", "--diff", "example.com"},
-		"live waterfall":                     {"--format", "waterfall", "--live", "example.com"},
-		"watched waterfall":                  {"--format", "waterfall-ascii", "--watch", "30s", "example.com"},
-		"explained gantt chart":              {"--format", "waterfall-mermaid", "--explain", "example.com"},
-		"a page for a waterfall":             {"--format", "waterfall", "--no-browser", "example.com"},
-		"live markdown":                      {"--format", "markdown", "--live", "example.com"},
-		"watched markdown":                   {"--format", "markdown", "--watch", "30s", "example.com"},
-		"live openmetrics":                   {"--format", "openmetrics", "--live", "example.com"},
-		"watched openmetrics":                {"--format", "openmetrics", "--watch", "30s", "example.com"},
-		"explained openmetrics":              {"--format", "openmetrics", "--explain", "example.com"},
-		"compared openmetrics":               {"--format", "openmetrics", "--diff", "example.com"},
-		"a walk already made, and a name":    {"--from", "walk.json", "example.com"},
-		"a walk already made, drawn live":    {"--from", "walk.json", "--live"},
-		"a walk already made, watched":       {"--from", "walk.json", "--watch", "30s"},
-		"a walk already made, remembered":    {"--from", "walk.json", "--diff"},
-		"held against a file and the cache":  {"--against", "walk.json", "--diff", "example.com"},
-		"both walks from the standard input": {"--from", "-", "--against", "-"},
-		"held against a walk, as json":       {"--format", "json", "--against", "walk.json", "example.com"},
-		"a walk already made, re-checked":    {"--dnssec", "--from", "walk.json"},
-		"a walk already made, re-asked":      {"--from", "walk.json", "--qmin", "--timeout", "3s"},
-		"a walk already made, sent cookies":  {"--from", "walk.json", "--cookie"},
-		"a walk already made, probed":        {"--from", "walk.json", "--check-axfr"},
-		"a lifetime that is not one":         {"--expect", "fresh:soon", "example.com"},
-		"a reverse lookup of no address":     {"-x", "example.com"},
-		"a reverse lookup and a name":        {"-x", "192.0.2.1", "example.com"},
-		"a reverse lookup and a type":        {"-x", "192.0.2.1", "A"},
-		"a reverse lookup of a saved walk":   {"--from", "walk.json", "-x", "192.0.2.1"},
-		"a request weighed unsigned":         {"--check-ds", "example.com"},
-		"designations asked of no resolver":  {"--ddr", "--no-compare", "example.com"},
-		"a walk already made, asked for ddr": {"--from", "walk.json", "--ddr"},
-		"an unknown colour":                  {"--color", "sometimes", "example.com"},
-		"a timeout of nothing":               {"--timeout", "0", "example.com"},
-		"a negative retry count":             {"--retries", "-1", "example.com"},
-		"a port beyond the range":            {"--port", "70000", "example.com"},
-		"a flag nobody has":                  {"--recursive", "example.com"},
-		"help":                               {"--help"},
+		"nothing to resolve":                       {},
+		"a lookup that is not one among several":   {"example.com", "A", "ANY"},
+		"names from a file and a name as well":     {"--names", "names.txt", "example.com"},
+		"names from a file and an address":         {"--names", "names.txt", "-x", "192.0.2.1"},
+		"names from a file and a saved walk":       {"--names", "names.txt", "--from", "walk.json"},
+		"several types written as one json":        {"--format", "json", "example.com", "A", "AAAA"},
+		"several types served as one page":         {"--format", "web", "example.com", "A", "AAAA"},
+		"several types measured as one":            {"--format", "openmetrics", "example.com", "A", "AAAA"},
+		"several types held to one expectation":    {"--expect", "answer", "example.com", "A", "AAAA"},
+		"several types held against one walk":      {"--against", "walk.json", "example.com", "A", "AAAA"},
+		"several types watched":                    {"--watch", "30s", "example.com", "A", "AAAA"},
+		"names from a file written as one json":    {"--format", "json", "--names", "names.txt"},
+		"names from a file held to an expectation": {"--names", "-", "--expect", "answer"},
+		"two address families":                     {"-4", "-6", "example.com"},
+		"a name no punycode can spell":             {"\u202eexample.com"},
+		"two transports":                           {"--udp", "--doh", "example.com"},
+		"an unknown format":                        {"--format", "runes", "example.com"},
+		"live json":                                {"--format", "json", "--live", "example.com"},
+		"live dot":                                 {"--format", "dot", "--live", "example.com"},
+		"live web":                                 {"--format", "web", "--live", "example.com"},
+		"watched json":                             {"--format", "json", "--watch", "30s", "example.com"},
+		"watched dot":                              {"--format", "dot", "--watch", "30s", "example.com"},
+		"watched web":                              {"--format", "web", "--watch", "30s", "example.com"},
+		"live web-3d":                              {"--format", "web-3d", "--live", "example.com"},
+		"watched web-3d":                           {"--format", "web-3d", "--watch", "30s", "example.com"},
+		"a watch tighter than a second":            {"--watch", "100ms", "example.com"},
+		"a watch of no time at all":                {"--watch", "-1s", "example.com"},
+		"a page nobody serves":                     {"--web-addr", "127.0.0.1:8080", "example.com"},
+		"a browser for a tree":                     {"--no-browser", "example.com"},
+		"explained json":                           {"--format", "json", "--explain", "example.com"},
+		"explained dot":                            {"--format", "dot", "--explain", "example.com"},
+		"compared json":                            {"--format", "json", "--diff", "example.com"},
+		"compared dot":                             {"--format", "dot", "--diff", "example.com"},
+		"live mermaid":                             {"--format", "mermaid", "--live", "example.com"},
+		"watched mermaid":                          {"--format", "mermaid", "--watch", "30s", "example.com"},
+		"explained mermaid":                        {"--format", "mermaid", "--explain", "example.com"},
+		"compared mermaid":                         {"--format", "mermaid", "--diff", "example.com"},
+		"live waterfall":                           {"--format", "waterfall", "--live", "example.com"},
+		"watched waterfall":                        {"--format", "waterfall-ascii", "--watch", "30s", "example.com"},
+		"explained gantt chart":                    {"--format", "waterfall-mermaid", "--explain", "example.com"},
+		"a page for a waterfall":                   {"--format", "waterfall", "--no-browser", "example.com"},
+		"live markdown":                            {"--format", "markdown", "--live", "example.com"},
+		"watched markdown":                         {"--format", "markdown", "--watch", "30s", "example.com"},
+		"live openmetrics":                         {"--format", "openmetrics", "--live", "example.com"},
+		"watched openmetrics":                      {"--format", "openmetrics", "--watch", "30s", "example.com"},
+		"explained openmetrics":                    {"--format", "openmetrics", "--explain", "example.com"},
+		"compared openmetrics":                     {"--format", "openmetrics", "--diff", "example.com"},
+		"a walk already made, and a name":          {"--from", "walk.json", "example.com"},
+		"a walk already made, drawn live":          {"--from", "walk.json", "--live"},
+		"a walk already made, watched":             {"--from", "walk.json", "--watch", "30s"},
+		"a walk already made, remembered":          {"--from", "walk.json", "--diff"},
+		"held against a file and the cache":        {"--against", "walk.json", "--diff", "example.com"},
+		"both walks from the standard input":       {"--from", "-", "--against", "-"},
+		"held against a walk, as json":             {"--format", "json", "--against", "walk.json", "example.com"},
+		"a walk already made, re-checked":          {"--dnssec", "--from", "walk.json"},
+		"a walk already made, re-asked":            {"--from", "walk.json", "--qmin", "--timeout", "3s"},
+		"a walk already made, sent cookies":        {"--from", "walk.json", "--cookie"},
+		"a walk already made, probed":              {"--from", "walk.json", "--check-axfr"},
+		"a lifetime that is not one":               {"--expect", "fresh:soon", "example.com"},
+		"a reverse lookup of no address":           {"-x", "example.com"},
+		"a reverse lookup and a name":              {"-x", "192.0.2.1", "example.com"},
+		"a reverse lookup and a type":              {"-x", "192.0.2.1", "A"},
+		"a reverse lookup of a saved walk":         {"--from", "walk.json", "-x", "192.0.2.1"},
+		"a request weighed unsigned":               {"--check-ds", "example.com"},
+		"designations asked of no resolver":        {"--ddr", "--no-compare", "example.com"},
+		"a walk already made, asked for ddr":       {"--from", "walk.json", "--ddr"},
+		"an unknown colour":                        {"--color", "sometimes", "example.com"},
+		"a timeout of nothing":                     {"--timeout", "0", "example.com"},
+		"a negative retry count":                   {"--retries", "-1", "example.com"},
+		"a port beyond the range":                  {"--port", "70000", "example.com"},
+		"a flag nobody has":                        {"--recursive", "example.com"},
+		"help":                                     {"--help"},
 
 		"two ways to start a walk":      {"--root", "127.0.0.1", "--root-hints", "hints", "example.com"},
 		"a root that is no address":     {"--root", "localhost", "example.com"},
@@ -364,5 +390,67 @@ func TestParseUsage(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got usage without %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestReadQuestions(t *testing.T) {
+	tests := map[string]struct {
+		text string
+		want []cli.Question
+	}{
+		"a name alone is asked for its address": {
+			text: "example.com\n",
+			want: []cli.Question{{Name: "example.com", Type: "A"}},
+		},
+		"a line per name, each with its own types": {
+			text: "example.com mx txt\nwww.example.com\taaaa\n",
+			want: []cli.Question{
+				{Name: "example.com", Type: "MX"}, {Name: "example.com", Type: "TXT"},
+				{Name: "www.example.com", Type: "AAAA"},
+			},
+		},
+		"blank lines and comments are skipped": {
+			text: "# the zone before the move\n\n   \nexample.com\n  # mail next\nexample.com MX",
+			want: []cli.Question{{Name: "example.com", Type: "A"}, {Name: "example.com", Type: "MX"}},
+		},
+		"a name in another script is asked in punycode": {
+			text: "münchen.de\n",
+			want: []cli.Question{{Name: "xn--mnchen-3ya.de", Type: "A"}},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := cli.ReadQuestions(strings.NewReader(test.text))
+			if err != nil {
+				t.Fatalf("ReadQuestions: %v", err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Errorf("got  %+v\nwant %+v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestReadQuestionsRejects(t *testing.T) {
+	tests := map[string]struct {
+		text string
+		line string
+	}{
+		"nothing but comments":         {text: "# nothing yet\n\n"},
+		"a type that is not a lookup":  {text: "example.com\nexample.com AXFR\n", line: "line 2"},
+		"a name no punycode can spell": {text: "\u202eexample.com\n", line: "line 1"},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := cli.ReadQuestions(strings.NewReader(test.text))
+			if !errors.Is(err, cli.ErrUsage) {
+				t.Fatalf("got error %v, want it to read as a usage problem", err)
+			}
+			if !strings.Contains(err.Error(), test.line) {
+				t.Errorf("got %q, want it to name %q", err, test.line)
+			}
+		})
 	}
 }

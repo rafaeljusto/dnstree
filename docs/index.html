@@ -882,10 +882,18 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
     <section id="scripts">
       <h2>For a screen, and for a script</h2>
       <p class="section-lede">
-        Everything above is one walk, read once. Three things take it further: the same
-        question put from several places at the same moment, the same question asked
-        again until something moves, and a walk read by something that is not a person.
+        Everything above is one walk, read once. Four things take it further: several
+        questions in one run, the same question put from several places at the same moment,
+        the same question asked again until something moves, and a walk read by something
+        that is not a person.
       </p>
+
+      <h3 style="margin-top:2.2rem">Ask several questions in one run</h3>
+      <p class="section-lede"><code>dnstree example.com A AAAA MX TXT</code> walks each type
+      in turn, every one from the root servers down, and draws a tree for each under the
+      question it answers. <code>--names</code> reads a list of them from a file, a name and
+      its types to a line, which is the domain checked whole before a change and again after
+      it. The run exits with the worst any of them earned.</p>
 
       <h3 style="margin-top:2.2rem">Ask from several places at once</h3>
       <p class="section-lede">Repeat <code>--resolver</code> and the question goes to all of

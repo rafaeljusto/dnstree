@@ -1191,3 +1191,61 @@ func TestRunFromStdin(t *testing.T) {
 		t.Errorf("got\n%s\nwant the saved hop drawn", stdout.String())
 	}
 }
+
+func TestRunSeveral(t *testing.T) {
+	// lame. is delegated back to the root's own server, which only ever
+	// refers the walk to itself again.
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone + `
+lame.               IN NS   a.root-servers.net.
+`})
+	hints := rootHintsFile(t)
+	common := []string{"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
+		"--no-asn", "--no-compare", "--color", "never"}
+
+	tests := map[string]struct {
+		args  []string
+		names string
+		want  int
+		trees int
+		heads []string
+	}{
+		"several types of one name, all answered": {
+			args: []string{".", "NS", "SOA"}, want: exitAnswer, trees: 2, heads: []string{". NS\n", ". SOA\n"},
+		},
+		"a lame delegation among names that answer": {
+			args: []string{"--names", "-"}, names: "# the root, then a lame delegation\n. NS\nlame.\n",
+			want: exitNoAnswer, trees: 2, heads: []string{". NS\n", "lame. A\n"},
+		},
+		"a type nobody has, refused before anything is walked": {
+			args: []string{".", "NS", "NONSENSE"}, want: exitUsage,
+		},
+		"a name that is not one, refused before anything is walked": {
+			args: []string{"--names", "-"}, names: ". NS\nexample..com\n", want: exitUsage,
+		},
+		"a file with a line that cannot be read": {
+			args: []string{"--names", "-"}, names: ". NS\n. AXFR\n", want: exitUsage,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			previous := stdin
+			t.Cleanup(func() { stdin = previous })
+			stdin = strings.NewReader(test.names)
+
+			var stdout, stderr bytes.Buffer
+			code := run(t.Context(), append(slices.Clone(common), test.args...), &stdout, &stderr)
+			if code != test.want {
+				t.Fatalf("got exit %d, want %d: %s%s", code, test.want, stdout.String(), stderr.String())
+			}
+			if got := strings.Count(stdout.String(), ". (root)\n"); got != test.trees {
+				t.Errorf("got %d trees, want %d:\n%s", got, test.trees, stdout.String())
+			}
+			for _, head := range test.heads {
+				if !strings.Contains(stdout.String(), head) {
+					t.Errorf("got\n%s\nwant a tree headed %q", stdout.String(), head)
+				}
+			}
+		})
+	}
+}

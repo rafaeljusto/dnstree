@@ -94,10 +94,12 @@ brew install --formula ./dnstree.rb
 ## Using it
 
 ```
-dnstree [flags] NAME [TYPE]
+dnstree [flags] NAME [TYPE...]
 ```
 
-`TYPE` defaults to `A`. It names one RRset, so `ANY` and the zone transfers
+`TYPE` defaults to `A`. Give several and each is walked in turn, from the root
+servers down; [`--names`](docs/guide/scripting.md#several-questions-in-one-run)
+reads a list of them from a file. A type names one RRset, so `ANY` and the zone transfers
 `AXFR` and `IXFR` are refused: servers answer `ANY` with a sample of their
 choosing (RFC 8482), and a walk would draw that as the whole answer.
 
@@ -107,6 +109,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | Flag | What it does |
 | --- | --- |
 | [`-x`](#reverse-lookups) | resolve the PTR of this address, in place of a name and a type |
+| [`--names`](docs/guide/scripting.md#several-questions-in-one-run) | walk every `NAME [TYPE...]` line of a file, or of `-` for the standard input, one after another |
 | `-4`, `-6` | ask only IPv4 or only IPv6 servers; the others are drawn unqueried |
 | `--udp`, `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
 | `--dot`, `--doh` | carry them encrypted, over TLS or HTTPS |

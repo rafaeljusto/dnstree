@@ -27,13 +27,15 @@ const Summary = "resolve a name from the root servers down, and draw the path it
 // Usage is the whole help text, and the only description of the flag surface
 // this repository keeps. cmd/mkman renders the man page from it, so a flag
 // added here reaches the packages without being written out a second time.
-const Usage = `usage: dnstree [flags] NAME [TYPE]
+const Usage = `usage: dnstree [flags] NAME [TYPE...]
 
 Resolve NAME from the root servers down, following every referral, and draw the
 path it took. TYPE defaults to A; ANY, AXFR and IXFR are refused. A NAME in any
-script is asked in punycode, the way the DNS holds it.
+script is asked in punycode, the way the DNS holds it. Several types are walked
+one after another, each from the root servers down.
 
   -x ADDR                 resolve the PTR of this address, instead of a name
+  --names FILE            walk every NAME [TYPE...] line of FILE, or of - for stdin
   -4, -6                  ask only IPv4 or only IPv6 servers
   --udp, --tcp            carry the queries over plain DNS (--udp is the default)
   --dot, --doh            carry them encrypted, over TLS or HTTPS
@@ -177,6 +179,19 @@ walk before the one drawn, and the first line says how far apart the two were
 made. Both have to be of the same question, and nothing is written to the disk.
 It takes the place of --diff.
 
+--names reads the questions from FILE, or from the standard input where it is
+-, one to a line and written as on the command line: a name, then the types to
+ask of it, A where there are none. Blank lines and lines opening with # are
+skipped. Every question is a walk of its own from the root servers down, with
+nothing carried from one to the next, and each is drawn in turn under a line
+that names it; a NAME given several types on the command line is the same.
+Every name and type is checked before anything is asked. The run exits with
+the worst any of them earned: a broken chain of trust over no answer, and no
+answer over an answer. Several questions cannot be written as one json, dot,
+mermaid, openmetrics or served page, held to one --expect or --against, or
+watched, so those are refused; --diff compares each with the last walk of its
+own question.
+
 --subnet asks every server the question as though it came from somebody inside
 that prefix, which is how a server that tailors its answers by network can be
 asked what it tells somewhere else. A bare address is taken as a /24 or a /56,
@@ -312,8 +327,15 @@ Exit codes:
 
 // Config is a run of dnstree, as the command line asked for it.
 type Config struct {
+	// Name and Type are the question being walked. More are the questions
+	// after it, each a walk of its own.
 	Name string
 	Type string
+	More []Question
+
+	// Names is the file --names reads the questions from, "-" for the
+	// standard input, empty when they were on the command line.
+	Names string
 
 	Family   int    // 0, 4 or 6
 	Proto    string // udp, tcp, dot or doh
@@ -446,6 +468,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		color, format string
 		subnet        string
 		reverse       string
+		names         string
 		timeout       time.Duration
 		port          uint
 		roots         rootList
@@ -454,6 +477,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		without       downList
 	)
 	flags.StringVar(&reverse, "x", "", "resolve the PTR of this address")
+	flags.StringVar(&names, "names", "", "walk every question in this file")
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
 	flags.BoolVar(&six, "6", false, "ask only IPv6 servers")
 	flags.BoolVar(&udp, "udp", false, "carry the queries over UDP")
@@ -550,9 +574,13 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch n := flags.NArg(); {
-	case cfg.From != "" && (n > 0 || reverse != ""):
+	case cfg.From != "" && (n > 0 || reverse != "" || names != ""):
 		return nil, fmt.Errorf("%w: --from draws a walk already made, so there is no name to resolve", ErrUsage)
 	case cfg.From != "":
+	case names != "" && (n > 0 || reverse != ""):
+		return nil, fmt.Errorf("%w: --names says what to resolve, so a name cannot be given as well", ErrUsage)
+	case names != "":
+		cfg.Names = names
 	case reverse != "" && n > 0:
 		return nil, fmt.Errorf("%w: -x names what to resolve, so a name cannot be given as well", ErrUsage)
 	case reverse != "":
@@ -564,18 +592,18 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	case n == 0:
 		flags.Usage()
 		return nil, fmt.Errorf("%w: no name to resolve", ErrUsage)
-	case n == 1:
-		cfg.Name, cfg.Type = flags.Arg(0), "A"
-	case n == 2:
-		cfg.Name, cfg.Type = flags.Arg(0), strings.ToUpper(flags.Arg(1))
 	default:
-		return nil, fmt.Errorf("%w: only a name and a type were expected", ErrUsage)
+		questions, err := ask(flags.Args())
+		if err != nil {
+			return nil, err
+		}
+		cfg.Name, cfg.Type = questions[0].Name, questions[0].Type
+		if len(questions) > 1 {
+			cfg.More = questions[1:]
+		}
 	}
-	if cfg.Name, err = idn.ASCII(cfg.Name); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
-	}
-	if why, ok := notLookups[cfg.Type]; ok {
-		return nil, fmt.Errorf("%w: %s is not a lookup: %s", ErrUsage, cfg.Type, why)
+	if err := several(&cfg, len(wanted.want) > 0); err != nil {
+		return nil, err
 	}
 
 	if four && six {
@@ -707,6 +735,86 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// Question is one name and one type to walk.
+type Question struct {
+	Name string
+	Type string
+}
+
+// ask reads one question's worth of words, a name and the types to ask of it,
+// as one question per type.
+func ask(words []string) ([]Question, error) {
+	name, err := idn.ASCII(words[0])
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
+	}
+	types := words[1:]
+	if len(types) == 0 {
+		types = []string{"A"}
+	}
+	questions := make([]Question, 0, len(types))
+	for _, qtype := range types {
+		qtype = strings.ToUpper(qtype)
+		if why, ok := notLookups[qtype]; ok {
+			return nil, fmt.Errorf("%w: %s is not a lookup: %s", ErrUsage, qtype, why)
+		}
+		questions = append(questions, Question{Name: name, Type: qtype})
+	}
+	return questions, nil
+}
+
+// ReadQuestions reads what --names names: a line to a name and the types to ask
+// of it, skipping blank lines and comments.
+func ReadQuestions(r io.Reader) ([]Question, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	var questions []Question
+	line := 0
+	for text := range strings.Lines(string(data)) {
+		line++
+		words := strings.Fields(text)
+		if len(words) == 0 || strings.HasPrefix(words[0], "#") {
+			continue
+		}
+		asked, err := ask(words)
+		if err != nil {
+			return nil, fmt.Errorf("line %d: %w", line, err)
+		}
+		questions = append(questions, asked...)
+	}
+	if len(questions) == 0 {
+		return nil, fmt.Errorf("%w: no name to resolve", ErrUsage)
+	}
+	return questions, nil
+}
+
+// Questions is every question the run asks, in the order it asks them.
+func (c *Config) Questions() []Question {
+	return append([]Question{{Name: c.Name, Type: c.Type}}, c.More...)
+}
+
+// several refuses what cannot be said of more than one walk. --names counts
+// however many lines the file turns out to hold, so that what a run accepts
+// does not hang on what is in it.
+func several(cfg *Config, expecting bool) error {
+	if len(cfg.More) == 0 && cfg.Names == "" {
+		return nil
+	}
+	switch {
+	case Programs(cfg.Format) || Serves(cfg.Format):
+		return fmt.Errorf("%w: %s writes one walk, and several questions make several", ErrUsage, cfg.Format)
+	case expecting:
+		return fmt.Errorf("%w: --expect cannot say which of several questions it is about", ErrUsage)
+	case cfg.Against != "":
+		return fmt.Errorf("%w: --against holds a walk of one question, and several were asked", ErrUsage)
+	case cfg.Watch != 0:
+		return fmt.Errorf("%w: --watch follows one question, and several were asked", ErrUsage)
+	}
+	return nil
 }
 
 // walkFlags are the flags that shape a walk being made, and say nothing about

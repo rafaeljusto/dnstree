@@ -191,3 +191,12 @@ func separator(charset Charset) string {
 	}
 	return " · "
 }
+
+// Asked is the line over a tree that says which question it answers, for a run
+// that asks several: the trees look alike, and the root says nothing of the
+// name.
+func Asked(w io.Writer, question trace.Question, opts Options) {
+	question = question.Shown()
+	paint := painter(ColorEnabled(w, opts.Color))
+	fmt.Fprintln(w, paint.server(question.Name)+" "+paint.rrtype(question.Type))
+}

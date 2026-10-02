@@ -225,19 +225,34 @@ func RootServers(hints *roothints.Hints) []trace.Server {
 	return servers
 }
 
+// Askable says why name and qtype cannot be walked, nil when they can, so
+// that a run of several questions can refuse one before walking any of them.
+func Askable(name, qtype string) error {
+	_, _, err := question(name, qtype)
+	return err
+}
+
+func question(name, qtype string) (string, uint16, error) {
+	qname := dnsutil.Fqdn(name)
+	if !dnsutil.IsName(qname) {
+		return "", 0, fmt.Errorf("resolver: %q is not a domain name", name)
+	}
+	rrtype, ok := dns.StringToType[strings.ToUpper(qtype)]
+	if !ok {
+		return "", 0, fmt.Errorf("resolver: unknown query type %q", strings.ToUpper(qtype))
+	}
+	return qname, rrtype, nil
+}
+
 // Resolve follows the delegation chain for name and qtype. The trace it returns
 // holds everything that was learned, including the failures; an error means the
 // question itself could not be asked.
 func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trace, error) {
-	qname := dnsutil.Fqdn(name)
-	if !dnsutil.IsName(qname) {
-		return nil, fmt.Errorf("resolver: %q is not a domain name", name)
+	qname, rrtype, err := question(name, qtype)
+	if err != nil {
+		return nil, err
 	}
 	qtype = strings.ToUpper(qtype)
-	rrtype, ok := dns.StringToType[qtype]
-	if !ok {
-		return nil, fmt.Errorf("resolver: unknown query type %q", qtype)
-	}
 
 	run := &run{
 		cfg:      r.cfg,

@@ -375,6 +375,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"a file that holds every walk against one": {file: "against = walk.json\n"},
 		"a file that names an address":             {file: "x = 192.0.2.1\n"},
 		"a file that takes part of the DNS down":   {file: "without = com.\n"},
+		"a file that lists the names to walk":      {file: "names = names.txt\n"},
 	}
 
 	for name, test := range tests {

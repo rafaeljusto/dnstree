@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -123,6 +124,100 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if cfg.Watch > 0 {
 		return watch(ctx, cfg, log, lookups, reference, stdout, stderr)
 	}
+	if cfg.From != "" {
+		return one(ctx, cfg, log, lookups, reference, stdout, stderr)
+	}
+
+	questions, err := asked(cfg)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+
+	// Each question is a walk of its own from the root servers down, and the
+	// run answers with the worst any of them earned.
+	worst := exitAnswer
+	for i, question := range questions {
+		if i > 0 {
+			if ctx.Err() != nil {
+				break
+			}
+			fmt.Fprintln(stdout)
+		}
+		walk := *cfg
+		walk.Name, walk.Type = question.Name, question.Type
+		if len(questions) > 1 && cfg.Format != "markdown" {
+			// A report heads itself with its question already.
+			tree.Asked(stdout, trace.Question{Name: fqdn(question.Name), Type: question.Type}, treeOptions(cfg))
+		}
+		code := one(ctx, &walk, log, lookups, reference, stdout, stderr)
+		if code == exitUsage {
+			return code
+		}
+		worst = worse(worst, code)
+	}
+	return worst
+}
+
+// asked is every question the run puts, read from --names where it was given,
+// each checked before any of them is walked.
+func asked(cfg *cli.Config) ([]cli.Question, error) {
+	questions := cfg.Questions()
+	if cfg.Names != "" {
+		var err error
+		if questions, err = names(cfg.Names); err != nil {
+			return nil, err
+		}
+	}
+	for _, question := range questions {
+		if err := resolver.Askable(question.Name, question.Type); err != nil {
+			return nil, err
+		}
+	}
+	return questions, nil
+}
+
+// names reads the questions --names lists, from a file or from the standard
+// input where the name is "-".
+func names(path string) ([]cli.Question, error) {
+	if path == "-" {
+		questions, err := cli.ReadQuestions(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("the standard input: %w", err)
+		}
+		return questions, nil
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	questions, err := cli.ReadQuestions(file)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return questions, nil
+}
+
+// worse is the exit code that says more of two walks: a broken chain of trust,
+// then no answer, then an unmet expectation, then an answer. It ranks them the
+// way outcome does for one walk.
+func worse(a, b int) int {
+	rank := map[int]int{exitAnswer: 0, exitExpect: 1, exitNoAnswer: 2, exitBogus: 3}
+	if rank[b] > rank[a] {
+		return b
+	}
+	return a
+}
+
+// one draws one walk, made now or read back with --from, with everything the
+// run asked to be said under it.
+func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
+	lookups *asn.Resolver, reference *history.Walk, stdout, stderr io.Writer) int {
+
+	var err error
 
 	// The live drawing owns the screen until it is cleared, and the finished
 	// tree is then written exactly where it stood.
@@ -732,4 +827,12 @@ func verdict(tr *trace.Trace) int {
 		return exitNoAnswer
 	}
 	return exitAnswer
+}
+
+// fqdn is a name as the trace spells it, with the root's dot.
+func fqdn(name string) string {
+	if strings.HasSuffix(name, ".") {
+		return name
+	}
+	return name + "."
 }

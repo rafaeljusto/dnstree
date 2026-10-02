@@ -5,6 +5,7 @@ system.
 
 - [Asking rather than reading](#asking-rather-than-reading)
 - [What has changed since last time](#what-has-changed-since-last-time)
+- [Several questions in one run](#several-questions-in-one-run)
 - [Leaving it running](#leaving-it-running)
 - [Drawing a walk again](#drawing-a-walk-again)
 - [Numbers for a monitoring system](#numbers-for-a-monitoring-system)
@@ -136,6 +137,69 @@ that is not a zone that stopped being signed.
 > time. Without the flag, nothing is read and nothing is kept. A cache that
 > cannot be read or written costs the comparison and says so in one line on
 > stderr; the walk still runs.
+
+## Several questions in one run
+
+Give a name several types and each is walked in turn, under a line that says
+which question the tree answers:
+
+```
+$ dnstree example.com A MX
+example.com. A
+. (root)
+├── a.root-servers.net. 198.41.0.4  356ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  244ms  NOERROR  referral → example.com.
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  231ms  NOERROR  AA
+│   │   │   ├── example.com. 300 A 104.20.23.154
+│   │   │   └── example.com. 300 A 172.66.147.243
+...
+✔ answered in 832ms · resolver in 355ms · 3 queries · 3 servers
+
+example.com. MX
+. (root)
+├── a.root-servers.net. 198.41.0.4  240ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  302ms  NOERROR  referral → example.com.
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  234ms  NOERROR  AA
+│   │   │   └── example.com. 300 MX 0 .
+...
+✔ answered in 776ms · resolver in 237ms · 3 queries · 3 servers
+```
+
+`--names` reads the questions from a file, or from the standard input where it
+is given `-`: a line to a name, written as on the command line, with the types
+to ask of it after it and `A` where there are none. Blank lines and lines
+opening with `#` are skipped, so a list kept beside a change can say what it is
+for:
+
+```
+# before moving the mail
+example.com MX TXT
+www.example.com A AAAA
+```
+
+```
+$ dnstree --names before-the-move.txt
+example.com. MX
+...
+www.example.com. AAAA
+...
+✔ answered in 708ms · resolver in 242ms · 3 queries · 3 servers
+```
+
+Every question is a walk of its own from the root servers down, with its own
+budgets, and nothing is carried from one to the next: the second walk to
+`example.com.` asks the root again, as a resolver with an empty cache would.
+Every name and type is checked before anything is asked, so a misspelt one
+fails the run straight away rather than after the walks before it.
+
+The run exits with the worst any of the walks earned: 3 where a chain of trust
+broke, then 2 where one came to no answer, and 0 only where they all answered.
+`--diff` holds each walk against the last one of its own question, and `--live`
+draws each as it is made. What can only be said of one walk is refused:
+`--expect`, which could not say which question it was about, `--against`,
+`--watch`, and the formats written as one document — `json`, `dot`, `mermaid`,
+`waterfall-mermaid`, `openmetrics`, `web` and `web-3d`. `--format markdown`
+writes a report per question, each headed with its own.
 
 ## Leaving it running
 
