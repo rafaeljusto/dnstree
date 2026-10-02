@@ -58,6 +58,10 @@ change touches without a test holding it. The ones that regress most quietly:
 - A signature checked against the zone the walk was referred to rather than
   the one its signer names.
 - Anything written to disk outside `internal/history`, or without `--diff`.
+- A dnstree-web walk on a transport that skips `transport.Guard` with
+  `transport.Public`, a resolver option the service sets on its own, a
+  redirect built from the path asked, or a forwarded address read from
+  anywhere but the header's last entry.
 - A name or wire text drawn without going through `Trace.Shown`.
 - A minimised hop (`Step.Minimised`) read as the answer.
 - A signature's time left read against the clock rather than `Trace.Started`.

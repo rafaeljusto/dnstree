@@ -101,8 +101,9 @@ request, go through this checklist:
 2. [Rebase](http://git-scm.com/book/en/Git-Branching-Rebasing) your local
    changes against the `main` branch.
 3. Run `make check`. It builds, lints, runs the whole suite under `-race` and
-   checks the dependencies for known vulnerabilities — what CI runs, less
-   hadolint, the packaging dry run and the image builds.
+   the pages' tests under node 22 or later, and checks the dependencies for
+   known vulnerabilities — what CI runs, less hadolint, the packaging dry run
+   and the image builds.
 4. Give the pull request title a descriptive prefix. See below: the pull
    request lands as one squashed commit under that title, and the release
    version is worked out from it.
@@ -129,9 +130,8 @@ Some other important notes when contributing:
   `codeberg.org/miekg/dns`, because the standard library has no DNS wire-format
   codec, `golang.org/x/sys`, for the terminal size, and `golang.org/x/net/idna`,
   for names typed in any script, which the codec leaves to its callers.
-  Everything else is
-  standard library, and a pull request adding a dependency needs to argue for
-  it.
+  Everything else is standard library, and a pull request adding a dependency
+  needs to argue for it.
 - **Only three packages may import the DNS codec**: `transport`, `resolver` and
   `dnssec`, plus the fake nameserver that has to speak the wire format. The
   trace model, the renderers and the ASN lookups work on plain Go types, which

@@ -148,8 +148,8 @@ incident write-up or a pull request: a heading that says what the walk came to
 and when it was made, the tree in a code fence, what --explain would say about
 it, and a table of what the resolvers answered. It always explains, and takes
 --diff and --against to add what changed. Everything a server wrote is escaped,
-so a name or a record cannot turn into a link or a table cell of its own. With
---from, a walk saved during an incident becomes a report afterwards.
+so a name or a record cannot turn into a link, a mention or a table cell of its
+own. With --from, a walk saved during an incident becomes a report afterwards.
 
 --format openmetrics writes the walk as numbers for a monitoring system: how
 it ended, what it and each hop on the path took, the chain of trust, the time

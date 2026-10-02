@@ -264,9 +264,9 @@ incident write-up or a pull request: a heading that says what it came to and
 when it was made, the tree and its summary in a code fence, the sentences
 `--explain` would write, and a table of what the resolvers answered. It always
 explains; `--diff` and `--against` add what changed. Everything a server wrote
-is escaped, so a name or a record cannot open a link or a table cell of its
-own. With `--from`, a walk saved during an incident becomes a report
-afterwards.
+is escaped, so a name or a record cannot open a link, mention anybody or start
+a table cell of its own. With `--from`, a walk saved during an incident becomes
+a report afterwards.
 
 <details>
 <summary>A report, as it is pasted</summary>

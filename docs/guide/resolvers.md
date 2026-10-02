@@ -82,8 +82,8 @@ takes as long as that floor for everybody using it:
 ```
 $ dnstree --resolver 94.140.14.14 --explain news.ycombinator.com A
 ...
-🧊 94.140.14.14 keeps this with ttl 60, the zone gives 1
-✔ answered in 2s · resolver in 249ms · 6 queries · 3 servers
+ttl: 94.140.14.14 keeps this with ttl 60, the zone gives 1
+✔ answered in 741ms · resolver in 250ms · 3 queries · 3 servers
 
 · news.ycombinator.com. A is 209.216.230.207, answered by ns-225.awsdns-28.com. for ycombinator.com.
 · a cache may hold this answer for 1 second, and the delegation to ycombinator.com. for 2 days

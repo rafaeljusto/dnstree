@@ -240,8 +240,8 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
 - [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, and what DNSSEC
   is worth to ECH.
 - [Checking a zone](docs/guide/zones.md): parent and child NS sets, serials, zone
-  transfers and open recursion, extended errors, NSID, cookies, `--qmin` and
-  answer sizes.
+  transfers and open recursion, extended errors, NSID, cookies, `--qmin`,
+  `--without` and answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, from here or from another subnet, and whether they offer
   encryption.

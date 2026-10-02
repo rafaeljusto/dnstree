@@ -16,8 +16,9 @@ finding even when nothing crashes.
   on the path, every server a referral names, and anyone who can spoof or
   rewrite a UDP answer. They control every byte after the question.
 - **The user runs the CLI** and reads its output in a terminal, a browser
-  (`--format web`), a JSON consumer or a Graphviz file. Record data is
-  attacker text.
+  (`--format web`), a JSON consumer, a Graphviz or Mermaid file, a markdown
+  report pasted into GitHub, or a metrics scrape. Record data is attacker
+  text.
 - **dnstree-web serves strangers.** The name, type, path and headers a visitor
   sends are attacker input, and every walk it runs must stay on public
   addresses, whatever the glue says.
@@ -104,8 +105,9 @@ Work through them in this order unless the scope names one.
    cursor movement that forges lines). HTML and JS injection in
    `internal/render/web` (payload embedding, `</script>` breakout), and what the
    local server binds to and accepts (Host header, DNS rebinding, any origin).
-   DOT label escaping. `--format ascii` staying below codepoint 128. Width
-   counting on hostile runes.
+   DOT and Mermaid label escaping. Autolinks, `@mentions` and `#refs` in
+   `--format markdown`. OpenMetrics label escaping. `--format ascii` staying
+   below codepoint 128. Width counting on hostile runes.
 6. **disk: `internal/history`.** File names built from the question (path
    traversal, separators, case, IDNs), permissions, atomic writes, and a
    corrupt or hostile cache file being read back.

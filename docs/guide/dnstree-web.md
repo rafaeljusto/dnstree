@@ -13,9 +13,10 @@ Every walk checks the chain of trust, and nothing a visitor sends reaches the
 resolver but the question. Glue pointing at a private, loopback or link-local
 address is recorded as refused and never asked, so a zone cannot aim the server
 at the network it runs on. Walks for the same question are made once and kept
-for a minute, and `-walks`, `-per-client` and `-timeout` bound how many run,
-how many one client starts, and how long each may take. It listens on `$PORT`
-when the host sets one; behind a proxy, `-client-header` names the header that
-carries the visitor's address, and the last address in it, the one the proxy
-wrote, is the one counted. The host needs UDP and TCP out to port 53, and
-IPv6 to reach the servers that only have it.
+for a minute (`-keep`), and `-walks`, `-per-client` and `-timeout` bound how
+many run, how many one client starts, and how long each may take. It listens on
+`-addr`, `:8080` by default, or on `$PORT` when the host sets one; behind a
+proxy, `-client-header` names the header that carries the visitor's address,
+and the last address in it, the one the proxy wrote, is the one counted. The
+host needs UDP and TCP out to port 53, and IPv6 to reach the servers that only
+have it.

@@ -38,7 +38,7 @@ them, don't hesitate to ask. We're here to help! This is what we look for before
       version is worked out from it: a feature under a plain title ships as a
       patch.
 - [ ] `make check` passes: it builds, lints, runs the tests under `-race` and
-      checks the dependencies for known vulnerabilities.
+      under node, and checks the dependencies for known vulnerabilities.
 - [ ] I have added tests that prove my fix is effective or that my feature
       works. The engine is tested offline against `internal/testutil/fakens`, so
       a delegation failure can be reproduced on purpose.
