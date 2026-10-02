@@ -3,6 +3,7 @@ package openmetrics_test
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -210,6 +211,40 @@ func TestRenderProbes(t *testing.T) {
 	}
 	if strings.Contains(out, "192.0.2.6") {
 		t.Errorf("got\n%s\nwant no sample for the server that could not be asked", out)
+	}
+}
+
+func TestRenderCAA(t *testing.T) {
+	for name, tt := range map[string]struct {
+		caa   *trace.CAA
+		state string
+	}{
+		"a set naming who may issue": {caa: &trace.CAA{Owner: "test.", Issue: &trace.Issuers{CAs: []string{"letsencrypt.org"}}}, state: "restricted"},
+		"no set anywhere":            {caa: &trace.CAA{}, state: "open"},
+		"a lookup that failed":       {caa: &trace.CAA{Refused: "the CAA lookup at www.test. failed: SERVFAIL"}, state: "refused"},
+		"a walk that did not look":   {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := &trace.Trace{
+				Question: trace.Question{Name: "www.test.", Type: "A"},
+				Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+				CAA:      tt.caa,
+			}
+			out := render(t, tr)
+			valid(t, out)
+			if tt.state == "" {
+				if strings.Contains(out, "dnstree_caa") {
+					t.Errorf("got\n%s\nwant no CAA family", out)
+				}
+				return
+			}
+			for _, state := range []string{"restricted", "open", "refused"} {
+				want := fmt.Sprintf(`dnstree_caa{name="www.test.",type="A",state=%q} %s`, state, map[bool]string{true: "1", false: "0"}[state == tt.state])
+				if !strings.Contains(out, want) {
+					t.Errorf("got\n%s\nwant %s", out, want)
+				}
+			}
+		})
 	}
 }
 

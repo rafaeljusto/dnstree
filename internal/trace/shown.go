@@ -54,7 +54,69 @@ func (t *Trace) Shown() *Trace {
 		r.DDR = resolver.DDR.Shown()
 		shown.Resolvers = append(shown.Resolvers, &r)
 	}
+	shown.CAA = t.CAA.Shown()
 	return &shown
+}
+
+// Shown is the CAA set with every name and value the zones wrote escaped.
+func (c *CAA) Shown() *CAA {
+	if c == nil {
+		return nil
+	}
+	shown := *c
+	shown.Owner, shown.Refused = Shown(c.Owner), Shown(c.Refused)
+	shown.Asked = slices.Clone(c.Asked)
+	for i := range shown.Asked {
+		lookup := &shown.Asked[i]
+		lookup.Name, lookup.Alias, lookup.Err = Shown(lookup.Name), Shown(lookup.Alias), Shown(lookup.Err)
+		lookup.Found = CAAFound(Shown(string(lookup.Found)))
+	}
+	shown.Records = slices.Clone(c.Records)
+	for i := range shown.Records {
+		record := &shown.Records[i]
+		record.Tag, record.Value = Shown(record.Tag), Shown(record.Value)
+	}
+	shown.Issue, shown.Wildcard = c.Issue.shown(), c.Wildcard.shown()
+	shown.DNSSEC = c.DNSSEC.shown()
+	return &shown
+}
+
+// shown is the verdict with the words a zone or a file chose escaped.
+func (s *DNSSECStatus) shown() *DNSSECStatus {
+	if s == nil {
+		return nil
+	}
+	d := *s
+	d.Zone = Shown(d.Zone)
+	d.Reason = Shown(d.Reason)
+	d.Algorithm, d.Digest = Shown(d.Algorithm), Shown(d.Digest)
+	if d.Signal != nil {
+		signal := *d.Signal
+		signal.Reason = Shown(signal.Reason)
+		d.Signal = &signal
+	}
+	if d.NSEC3 != nil {
+		nsec3 := *d.NSEC3
+		nsec3.Zone, nsec3.Salt = Shown(nsec3.Zone), Shown(nsec3.Salt)
+		d.NSEC3 = &nsec3
+	}
+	d.Keys = slices.Clone(d.Keys)
+	for i := range d.Keys {
+		d.Keys[i].Algorithm = Shown(d.Keys[i].Algorithm)
+	}
+	d.DS = slices.Clone(d.DS)
+	for i := range d.DS {
+		ds := &d.DS[i]
+		ds.Algorithm, ds.Digest, ds.Match = Shown(ds.Algorithm), Shown(ds.Digest), DSMatch(Shown(string(ds.Match)))
+	}
+	return &d
+}
+
+func (i *Issuers) shown() *Issuers {
+	if i == nil {
+		return nil
+	}
+	return &Issuers{CAs: shownAll(i.CAs)}
 }
 
 // Shown is the same copy of one step and everything below it.
@@ -86,32 +148,7 @@ func (s *Step) Shown() *Step {
 		}
 		shown.Delegation = &d
 	}
-	if s.DNSSEC != nil {
-		d := *s.DNSSEC
-		d.Zone = Shown(d.Zone)
-		d.Reason = Shown(d.Reason)
-		d.Algorithm, d.Digest = Shown(d.Algorithm), Shown(d.Digest)
-		if d.Signal != nil {
-			signal := *d.Signal
-			signal.Reason = Shown(signal.Reason)
-			d.Signal = &signal
-		}
-		if d.NSEC3 != nil {
-			nsec3 := *d.NSEC3
-			nsec3.Zone, nsec3.Salt = Shown(nsec3.Zone), Shown(nsec3.Salt)
-			d.NSEC3 = &nsec3
-		}
-		d.Keys = slices.Clone(d.Keys)
-		for i := range d.Keys {
-			d.Keys[i].Algorithm = Shown(d.Keys[i].Algorithm)
-		}
-		d.DS = slices.Clone(d.DS)
-		for i := range d.DS {
-			ds := &d.DS[i]
-			ds.Algorithm, ds.Digest, ds.Match = Shown(ds.Algorithm), Shown(ds.Digest), DSMatch(Shown(string(ds.Match)))
-		}
-		shown.DNSSEC = &d
-	}
+	shown.DNSSEC = s.DNSSEC.shown()
 	if s.Dangling != nil {
 		d := *s.Dangling
 		d.Name, d.Target = Shown(d.Name), Shown(d.Target)

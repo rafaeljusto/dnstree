@@ -159,6 +159,12 @@ type Config struct {
 	// asks the question.
 	Minimise bool
 
+	// CAA looks for the CAA set that decides which certificate authorities may
+	// issue for the name, climbing from it towards the root the way an
+	// authority does (RFC 8659). Each name on the way costs a query, asked of
+	// the zone the walk found it in.
+	CAA bool
+
 	// Down says why a server is to be treated as unreachable, empty for one
 	// that is not. A server it names is drawn among its zone's but never
 	// asked, the way one of the wrong family is, and the walk goes wherever
@@ -252,7 +258,10 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 
 	run.trace.Started = time.Now()
 	run.trace.Timed = true
-	run.walk(ctx, qname, rrtype, run.trace.Root, 0)
+	end := run.walk(ctx, qname, rrtype, run.trace.Root, 0)
+	if r.cfg.CAA {
+		run.climb(ctx, cmp.Or(end, run.trace.Root))
+	}
 	run.trace.Elapsed = time.Since(run.trace.Started)
 	return run.trace, nil
 }
@@ -283,6 +292,11 @@ type run struct {
 	secret  []byte
 	cookies map[netip.Addr]string
 
+	// cuts are the zones the walk for the question entered, which the CAA
+	// lookups are asked of, and climbing is set while they are being made.
+	cuts     []cut
+	climbing bool
+
 	// mu guards the warnings and the cookies, which the fanout writes to from
 	// several goroutines.
 	mu sync.Mutex
@@ -309,6 +323,11 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 	// whether the chain has checked this zone yet: minimising asks one zone
 	// several questions, and its keys are fetched once.
 	reach, entered := r.reach(zone, qname), false
+
+	// top is the walk for the question itself, whose zones the CAA lookups go
+	// to, and recorded whether this zone has been kept for them.
+	top := r.cfg.CAA && side == 0 && !r.climbing && dns.EqualName(qname, r.trace.Question.Name)
+	recorded := false
 
 	// referred is the step that pointed the walk into this zone, which the
 	// minimised hops inside it hang below rather than replace.
@@ -362,6 +381,10 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			}
 			entered = true
 		}
+		if top && !recorded && step.Server.IP.IsValid() {
+			r.record(zone, servers, chain)
+			recorded = true
+		}
 
 		if denied != nil && step.Kind != trace.KindNXDomain && step.Kind != trace.KindFiltered && step.Server.IP.IsValid() {
 			r.warnf("%s answered NXDOMAIN for %s, which has names below it, so a resolver that minimises its questions stops there (RFC 8020); it should answer NODATA",
@@ -387,15 +410,20 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 
 		switch {
 		case step.Kind == trace.KindCNAME && qtype != dns.TypeCNAME:
-			r.verify(ctx, chain, hop, qname, qtype)
+			if crossed := r.verify(ctx, chain, hop, qname, qtype); crossed != nil && top {
+				r.record(crossed.zone, []trace.Server{step.Server}, chain)
+			}
 			return r.chaseCNAME(ctx, step, qname, qtype, side)
 		case step.Kind != trace.KindReferral:
 			last := zoneCut{zone: zone, step: referred, authority: delegation}
 			if crossed := r.verify(ctx, chain, hop, qname, qtype); crossed != nil {
 				last = *crossed
+				if top {
+					r.record(crossed.zone, []trace.Server{step.Server}, chain)
+				}
 			}
 			r.denial(hop, zone, qname)
-			if side == 0 {
+			if side == 0 && !r.climbing {
 				r.checkECH(step)
 				r.checkSubnet(step)
 				r.checkNS(ctx, step, referred)
@@ -407,7 +435,9 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 
 		}
 
-		r.crossReferral(ctx, chain, hop)
+		if crossed := r.crossReferral(ctx, chain, hop); crossed != nil && top {
+			r.record(crossed.zone, []trace.Server{step.Server}, chain)
+		}
 		next, rest := r.nextServers(ctx, step, side)
 		if len(next) == 0 {
 			r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
@@ -415,7 +445,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		}
 		pending = rest
 		zone, servers, parent, referred = step.Delegation.Zone, next, step, step
-		reach, entered = r.reach(zone, qname), false
+		reach, entered, recorded = r.reach(zone, qname), false, false
 		depth++
 		delegation = nil
 		if hop.resp != nil {
@@ -491,17 +521,17 @@ func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname s
 // referred to it: a server holding both br. and net.br. hands out the
 // delegations of net.br., signed with its keys, to a walk still holding those
 // of br.
-func (r *run) crossReferral(ctx context.Context, chain *dnssec.Chain, hop *hop) {
+func (r *run) crossReferral(ctx context.Context, chain *dnssec.Chain, hop *hop) *zoneCut {
 	if chain == nil || hop.resp == nil || hop.step.Delegation == nil {
-		return
+		return nil
 	}
 	// The delegation's own name is the child's word; crossCut turns away
 	// anything below it.
 	cut, delegated := referralSigner(hop.resp), hop.step.Delegation.Zone
 	if cut == "" || dns.EqualName(cut, delegated) {
-		return
+		return nil
 	}
-	r.crossCut(ctx, chain, hop, cut, delegated)
+	return r.crossCut(ctx, chain, hop, cut, delegated)
 }
 
 // crossCut enters a zone the walk was never referred to. A server authoritative

@@ -134,6 +134,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, line := range r.designations(tr) {
 		r.write(line + "\n")
 	}
+	for _, line := range r.authorities(tr.CAA) {
+		r.write(line + "\n")
+	}
 	for _, warning := range tr.Warnings {
 		mark := "warning: "
 		if r.glyphs.icons {
@@ -703,6 +706,74 @@ func (r *renderer) designations(tr *trace.Trace) []string {
 		}
 	}
 	return lines
+}
+
+// authorities say who may issue certificates for the name and which set
+// decided it, only where --caa asked. The climb itself is in the tree.
+func (r *renderer) authorities(caa *trace.CAA) []string {
+	if caa == nil {
+		return nil
+	}
+	mark := "caa: "
+	if r.glyphs.icons {
+		mark = spaced("📜")
+	}
+
+	var none []string
+	for _, lookup := range caa.Asked {
+		if lookup.Found == trace.CAANone {
+			none = append(none, lookup.Name)
+		}
+	}
+	found := ""
+	switch {
+	case caa.Owner != "":
+		found = caa.Owner + " decides it"
+		if len(none) > 0 {
+			found = "none at " + strings.Join(none, ", ") + "; " + found
+		}
+		for _, lookup := range caa.Asked {
+			if lookup.Name == caa.Owner && lookup.Alias != "" {
+				found += ", as an alias for " + lookup.Alias
+			}
+		}
+	case caa.Refused == "" && len(caa.Asked) > 0:
+		found = "none from " + caa.Asked[0].Name + " up, so any authority may issue"
+	}
+
+	var lines []string
+	if found != "" {
+		line := r.paint.dim(mark + found)
+		if verdict := r.dnssec(caa.DNSSEC); verdict != "" {
+			line += " " + verdict
+		}
+		lines = append(lines, line)
+	}
+	if caa.Refused != "" {
+		return append(lines, r.paint.paint(mark+"every authority refuses: "+caa.Refused, red))
+	}
+	if caa.Owner == "" {
+		return lines
+	}
+
+	policy := []string{"may issue: " + issuers(caa.Issue), "wildcards: " + issuers(caa.Wildcard)}
+	for _, record := range caa.Records {
+		if strings.EqualFold(record.Tag, "iodef") {
+			policy = append(policy, "reports to "+record.Value)
+		}
+	}
+	return append(lines, r.paint.paint(mark+strings.Join(policy, "; "), green))
+}
+
+// issuers are the authorities a set lets issue, as a reader wants them.
+func issuers(issuers *trace.Issuers) string {
+	switch {
+	case issuers == nil:
+		return "any authority"
+	case len(issuers.CAs) == 0:
+		return "nobody"
+	}
+	return strings.Join(issuers.CAs, ", ")
 }
 
 // offered is one designation as a client would dial it, once per transport it

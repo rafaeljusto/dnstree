@@ -104,6 +104,20 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 	}
 
+	if caa := tr.CAA; caa != nil {
+		state := "open"
+		switch {
+		case caa.Refused != "":
+			state = "refused"
+		case caa.Issue != nil:
+			state = "restricted"
+		}
+		m.family("dnstree_caa", "", "who the CAA set lets issue certificates for the name: restricted to the authorities it names, open to any, or refused by every authority")
+		for _, value := range []string{"restricted", "open", "refused"} {
+			m.sample("dnstree_caa", flag(value == state), label{"state", value})
+		}
+	}
+
 	probes(m, tr)
 	resolvers(m, tr)
 

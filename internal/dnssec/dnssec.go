@@ -430,7 +430,7 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 				reason = fmt.Errorf("the signature of key %d is outside its validity period", key.KeyTag())
 				continue
 			}
-			if err := signature.Verify(key, rrset, &dns.SignOption{}); err != nil {
+			if err := signature.Verify(key, ordered(rrset), &dns.SignOption{}); err != nil {
 				reason = fmt.Errorf("the signature of key %d does not verify", key.KeyTag())
 				continue
 			}
@@ -480,6 +480,26 @@ func (c *Chain) settleAs(status *trace.DNSSECStatus, state trace.DNSSECState, re
 var implemented = map[uint8]bool{
 	dns.RSASHA1: true, dns.RSASHA1NSEC3SHA1: true, dns.RSASHA256: true, dns.RSASHA512: true,
 	dns.ECDSAP256SHA256: true, dns.ECDSAP384SHA384: true, dns.ED25519: true, dns.MLDSA44: true,
+}
+
+// ordered is the RRset in a form the codec puts in canonical order. It sorts
+// CAA values shortest first, as though each carried its length, where RFC 4034
+// 6.3 sorts the octets, so a set of more than one is reassembled out of the
+// order it was signed in. The generic form of RFC 3597 is sorted by its octets,
+// and packs to the same wire; a CAA holds no name for it to leave uppercase.
+func ordered(rrset []dns.RR) []dns.RR {
+	if len(rrset) < 2 || dns.RRToType(rrset[0]) != dns.TypeCAA {
+		return rrset
+	}
+	generic := make([]dns.RR, 0, len(rrset))
+	for _, rr := range rrset {
+		raw := new(dns.RFC3597)
+		if err := raw.ToRFC3597(rr); err != nil {
+			return rrset
+		}
+		generic = append(generic, raw)
+	}
+	return generic
 }
 
 // matchDS finds the keys the DS records point at, by digesting each key the

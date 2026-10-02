@@ -233,6 +233,16 @@ func TestReadRefuses(t *testing.T) {
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "trusted"}}}`,
 			want: `"trusted"`,
 		},
+		"a CAA lookup that came to something nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"caa": {"asked": [{"name": "x.", "found": "maybe"}]}}`,
+			want: `"maybe"`,
+		},
+		"a CAA verdict in a state nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"caa": {"asked": [], "dnssec": {"state": "trusted"}}}`,
+			want: `"trusted"`,
+		},
 		"a request of the parent in a state nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure", "signal": {"state": "granted"}}}}`,

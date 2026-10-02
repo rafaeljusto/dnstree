@@ -40,9 +40,67 @@
       "description": "What --without told the walk to treat as down: nameserver names, addresses and prefixes, as they were given. The servers inside them were never asked: the walk shows them as not queried, with a note saying which of these left them out, and a check that would have asked one carries an error saying so. An answer the walk found is one the rest of the DNS gives without them.",
       "type": "array",
       "items": { "type": "string" }
-    }
+    },
+    "caa": { "$ref": "#/$defs/caa" }
   },
   "$defs": {
+    "caa": {
+      "description": "Who may issue certificates for the name (RFC 8659), present only where --caa asked. A certificate authority looks for a CAA set at the name, then at each name above it short of the root, and goes by the first it finds, following an alias for that one lookup. The steps that asked are in the tree, as asides.",
+      "type": "object",
+      "required": ["asked"],
+      "properties": {
+        "asked": {
+          "description": "The names looked up, from the name up, until one decided or one failed.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/caa_lookup" }
+        },
+        "owner": { "description": "The name whose set decides. Absent where none was found, which leaves it to any authority.", "type": "string" },
+        "records": {
+          "description": "The set that decides, one property each, its value as the zone wrote it.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/caa_record" }
+        },
+        "issue": { "description": "Who may issue for the name. Absent where any authority may; cas is empty where none may.", "$ref": "#/$defs/issuers" },
+        "wildcard": { "description": "Who may issue for a wildcard below the name: the issuewild properties where the set has any, and otherwise the same as issue.", "$ref": "#/$defs/issuers" },
+        "refused": { "description": "Why every authority has to refuse, whatever the set says: a lookup that failed, or a critical property nobody knows.", "type": "string" },
+        "dnssec": {
+          "description": "The first verdict on the way up that is not secure, or else the one over the set that decided. A name with no set has to prove it, since dropping a set is all it takes to lift a restriction.",
+          "$ref": "#/$defs/dnssec"
+        }
+      }
+    },
+    "caa_lookup": {
+      "description": "One name a certificate authority asks on the way up.",
+      "type": "object",
+      "required": ["name", "found"],
+      "properties": {
+        "name": { "type": "string" },
+        "found": {
+          "description": "none where the name has no set, set where it has one, failed where the lookup did not come back with an answer, which makes every authority refuse.",
+          "enum": ["none", "set", "failed"]
+        },
+        "alias": { "description": "The name the answer came from, where name is an alias.", "type": "string" },
+        "error": { "description": "Why the lookup failed.", "type": "string" }
+      }
+    },
+    "caa_record": {
+      "description": "One property of the set that decides.",
+      "type": "object",
+      "required": ["tag", "value", "known"],
+      "properties": {
+        "critical": { "description": "The issuer critical flag: an authority that does not know the tag has to refuse.", "type": "boolean" },
+        "tag": { "type": "string" },
+        "value": { "type": "string" },
+        "known": { "description": "Whether the tag is one whose meaning dnstree knows.", "type": "boolean" }
+      }
+    },
+    "issuers": {
+      "type": "object",
+      "required": ["cas"],
+      "properties": {
+        "cas": { "description": "The authorities, by the domain each identifies itself with.", "type": "array", "items": { "type": "string" } }
+      }
+    },
     "question": {
       "description": "What the resolution set out to answer.",
       "type": "object",

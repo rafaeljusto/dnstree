@@ -442,6 +442,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 
 		CheckTransfer:  cfg.CheckAXFR,
 		CheckRecursion: cfg.CheckRecursion,
+		CAA:            cfg.CAA,
 
 		NSID:     cfg.NSID,
 		Cookie:   cfg.Cookie,

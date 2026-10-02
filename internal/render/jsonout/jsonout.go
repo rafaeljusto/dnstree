@@ -36,6 +36,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.Root = convert(tr.Root, tr.Timed)
 		document.Warnings = tr.Warnings
 		document.Without = tr.Without
+		document.CAA = convertCAA(tr.CAA)
 	}
 
 	encoder := json.NewEncoder(w)
@@ -52,6 +53,41 @@ type document struct {
 	Root          *step       `json:"root,omitempty"`
 	Warnings      []string    `json:"warnings,omitempty"`
 	Without       []string    `json:"without,omitempty"`
+	CAA           *caa        `json:"caa,omitempty"`
+}
+
+// caa is who may issue certificates for the name (RFC 8659), and the climb from
+// the name up that found the set deciding it.
+type caa struct {
+	Asked   []caaLookup `json:"asked"`
+	Owner   string      `json:"owner,omitempty"`
+	Records []caaRecord `json:"records,omitempty"`
+
+	// Issue and Wildcard are absent where any authority may issue, and name
+	// no authority where none may.
+	Issue    *issuers `json:"issue,omitempty"`
+	Wildcard *issuers `json:"wildcard,omitempty"`
+
+	Refused string  `json:"refused,omitempty"`
+	DNSSEC  *dnssec `json:"dnssec,omitempty"`
+}
+
+type caaLookup struct {
+	Name  string `json:"name"`
+	Found string `json:"found"`
+	Alias string `json:"alias,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+type caaRecord struct {
+	Critical bool   `json:"critical,omitempty"`
+	Tag      string `json:"tag"`
+	Value    string `json:"value"`
+	Known    bool   `json:"known"`
+}
+
+type issuers struct {
+	CAs []string `json:"cas"`
 }
 
 // resolver is the same question put to a recursive server, for whatever reads
@@ -350,6 +386,34 @@ func convertResolver(from *trace.Resolver) *resolver {
 		Kept:      string(from.Kept),
 		DDR:       convertDiscovery(from.DDR),
 	}
+}
+
+func convertCAA(from *trace.CAA) *caa {
+	if from == nil {
+		return nil
+	}
+	to := &caa{
+		Asked:    []caaLookup{},
+		Owner:    from.Owner,
+		Issue:    convertIssuers(from.Issue),
+		Wildcard: convertIssuers(from.Wildcard),
+		Refused:  from.Refused,
+		DNSSEC:   convertDNSSEC(from.DNSSEC),
+	}
+	for _, lookup := range from.Asked {
+		to.Asked = append(to.Asked, caaLookup{Name: lookup.Name, Found: string(lookup.Found), Alias: lookup.Alias, Error: lookup.Err})
+	}
+	for _, record := range from.Records {
+		to.Records = append(to.Records, caaRecord{Critical: record.Critical, Tag: record.Tag, Value: record.Value, Known: record.Known})
+	}
+	return to
+}
+
+func convertIssuers(from *trace.Issuers) *issuers {
+	if from == nil {
+		return nil
+	}
+	return &issuers{CAs: append([]string{}, from.CAs...)}
 }
 
 func convertDiscovery(from *trace.Discovery) *discovery {

@@ -27,8 +27,9 @@ $ echo $?
 
 It takes one of the words that name how far the chain of trust got — `secure`,
 `insecure`, `bogus`, `indeterminate` — or what the walk came to — `answer`,
-`cname`, `nodata`, `nxdomain` — or `fresh`, below — or else the rdata of a
-record that has to be among the answers. Repeat it for each thing that has to
+`cname`, `nodata`, `nxdomain` — or `fresh`, below — or `caa:` and a
+certificate authority, below that — or else the rdata of a record that has to
+be among the answers. Repeat it for each thing that has to
 hold:
 
 ```
@@ -49,6 +50,21 @@ $ dnstree --dnssec --expect fresh --expect fresh:3d www.example.com A
 ...
 ✔ answered in 1.1s · resolver in 33ms · 6 queries · 3 servers
 expected fresh:3d, got signatures over example.com. that run out in 1 day 1 hour
+
+$ echo $?
+4
+```
+
+`caa:letsencrypt.org` asks that `--caa` found that authority free to issue for
+the name, which is how a renewal about to be refused is caught before it is.
+A failed lookup, or a critical property nobody knows, fails it whatever the set
+names:
+
+```
+$ dnstree --caa --expect caa:letsencrypt.org --no-asn --no-compare mail.google.com
+...
+✔ answered in 726ms · 5 queries · 3 servers
+expected caa:letsencrypt.org, got pki.goog
 
 $ echo $?
 4

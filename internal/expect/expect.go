@@ -23,10 +23,11 @@ import (
 type about int
 
 const (
-	trust   about = iota // how far the chain of trust got
-	outcome              // what the walk came to
-	answer               // the records that answered
-	fresh                // how long the signatures have left to run
+	trust     about = iota // how far the chain of trust got
+	outcome                // what the walk came to
+	answer                 // the records that answered
+	fresh                  // how long the signatures have left to run
+	authority              // a certificate authority free to issue for the name
 )
 
 // Expectation is one thing the command line asked to be true of the walk.
@@ -48,7 +49,8 @@ func (e Expectation) String() string { return e.want }
 // the walk came to — answer, cname, nodata, nxdomain — or fresh, which asks for
 // a secure chain none of whose signatures is late in the life it was made for,
 // or none of which runs out within the time after a colon, such as fresh:3d; or
-// else the rdata of a record that has to be among the answers.
+// caa: and the certificate authority that has to be free to issue for the
+// name; or else the rdata of a record that has to be among the answers.
 //
 // The words win, because they are what is nearly always meant. A zone that
 // serves a record whose rdata reads like one of them is asked for with a
@@ -74,6 +76,12 @@ func Parse(text string) (Expectation, error) {
 			return Expectation{}, fmt.Errorf("%s: %w", text, err)
 		}
 		return Expectation{about: fresh, want: lower, left: left}, nil
+	}
+	if ca, ok := strings.CutPrefix(lower, "caa:"); ok {
+		if ca == "" {
+			return Expectation{}, fmt.Errorf("%s: name the certificate authority, such as caa:letsencrypt.org", text)
+		}
+		return Expectation{about: authority, want: lower}, nil
 	}
 	switch trace.DNSSECState(lower) {
 	case trace.Secure, trace.Insecure, trace.Bogus, trace.Indeterminate:
@@ -130,6 +138,9 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 
 	case fresh:
 		return e.fresh(tr)
+
+	case authority:
+		return e.issuer(tr)
 	}
 
 	result := tr.Result()
@@ -279,4 +290,27 @@ func list(items []string) string {
 		return strings.Join(items[:most], ", ") + fmt.Sprintf(" and %d more", len(items)-most)
 	}
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+}
+
+// issuer reports whether the authority after caa: may issue for the name. A
+// walk that looked up no CAA has not met it, the way one that followed no
+// chain has not met an expectation about trust.
+func (e Expectation) issuer(tr *trace.Trace) (got string, ok bool) {
+	caa := tr.CAA
+	switch {
+	case caa == nil:
+		return "a walk that looked up no caa", false
+	case caa.Refused != "":
+		return "every authority refused: " + caa.Refused, false
+	case caa.Issue == nil:
+		return "any authority", true
+	}
+	ca := strings.TrimPrefix(e.want, "caa:")
+	if caa.Issue.Allows(ca) {
+		return ca, true
+	}
+	if len(caa.Issue.CAs) == 0 {
+		return "no authority", false
+	}
+	return strings.Join(caa.Issue.CAs, ", "), false
 }

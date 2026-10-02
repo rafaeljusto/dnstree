@@ -50,6 +50,88 @@ type Trace struct {
 	// it. The servers inside it were never asked, so an answer the walk found
 	// is one the rest of the DNS gives on its own.
 	Without []string
+
+	// CAA is who may issue certificates for the name, nil where --caa did not
+	// ask.
+	CAA *CAA
+}
+
+// CAA is the CAA set that decides which certificate authorities may issue for
+// a name (RFC 8659), found the way an authority finds it: at the name, or else
+// at the closest name above it that has one, the root aside.
+type CAA struct {
+	// Asked are the names looked up, from the name up, until one decided.
+	Asked []CAALookup
+
+	// Owner is the name whose set decides, empty where none was found, and
+	// Records that set.
+	Owner   string
+	Records []CAARecord
+
+	// Issue and Wildcard are who may issue for the name and for a wildcard
+	// below it. Nil leaves it to any authority, and an empty list to none.
+	Issue    *Issuers
+	Wildcard *Issuers
+
+	// Refused is why every authority has to refuse whatever the set says,
+	// empty where none has to.
+	Refused string
+
+	// DNSSEC is the first verdict on the way up that is not secure, or else
+	// the one over the set that decided. Nil where no signatures were checked.
+	DNSSEC *DNSSECStatus
+}
+
+// CAALookup is one name a certificate authority asks on the way up.
+type CAALookup struct {
+	Name  string
+	Found CAAFound
+
+	// Alias is the name the answer came from, where Name is an alias.
+	Alias string
+
+	// Err is why the lookup failed.
+	Err string
+}
+
+// CAAFound is what one lookup came to.
+type CAAFound string
+
+// What a lookup can come to.
+const (
+	CAANone   CAAFound = "none"
+	CAASet    CAAFound = "set"
+	CAAFailed CAAFound = "failed"
+)
+
+// CAARecord is one property of a CAA set, its value escaped the way the text of
+// any record is.
+type CAARecord struct {
+	Critical bool
+	Tag      string
+	Value    string
+
+	// Known is whether the tag is one this build knows the meaning of.
+	Known bool
+}
+
+// Issuers are the certificate authorities a set names, by the domain each
+// identifies itself with.
+type Issuers struct {
+	CAs []string
+}
+
+// Allows reports whether an authority may issue under these issuers.
+func (i *Issuers) Allows(ca string) bool {
+	if i == nil {
+		return true
+	}
+	for _, named := range i.CAs {
+		if strings.EqualFold(strings.TrimSuffix(named, "."), strings.TrimSuffix(ca, ".")) {
+			return true
+		}
+	}
+	return false
 }
 
 // Resolver is what one recursive server made of the question. It is metadata,

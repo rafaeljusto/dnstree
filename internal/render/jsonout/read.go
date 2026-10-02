@@ -66,7 +66,48 @@ func Read(r io.Reader) (*trace.Trace, error) {
 		return nil, err
 	}
 	tr.Timed = timed(doc.Root)
+	if tr.CAA, err = readCAA(doc.CAA); err != nil {
+		return nil, err
+	}
 	return tr, nil
+}
+
+// readCAA reads the climb back. --expect caa: is a verdict read from it, so
+// what each lookup came to has to be one this build knows.
+func readCAA(from *caa) (*trace.CAA, error) {
+	if from == nil {
+		return nil, nil
+	}
+	to := &trace.CAA{
+		Owner:    from.Owner,
+		Issue:    readIssuers(from.Issue),
+		Wildcard: readIssuers(from.Wildcard),
+		Refused:  from.Refused,
+	}
+	for _, lookup := range from.Asked {
+		found := trace.CAAFound(lookup.Found)
+		switch found {
+		case trace.CAANone, trace.CAASet, trace.CAAFailed:
+		default:
+			return nil, fmt.Errorf("jsonout: %q is not what a CAA lookup can come to", lookup.Found)
+		}
+		to.Asked = append(to.Asked, trace.CAALookup{Name: lookup.Name, Found: found, Alias: lookup.Alias, Err: lookup.Error})
+	}
+	for _, record := range from.Records {
+		to.Records = append(to.Records, trace.CAARecord{Critical: record.Critical, Tag: record.Tag, Value: record.Value, Known: record.Known})
+	}
+	var err error
+	if to.DNSSEC, err = readDNSSEC(from.DNSSEC); err != nil {
+		return nil, err
+	}
+	return to, nil
+}
+
+func readIssuers(from *issuers) *trace.Issuers {
+	if from == nil {
+		return nil
+	}
+	return &trace.Issuers{CAs: append([]string{}, from.CAs...)}
 }
 
 // A trace is far smaller and shallower than these, whatever the budgets were

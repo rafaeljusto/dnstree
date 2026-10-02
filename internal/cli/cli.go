@@ -45,6 +45,7 @@ script is asked in punycode, the way the DNS holds it.
   --serial                ask every nameserver of the zone which copy it serves
   --check-axfr            ask each nameserver of the zone to hand over all of it
   --check-recursion       ask each nameserver of the zone to resolve another name
+  --caa                   say which certificate authorities may issue for NAME
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
@@ -154,8 +155,8 @@ own. With --from, a walk saved during an incident becomes a report afterwards.
 --format openmetrics writes the walk as numbers for a monitoring system: how
 it ended, what it and each hop on the path took, the chain of trust, the time
 left on the signatures, what --check-ds found, which nameservers the
---check-axfr and --check-recursion probes found open and what the resolvers
-answered, each labelled with the question. Run from cron into the directory of
+--check-axfr and --check-recursion probes found open, who --caa found free to
+issue and what the resolvers answered, each labelled with the question. Run from cron into the directory of
 node_exporter's textfile collector, it is what Prometheus alerts on.
 
 --from reads a walk that --format json wrote, from FILE or from - for the
@@ -204,7 +205,9 @@ rather than reads. It takes one of the words that name how far the chain of
 trust got (secure, insecure, bogus, indeterminate), or what the walk came to
 (answer, cname, nodata, nxdomain), or fresh, which asks for a chain of trust
 that holds and none of whose signatures is late in the life it was made for;
-fresh:3d or fresh:36h asks instead that none runs out that soon. Or else it
+fresh:3d or fresh:36h asks instead that none runs out that soon. caa:CA, such as
+caa:letsencrypt.org, asks that --caa found that authority free to issue for the
+name, which is how a renewal about to be refused is caught. Or else it
 takes the rdata of a record that has to be among the answers, such as an
 address. Repeat it for every one that has to hold.
 Those words win where a value could be read either way, so a record whose rdata
@@ -239,6 +242,18 @@ Both cost a query per nameserver and are off unless asked for: a transfer
 refused still shows up in the server's logs, so they are for zones you run or
 have been asked to check. The root is never asked either, since its servers
 hand out the root zone on purpose.
+
+--caa says which certificate authorities may issue a certificate for NAME, and
+which CAA set decides it (RFC 8659). An authority looks at the name, then at
+each name above it short of the root, and goes by the first set it finds,
+following an alias for that one lookup; so does this, asking each name of the
+zone the walk found it in, and drawing the climb under the tree. A set with no
+issue property leaves it to any authority, one with no issuewild leaves
+wildcards to issue, and a lookup that fails or a critical property nobody knows
+makes every authority refuse, which is said in a warning. With --dnssec the
+verdict is the weakest on the way up: a name that has no set has to prove it,
+since dropping a set is all it takes to lift a restriction. It costs a query
+for each name asked.
 
 --all sees the other half of the same thing without being asked to: where it
 puts the question itself to every nameserver of a zone, it says so when they do
@@ -309,6 +324,7 @@ type Config struct {
 
 	CheckAXFR      bool
 	CheckRecursion bool
+	CAA            bool
 
 	NSID     bool
 	Cookie   bool
@@ -450,6 +466,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.CheckAXFR, "check-axfr", false, "ask every nameserver of the zone for all of it")
 	flags.BoolVar(&cfg.CheckRecursion, "check-recursion", false, "ask every nameserver of the zone to look up somebody else's name")
+	flags.BoolVar(&cfg.CAA, "caa", false, "say which certificate authorities may issue for the name")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
@@ -694,7 +711,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "caa": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "no-asn": true, "no-compare": true, "ddr": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

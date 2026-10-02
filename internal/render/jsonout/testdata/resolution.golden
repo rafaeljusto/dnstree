@@ -224,5 +224,43 @@
   "without": [
     "ns1.example.com.",
     "192.0.2.0/24"
-  ]
+  ],
+  "caa": {
+    "asked": [
+      {
+        "name": "www.example.com.",
+        "found": "none"
+      },
+      {
+        "name": "example.com.",
+        "found": "set"
+      }
+    ],
+    "owner": "example.com.",
+    "records": [
+      {
+        "tag": "issue",
+        "value": "letsencrypt.org",
+        "known": true
+      },
+      {
+        "tag": "issuewild",
+        "value": ";",
+        "known": true
+      }
+    ],
+    "issue": {
+      "cas": [
+        "letsencrypt.org"
+      ]
+    },
+    "wildcard": {
+      "cas": []
+    },
+    "dnssec": {
+      "state": "secure",
+      "zone": "example.com.",
+      "algorithm": "ECDSAP256SHA256"
+    }
+  }
 }

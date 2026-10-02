@@ -1094,3 +1094,44 @@ func TestExposure(t *testing.T) {
 		})
 	}
 }
+
+func TestIssuance(t *testing.T) {
+	for name, tt := range map[string]struct {
+		caa  *trace.CAA
+		want string
+	}{
+		"a set naming the authorities, with wildcards kept to none": {
+			caa: &trace.CAA{Owner: "test.",
+				Issue:    &trace.Issuers{CAs: []string{"letsencrypt.org", "pki.goog", "sectigo.com"}},
+				Wildcard: &trace.Issuers{CAs: []string{}}},
+			want: "the CAA set at test. lets only letsencrypt.org, pki.goog and sectigo.com issue for www.test., and no certificate authority issue wildcards below it",
+		},
+		"a set naming one authority for both": {
+			caa:  &trace.CAA{Owner: "test.", Issue: &trace.Issuers{CAs: []string{"letsencrypt.org"}}, Wildcard: &trace.Issuers{CAs: []string{"letsencrypt.org"}}},
+			want: "the CAA set at test. lets only letsencrypt.org issue for www.test.",
+		},
+		"a set with no issue property": {
+			caa:  &trace.CAA{Owner: "test."},
+			want: "the CAA set at test. names no issuer, so any certificate authority may issue for www.test.",
+		},
+		"no set anywhere": {
+			caa:  &trace.CAA{},
+			want: "no name from www.test. up has a CAA set, so any certificate authority may issue for it",
+		},
+		"a lookup that failed": {
+			caa:  &trace.CAA{Refused: "the CAA lookup at www.test. failed: SERVFAIL"},
+			want: "every certificate authority has to refuse to issue for www.test.: the CAA lookup at www.test. failed: SERVFAIL",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := walk(answered(300))
+			tr.CAA = tt.caa
+			if got := said(tr); !strings.Contains(got, tt.want) {
+				t.Errorf("got %q, want it to say %q", got, tt.want)
+			}
+		})
+	}
+	if got := said(walk(answered(300))); strings.Contains(got, "certificate authority") {
+		t.Errorf("got %q, want nothing said of CAA a walk did not look up", got)
+	}
+}

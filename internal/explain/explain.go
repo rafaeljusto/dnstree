@@ -30,6 +30,7 @@ const (
 	Takeover              // what somebody else could take the name over with
 	Spread                // what the nameservers of the zone have in common
 	Servers               // the servers that made the walk harder
+	Issuance              // who may issue certificates for the name
 	Resolver              // what an ordinary resolution made of the same question
 	Change                // what is not what it was when this walk was last made
 )
@@ -48,6 +49,8 @@ func (t Topic) String() string {
 		return "spread"
 	case Servers:
 		return "servers"
+	case Issuance:
+		return "issuance"
 	case Resolver:
 		return "resolver"
 	case Change:
@@ -109,6 +112,9 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, servers(tr)...)
 	findings = append(findings, cookies(tr)...)
 	findings = append(findings, exposure(tr)...)
+	if finding, ok := issuance(tr); ok {
+		findings = append(findings, finding)
+	}
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
 	}
@@ -1073,4 +1079,41 @@ func first(items []string) string {
 		return ""
 	}
 	return items[0]
+}
+
+// issuance is who may issue certificates for the name, as the CAA set that
+// decides it says, where --caa looked.
+func issuance(tr *trace.Trace) (Finding, bool) {
+	caa, name := tr.CAA, tr.Question.Name
+	switch {
+	case caa == nil:
+		return Finding{}, false
+	case caa.Refused != "":
+		return Finding{Topic: Issuance, Level: Warn, Text: fmt.Sprintf(
+			"every certificate authority has to refuse to issue for %s: %s", name, caa.Refused)}, true
+	case caa.Owner == "":
+		return Finding{Topic: Issuance, Level: Note, Text: fmt.Sprintf(
+			"no name from %s up has a CAA set, so any certificate authority may issue for it", name)}, true
+	case caa.Issue == nil:
+		return Finding{Topic: Issuance, Level: Note, Text: fmt.Sprintf(
+			"the CAA set at %s names no issuer, so any certificate authority may issue for %s", caa.Owner, name)}, true
+	}
+	text := fmt.Sprintf("the CAA set at %s lets %s issue for %s", caa.Owner, issuers(caa.Issue), name)
+	if !slices.Equal(caa.Issue.CAs, caa.Wildcard.CAs) {
+		text += fmt.Sprintf(", and %s issue wildcards below it", issuers(caa.Wildcard))
+	}
+	return Finding{Topic: Issuance, Level: Note, Text: text}, true
+}
+
+// issuers names the authorities a set lets issue.
+func issuers(issuers *trace.Issuers) string {
+	switch {
+	case issuers == nil:
+		return "any certificate authority"
+	case len(issuers.CAs) == 0:
+		return "no certificate authority"
+	case len(issuers.CAs) == 1:
+		return "only " + issuers.CAs[0]
+	}
+	return "only " + strings.Join(issuers.CAs[:len(issuers.CAs)-1], ", ") + " and " + issuers.CAs[len(issuers.CAs)-1]
 }

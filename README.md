@@ -118,6 +118,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--serial`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of the zone which copy of it they serve, and compare |
 | [`--check-axfr`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over |
 | [`--check-recursion`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone to look up somebody else's name, and say which do |
+| [`--caa`](docs/guide/zones.md#who-may-issue-certificates-for-it) | say which certificate authorities may issue for the name, and which CAA set decides it (RFC 8659) |
 | [`--nsid`](docs/guide/zones.md#which-machine-answered) | ask each server which of itself answered, and draw it beside the address |
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |
 | [`--qmin`](docs/guide/zones.md#asking-only-what-each-zone-needs) | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
@@ -240,8 +241,8 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
 - [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, and what DNSSEC
   is worth to ECH.
 - [Checking a zone](docs/guide/zones.md): parent and child NS sets, serials, zone
-  transfers and open recursion, extended errors, NSID, cookies, `--qmin`,
-  `--without` and answer sizes.
+  transfers and open recursion, who may issue certificates, extended errors,
+  NSID, cookies, `--qmin`, `--without` and answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, from here or from another subnet, and whether they offer
   encryption.

@@ -6,6 +6,7 @@ server says about its own answer.
 - [Whether the parent and the child agree](#whether-the-parent-and-the-child-agree)
 - [Whether they all have the same zone](#whether-they-all-have-the-same-zone)
 - [What they give a stranger](#what-they-give-a-stranger)
+- [Who may issue certificates for it](#who-may-issue-certificates-for-it)
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
 - [Which machine answered](#which-machine-answered)
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
@@ -166,6 +167,55 @@ have been asked to check. The root is never asked: its servers hand out the
 root zone on purpose (RFC 8806). Like `--serial`, only the nameservers the walk
 found an address for are asked. `--format json` carries each check as a `probe`
 on its hop, and `--format openmetrics` as `dnstree_open`.
+
+## Who may issue certificates for it
+
+A CAA record (RFC 8659) says which certificate authorities may issue for a
+name, and every public authority checks it before issuing. It does not only
+look at the name: where the name has no set, it asks the name above, and so on
+short of the root, and goes by the first set it finds. That is why a renewal
+refused because of CAA is hard to explain with `dig`: the set that decided it is
+often one somebody added at the top of the domain years ago. `--caa` makes the
+same climb, asking each name of the zone the walk found it in, and says under
+the tree which set decided and what it allows:
+
+```
+$ dnstree --caa --dnssec --explain --no-asn --no-compare www.isc.org
+...
+│   │   ├── ns1.isc.org. 149.20.2.26  361ms  1180 of 1232 bytes  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   ├── www.isc.org. 300 A 151.101.195.42
+...
+│   │   │   ├── ns1.isc.org. 149.20.2.26  362ms  NOERROR  AA DO  no data  [secure]  (CAA of www.isc.org.)
+│   │   │   └── ns1.isc.org. 149.20.2.26  456ms  1181 of 1232 bytes  NOERROR  AA DO  [secure ECDSAP256SHA256]  (CAA of isc.org.)
+│   │   │       ├── isc.org. 7200 CAA 0 issuewild "sectigo.com"
+│   │   │       ├── isc.org. 7200 CAA 0 issuewild "certainly.com"
+│   │   │       ├── isc.org. 7200 CAA 0 iodef "mailto:hostmaster@isc.org"
+...
+caa: none at www.isc.org.; isc.org. decides it [secure ECDSAP256SHA256]
+caa: may issue: digicert.com, sectigo.com, certainly.com, pki.goog, globalsign.com, letsencrypt.org, comodoca.com; wildcards: sectigo.com, certainly.com, usertrust.com, comodoca.com, globalsign.com, trust-provider.com; reports to mailto:hostmaster@isc.org
+...
+· the CAA set at isc.org. lets only digicert.com, sectigo.com, certainly.com, pki.goog, globalsign.com, letsencrypt.org and comodoca.com issue for www.isc.org., and only sectigo.com, certainly.com, usertrust.com, comodoca.com, globalsign.com and trust-provider.com issue wildcards below it
+```
+
+The rules are the authorities' own. A set with no `issue` property restricts
+nobody, and one with no `issuewild` leaves wildcards to `issue`. An `issue`
+naming no domain, `";"`, lets nobody issue. An alias is followed for the
+lookup it was met on, and the climb goes on from the alias rather than from its
+target. A lookup that fails, a timeout or a `SERVFAIL` rather than an empty
+answer, stops the climb, and so does a critical property no authority knows:
+either makes every authority refuse, which is said in a warning. Parameters
+such as `accounturi` and `validationmethods` (RFC 8657) are drawn with the
+record, but not read: authorities differ on them.
+
+With `--dnssec` the verdict is the weakest on the way up. A name with no set has
+to prove it, the way any NODATA does, since dropping a set is all it takes to
+lift a restriction, and a set or a denial that does not verify is a broken
+chain of trust like any other, which exits 3. Otherwise the exit code is left
+alone, unless `--expect caa:` asks for an authority by name
+([Asking rather than reading](scripting.md#asking-rather-than-reading)). It
+costs a query for each name asked, or a walk for one that is an alias.
+`--format json` carries it as `caa`, and `--format openmetrics` as
+`dnstree_caa`.
 
 ## What a server said about its answer
 

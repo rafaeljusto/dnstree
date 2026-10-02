@@ -408,6 +408,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--check-axfr</code> asks every nameserver for the whole zone, and <code>--check-recursion</code> asks each to look up somebody else's name. Only the start of a transfer is read, and none of it is kept.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-accent">certificates</span>
+          <h3>Who may issue a certificate</h3>
+          <p><code>--caa</code> climbs from the name towards the root the way a certificate authority does, and says which CAA set decides who may issue. A lookup that fails is said too, since it makes every authority refuse.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">disagreeing</span>
           <h3>A delegation the zone does not recognise</h3>
           <p><code>--check-ns</code> holds the zone's own NS records against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed.</p>

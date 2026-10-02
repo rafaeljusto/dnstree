@@ -127,6 +127,20 @@ func resolution() *trace.Trace {
 		}},
 		Warnings: []string{"the delegation to example.com. lists a nameserver the zone does not"},
 		Without:  []string{"ns1.example.com.", "192.0.2.0/24"},
+		CAA: &trace.CAA{
+			Asked: []trace.CAALookup{
+				{Name: "www.example.com.", Found: trace.CAANone},
+				{Name: "example.com.", Found: trace.CAASet},
+			},
+			Owner: "example.com.",
+			Records: []trace.CAARecord{
+				{Tag: "issue", Value: "letsencrypt.org", Known: true},
+				{Tag: "issuewild", Value: ";", Known: true},
+			},
+			Issue:    &trace.Issuers{CAs: []string{"letsencrypt.org"}},
+			Wildcard: &trace.Issuers{CAs: []string{}},
+			DNSSEC:   &trace.DNSSECStatus{State: trace.Secure, Zone: "example.com.", Algorithm: "ECDSAP256SHA256"},
+		},
 	}
 }
 

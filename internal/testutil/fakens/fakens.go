@@ -107,6 +107,10 @@ type Behaviour struct {
 	// recursion, the way an open resolver does: the root's NS set, with RA
 	// and without AA. Without it such a question is refused.
 	OpenRecursion bool
+	// ServFailType answers SERVFAIL to any question for this type, the way a
+	// server whose software or backend cannot serve a newer type does. Zero
+	// answers every type.
+	ServFailType uint16
 }
 
 // Cookies is how a server answers a DNS cookie.
@@ -431,6 +435,8 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		reply.UDPSize = 0
 	case s.behaviour.Refuse:
 		reply.Rcode = dns.RcodeRefused
+	case s.behaviour.ServFailType != 0 && qtype == s.behaviour.ServFailType:
+		reply.Rcode = dns.RcodeServerFailure
 	case s.behaviour.Lame:
 		// NOERROR, no AA, nothing to follow: the server is not serving this zone.
 	case qtype == dns.TypeAXFR:

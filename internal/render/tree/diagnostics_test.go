@@ -420,3 +420,71 @@ func TestRenderDangling(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderCAA(t *testing.T) {
+	letsEncrypt := &trace.Issuers{CAs: []string{"letsencrypt.org"}}
+	for name, tt := range map[string]struct {
+		caa  *trace.CAA
+		want []string
+	}{
+		"a set above the name, with a report address": {
+			caa: &trace.CAA{
+				Asked: []trace.CAALookup{{Name: "www.test.", Found: trace.CAANone}, {Name: "test.", Found: trace.CAASet}},
+				Owner: "test.",
+				Records: []trace.CAARecord{
+					{Tag: "issue", Value: "letsencrypt.org", Known: true},
+					{Tag: "issuewild", Value: ";", Known: true},
+					{Tag: "iodef", Value: "mailto:security@test", Known: true},
+				},
+				Issue: letsEncrypt, Wildcard: &trace.Issuers{CAs: []string{}},
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure},
+			},
+			want: []string{
+				"caa: none at www.test.; test. decides it [secure]",
+				"caa: may issue: letsencrypt.org; wildcards: nobody; reports to mailto:security@test",
+			},
+		},
+		"an alias whose target holds the set": {
+			caa: &trace.CAA{
+				Asked: []trace.CAALookup{{Name: "www.test.", Found: trace.CAASet, Alias: "cdn.test."}},
+				Owner: "www.test.", Issue: letsEncrypt, Wildcard: letsEncrypt,
+			},
+			want: []string{"caa: www.test. decides it, as an alias for cdn.test.", "caa: may issue: letsencrypt.org; wildcards: letsencrypt.org"},
+		},
+		"a set with no issue property": {
+			caa: &trace.CAA{
+				Asked: []trace.CAALookup{{Name: "www.test.", Found: trace.CAASet}}, Owner: "www.test.",
+			},
+			want: []string{"caa: www.test. decides it", "caa: may issue: any authority; wildcards: any authority"},
+		},
+		"no set anywhere": {
+			caa:  &trace.CAA{Asked: []trace.CAALookup{{Name: "www.test.", Found: trace.CAANone}, {Name: "test.", Found: trace.CAANone}}},
+			want: []string{"caa: none from www.test. up, so any authority may issue"},
+		},
+		"a lookup that failed": {
+			caa: &trace.CAA{
+				Asked:   []trace.CAALookup{{Name: "www.test.", Found: trace.CAAFailed, Err: "SERVFAIL"}},
+				Refused: "the CAA lookup at www.test. failed: SERVFAIL",
+			},
+			want: []string{"caa: every authority refuses: the CAA lookup at www.test. failed: SERVFAIL"},
+		},
+		"a climb read from a file with nothing in it": {
+			caa: &trace.CAA{},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := oneHop(&trace.Step{Kind: trace.KindAnswer, Rcode: "NOERROR"})
+			tr.CAA = tt.caa
+			out := draw(t, tr)
+			var got []string
+			for line := range strings.Lines(out) {
+				if strings.HasPrefix(line, "caa: ") {
+					got = append(got, strings.TrimSuffix(line, "\n"))
+				}
+			}
+			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

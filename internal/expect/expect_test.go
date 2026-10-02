@@ -172,7 +172,7 @@ func TestUnmet(t *testing.T) {
 // TestParseRejects covers the values that say nothing. They are reported
 // against the flag that carried them rather than after a walk has been made.
 func TestParseRejects(t *testing.T) {
-	for _, value := range []string{"", "="} {
+	for _, value := range []string{"", "=", "caa:"} {
 		if _, err := expect.Parse(value); err == nil {
 			t.Errorf("Parse(%q): got no error, want one", value)
 		}
@@ -271,5 +271,55 @@ func TestParseFresh(t *testing.T) {
 				t.Errorf("Parse(%q) took it, want it refused", value)
 			}
 		})
+	}
+}
+
+func TestCAA(t *testing.T) {
+	letsEncrypt := &trace.Issuers{CAs: []string{"letsencrypt.org"}}
+	for name, tt := range map[string]struct {
+		caa    *trace.CAA
+		expect string
+		unmet  []string
+	}{
+		"an authority the set names": {
+			caa: &trace.CAA{Owner: "test.", Issue: letsEncrypt}, expect: "caa:LetsEncrypt.org",
+		},
+		"an authority the set leaves out": {
+			caa: &trace.CAA{Owner: "test.", Issue: letsEncrypt}, expect: "caa:digicert.com",
+			unmet: []string{"expected caa:digicert.com, got letsencrypt.org"},
+		},
+		"a set that lets nobody issue": {
+			caa: &trace.CAA{Owner: "test.", Issue: &trace.Issuers{CAs: []string{}}}, expect: "caa:letsencrypt.org",
+			unmet: []string{"expected caa:letsencrypt.org, got no authority"},
+		},
+		"no set anywhere": {
+			caa: &trace.CAA{}, expect: "caa:letsencrypt.org",
+		},
+		"a lookup that failed, whatever the set says": {
+			caa:    &trace.CAA{Issue: letsEncrypt, Refused: "the CAA lookup at www.test. failed: SERVFAIL"},
+			expect: "caa:letsencrypt.org",
+			unmet:  []string{"expected caa:letsencrypt.org, got every authority refused: the CAA lookup at www.test. failed: SERVFAIL"},
+		},
+		"a walk that looked up no caa": {
+			expect: "caa:letsencrypt.org",
+			unmet:  []string{"expected caa:letsencrypt.org, got a walk that looked up no caa"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := walk("A", answered("A", "192.0.2.10"))
+			tr.CAA = tt.caa
+			if got := expect.Unmet(tr, parse(t, tt.expect)); !slices.Equal(got, tt.unmet) {
+				t.Errorf("got %q, want %q", got, tt.unmet)
+			}
+		})
+	}
+}
+
+// TestParseCAA covers the escape, which still reads a record whose rdata
+// happens to start the way a caa: expectation does.
+func TestParseCAA(t *testing.T) {
+	tr := walk("TXT", answered("TXT", `caa:letsencrypt.org`))
+	if got := expect.Unmet(tr, parse(t, "=caa:letsencrypt.org")); len(got) != 0 {
+		t.Errorf("got %q, want the rdata found", got)
 	}
 }
