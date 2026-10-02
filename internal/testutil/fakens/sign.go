@@ -149,10 +149,12 @@ func (s *signer) sign(rrset []dns.RR, key *dns.DNSKEY, private crypto.Signer, sp
 	copies := make([]dns.RR, len(rrset))
 	for i, rr := range rrset {
 		copies[i] = rr.Clone()
-		// The codec sorts CAA values shortest first rather than by their
-		// octets (RFC 4034 6.3); the generic form is sorted the way a real
-		// signer sorts them, and packs to the same wire.
-		if dns.RRToType(rr) == dns.TypeCAA {
+		// The codec sorts the values that end CAA, URI and NULL records
+		// shortest first rather than by their octets (RFC 4034 6.3); the
+		// generic form is sorted the way a real signer sorts them, and packs
+		// to the same wire for types that hold no name.
+		switch dns.RRToType(rr) {
+		case dns.TypeCAA, dns.TypeURI, dns.TypeNULL:
 			raw := new(dns.RFC3597)
 			if err := raw.ToRFC3597(rr); err == nil {
 				copies[i] = raw

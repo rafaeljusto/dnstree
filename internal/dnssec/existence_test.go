@@ -210,30 +210,52 @@ func TestDenialMustBeSignedToDenyAnything(t *testing.T) {
 	}
 }
 
-// TestCAAOrderedByItsOctets covers an RRset the codec orders wrongly: it sorts
-// CAA values shortest first, as though each carried its length, where a signer
-// sorts the octets (RFC 4034 6.3). certainly.com comes before pki.goog by its
-// octets and after it by its length, so a set holding both, signed as a real
-// signer signs it, is one the codec alone would call bogus.
-func TestCAAOrderedByItsOctets(t *testing.T) {
-	chain, child := secured(t)
-
-	var rrset, generic []dns.RR
-	for _, value := range []string{"pki.goog", "certainly.com", "letsencrypt.org"} {
-		rr, err := dns.New(`example. 3600 IN CAA 0 issue "` + value + `"`)
-		if err != nil {
-			t.Fatalf("dns.New: %v", err)
-		}
-		rrset = append(rrset, rr)
-		raw := new(dns.RFC3597)
-		if err := raw.ToRFC3597(rr); err != nil {
-			t.Fatalf("ToRFC3597: %v", err)
-		}
-		generic = append(generic, raw)
+// TestOrderedByItsOctets covers the sets the codec orders wrongly: it sorts the
+// value that ends a CAA, URI or NULL record shortest first, as though it
+// carried its length, where a signer sorts the octets (RFC 4034 6.3). Each set
+// holds values whose order by octets is not their order by length, so signed as
+// a real signer signs it, it is one the codec alone would call bogus.
+func TestOrderedByItsOctets(t *testing.T) {
+	tests := map[string]struct {
+		rrtype string
+		values []string
+	}{
+		"authorities that sort before others longer than them": {
+			rrtype: "CAA",
+			values: []string{`0 issue "pki.goog"`, `0 issue "certainly.com"`, `0 issue "letsencrypt.org"`},
+		},
+		"targets that sort before others longer than them": {
+			rrtype: "URI",
+			values: []string{`10 1 "https://zz.example/"`, `10 1 "https://a.example/long/path"`},
+		},
+		"opaque data that sorts before other data longer than it": {
+			rrtype: "NULL",
+			values: []string{`\# 2 ffff`, `\# 3 000000`},
+		},
 	}
-	rrset = append(rrset, child.sign(t, generic, time.Now().Add(time.Hour)))
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			chain, child := secured(t)
 
-	if status := chain.Verify(rrset, nil, dns.RcodeSuccess, "example.", dns.TypeCAA); status.State != trace.Secure {
-		t.Errorf("got %s (%s), want the set secure", status.State, status.Reason)
+			var rrset, generic []dns.RR
+			for _, value := range tt.values {
+				rr, err := dns.New("example. 3600 IN " + tt.rrtype + " " + value)
+				if err != nil {
+					t.Fatalf("dns.New: %v", err)
+				}
+				rrset = append(rrset, rr)
+				raw := new(dns.RFC3597)
+				if err := raw.ToRFC3597(rr); err != nil {
+					t.Fatalf("ToRFC3597: %v", err)
+				}
+				generic = append(generic, raw)
+			}
+			rrset = append(rrset, child.sign(t, generic, time.Now().Add(time.Hour)))
+
+			status := chain.Verify(rrset, nil, dns.RcodeSuccess, "example.", dns.StringToType[tt.rrtype])
+			if status.State != trace.Secure {
+				t.Errorf("got %s (%s), want the set secure", status.State, status.Reason)
+			}
+		})
 	}
 }
