@@ -128,6 +128,11 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--root", "192.0.2.9", "example.com"},
 			want: cli.Config{Roots: []cli.Root{{Addr: netip.MustParseAddrPort("192.0.2.9:0")}}},
 		},
+		"a resolver asked for replaces every one in the file": {
+			file: "resolver = 192.0.2.1\nasn-resolver = 192.0.2.2\n",
+			args: []string{"--resolver", "192.0.2.9", "example.com"},
+			want: cli.Config{Resolvers: []netip.AddrPort{netip.MustParseAddrPort("192.0.2.9:53")}},
+		},
 		"a page served where the file says": {
 			file: "format = web\nweb-addr = 127.0.0.1:8080\n",
 			args: []string{"example.com"},
@@ -369,6 +374,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"a file that draws a saved walk":           {file: "from = walk.json\n"},
 		"a file that holds every walk against one": {file: "against = walk.json\n"},
 		"a file that names an address":             {file: "x = 192.0.2.1\n"},
+		"a file that takes part of the DNS down":   {file: "without = com.\n"},
 	}
 
 	for name, test := range tests {

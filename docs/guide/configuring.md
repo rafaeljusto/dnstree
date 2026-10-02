@@ -25,8 +25,8 @@ and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
-`no-config`, `version`, `schema`, `from`, `against` and `x`: those seven ask
-something of the run rather than set a default for it.
+`no-config`, `version`, `schema`, `from`, `against`, `x` and `without`: those
+eight ask something of the run rather than set a default for it.
 
 > [!NOTE]
 > A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be
@@ -49,10 +49,10 @@ format that serves no page drops a `web-addr` and a `no-browser` it set, and
 `--from` drops a `live`, a `watch` and a `diff`, which are about walks being
 made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.
 
-`root` is the one line worth repeating: a file may carry as many as the walk
-should start from, in the order they are written. One `--root` on the command
-line replaces every one of them, rather than adding to them, and so does
-`--root-hints`.
+`root` and `resolver` are the lines worth repeating: a file may carry as many
+as the walk should start from, or ask, in the order they are written. One
+`--root` or `--resolver` on the command line replaces every line of its kind,
+rather than adding to them, and `--root-hints` replaces the roots too.
 
 > [!TIP]
 > [`dnstreerc.example`](../../dnstreerc.example) is a file of every setting worth

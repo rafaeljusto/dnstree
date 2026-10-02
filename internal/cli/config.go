@@ -24,8 +24,9 @@ type configFile struct {
 // Some flags say the same thing in different ways. A command line that names
 // one of a group answers the whole group, so the file's choice is dropped
 // rather than left to collide with it. --root is in one for a second reason:
-// it is the only flag that may be repeated, so a file's roots would otherwise
-// pile onto the command line's instead of giving way to them.
+// it may be repeated, so a file's roots would otherwise pile onto the command
+// line's instead of giving way to them. --resolver is in one with its older
+// name, and so a file's resolvers give way too.
 var groups = [][]string{
 	{"4", "6"},
 	{"udp", "tcp", "dot", "doh"},
@@ -138,7 +139,7 @@ func defaults(flags *flag.FlagSet, file configFile) ([]string, bool, error) {
 		case "config", "no-config":
 			return nil, false, fmt.Errorf("%w: %s: --%s says which file to read, so it cannot be read from one",
 				ErrUsage, where, name)
-		case "version", "schema", "from", "against", "x":
+		case "version", "schema", "from", "against", "x", "without":
 			return nil, false, fmt.Errorf("%w: %s: --%s is asked for, not set", ErrUsage, where, name)
 		}
 
