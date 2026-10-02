@@ -53,6 +53,17 @@ func New(anchors roothints.Anchors) *Chain {
 	return &Chain{anchors: anchors, state: trace.Secure, zone: ".", now: time.Now}
 }
 
+// Clone is the chain as it stands, to check a zone's answers against after the
+// walk has gone below it. Nil stays nil.
+func (c *Chain) Clone() *Chain {
+	if c == nil {
+		return nil
+	}
+	clone := *c
+	clone.signatures, clone.nsec3 = nil, nil
+	return &clone
+}
+
 // State is how far the chain got.
 func (c *Chain) State() trace.DNSSECState { return c.state }
 

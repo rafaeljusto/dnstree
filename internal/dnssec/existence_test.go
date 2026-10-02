@@ -209,3 +209,31 @@ func TestDenialMustBeSignedToDenyAnything(t *testing.T) {
 		t.Fatalf("got %+v, want an unsigned denial refused", status)
 	}
 }
+
+// TestCAAOrderedByItsOctets covers an RRset the codec orders wrongly: it sorts
+// CAA values shortest first, as though each carried its length, where a signer
+// sorts the octets (RFC 4034 6.3). certainly.com comes before pki.goog by its
+// octets and after it by its length, so a set holding both, signed as a real
+// signer signs it, is one the codec alone would call bogus.
+func TestCAAOrderedByItsOctets(t *testing.T) {
+	chain, child := secured(t)
+
+	var rrset, generic []dns.RR
+	for _, value := range []string{"pki.goog", "certainly.com", "letsencrypt.org"} {
+		rr, err := dns.New(`example. 3600 IN CAA 0 issue "` + value + `"`)
+		if err != nil {
+			t.Fatalf("dns.New: %v", err)
+		}
+		rrset = append(rrset, rr)
+		raw := new(dns.RFC3597)
+		if err := raw.ToRFC3597(rr); err != nil {
+			t.Fatalf("ToRFC3597: %v", err)
+		}
+		generic = append(generic, raw)
+	}
+	rrset = append(rrset, child.sign(t, generic, time.Now().Add(time.Hour)))
+
+	if status := chain.Verify(rrset, nil, dns.RcodeSuccess, "example.", dns.TypeCAA); status.State != trace.Secure {
+		t.Errorf("got %s (%s), want the set secure", status.State, status.Reason)
+	}
+}
