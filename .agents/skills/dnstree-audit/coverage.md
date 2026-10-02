@@ -2,15 +2,19 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `cc0837f`
-- **Date**: 2026-09-29
-- **Scope**: the eighteen commits since `499eefc` (dnstree-web and
-  `internal/server`, `transport.Guard`, `--against`, IDN names, dangling names,
-  DDR, open transfer and recursion probes, the hidden zone cut referral)
+- **Commit**: `d0b7ecc`
+- **Date**: 2026-10-01
+- **Scope**: the commits since `cc0837f` (`--format markdown`, the DNSKEY and
+  DS setup findings, the resolver TTL readings, `--without`, the web-3d replay
+  and its modules, the redirect and client-address fixes, the new `Public`
+  prefixes)
 
 ## Open findings
 
-None.
+- Low: names inside the markdown report's finding sentences are still open to
+  GitHub's autolinks, `@mentions` and `#refs`; fixing it means marking names
+  apart from the prose explain writes
+  ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 
 ## Checked and sound
 
@@ -141,3 +145,19 @@ None.
 - `Public` refuses IPv4-compatible, SIIT, Teredo, site-local and the 6to4
   relays (`TestPublic`).
 - Every finding's text is checked for ASCII in the explain table tests.
+- Markdown: names, records and findings go through `Shown` and then `escape`;
+  `|`, brackets, `<`, `&` and openers are escaped, the fence outgrows any
+  backtick run, the heading is a padded code span. Resolver answers are code
+  spans with `|` as `\124` (`TestRenderEscapes`).
+- `setupOf` runs only after the chain held, and digests no more pairs than
+  `matchDS` already did; `rsaBits` checks lengths before indexing.
+- `Keys` and `DS` text goes through `Shown`; `read.go` validates the DS `match`
+  and `kept`; `Bits` from a file is only read when above zero.
+- `Kept` and `Allowed` skip minimised hops and asides; `stale` needs a TTL of
+  at most 30 against a zone TTL above it.
+- `--without`: `Down` is checked before a query and again in the transport
+  (TCP, fallback, probes); `kept` is under a mutex; never reaches dnstree-web;
+  refused with `--diff`. `go test -race -count=2` is clean.
+- web and web-3d after the replay rewrite: walk text only through
+  `textContent` or text nodes, styles only from `TONES`, the film's file name
+  limited to `[A-Za-z0-9.-]`, the new modules in the served file list.
