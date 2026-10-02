@@ -36,6 +36,9 @@ PLATFORMS := \
 	freebsd/amd64 \
 	windows/amd64 windows/arm64
 
+# The architectures make web-lambda builds a zip for.
+LAMBDA_ARCHES ?= arm64 amd64
+
 # The native packages a release carries, as GOARCH:nfpm arch. nfpm translates
 # the right hand side per format, so arm7 lands as armhf on Debian, armv7hl on
 # RPM and armv7 on Alpine.
@@ -56,7 +59,7 @@ MAN_DATE ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +'%Y-%m-%d')
 BUILD := build
 
 .PHONY: all build install test race js lint lint-docker vuln check live goldens dist man \
-	archives packages formula checksums image image-push image-web image-web-push clean roothints demos demo-3d
+	archives packages formula checksums image image-push image-web image-web-push web-lambda clean roothints demos demo-3d
 
 # The stages of dist read each other's output, so they run one after another
 # rather than at the same time.
@@ -218,6 +221,24 @@ image-web-push:
 		--tag $(IMAGE)-web:latest \
 		--push \
 		.
+
+# dnstree-web as a zip for Lambda's provided.al2023 runtime, one per
+# architecture, to be uploaded by hand with the Lambda Web Adapter layer
+# attached. Nothing publishes it.
+web-lambda:
+	@for arch in $(LAMBDA_ARCHES); do \
+		dir=$(BUILD)/lambda_$$arch; \
+		echo "building dnstree-web for lambda $$arch"; \
+		rm -rf $$dir && mkdir -p $$dir; \
+		GOOS=linux GOARCH=$$arch CGO_ENABLED=0 \
+			$(GO) build -trimpath -ldflags '$(LDFLAGS)' \
+			-o $$dir/dnstree-web ./cmd/dnstree-web || exit 1; \
+		install -m 755 packaging/lambda/bootstrap $$dir/bootstrap; \
+		rm -f $(BUILD)/dnstree-web_$(VERSION)_lambda_$$arch.zip; \
+		(cd $$dir && zip -qX $(CURDIR)/$(BUILD)/dnstree-web_$(VERSION)_lambda_$$arch.zip \
+			bootstrap dnstree-web) || exit 1; \
+	done
+	@ls $(BUILD)/dnstree-web_$(VERSION)_lambda_*.zip
 
 # Re-records the terminal demos in docs/ from tapes/, and the still of
 # --format web-3d. Every one walks the real root servers, so the timings in a

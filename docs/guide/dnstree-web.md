@@ -20,3 +20,29 @@ proxy, `-client-header` names the header that carries the visitor's address,
 and the last address in it, the one the proxy wrote, is the one counted. The
 host needs UDP and TCP out to port 53, and IPv6 to reach the servers that only
 have it.
+
+## On AWS Lambda
+
+`make web-lambda` zips the server for Lambda's `provided.al2023` runtime, one
+zip per architecture, into `build/`. Upload one as the function's code with
+handler `bootstrap` and the matching architecture, and attach the [Lambda Web
+Adapter](https://github.com/aws/aws-lambda-web-adapter) layer, which turns each
+invocation into a request to the server on `:8080`:
+
+```
+arn:aws:lambda:<region>:753240598075:layer:LambdaAdapterLayerArm64:28
+arn:aws:lambda:<region>:753240598075:layer:LambdaAdapterLayerX86:28
+```
+
+Version 28 of the layer is the adapter's 1.1.0.
+
+Set `AWS_LWA_READINESS_CHECK_PATH=/healthz` on the function, and put a function
+URL or a regional or HTTP API Gateway in front. The zip's `bootstrap` counts the
+last address in `X-Forwarded-For`, which only holds when nothing but AWS reaches
+the function; with CloudFront in front, the last address is CloudFront's, and
+every visitor behind one edge counts as one. Give the function a timeout above
+`-timeout` (15 seconds) and keep it out of a VPC, or give the VPC a NAT, so it
+can reach port 53. Lambda outside a VPC has no IPv6, so servers that only have
+it go unanswered. Each instance keeps its own walks and its own counts, so the
+page's second request can walk again on a cold instance, and `-per-client`
+holds per instance rather than for the whole function.

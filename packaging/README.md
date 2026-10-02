@@ -98,6 +98,13 @@ The release workflow's `image` job runs `make image-push image-web-push` beside
 it, tagging each with the version and `latest`, and CI builds both on every pull
 request. `make image` and `make image-web` build them for this machine.
 
+## The Lambda zip
+
+`make web-lambda` builds `dnstree-web` for Lambda's `provided.al2023` runtime
+and zips it with [`lambda/bootstrap`](lambda/bootstrap), the script Lambda
+starts, into `build/`, one zip per architecture in `LAMBDA_ARCHES`. It is
+uploaded by hand: CI builds it, and nothing publishes it.
+
 ## The release notes
 
 [`install.md`](install.md) is the install section appended to every release

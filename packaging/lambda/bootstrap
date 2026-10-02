@@ -1,0 +1,4 @@
+#!/bin/sh
+# Lambda runs this with no arguments. AWS's front door appends the caller
+# to X-Forwarded-For, so the last entry is the one to count.
+exec "${LAMBDA_TASK_ROOT:-.}/dnstree-web" -client-header X-Forwarded-For "$@"

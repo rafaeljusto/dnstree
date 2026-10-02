@@ -186,6 +186,7 @@ make roothints    # refresh the embedded root hints and trust anchors
 make dist         # cross compile a release into dist/
 make image        # build the container image for this machine
 make image-web    # build the dnstree-web image for this machine
+make web-lambda   # zip dnstree-web for AWS Lambda into build/
 ```
 
 After touching anything concurrent or `fakens`, run
