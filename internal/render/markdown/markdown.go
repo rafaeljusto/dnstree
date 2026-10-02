@@ -63,7 +63,7 @@ func Render(w io.Writer, tr *trace.Trace, findings []explain.Finding) error {
 				continue
 			}
 			fmt.Fprintf(out, "| %s | %s | %s |\n",
-				escape(resolverName(answer.Server)), escape(said(shown, answer)), elapsed(answer))
+				escape(resolverName(answer.Server)), said(shown, answer), elapsed(answer))
 		}
 	}
 	return out.Flush()
@@ -93,7 +93,7 @@ func level(l explain.Level) string {
 }
 
 // said is one resolver's answer, held against the walk's in a word where the
-// two agree.
+// two agree, as the table cell writes it.
 func said(tr *trace.Trace, answer *trace.Resolver) string {
 	switch {
 	case answer.Err != "":
@@ -108,11 +108,26 @@ func said(tr *trace.Trace, answer *trace.Resolver) string {
 		if answer.Rcode == "" {
 			return "-"
 		}
-		return "answered " + answer.Rcode
+		return "answered " + escape(answer.Rcode)
 	case result.Rcode != answer.Rcode:
-		return "differs: " + answer.Rcode + " where the walk found " + result.Rcode
+		return "differs: " + escape(answer.Rcode) + " where the walk found " + escape(result.Rcode)
 	}
-	return "differs: " + tree.List(trace.Answers(answer.Records, tr.Question.Type))
+	answers := trace.Answers(answer.Records, tr.Question.Type)
+	for i, text := range answers {
+		answers[i] = data(text)
+	}
+	return "differs: " + tree.List(answers)
+}
+
+// data is record data as a table cell holds it. Escaping is not enough here:
+// GitHub links URLs and notifies @mentions after escapes are read, but never
+// inside a code span. A bar is written the way the DNS writes any octet, since
+// the table splits on one even there. Empty, a span would be two backticks.
+func data(text string) string {
+	if text == "" {
+		return "-"
+	}
+	return code(strings.ReplaceAll(text, "|", `\124`))
 }
 
 func resolverName(server trace.Server) string {

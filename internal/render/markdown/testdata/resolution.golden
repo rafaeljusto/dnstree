@@ -31,5 +31,5 @@ warning: the delegation to example.com. lists a nameserver the zone does not
 | resolver | answer | time |
 | --- | --- | --- |
 | 192.0.2.53 | agrees | 23ms |
-| 198.51.100.53:5353 | differs: 198.51.100.1, 198.51.100.2, 198.51.100.3 (and 1 more) | 9ms |
+| 198.51.100.53:5353 | differs: `198.51.100.1`, `198.51.100.2`, `198.51.100.3` (and 1 more) | 9ms |
 | 203.0.113.53 | did not answer | - |

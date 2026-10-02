@@ -74,7 +74,7 @@ func TestRenderEscapes(t *testing.T) {
 		}}},
 		Resolvers: []*trace.Resolver{{
 			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53")}, Rcode: "NOERROR", Match: trace.MatchDiffers,
-			Records: []trace.RR{{Name: "a`b.example.", Type: "TXT", Data: `"x|y [a](http://b) <img>"`}},
+			Records: []trace.RR{{Name: "a`b.example.", Type: "TXT", Data: `"x|y [a](http://b) <img> www.evil.example @octocat #1"`}},
 		}},
 	}
 	findings := []explain.Finding{
@@ -94,7 +94,8 @@ func TestRenderEscapes(t *testing.T) {
 		`- ⚠ \# not a heading`,
 		`- 1\. not a list`,
 		`- \*not\* \_emphasis\_ \& \[no\](link) \<b\>`,
-		`| 192.0.2.53 | differs: "x\|y \[a\](http://b) \<img\>" |`,
+		// A code span is the one place GitHub neither links nor mentions.
+		"| 192.0.2.53 | differs: `\"x\\124y [a](http://b) <img> www.evil.example @octocat #1\"` |",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("got\n%s\nwant %q in it", out, want)
@@ -122,5 +123,29 @@ func compare(tb testing.TB, name, got string) {
 	}
 	if got != string(want) {
 		tb.Errorf("output does not match %s, run go test -update to see the change\n--- got ---\n%s", golden, got)
+	}
+}
+
+// TestRenderEmptyRecord covers a record with no data, which as a code span
+// would print as two bare backticks.
+func TestRenderEmptyRecord(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "example.", Type: "NULL"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: ".", Kind: trace.KindAnswer, Rcode: "NOERROR", Server: trace.Server{IP: netip.MustParseAddr("192.0.2.1")},
+			Records: []trace.RR{{Name: "example.", Type: "NULL", Data: "x"}},
+		}}},
+		Resolvers: []*trace.Resolver{{
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53")}, Rcode: "NOERROR", Match: trace.MatchDiffers,
+			Records: []trace.RR{{Name: "example.", Type: "NULL", Data: ""}},
+		}},
+	}
+
+	var got bytes.Buffer
+	if err := markdown.Render(&got, tr, nil); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if want := "| 192.0.2.53 | differs: - |"; !strings.Contains(got.String(), want) {
+		t.Errorf("got\n%s\nwant %q in it", got.String(), want)
 	}
 }
