@@ -1091,6 +1091,9 @@ func issuance(tr *trace.Trace) (Finding, bool) {
 	case caa.Refused != "":
 		return Finding{Topic: Issuance, Level: Warn, Text: fmt.Sprintf(
 			"every certificate authority has to refuse to issue for %s: %s", name, caa.Refused)}, true
+	case caa.Undecided != "":
+		return Finding{Topic: Issuance, Level: Warn, Text: fmt.Sprintf(
+			"a certificate authority may refuse to issue for %s: %s", name, caa.Undecided)}, true
 	case caa.Owner == "":
 		return Finding{Topic: Issuance, Level: Note, Text: fmt.Sprintf(
 			"no name from %s up has a CAA set, so any certificate authority may issue for it", name)}, true

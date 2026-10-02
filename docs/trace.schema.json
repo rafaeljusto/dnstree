@@ -62,7 +62,8 @@
         },
         "issue": { "description": "Who may issue for the name. Absent where any authority may; cas is empty where none may.", "$ref": "#/$defs/issuers" },
         "wildcard": { "description": "Who may issue for a wildcard below the name: the issuewild properties where the set has any, and otherwise the same as issue.", "$ref": "#/$defs/issuers" },
-        "refused": { "description": "Why every authority has to refuse, whatever the set says: a lookup that failed, or a critical property nobody knows.", "type": "string" },
+        "refused": { "description": "Why every authority has to refuse, whatever the set says: a lookup that failed in a zone with a chain of trust behind it, or a critical property nobody knows.", "type": "string" },
+        "undecided": { "description": "Why the climb could not say who may issue: a lookup that failed where no chain of trust was found behind the zone, which an authority may take as leave to issue, or a budget dnstree ran out of.", "type": "string" },
         "dnssec": {
           "description": "The first verdict on the way up that is not secure, or else the one over the set that decided. A name with no set has to prove it, since dropping a set is all it takes to lift a restriction.",
           "$ref": "#/$defs/dnssec"

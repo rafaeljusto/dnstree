@@ -77,6 +77,13 @@ type CAA struct {
 	// empty where none has to.
 	Refused string
 
+	// Undecided is why the climb could not say, where a lookup failed and
+	// nothing makes every authority refuse for it: an authority may read a
+	// failure in a zone no chain of trust vouches for as leave to issue
+	// (CA/Browser Forum Baseline Requirements 3.2.2.8), and a budget dnstree
+	// ran out of is no authority's.
+	Undecided string
+
 	// DNSSEC is the first verdict on the way up that is not secure, or else
 	// the one over the set that decided. Nil where no signatures were checked.
 	DNSSEC *DNSSECStatus

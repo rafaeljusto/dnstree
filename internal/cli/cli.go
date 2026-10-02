@@ -249,8 +249,10 @@ each name above it short of the root, and goes by the first set it finds,
 following an alias for that one lookup; so does this, asking each name of the
 zone the walk found it in, and drawing the climb under the tree. A set with no
 issue property leaves it to any authority, one with no issuewild leaves
-wildcards to issue, and a lookup that fails or a critical property nobody knows
-makes every authority refuse, which is said in a warning. With --dnssec the
+wildcards to issue, and a critical property nobody knows makes every authority
+refuse. So does a lookup that fails in a zone with a chain of trust behind it;
+elsewhere an authority may take the failure as leave to issue, and the climb is
+left undecided. Either is said in a warning. With --dnssec the
 verdict is the weakest on the way up: a name that has no set has to prove it,
 since dropping a set is all it takes to lift a restriction. It costs a query
 for each name asked.

@@ -278,6 +278,7 @@ func TestCAA(t *testing.T) {
 	letsEncrypt := &trace.Issuers{CAs: []string{"letsencrypt.org"}}
 	for name, tt := range map[string]struct {
 		caa    *trace.CAA
+		qname  string
 		expect string
 		unmet  []string
 	}{
@@ -295,10 +296,20 @@ func TestCAA(t *testing.T) {
 		"no set anywhere": {
 			caa: &trace.CAA{}, expect: "caa:letsencrypt.org",
 		},
+		"a wildcard, which issuewild decides": {
+			caa:   &trace.CAA{Owner: "test.", Issue: letsEncrypt, Wildcard: &trace.Issuers{CAs: []string{"digicert.com"}}},
+			qname: "*.test.", expect: "caa:letsencrypt.org",
+			unmet: []string{"expected caa:letsencrypt.org, got digicert.com"},
+		},
 		"a lookup that failed, whatever the set says": {
 			caa:    &trace.CAA{Issue: letsEncrypt, Refused: "the CAA lookup at www.test. failed: SERVFAIL"},
 			expect: "caa:letsencrypt.org",
 			unmet:  []string{"expected caa:letsencrypt.org, got every authority refused: the CAA lookup at www.test. failed: SERVFAIL"},
+		},
+		"a lookup that failed where an authority may still issue": {
+			caa:    &trace.CAA{Undecided: "the CAA lookup at www.test. failed: SERVFAIL"},
+			expect: "caa:letsencrypt.org",
+			unmet:  []string{"expected caa:letsencrypt.org, got undecided: the CAA lookup at www.test. failed: SERVFAIL"},
 		},
 		"a walk that looked up no caa": {
 			expect: "caa:letsencrypt.org",
@@ -308,6 +319,9 @@ func TestCAA(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tr := walk("A", answered("A", "192.0.2.10"))
 			tr.CAA = tt.caa
+			if tt.qname != "" {
+				tr.Question.Name = tt.qname
+			}
 			if got := expect.Unmet(tr, parse(t, tt.expect)); !slices.Equal(got, tt.unmet) {
 				t.Errorf("got %q, want %q", got, tt.unmet)
 			}

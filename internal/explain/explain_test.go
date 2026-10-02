@@ -1118,9 +1118,13 @@ func TestIssuance(t *testing.T) {
 			caa:  &trace.CAA{},
 			want: "no name from www.test. up has a CAA set, so any certificate authority may issue for it",
 		},
-		"a lookup that failed": {
+		"a lookup that failed in a signed zone": {
 			caa:  &trace.CAA{Refused: "the CAA lookup at www.test. failed: SERVFAIL"},
 			want: "every certificate authority has to refuse to issue for www.test.: the CAA lookup at www.test. failed: SERVFAIL",
+		},
+		"a lookup that failed where an authority may still issue": {
+			caa:  &trace.CAA{Undecided: "the CAA lookup at www.test. failed: SERVFAIL"},
+			want: "a certificate authority may refuse to issue for www.test.: the CAA lookup at www.test. failed: SERVFAIL",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

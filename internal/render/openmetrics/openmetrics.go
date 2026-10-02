@@ -109,11 +109,13 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		switch {
 		case caa.Refused != "":
 			state = "refused"
+		case caa.Undecided != "":
+			state = "undecided"
 		case caa.Issue != nil:
 			state = "restricted"
 		}
-		m.family("dnstree_caa", "", "who the CAA set lets issue certificates for the name: restricted to the authorities it names, open to any, or refused by every authority")
-		for _, value := range []string{"restricted", "open", "refused"} {
+		m.family("dnstree_caa", "", "who the CAA set lets issue certificates for the name: restricted to the authorities it names, open to any, refused by every authority, or undecided where a lookup failed")
+		for _, value := range []string{"restricted", "open", "refused", "undecided"} {
 			m.sample("dnstree_caa", flag(value == state), label{"state", value})
 		}
 	}

@@ -201,9 +201,13 @@ The rules are the authorities' own. A set with no `issue` property restricts
 nobody, and one with no `issuewild` leaves wildcards to `issue`. An `issue`
 naming no domain, `";"`, lets nobody issue. An alias is followed for the
 lookup it was met on, and the climb goes on from the alias rather than from its
-target. A lookup that fails, a timeout or a `SERVFAIL` rather than an empty
-answer, stops the climb, and so does a critical property no authority knows:
-either makes every authority refuse, which is said in a warning. Parameters
+target. A critical property no authority knows makes every authority refuse. A
+lookup that fails, a timeout or a `SERVFAIL` rather than an empty answer, stops
+the climb: in a zone `--dnssec` found a chain of trust behind, every authority
+has to refuse, but elsewhere one that retried may take the failure as leave to
+issue (the CA/Browser Forum's Baseline Requirements, 3.2.2.8), so the climb is
+left undecided. A climb cut short by dnstree's own budget is undecided too.
+Each of these is said in a warning. Parameters
 such as `accounturi` and `validationmethods` (RFC 8657) are drawn with the
 record, but not read: authorities differ on them.
 

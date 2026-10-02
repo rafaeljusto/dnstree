@@ -64,7 +64,7 @@ func (c *CAA) Shown() *CAA {
 		return nil
 	}
 	shown := *c
-	shown.Owner, shown.Refused = Shown(c.Owner), Shown(c.Refused)
+	shown.Owner, shown.Refused, shown.Undecided = Shown(c.Owner), Shown(c.Refused), Shown(c.Undecided)
 	shown.Asked = slices.Clone(c.Asked)
 	for i := range shown.Asked {
 		lookup := &shown.Asked[i]

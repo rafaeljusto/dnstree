@@ -468,6 +468,13 @@ func TestRenderCAA(t *testing.T) {
 			},
 			want: []string{"caa: every authority refuses: the CAA lookup at www.test. failed: SERVFAIL"},
 		},
+		"a lookup that failed where an authority may still issue": {
+			caa: &trace.CAA{
+				Asked:     []trace.CAALookup{{Name: "www.test.", Found: trace.CAAFailed, Err: "SERVFAIL"}},
+				Undecided: "the CAA lookup at www.test. failed: SERVFAIL",
+			},
+			want: []string{"caa: an authority may refuse: the CAA lookup at www.test. failed: SERVFAIL"},
+		},
 		"a climb read from a file with nothing in it": {
 			caa: &trace.CAA{},
 		},

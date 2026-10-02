@@ -67,11 +67,12 @@ func TestCAA(t *testing.T) {
 		behaviour fakens.Behaviour
 		qname     string
 
-		asked    []string
-		owner    string
-		issue    []string // nil when any authority may
-		wildcard []string
-		refused  bool
+		asked     []string
+		owner     string
+		issue     []string // nil when any authority may
+		wildcard  []string
+		refused   bool
+		undecided bool
 	}{
 		"a set at the name decides it": {
 			extra: `www IN CAA 0 issue "letsencrypt.org"`,
@@ -121,11 +122,11 @@ www IN CAA 128 tbs "unknown"`,
 			asked: []string{"www.example.com. set"}, owner: "www.example.com.",
 			issue: []string{"letsencrypt.org"}, wildcard: []string{"letsencrypt.org"}, refused: true,
 		},
-		"a server that fails the lookup stops the climb": {
+		"a server that fails the lookup in an unsigned zone leaves it undecided": {
 			extra:     `@ IN CAA 0 issue "letsencrypt.org"`,
 			behaviour: fakens.Behaviour{ServFailType: dns.TypeCAA},
 			qname:     "www.example.com",
-			asked:     []string{"www.example.com. failed"}, refused: true,
+			asked:     []string{"www.example.com. failed"}, undecided: true,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -154,8 +155,11 @@ www IN CAA 128 tbs "unknown"`,
 			if refused := caa.Refused != ""; refused != tt.refused {
 				t.Errorf("got refused %q, want refused %v", caa.Refused, tt.refused)
 			}
-			if tt.refused && len(tr.Warnings) == 0 {
-				t.Error("got no warning, want one saying why every authority refuses")
+			if undecided := caa.Undecided != ""; undecided != tt.undecided {
+				t.Errorf("got undecided %q, want undecided %v", caa.Undecided, tt.undecided)
+			}
+			if (tt.refused || tt.undecided) && len(tr.Warnings) == 0 {
+				t.Error("got no warning, want one saying why an authority refuses")
 			}
 
 			for step := range tr.Mainline() {
@@ -228,8 +232,25 @@ func TestCAADNSSEC(t *testing.T) {
 	}
 }
 
-// TestCAABudget covers a climb cut short: the budget is the run's, and the
-// lookup it stops is a failure, which is what an authority would make of it.
+// TestCAAFailedSigned covers a lookup that fails in a zone with a chain of trust
+// behind it, which no authority may take as leave to issue.
+func TestCAAFailedSigned(t *testing.T) {
+	h, cfg := authorised(t, `@ IN CAA 0 issue "letsencrypt.org"`, fakens.Behaviour{ServFailType: dns.TypeCAA}, true)
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if tr.CAA == nil || tr.CAA.Refused == "" || tr.CAA.Undecided != "" {
+		t.Fatalf("got %+v, want every authority refusing", tr.CAA)
+	}
+	if !slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, "every authority has to refuse") }) {
+		t.Errorf("got warnings %q, want one saying every authority refuses", tr.Warnings)
+	}
+}
+
+// TestCAABudget covers a climb cut short: the budget is the run's, not an
+// authority's, so the lookup it stops leaves who may issue undecided.
 func TestCAABudget(t *testing.T) {
 	h, cfg := authorised(t, `@ IN CAA 0 issue "letsencrypt.org"`, fakens.Behaviour{}, false)
 	cfg.Budget.MaxQueries = 4 // the walk takes three
@@ -242,8 +263,8 @@ func TestCAABudget(t *testing.T) {
 	if got := climbed(tr.CAA); !slices.Equal(got, want) {
 		t.Fatalf("got the climb %q, want %q", got, want)
 	}
-	if !strings.Contains(tr.CAA.Refused, "gave up after 4 queries") {
-		t.Errorf("got refused %q, want it to name the budget", tr.CAA.Refused)
+	if tr.CAA.Refused != "" || !strings.Contains(tr.CAA.Undecided, "gave up after 4 queries") {
+		t.Errorf("got refused %q and undecided %q, want it undecided for the budget", tr.CAA.Refused, tr.CAA.Undecided)
 	}
 }
 

@@ -737,7 +737,7 @@ func (r *renderer) authorities(caa *trace.CAA) []string {
 				found += ", as an alias for " + lookup.Alias
 			}
 		}
-	case caa.Refused == "" && len(caa.Asked) > 0:
+	case caa.Refused == "" && caa.Undecided == "" && len(caa.Asked) > 0:
 		found = "none from " + caa.Asked[0].Name + " up, so any authority may issue"
 	}
 
@@ -751,6 +751,9 @@ func (r *renderer) authorities(caa *trace.CAA) []string {
 	}
 	if caa.Refused != "" {
 		return append(lines, r.paint.paint(mark+"every authority refuses: "+caa.Refused, red))
+	}
+	if caa.Undecided != "" {
+		return append(lines, r.paint.paint(mark+"an authority may refuse: "+caa.Undecided, yellow))
 	}
 	if caa.Owner == "" {
 		return lines

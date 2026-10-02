@@ -68,8 +68,9 @@ type caa struct {
 	Issue    *issuers `json:"issue,omitempty"`
 	Wildcard *issuers `json:"wildcard,omitempty"`
 
-	Refused string  `json:"refused,omitempty"`
-	DNSSEC  *dnssec `json:"dnssec,omitempty"`
+	Refused   string  `json:"refused,omitempty"`
+	Undecided string  `json:"undecided,omitempty"`
+	DNSSEC    *dnssec `json:"dnssec,omitempty"`
 }
 
 type caaLookup struct {
@@ -393,12 +394,13 @@ func convertCAA(from *trace.CAA) *caa {
 		return nil
 	}
 	to := &caa{
-		Asked:    []caaLookup{},
-		Owner:    from.Owner,
-		Issue:    convertIssuers(from.Issue),
-		Wildcard: convertIssuers(from.Wildcard),
-		Refused:  from.Refused,
-		DNSSEC:   convertDNSSEC(from.DNSSEC),
+		Asked:     []caaLookup{},
+		Owner:     from.Owner,
+		Issue:     convertIssuers(from.Issue),
+		Wildcard:  convertIssuers(from.Wildcard),
+		Refused:   from.Refused,
+		Undecided: from.Undecided,
+		DNSSEC:    convertDNSSEC(from.DNSSEC),
 	}
 	for _, lookup := range from.Asked {
 		to.Asked = append(to.Asked, caaLookup{Name: lookup.Name, Found: string(lookup.Found), Alias: lookup.Alias, Error: lookup.Err})

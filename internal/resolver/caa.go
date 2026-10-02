@@ -83,9 +83,7 @@ func (r *run) climb(ctx context.Context, under *trace.Step) {
 
 		switch lookup.Found {
 		case trace.CAAFailed:
-			caa.Refused = "the CAA lookup at " + asked + " failed: " + lookup.Err
-			r.warnf("the CAA lookup at %s failed (%s), and an authority that cannot look it up refuses to issue for %s; fix the servers of %s",
-				asked, lookup.Err, name, r.cutOf(asked).zone)
+			r.failed(caa, lookup)
 			return
 		case trace.CAASet:
 			caa.Owner = asked
@@ -95,6 +93,34 @@ func (r *run) climb(ctx context.Context, under *trace.Step) {
 			}
 			return
 		}
+	}
+}
+
+// failed says what a lookup that stopped the climb leaves an authority to do.
+// Only a zone with a chain of trust behind it makes every one refuse: where
+// none vouches for it, an authority that retried may take the failure as leave
+// to issue (CA/Browser Forum Baseline Requirements 3.2.2.8).
+func (r *run) failed(caa *trace.CAA, lookup trace.CAALookup) {
+	name, why := r.trace.Question.Name, "the CAA lookup at "+lookup.Name+" failed: "+lookup.Err
+	zone := "the zone of " + lookup.Name
+	c := r.cutOf(lookup.Name)
+	if c != nil {
+		zone = c.zone
+	}
+
+	switch {
+	case r.counters.spent():
+		caa.Undecided = why
+		r.warnf("the CAA lookup at %s was not made (%s), so who may issue for %s is not known; raise the budget that ran out",
+			lookup.Name, lookup.Err, name)
+	case c != nil && c.chain != nil && c.chain.State() == trace.Secure:
+		caa.Refused = why
+		r.warnf("the CAA lookup at %s failed (%s), and %s is signed, so every authority has to refuse to issue for %s; fix the servers of %s",
+			lookup.Name, lookup.Err, zone, name, zone)
+	default:
+		caa.Undecided = why
+		r.warnf("the CAA lookup at %s failed (%s), so an authority may refuse to issue for %s, and only one that finds no chain of trust to %s may take it as leave to; fix the servers of %s",
+			lookup.Name, lookup.Err, name, zone, zone)
 	}
 }
 

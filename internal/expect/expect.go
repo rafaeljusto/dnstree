@@ -292,9 +292,9 @@ func list(items []string) string {
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
-// issuer reports whether the authority after caa: may issue for the name. A
-// walk that looked up no CAA has not met it, the way one that followed no
-// chain has not met an expectation about trust.
+// issuer reports whether the authority after caa: may issue for the name, or,
+// for a wildcard, under issuewild. A walk that looked up no CAA has not met it,
+// the way one that followed no chain has not met an expectation about trust.
 func (e Expectation) issuer(tr *trace.Trace) (got string, ok bool) {
 	caa := tr.CAA
 	switch {
@@ -302,15 +302,22 @@ func (e Expectation) issuer(tr *trace.Trace) (got string, ok bool) {
 		return "a walk that looked up no caa", false
 	case caa.Refused != "":
 		return "every authority refused: " + caa.Refused, false
-	case caa.Issue == nil:
+	case caa.Undecided != "":
+		return "undecided: " + caa.Undecided, false
+	}
+	issuers := caa.Issue
+	if strings.HasPrefix(tr.Question.Name, "*.") {
+		issuers = caa.Wildcard
+	}
+	if issuers == nil {
 		return "any authority", true
 	}
 	ca := strings.TrimPrefix(e.want, "caa:")
-	if caa.Issue.Allows(ca) {
+	if issuers.Allows(ca) {
 		return ca, true
 	}
-	if len(caa.Issue.CAs) == 0 {
+	if len(issuers.CAs) == 0 {
 		return "no authority", false
 	}
-	return strings.Join(caa.Issue.CAs, ", "), false
+	return strings.Join(issuers.CAs, ", "), false
 }

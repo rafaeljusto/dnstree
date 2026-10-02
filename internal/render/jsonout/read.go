@@ -79,10 +79,11 @@ func readCAA(from *caa) (*trace.CAA, error) {
 		return nil, nil
 	}
 	to := &trace.CAA{
-		Owner:    from.Owner,
-		Issue:    readIssuers(from.Issue),
-		Wildcard: readIssuers(from.Wildcard),
-		Refused:  from.Refused,
+		Owner:     from.Owner,
+		Issue:     readIssuers(from.Issue),
+		Wildcard:  readIssuers(from.Wildcard),
+		Refused:   from.Refused,
+		Undecided: from.Undecided,
 	}
 	for _, lookup := range from.Asked {
 		found := trace.CAAFound(lookup.Found)

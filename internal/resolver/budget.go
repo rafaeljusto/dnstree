@@ -49,6 +49,11 @@ func (c *counters) query() error {
 	return nil
 }
 
+// spent reports whether a budget has run out.
+func (c *counters) spent() bool {
+	return c.queries > c.max.MaxQueries || c.cnames > c.max.MaxCNAME
+}
+
 func (c *counters) cname() error {
 	c.cnames++
 	if c.cnames > c.max.MaxCNAME {

@@ -57,6 +57,7 @@ $ echo $?
 
 `caa:letsencrypt.org` asks that `--caa` found that authority free to issue for
 the name, which is how a renewal about to be refused is caught before it is.
+For a wildcard such as `*.example.com` it asks the same of `issuewild`.
 A failed lookup, or a critical property nobody knows, fails it whatever the set
 names:
 

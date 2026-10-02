@@ -222,6 +222,7 @@ func TestRenderCAA(t *testing.T) {
 		"a set naming who may issue": {caa: &trace.CAA{Owner: "test.", Issue: &trace.Issuers{CAs: []string{"letsencrypt.org"}}}, state: "restricted"},
 		"no set anywhere":            {caa: &trace.CAA{}, state: "open"},
 		"a lookup that failed":       {caa: &trace.CAA{Refused: "the CAA lookup at www.test. failed: SERVFAIL"}, state: "refused"},
+		"a lookup left undecided":    {caa: &trace.CAA{Undecided: "the CAA lookup at www.test. failed: SERVFAIL"}, state: "undecided"},
 		"a walk that did not look":   {},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -238,7 +239,7 @@ func TestRenderCAA(t *testing.T) {
 				}
 				return
 			}
-			for _, state := range []string{"restricted", "open", "refused"} {
+			for _, state := range []string{"restricted", "open", "refused", "undecided"} {
 				want := fmt.Sprintf(`dnstree_caa{name="www.test.",type="A",state=%q} %s`, state, map[bool]string{true: "1", false: "0"}[state == tt.state])
 				if !strings.Contains(out, want) {
 					t.Errorf("got\n%s\nwant %s", out, want)
