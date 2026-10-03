@@ -426,6 +426,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 
 		switch {
 		case step.Kind == trace.KindCNAME && qtype != dns.TypeCNAME:
+			r.checkApexAlias(step, zone, qname)
 			if crossed := r.verify(ctx, chain, hop, qname, qtype); crossed != nil && top {
 				r.record(crossed.zone, []trace.Server{step.Server}, chain)
 			}
@@ -1024,6 +1025,12 @@ func (r *run) remember(server netip.Addr, resp *dns.Msg) {
 func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]trace.Server, []string) {
 	delegation := step.Delegation
 
+	for _, name := range delegation.NS {
+		if addressShaped(name) {
+			r.warnOnce("%s delegates to %s, which is an address written as a name, and nothing resolves it; name the nameserver instead (RFC 1035 section 3.3.11)",
+				delegation.Zone, name)
+		}
+	}
 	if len(delegation.GlueLess) > 0 {
 		r.warnf("%s delegates to %s inside the zone, with no glue to reach them",
 			delegation.Zone, strings.Join(delegation.GlueLess, ", "))
@@ -1062,6 +1069,9 @@ func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string
 		r.attach(step, root)
 
 		result := r.walk(ctx, name, rrtype, root, side+1)
+		if target := aliasUnder(root, name); target != "" {
+			r.warnAliasedNS(step.Delegation.Zone, name, target)
+		}
 		if result == nil {
 			continue
 		}
@@ -1268,6 +1278,9 @@ func (r *run) checkGlue(ctx context.Context, check *trace.Step, server trace.Ser
 		step.Aside = true
 		step.Notes = append(step.Notes, "glue check: "+dnsutil.TypeToString(q.rrtype)+" of "+q.name)
 		held := addresses(step.Records, q.name, q.rrtype)
+		if step.Kind == trace.KindCNAME {
+			r.warnAliasedNS(delegated.Zone, q.name, cnameTarget(step.Records, q.name))
+		}
 		step.Records = nil // the comparison is the point, and it is on the delegation
 		r.attach(check, step)
 
@@ -1285,6 +1298,51 @@ func (r *run) checkGlue(ctx context.Context, check *trace.Step, server trace.Ser
 	if budget != nil {
 		r.warnf("the budget ran out before the glue of %s could be checked", delegated.Zone)
 	}
+}
+
+// warnAliasedNS says a nameserver's name is an alias. A resolver looking up
+// the address of a nameserver is not required to follow one (RFC 2181 section
+// 10.3), so the zone resolves through some resolvers and not others, and this
+// walk, which does not follow it, may not reach the zone at all.
+func (r *run) warnAliasedNS(zone, name, target string) {
+	r.warnOnce("%s delegates to %s, which is an alias for %s; name the nameserver by its own name, since resolvers need not follow an alias to find one (RFC 2181 section 10.3)",
+		zone, name, target)
+}
+
+// checkApexAlias warns about an alias at the top of a zone. An alias may not
+// share its name with anything else (RFC 1034 section 3.6.2), and the apex
+// always holds the zone's SOA and NS, so one there hides them from whoever asks.
+// A provider that flattens an alias there answers with the addresses instead,
+// and that is never seen here.
+func (r *run) checkApexAlias(step *trace.Step, zone, qname string) {
+	if !step.Flags.AA || !dns.EqualName(zone, qname) || zone == "." {
+		return
+	}
+	r.warnOnce("%s is an alias at the top of its zone, which hides the zone's SOA and NS from every resolver that asks (RFC 1034 section 3.6.2); serve the records there rather than an alias",
+		zone)
+}
+
+// aliasUnder is what name is an alias for, as the walk below root found it,
+// and empty where it found no alias for it.
+func aliasUnder(root *trace.Step, name string) string {
+	for _, step := range root.Children {
+		if step.Kind == trace.KindCNAME && !step.Aside {
+			if target := cnameTarget(step.Records, name); target != "" {
+				return target
+			}
+		}
+		if target := aliasUnder(step, name); target != "" {
+			return target
+		}
+	}
+	return ""
+}
+
+// addressShaped reports whether a nameserver's name is an address written as
+// one, which looks right to a person and is a name nobody can resolve.
+func addressShaped(name string) bool {
+	_, err := netip.ParseAddr(strings.TrimSuffix(name, "."))
+	return err == nil
 }
 
 // compareGlue warns where the glue of one family disagrees with what the zone
@@ -1738,6 +1796,18 @@ func (r *run) fail(parent *trace.Step, zone, reason string) *trace.Step {
 	step := &trace.Step{Zone: zone, Kind: trace.KindError, Err: reason}
 	r.attach(parent, step)
 	return step
+}
+
+// warnOnce is warnf for what more than one walk of a run can come across: an
+// alias walks the delegations above its target again, and --all asks after
+// every nameserver.
+func (r *run) warnOnce(format string, args ...any) {
+	warning := fmt.Sprintf(format, args...)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !slices.Contains(r.trace.Warnings, warning) {
+		r.trace.Warnings = append(r.trace.Warnings, warning)
+	}
 }
 
 func (r *run) warnf(format string, args ...any) {

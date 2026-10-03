@@ -4,6 +4,7 @@ The questions a walk can put to a zone beyond the one it was given, and what a
 server says about its own answer.
 
 - [Whether the parent and the child agree](#whether-the-parent-and-the-child-agree)
+- [Records that point where they may not](#records-that-point-where-they-may-not)
 - [Whether they all have the same zone](#whether-they-all-have-the-same-zone)
 - [What they give a stranger](#what-they-give-a-stranger)
 - [Who may issue certificates for it](#who-may-issue-certificates-for-it)
@@ -101,6 +102,27 @@ $ dnstree --check-ns --explain --no-asn www.example.com A
 ...
 · the parent hands out the nameservers of example.com. for 2 days and the zone gives its own for 1 day, so a change of nameservers takes up to 2 days to reach every resolver
 ```
+
+## Records that point where they may not
+
+An alias stands in for another name almost anywhere, and the few places it may
+not are the ones a forgiving resolver papers over and a strict one does not. A
+walk is strict, so it runs into them as it goes, and says so above the summary
+without asking anything more:
+
+> test. delegates to ns1.example.test., which is an alias for host.example.test.; name the nameserver by its own name, since resolvers need not follow an alias to find one (RFC 2181 section 10.3)
+
+> example.test. is an alias at the top of its zone, which hides the zone's SOA and NS from every resolver that asks (RFC 1034 section 3.6.2); serve the records there rather than an alias
+
+> test. delegates to 192.0.2.53., which is an address written as a name, and nothing resolves it; name the nameserver instead (RFC 1035 section 3.3.11)
+
+A nameserver named by an alias is found where the walk looks the name up, which
+is only for one named outside the zone it serves; `--check-ns` asks the zone
+about the ones named inside it. An alias at the top of a zone is only said of
+the CNAME itself: a provider that lets one be written there and answers with
+the addresses instead is answering correctly, and nothing on the wire shows it
+was ever an alias. None of them is a failure, so none of them changes the
+result or the exit code.
 
 ## Whether they all have the same zone
 
