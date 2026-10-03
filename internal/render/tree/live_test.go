@@ -19,6 +19,7 @@ func walk(hops int) *trace.Trace {
 		step := &trace.Step{
 			Zone:   ".",
 			Server: trace.Server{Name: "ns.example.com.", IP: netip.MustParseAddr("192.0.2.1"), Port: 53},
+			Asked:  trace.Question{Name: "www.example.com.", Type: "A"},
 			Rcode:  "NOERROR",
 			Kind:   trace.KindReferral,
 			Delegation: &trace.Delegation{

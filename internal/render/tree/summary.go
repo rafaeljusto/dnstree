@@ -155,18 +155,15 @@ func oneResolver(answer *trace.Resolver) string {
 }
 
 // spent is what a finished walk cost, read off the trace: one query per hop it
-// made, and the servers those hops went to. A hop that was only listed was
-// never asked, and costs nothing.
+// made, and the servers those hops went to.
 func spent(tr *trace.Trace) (queries int, servers int) {
 	seen := make(map[netip.Addr]struct{})
 	for step := range tr.Steps() {
-		if step.Kind == trace.KindZone || step.Kind == trace.KindSkipped {
+		if !step.Queried() {
 			continue
 		}
 		queries++
-		if step.Server.IP.IsValid() {
-			seen[step.Server.IP] = struct{}{}
-		}
+		seen[step.Server.IP] = struct{}{}
 	}
 	return queries, len(seen)
 }

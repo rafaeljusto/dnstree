@@ -42,7 +42,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 
 	queries, failed := 0, 0
 	for step := range tr.Steps() {
-		if !asked(step) {
+		if !step.Queried() {
 			continue
 		}
 		queries++
@@ -64,7 +64,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 	// same server asked the same name twice, which only a loop cut short does.
 	seen := map[string]bool{}
 	for step := range tr.Mainline() {
-		if !asked(step) {
+		if !step.Queried() {
 			continue
 		}
 		hop := []label{
@@ -254,12 +254,6 @@ func signal(tr *trace.Trace) *trace.Signal {
 		}
 	}
 	return nil
-}
-
-// asked reports whether a step is a query: the zone a trace starts from, a
-// server never asked and a note about why the walk stopped are not.
-func asked(step *trace.Step) bool {
-	return step.Kind != trace.KindZone && step.Kind != trace.KindSkipped && step.Server.IP.IsValid()
 }
 
 func address(server trace.Server) string {

@@ -53,6 +53,11 @@ test("a hop is an aside when anything above it is", () => {
   assert.deepEqual(hops.map((hop) => asked(hop.step)), [false, true, true, true, true]);
 });
 
+test("a note that the budget ran out is no query", () => {
+  const hops = flatten(zone(step("referral", {}, { zone: "example.", kind: "error", error: "gave up after 2 queries" })));
+  assert.deepEqual(hops.map((hop) => asked(hop.step)), [false, true, false]);
+});
+
 test("the chain is as good as its worst cut, and unknown without one", () => {
   assert.equal(chainState(flatten(golden().root)), "insecure");
   assert.equal(chainState(flatten(zone(step("answer")))), "indeterminate");
@@ -114,7 +119,7 @@ test("the timeline has every query in the order it went out", () => {
 
 test("a walk that gave up stands where the last thing before it finished", () => {
   const hops = flatten(zone(
-    step("referral", { asked: {}, start_ms: 0, rtt_ms: 50 }, step("error", { error: "no address" })),
+    step("referral", { asked: {}, start_ms: 0, rtt_ms: 50 }, step("error", { error: "no address", asked: undefined })),
   ));
   const { spans } = timeline(hops, 0);
   assert.deepEqual(spans.map(({ start, rtt, stop }) => ({ start, rtt, stop })), [

@@ -29,6 +29,10 @@
           "ip": "198.41.0.4",
           "port": 53
         },
+        "asked": {
+          "name": "www.example.com.",
+          "type": "A"
+        },
         "proto": "udp",
         "rtt_ms": 12,
         "size_bytes": 745,
@@ -56,6 +60,10 @@
               "name": "b.gtld-servers.net.",
               "ip": "192.33.14.30",
               "port": 53
+            },
+            "asked": {
+              "name": "www.example.com.",
+              "type": "A"
             },
             "proto": "udp",
             "rtt_ms": 2000,

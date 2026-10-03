@@ -10,11 +10,13 @@ export const golden = () =>
 
 export const zone = (...children) => ({ zone: ".", kind: "zone", children });
 
+// A hop puts a question unless it is a server the walk only knew of.
 let next = 1;
 export const step = (kind, fields = {}, ...children) => ({
   zone: "example.",
   kind,
   server: { name: `ns${next}.example.`, ip: `192.0.2.${next++ % 250}`, port: 53 },
+  ...(kind === "skipped" ? {} : { asked: { name: "www.example.", type: "A" } }),
   rtt_ms: 10,
   ...fields,
   ...(children.length ? { children } : {}),

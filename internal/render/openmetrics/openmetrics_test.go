@@ -183,6 +183,7 @@ func TestRenderProbes(t *testing.T) {
 		return &trace.Step{
 			Zone: "test.", Kind: how, Aside: true,
 			Server: trace.Server{Name: "ns.test.", IP: netip.MustParseAddr(ip)},
+			Asked:  trace.Question{Name: "test.", Type: "AXFR"},
 			Probe:  &trace.Probe{Kind: kind, State: state},
 		}
 	}
@@ -257,6 +258,7 @@ func TestRenderEscapes(t *testing.T) {
 		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
 			Zone: "\"}.", Kind: trace.KindAnswer, RTT: time.Millisecond,
 			Server: trace.Server{Name: "ns\n.", IP: netip.MustParseAddr("192.0.2.1")},
+			Asked:  trace.Question{Name: "a\"b\\c\n} 1\x1b.example.", Type: "A"},
 		}}},
 	}
 

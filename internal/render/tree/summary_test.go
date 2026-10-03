@@ -17,12 +17,17 @@ func TestSummary(t *testing.T) {
 	tr.Root.Children[0].Children[0].Kind = trace.KindAnswer
 	tr.Elapsed = 1500 * time.Millisecond
 
-	// The second hop went to a server of its own, and a third was only listed.
+	// The second hop went to a server of its own, a third was only listed, and
+	// a budget that ran out left a note that was never sent anywhere.
 	tr.Root.Children[0].Children[0].Server.IP = netip.MustParseAddr("192.0.2.2")
 	tr.Root.Children = append(tr.Root.Children, &trace.Step{
 		Zone:   ".",
 		Kind:   trace.KindSkipped,
 		Server: trace.Server{IP: netip.MustParseAddr("192.0.2.3")},
+	}, &trace.Step{
+		Zone: ".",
+		Kind: trace.KindError,
+		Err:  "gave up after 2 queries",
 	})
 
 	var buf bytes.Buffer

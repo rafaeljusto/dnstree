@@ -71,9 +71,10 @@ export function flatten(root) {
   return hops;
 }
 
-// asked is a hop that cost a query. The synthetic zone node never was one, and
-// a skipped server never was asked.
-export const asked = (step) => step.kind !== "zone" && step.kind !== "skipped";
+// asked is a hop that cost a query, which is one that put a question, as
+// Step.Queried has it: the zone node, a skipped server and a note about why the
+// walk stopped put none.
+export const asked = (step) => Boolean(step.asked);
 
 // aside is a hop inside work that answers another question, which the trace
 // marks on the step that starts it rather than on every step below.
