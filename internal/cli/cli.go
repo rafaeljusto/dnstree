@@ -687,6 +687,18 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Retries < 0 {
 		return nil, fmt.Errorf("%w: %d retries is not a number of retries", ErrUsage, cfg.Retries)
 	}
+	// Left alone they are zero, which the resolver reads as its default; set to
+	// zero, they would quietly mean the opposite of what was typed.
+	budgets := map[string]int{"max-depth": cfg.MaxDepth, "max-queries": cfg.MaxQueries, "max-cname": cfg.MaxCNAME}
+	var none error
+	flags.Visit(func(f *flag.Flag) {
+		if value, ok := budgets[f.Name]; ok && value < 1 && none == nil {
+			none = fmt.Errorf("%w: --%s %d is no budget at all; the least is 1", ErrUsage, f.Name, value)
+		}
+	})
+	if none != nil {
+		return nil, none
+	}
 	if port > 65535 {
 		return nil, fmt.Errorf("%w: %d is not a port", ErrUsage, port)
 	}
