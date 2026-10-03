@@ -73,7 +73,7 @@ one after another, each from the root servers down.
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
   --max-depth N           zone cuts to follow (default 16)
-  --max-queries N         queries to make in total (default 64)
+  --max-queries N         queries to make in total (default 64, or 256 with --all)
   --max-cname N           aliases to chase (default 8)
   --port N                the port nameservers are asked on (default 53)
   --root-hints FILE       where the walk starts, instead of the built-in hints
@@ -710,6 +710,13 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if none != nil {
 		return nil, none
 	}
+	// --all asks every address of every zone on the way, the root's
+	// twenty-six included, and spends the ordinary budget before it is half way
+	// down a large zone. Only the run asks for more: the resolver's default is
+	// also what dnstree-web walks for strangers with.
+	if cfg.All && cfg.MaxQueries == 0 {
+		cfg.MaxQueries = AllMaxQueries
+	}
 	if port > 65535 {
 		return nil, fmt.Errorf("%w: %d is not a port", ErrUsage, port)
 	}
@@ -769,6 +776,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 
 	return &cfg, nil
 }
+
+// AllMaxQueries is the query budget of a run with --all that names none.
+const AllMaxQueries = 256
 
 // Question is one name and one type to walk.
 type Question struct {

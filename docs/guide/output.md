@@ -73,9 +73,10 @@ set:
 ```
 $ dnstree --all --explain www.example.com
 ...
-✔ answered in 3.3s · resolver in 258ms · 64 queries · 64 servers
+✔ answered in 1.9s · resolver in 15ms · 64 queries · 64 servers
 
 · www.example.com. A is 104.20.23.154 and 172.66.147.243, answered by elliott.ns.cloudflare.com. for example.com.
+· a cache may hold this answer for 5 minutes, and the delegation to example.com. for 2 days
 · all 2 nameservers of example.com. are in AS13335, so one operator's outage takes the whole zone with it
 ```
 

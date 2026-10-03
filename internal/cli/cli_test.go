@@ -73,6 +73,10 @@ func TestParse(t *testing.T) {
 				RootHints: "hints", TrustAnchors: "anchors", TLSCA: "ca.pem", Debug: true,
 			},
 		},
+		"every nameserver asked, with the budget that takes": {
+			args: []string{"--all", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", All: true, MaxQueries: cli.AllMaxQueries},
+		},
 		"a root named outright": {
 			args: []string{"--root", "127.0.0.1", "example.com"},
 			want: cli.Config{

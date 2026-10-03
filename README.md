@@ -143,7 +143,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--against`](docs/guide/scripting.md#drawing-a-walk-again) | say how the walk differs from one `--format json` saved, from a file or `-` |
 | `--color` | `auto` (the default: only on a terminal, and off where `NO_COLOR` is set or `TERM` is unset or `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
-| `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries, 8 aliases |
+| `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries (256 with `--all`), 8 aliases |
 | [`--port`](docs/guide/configuring.md#pointing-it-somewhere-else) | the port nameservers are asked on (53) |
 | [`--root-hints`](docs/guide/configuring.md#pointing-it-somewhere-else) | where the walk starts, instead of the built-in hints |
 | [`--trust-anchors`](docs/guide/configuring.md#pointing-it-somewhere-else) | the DS records to trust, instead of the built-in ones |

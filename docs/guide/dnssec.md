@@ -102,15 +102,15 @@ nameserver of the zone it ends in for the keys it publishes and the key it signs
 its SOA with:
 
 ```
-$ dnstree --all --dnssec --no-asn --max-queries 400 isc.org SOA
+$ dnstree --all --dnssec --no-asn isc.org SOA
 ...
-│   │   ├── ns1.isc.org. 149.20.2.26  194ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
-│   │   │   ├── isc.org. 7200 SOA ns-int.isc.org. hostmaster.isc.org. 2026100160 7200 3600 24796800 3600
-│   │   │   ├── ns1.isc.org. 149.20.2.26  196ms  NOERROR  AA DO  (DNSKEY of isc.org.)
-│   │   │   ├── ns1.isc.org. 149.20.2.26  186ms  NOERROR  AA DO  (keys check: publishes 7250 27566)
-│   │   │   ├── ns1.isc.org. 149.20.2.26  194ms  NOERROR  AA DO  (keys check: signs with 27566)
+│   │   ├── ns2.isc.org. 199.6.1.52  220ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   ├── isc.org. 7200 SOA ns-int.isc.org. hostmaster.isc.org. 2026100191 7200 3600 24796800 3600
+│   │   │   ├── ns2.isc.org. 199.6.1.52  212ms  NOERROR  AA DO  (DNSKEY of isc.org.)
+│   │   │   ├── ns2.isc.org. 199.6.1.52  220ms  NOERROR  AA DO  (keys check: publishes 7250 27566)
+│   │   │   ├── ns2.isc.org. 199.6.1.52  240ms  NOERROR  AA DO  (keys check: signs with 27566)
 ...
-✔ answered in 8.3s · resolver in 265ms · 177 queries · 100 servers
+✔ answered in 8.5s · resolver in 216ms · 177 queries · 100 servers
 ```
 
 Where one signs with a key another does not publish, the walk names both, once
@@ -121,9 +121,10 @@ for each key:
 A key one server publishes and nobody signs with breaks nothing, and is left
 alone. The verdict is the one the walk reached: this is about the paths it did
 not take. Servers are told apart by address, since an anycast site left behind
-is one address of a name. It costs two queries for each address, which `--all`
-is already short of for a large zone; a walk whose budget ran out before it
-entered the zone has no keys to compare, and says nothing.
+is one address of a name. It costs two queries for each address, which is
+part of why `--all` walks on a budget of 256 queries rather than 64; a walk
+whose budget ran out before it entered the zone has no keys to compare, and
+says nothing.
 
 A chain that holds can still be set up the way the advice has moved on from, and
 `--explain` says so under the verdict, which it never changes: a zone signing

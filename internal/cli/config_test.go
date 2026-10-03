@@ -59,6 +59,11 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"example.com"},
 			want: cli.Config{Format: "emoji"},
 		},
+		"a budget the file sets holds for --all too": {
+			file: "max-queries = 100\n",
+			args: []string{"--all", "example.com"},
+			want: cli.Config{All: true, MaxQueries: 100},
+		},
 		"the command line wins over the file": {
 			file: "format = emoji\ntimeout = 3s\n",
 			args: []string{"--format", "ascii", "example.com"},
