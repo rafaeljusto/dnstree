@@ -42,7 +42,7 @@ one after another, each from the root servers down.
   --fallback              let plain DNS pick up a hop the transport could not
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
-  --check-ns              ask the zone that answered for its NS set and compare
+  --check-ns              ask the zone for its NS set and glue, and compare
   --check-ds              ask the zone for its CDS and CDNSKEY and compare
   --serial                ask every nameserver of the zone which copy it serves
   --check-axfr            ask each nameserver of the zone to hand over all of it
@@ -487,7 +487,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Fallback, "fallback", false, "let plain DNS pick up a hop the transport could not")
 	flags.BoolVar(&cfg.All, "all", false, "ask every nameserver of a zone")
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
-	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets")
+	flags.BoolVar(&cfg.CheckNS, "check-ns", false, "compare the parent and child NS sets and glue")
 	flags.BoolVar(&cfg.CheckDS, "check-ds", false, "compare the zone's CDS and CDNSKEY with its DS")
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.CheckAXFR, "check-axfr", false, "ask every nameserver of the zone for all of it")

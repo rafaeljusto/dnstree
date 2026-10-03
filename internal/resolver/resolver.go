@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -1206,16 +1207,151 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 
 	if len(child) == 0 {
 		r.warnf("%s did not return its own NS records", delegated.Zone)
-		return
+	} else {
+		if missing := missing(delegated.NS, child); len(missing) > 0 {
+			r.warnf("%s delegates to %s, which the zone itself does not list",
+				delegated.Zone, strings.Join(missing, ", "))
+		}
+		if extra := missing(child, delegated.NS); len(extra) > 0 {
+			r.warnf("%s lists %s, which the delegation does not carry",
+				delegated.Zone, strings.Join(extra, ", "))
+		}
 	}
-	if missing := missing(delegated.NS, child); len(missing) > 0 {
-		r.warnf("%s delegates to %s, which the zone itself does not list",
-			delegated.Zone, strings.Join(missing, ", "))
+	r.checkGlue(ctx, step, answer.Server, parent.Zone, delegated)
+}
+
+// checkGlue asks the zone for the addresses of the nameservers named inside
+// it, and holds them against the glue its parent handed out. Glue is a copy,
+// made when the nameserver was registered, and nothing tells the registry when
+// the zone renumbers one: resolvers go on trying the old address first, and
+// whoever holds it next answers for the zone.
+//
+// A nameserver named outside the zone is not the zone's to say anything about,
+// and one with no glue at all is warned about where the referral is followed.
+// The questions go out together and hang under the NS check once they are all
+// back, from the goroutine doing the walking.
+func (r *run) checkGlue(ctx context.Context, check *trace.Step, server trace.Server, parent string, delegated *trace.Delegation) {
+	type question struct {
+		name   string
+		rrtype uint16
 	}
-	if extra := missing(child, delegated.NS); len(extra) > 0 {
-		r.warnf("%s lists %s, which the delegation does not carry",
-			delegated.Zone, strings.Join(extra, ", "))
+	var questions []question
+	for _, name := range delegated.NS {
+		if len(delegated.Glue[name]) == 0 || !dnsutil.IsBelow(delegated.Zone, name) {
+			continue
+		}
+		questions = append(questions, question{name, dns.TypeA}, question{name, dns.TypeAAAA})
 	}
+
+	var budget error
+	for i := range questions {
+		if err := r.counters.query(); err != nil {
+			questions, budget = questions[:i], err
+			break
+		}
+	}
+
+	hops := make([]*hop, len(questions))
+	limit := make(chan struct{}, maxParallel)
+	var wait sync.WaitGroup
+	for i, q := range questions {
+		wait.Go(func() {
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			hops[i] = r.query(ctx, delegated.Zone, server, q.name, q.rrtype)
+		})
+	}
+	wait.Wait()
+
+	for i, hop := range hops {
+		q, step := questions[i], hop.step
+		step.Aside = true
+		step.Notes = append(step.Notes, "glue check: "+dnsutil.TypeToString(q.rrtype)+" of "+q.name)
+		held := addresses(step.Records, q.name, q.rrtype)
+		step.Records = nil // the comparison is the point, and it is on the delegation
+		r.attach(check, step)
+
+		if step.Kind != trace.KindAnswer && step.Kind != trace.KindNoData {
+			continue // a server that did not say is not a zone that disagrees
+		}
+		if delegated.ZoneAddrs == nil {
+			delegated.ZoneAddrs = make(map[string][]netip.Addr)
+		}
+		delegated.ZoneAddrs[q.name] = append(delegated.ZoneAddrs[q.name], held...)
+		glue := delegated.Glue[q.name]
+		r.compareGlue(parent, delegated.Zone, q.name,
+			ofFamily(glue, q.rrtype), ofFamily(glue, otherFamily(q.rrtype)), held, q.rrtype)
+	}
+	if budget != nil {
+		r.warnf("the budget ran out before the glue of %s could be checked", delegated.Zone)
+	}
+}
+
+// compareGlue warns where the glue of one family disagrees with what the zone
+// gives. The order is no part of it: both are sets.
+func (r *run) compareGlue(parent, zone, name string, glue, other, held []netip.Addr, rrtype uint16) {
+	slices.SortFunc(glue, netip.Addr.Compare)
+	slices.SortFunc(held, netip.Addr.Compare)
+	glue, held = slices.Compact(glue), slices.Compact(held)
+	switch {
+	case slices.Equal(glue, held):
+	case len(glue) == 0 && len(other) > 0:
+		r.warnf("%s hands out no %s address for %s, which %s gives as %s; have the registrar add it to the glue",
+			parent, familyName(rrtype), name, zone, joinAddrs(held))
+	case len(held) == 0:
+		r.warnf("%s hands out %s for %s, which %s itself does not give; have the registrar remove it from the glue",
+			parent, joinAddrs(glue), name, zone)
+	default:
+		r.warnf("%s hands out %s for %s, which %s itself gives as %s; have the registrar update the glue",
+			parent, joinAddrs(glue), name, zone, joinAddrs(held))
+	}
+}
+
+// addresses are the addresses of one type that name owns among records.
+func addresses(records []trace.RR, name string, rrtype uint16) []netip.Addr {
+	var found []netip.Addr
+	for _, record := range records {
+		if record.Type != dnsutil.TypeToString(rrtype) || !dns.EqualName(record.Name, name) {
+			continue
+		}
+		if addr, err := netip.ParseAddr(record.Data); err == nil {
+			found = append(found, addr)
+		}
+	}
+	return found
+}
+
+// ofFamily are the addresses an A or an AAAA query would be answered with.
+func ofFamily(addrs []netip.Addr, rrtype uint16) []netip.Addr {
+	var found []netip.Addr
+	for _, addr := range addrs {
+		if addr.Is4() == (rrtype == dns.TypeA) {
+			found = append(found, addr)
+		}
+	}
+	return found
+}
+
+func otherFamily(rrtype uint16) uint16 {
+	if rrtype == dns.TypeA {
+		return dns.TypeAAAA
+	}
+	return dns.TypeA
+}
+
+func familyName(rrtype uint16) string {
+	if rrtype == dns.TypeA {
+		return "IPv4"
+	}
+	return "IPv6"
+}
+
+func joinAddrs(addrs []netip.Addr) string {
+	text := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		text = append(text, addr.String())
+	}
+	return strings.Join(text, " and ")
 }
 
 // checkDS asks the zone the walk ended in what it wants its parent to publish,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"net/netip"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -240,6 +241,7 @@ type delegation struct {
 	ZoneTTL        uint32              `json:"zone_ttl,omitempty"`
 	NS             []string            `json:"ns,omitempty"`
 	Glue           map[string][]string `json:"glue,omitempty"`
+	ZoneAddrs      map[string][]string `json:"zone_addrs,omitempty"`
 	GlueLess       []string            `json:"glueless,omitempty"`
 	OutOfBailiwick []string            `json:"out_of_bailiwick,omitempty"`
 	DSPresent      bool                `json:"ds_present,omitempty"`
@@ -535,12 +537,21 @@ func convertDelegation(from *trace.Delegation) *delegation {
 		OutOfBailiwick: from.OutOfBailiwick,
 		DSPresent:      from.DSPresent,
 	}
-	for name, addrs := range from.Glue {
-		if to.Glue == nil {
-			to.Glue = make(map[string][]string, len(from.Glue))
+	to.Glue = addrStrings(from.Glue)
+	to.ZoneAddrs = addrStrings(from.ZoneAddrs)
+	return to
+}
+
+// addrStrings is a map of names to addresses as text, nil where it is empty.
+func addrStrings(from map[string][]netip.Addr) map[string][]string {
+	var to map[string][]string
+	for name, addrs := range from {
+		if to == nil {
+			to = make(map[string][]string, len(from))
 		}
+		to[name] = []string{}
 		for _, addr := range addrs {
-			to.Glue[name] = append(to.Glue[name], addr.String())
+			to[name] = append(to[name], addr.String())
 		}
 	}
 	return to

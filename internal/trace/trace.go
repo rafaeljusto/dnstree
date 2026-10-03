@@ -573,6 +573,13 @@ type Delegation struct {
 	// child's copy once it has one keeps the nameservers for this long instead.
 	ZoneTTL uint32
 
+	// ZoneAddrs are the addresses the zone itself gives the nameservers named
+	// inside it, set only where --check-ns asked. They are what the glue is a
+	// copy of, and a copy nothing keeps in step: a nameserver renumbered in the
+	// zone goes on being handed out at its old address until the registry is
+	// told.
+	ZoneAddrs map[string][]netip.Addr
+
 	// NS are the nameserver names, in the order they were received.
 	NS []string
 

@@ -395,16 +395,30 @@ func readDelegation(from *delegation) (*trace.Delegation, error) {
 		OutOfBailiwick: from.OutOfBailiwick,
 		DSPresent:      from.DSPresent,
 	}
-	for name, addrs := range from.Glue {
-		if to.Glue == nil {
-			to.Glue = make(map[string][]netip.Addr, len(from.Glue))
+	var err error
+	if to.Glue, err = readAddrs("glue", from.Glue); err != nil {
+		return nil, err
+	}
+	if to.ZoneAddrs, err = readAddrs("zone_addrs", from.ZoneAddrs); err != nil {
+		return nil, err
+	}
+	return to, nil
+}
+
+// readAddrs reads a map of names to addresses, nil where it is empty.
+func readAddrs(field string, from map[string][]string) (map[string][]netip.Addr, error) {
+	var to map[string][]netip.Addr
+	for name, addrs := range from {
+		if to == nil {
+			to = make(map[string][]netip.Addr, len(from))
 		}
+		to[name] = []netip.Addr{}
 		for _, addr := range addrs {
 			ip, err := netip.ParseAddr(addr)
 			if err != nil {
-				return nil, fmt.Errorf("jsonout: glue for %s: %w", name, err)
+				return nil, fmt.Errorf("jsonout: %s for %s: %w", field, name, err)
 			}
-			to.Glue[name] = append(to.Glue[name], ip)
+			to[name] = append(to[name], ip)
 		}
 	}
 	return to, nil

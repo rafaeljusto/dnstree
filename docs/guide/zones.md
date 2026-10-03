@@ -52,6 +52,42 @@ drifted.
 It costs one query, asked of the server that answered the question, and it is
 off unless asked for.
 
+A nameserver named inside the zone it serves can only be reached through the
+addresses its parent hands out with the referral, the glue. Glue is a copy of
+what the zone says, made when the nameserver was registered, and nothing keeps
+the two in step: a nameserver renumbered in the zone goes on being handed out at
+its old address, and every resolver tries that first. `--check-ns` asks the zone
+for the A and AAAA of each such nameserver too, together, under the NS check:
+
+```
+$ dnstree --check-ns --no-asn www.isc.org A
+...
+│   │   │   └── ns3.isc.org. 51.75.79.143  226ms  NOERROR  AA  (parent/child NS check)
+│   │   │       ├── ns3.isc.org. 51.75.79.143  232ms  NOERROR  AA  (glue check: A of ns3.isc.org.)
+│   │   │       ├── ns3.isc.org. 51.75.79.143  223ms  NOERROR  AA  (glue check: AAAA of ns3.isc.org.)
+│   │   │       ├── ns3.isc.org. 51.75.79.143  233ms  NOERROR  AA  (glue check: A of ns1.isc.org.)
+│   │   │       ├── ns3.isc.org. 51.75.79.143  232ms  NOERROR  AA  (glue check: AAAA of ns1.isc.org.)
+│   │   │       ├── ns3.isc.org. 51.75.79.143  221ms  NOERROR  AA  (glue check: A of ns2.isc.org.)
+│   │   │       └── ns3.isc.org. 51.75.79.143  230ms  NOERROR  AA  (glue check: AAAA of ns2.isc.org.)
+...
+✔ answered in 1.2s · resolver in 169ms · 10 queries · 3 servers
+```
+
+The addresses are compared a family at a time, as sets, and agreeing costs no
+room. Where they differ the walk says which way:
+
+> test. hands out 192.0.2.53 for ns1.example.test., which example.test. itself gives as 198.51.100.53; have the registrar update the glue
+
+> test. hands out no IPv6 address for ns1.example.test., which example.test. gives as 2001:db8::53; have the registrar add it to the glue
+
+> test. hands out 2001:db8::53 for ns1.example.test., which example.test. itself does not give; have the registrar remove it from the glue
+
+A nameserver named in some other zone gets no glue and is not the zone's to
+give an address for, so it is left alone; one named inside with no glue at all
+breaks the delegation, and is warned about where the referral is followed. What
+the zone gave is in `--format json` as the delegation's `zone_addrs`. It costs
+two queries for each nameserver named inside the zone.
+
 The zone's own NS set carries a TTL of its own, too, and it is rarely the
 parent's: the parent's is often the registry's to choose. Resolvers differ over
 whose copy they keep once they have seen both, so a change of nameservers takes

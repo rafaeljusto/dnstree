@@ -140,12 +140,8 @@ func (s *Step) Shown() *Step {
 		d.NS = shownAll(d.NS)
 		d.GlueLess = shownAll(d.GlueLess)
 		d.OutOfBailiwick = shownAll(d.OutOfBailiwick)
-		if d.Glue != nil {
-			d.Glue = make(map[string][]netip.Addr, len(s.Delegation.Glue))
-			for name, addrs := range s.Delegation.Glue {
-				d.Glue[Shown(name)] = addrs
-			}
-		}
+		d.Glue = shownAddrs(s.Delegation.Glue)
+		d.ZoneAddrs = shownAddrs(s.Delegation.ZoneAddrs)
 		shown.Delegation = &d
 	}
 	shown.DNSSEC = s.DNSSEC.shown()
@@ -237,6 +233,18 @@ func shownAll(texts []string) []string {
 	shown := make([]string, len(texts))
 	for i, text := range texts {
 		shown[i] = Shown(text)
+	}
+	return shown
+}
+
+// shownAddrs is a map of names to addresses with the names escaped.
+func shownAddrs(addrs map[string][]netip.Addr) map[string][]netip.Addr {
+	if addrs == nil {
+		return nil
+	}
+	shown := make(map[string][]netip.Addr, len(addrs))
+	for name, list := range addrs {
+		shown[Shown(name)] = list
 	}
 	return shown
 }

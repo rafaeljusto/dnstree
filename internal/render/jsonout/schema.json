@@ -419,6 +419,14 @@
             "items": { "type": "string" }
           }
         },
+        "zone_addrs": {
+          "description": "The addresses the zone itself gives the nameservers named inside it, set only where --check-ns asked it. The glue is a copy of these, and nothing keeps the two in step: a nameserver renumbered in the zone goes on being handed out at its old address until the registry is told. A name with an empty list is one the zone gives no address of either family.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
         "glueless": {
           "description": "Nameservers inside the delegated zone that came with no glue. Nothing can resolve them, so the delegation is broken.",
           "type": "array",
