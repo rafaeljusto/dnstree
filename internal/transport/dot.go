@@ -27,7 +27,11 @@ func (d *DoT) Proto() string { return ProtoDoT }
 func (d *DoT) Port() uint16 { return d.port(PortDoT) }
 
 // Exchange implements [Transport]. The name is what the certificate is checked
-// against, so a server known only by address cannot be verified.
+// against; a server known only by address is checked against the address, as
+// DoH does, which a resolver's certificate usually names.
 func (d *DoT) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort, name string) (*dns.Msg, time.Duration, error) {
+	if name == "" {
+		name = server.Addr().Unmap().String()
+	}
 	return exchange(ctx, "tcp", d.Config, d.tlsConfig(name, dns.NextProtos), req, server)
 }
