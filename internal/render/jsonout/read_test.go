@@ -50,6 +50,12 @@ func TestReadRoundTrip(t *testing.T) {
 					NSEC3: &trace.NSEC3{Zone: "example.", Iterations: 10, Salt: "aabbccdd"}},
 			}}},
 		},
+		"a zone tried on new nameservers": {
+			Question: trace.Question{Name: "www.example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Trial: &trace.Trial{Zone: "example.", NS: []string{"ns1.new.net.", "192.0.2.9"},
+				Addrs: map[string][]netip.Addr{"192.0.2.9": {netip.MustParseAddr("192.0.2.9")}}},
+		},
 		"a broken chain reported to the agent its zone named": {
 			Question: trace.Question{Name: "www.example.", Type: "A", Class: "IN"},
 			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{

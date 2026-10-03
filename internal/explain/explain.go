@@ -344,6 +344,13 @@ func trust(tr *trace.Trace) []Finding {
 		findings := []Finding{{Topic: Trust, Level: Fault, Text: fmt.Sprintf(
 			"the chain of trust breaks at %s%s, so a resolver that validates answers SERVFAIL for this name",
 			zone, because(status.Reason))}}
+		// A broken chain at the zone --try-ns moved is the move's doing: the
+		// parent still vouches for the keys the zone is moving away from.
+		if tr.Trial != nil && strings.EqualFold(zoneOf(step), tr.Trial.Zone) {
+			findings = append(findings, Finding{Topic: Trust, Level: Fault, Text: fmt.Sprintf(
+				"this walk went to the nameservers --try-ns named, so moving %s to them as it stands breaks it for every resolver that validates; have the parent publish a DS for their keys first, or move it unsigned",
+				tr.Trial.Zone)})
+		}
 		// What --report did is under the tree already; what it would have
 		// done is only said here.
 		if agent, step := recursive.Agent(tr); agent != "" && tr.Report == nil {

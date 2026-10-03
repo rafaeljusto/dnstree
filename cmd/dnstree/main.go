@@ -572,6 +572,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 		},
 	}
 	config.Log = log
+	config.Try = cfg.Try
 	if len(cfg.Without) > 0 {
 		config.Down = outage.left
 	}

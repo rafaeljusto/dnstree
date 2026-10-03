@@ -40,6 +40,20 @@ func TestSummary(t *testing.T) {
 	}
 }
 
+// TestSummaryTrial covers a walk of a zone moved by --try-ns, which has to read
+// as a simulation on the line that says how the walk went.
+func TestSummaryTrial(t *testing.T) {
+	tr := walk(1)
+	tr.Root.Children[0].Kind = trace.KindAnswer
+	tr.Trial = &trace.Trial{Zone: "example.com.", NS: []string{"ns1.new.net.", "ns2.new.net."}}
+
+	var buf bytes.Buffer
+	Summary(&buf, tr, Options{Color: ColorNever})
+	if want := "as though delegated to ns1.new.net., ns2.new.net."; !strings.Contains(buf.String(), want) {
+		t.Errorf("got %q, want it to carry %q", buf.String(), want)
+	}
+}
+
 // TestSummaryResolver is the comparison the line is there for: what the same
 // question cost through a recursive server.
 func TestSummaryResolver(t *testing.T) {

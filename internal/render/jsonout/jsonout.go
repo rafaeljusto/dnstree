@@ -37,6 +37,9 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.Root = convert(tr.Root, tr.Timed)
 		document.Warnings = tr.Warnings
 		document.Without = tr.Without
+		if tr.Trial != nil {
+			document.Trial = &trial{Zone: tr.Trial.Zone, NS: tr.Trial.NS, Addrs: addrStrings(tr.Trial.Addrs)}
+		}
 		document.CAA = convertCAA(tr.CAA)
 		if tr.Report != nil {
 			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
@@ -60,6 +63,14 @@ type document struct {
 	Without       []string    `json:"without,omitempty"`
 	CAA           *caa        `json:"caa,omitempty"`
 	Report        *report     `json:"report,omitempty"`
+	Trial         *trial      `json:"trial,omitempty"`
+}
+
+// trial is the delegation --try-ns put in place of a zone's real one.
+type trial struct {
+	Zone  string              `json:"zone"`
+	NS    []string            `json:"ns"`
+	Addrs map[string][]string `json:"addrs,omitempty"`
 }
 
 // report is the failure report --report sent to the agent the zone named (RFC

@@ -13,6 +13,7 @@ server says about its own answer.
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
 - [Asking only what each zone needs](#asking-only-what-each-zone-needs)
 - [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
+- [Whether it will answer on new nameservers](#whether-it-will-answer-on-new-nameservers)
 - [How much room an answer had](#how-much-room-an-answer-had)
 
 ## Whether the parent and the child agree
@@ -481,6 +482,58 @@ With `--expect answer` it is a check for CI.
 It shows the path dnstree would take, which is not every path. A resolver that
 has already learned which servers are slow keeps away from them, and dnstree
 starts afresh every time. Leaving out a network by its AS is not there yet.
+
+## Whether it will answer on new nameservers
+
+Moving a zone to another provider comes down to changing the nameservers its
+parent delegates it to, and the mistakes are the ones nobody checks before the
+change: a record the new provider was never given, a zone it was never told to
+serve, and, for a signed zone, a DS at the parent that still vouches for the old
+provider's keys. Once the change is made, resolvers keep the old delegation for
+as long as the parent allows — two days, often — so undoing it is slow.
+
+`--try-ns ZONE=SERVER` walks as though the parent already delegated the zone to
+the servers named, as many times as there are of them. A server is a name, an
+address, or both as `--root` writes them, `NAME@ADDR`; a name with no address
+is looked up the way a nameserver named outside its zone is, so one inside the
+zone it serves has to be given its address, as glue would. The referral is
+drawn as the parent really gave it, marked `replaced by --try-ns`, its DS and all,
+and the walk goes on to the new servers:
+
+```
+$ dnstree --dnssec --no-asn --explain --try-ns example.com=a.iana-servers.net --try-ns example.com=b.iana-servers.net www.example.com A
+. (root)  [secure RSASHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  133ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  397ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
+│   ├── l.gtld-servers.net. 192.41.162.30  177ms  NOERROR  DO  referral → example.com.  [bogus ECDSAP256SHA256/SHA256: no DNSKEY of the zone matches the DS its parent published]  (replaced by --try-ns)
+│   │   ├── l.gtld-servers.net. 192.41.162.30  184ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── . (root)  [secure RSASHA256/SHA256]  (resolving a.iana-servers.net.)
+...
+│   │   └── a.iana-servers.net. 199.43.135.53  151ms  NOERROR  AA DO  [bogus: no DNSKEY of the zone matches the DS its parent published]
+│   │       ├── www.example.com. 300 CNAME www.example.com.cdn.cloudflare.net.
+...
+✘ bogus in 3.7s · as though delegated to a.iana-servers.net., b.iana-servers.net. · resolver in 20ms · 18 queries · 5 servers
+
+· www.example.com. A is 104.20.23.154 and 172.66.147.243, answered by ns1.cloudflare.net. for cloudflare.net., after 1 alias
+· a cache may hold this answer for 5 minutes, and the delegation to cloudflare.net. for 2 days
+· the chain of trust breaks at example.com.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name
+· this walk went to the nameservers --try-ns named, so moving example.com. to them as it stands breaks it for every resolver that validates; have the parent publish a DS for their keys first, or move it unsigned
+...
+```
+
+IANA's servers still serve `example.com`, with keys of their own; the parent's
+DS is for the ones Cloudflare signs with, so moving the zone back today would
+break it for every resolver that validates. The exit code is the walk's, so a
+script can hold a move to `--expect` before making it. To see what the new
+servers say differently, save a walk of the zone as it is with `--format json`
+and hold the trial against it with `--against`; `--names` tries a whole list
+of names in one run.
+
+The summary says the walk was a simulation, and so does `--format json`, as
+`trial`. A walk that never comes to a referral for the zone named changes
+nothing and says so. One zone is tried at a time, the root cannot be, since it
+has no parent to delegate it; `--diff`, which remembers the DNS as it is, will
+not take it, and nor will the file of defaults.
 
 ## How much room an answer had
 

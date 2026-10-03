@@ -66,6 +66,12 @@ func Read(r io.Reader) (*trace.Trace, error) {
 		return nil, err
 	}
 	tr.Timed = timed(doc.Root)
+	if doc.Trial != nil {
+		tr.Trial = &trace.Trial{Zone: doc.Trial.Zone, NS: doc.Trial.NS}
+		if tr.Trial.Addrs, err = readAddrs("trial", doc.Trial.Addrs); err != nil {
+			return nil, err
+		}
+	}
 	if doc.Report != nil {
 		tr.Report = &trace.Report{Agent: doc.Report.Agent, Name: doc.Report.Name, Code: doc.Report.Code,
 			Rcode: doc.Report.Rcode, Err: doc.Report.Error}

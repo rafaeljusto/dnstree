@@ -42,6 +42,9 @@ func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 	if len(tr.Without) > 0 {
 		fields = append(fields, "without "+strings.Join(tr.Without, ", "))
 	}
+	if tr.Trial != nil {
+		fields = append(fields, "as though delegated to "+strings.Join(tr.Trial.NS, ", "))
+	}
 	if timing := resolverField(tr.Resolvers); timing != "" {
 		fields = append(fields, timing)
 	}

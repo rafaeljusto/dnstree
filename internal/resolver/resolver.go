@@ -172,6 +172,12 @@ type Config struct {
 	// it would go next. Nil leaves every server up.
 	Down func(trace.Server) string
 
+	// Try replaces the delegation of one zone, wherever the walk comes to
+	// it, with nameservers of the run's choosing, so that a zone can be walked
+	// as it would be once moved to them. The referral is kept as the parent
+	// gave it, DS included. Nil walks the DNS as it is.
+	Try *trace.Trial
+
 	Budget Budget
 }
 
@@ -272,9 +278,14 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		run.cookies = map[netip.Addr]string{}
 	}
 
+	run.trace.Trial = r.cfg.Try
 	run.trace.Started = time.Now()
 	run.trace.Timed = true
 	end := run.walk(ctx, qname, rrtype, run.trace.Root, 0)
+	if r.cfg.Try != nil && !run.tried {
+		run.warnf("the walk never came to a delegation of %s, so --try-ns changed nothing; name the zone a referral on the way delegates",
+			r.cfg.Try.Zone)
+	}
 	if r.cfg.CAA {
 		run.climb(ctx, cmp.Or(end, run.trace.Root))
 	}
@@ -312,6 +323,9 @@ type run struct {
 	// lookups are asked of, and climbing is set while they are being made.
 	cuts     []cut
 	climbing bool
+
+	// tried is whether the walk came to the delegation --try-ns replaces.
+	tried bool
 
 	// mu guards the warnings and the cookies, which the fanout writes to from
 	// several goroutines.
@@ -457,7 +471,13 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 		if crossed := r.crossReferral(ctx, chain, hop); crossed != nil && top {
 			r.record(crossed.zone, []trace.Server{step.Server}, chain)
 		}
-		next, rest := r.nextServers(ctx, step, side)
+		var next []trace.Server
+		var rest []string
+		if r.cfg.Try != nil && dns.EqualName(step.Delegation.Zone, r.cfg.Try.Zone) {
+			next, rest = r.trialServers(ctx, step, side)
+		} else {
+			next, rest = r.nextServers(ctx, step, side)
+		}
 		if len(next) == 0 {
 			r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
 			return step
@@ -1051,6 +1071,44 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]tr
 		return servers, pending
 	}
 	resolved, pending := r.resolveNames(ctx, step, pending, side)
+	return append(servers, resolved...), pending
+}
+
+// trialServers is where the walk goes after the referral --try-ns replaces:
+// the servers it named, rather than the ones the parent did. The referral is
+// left as the parent gave it, and marked, so that what was replaced is drawn.
+// A nameserver named without an address is looked up the way one named outside
+// its zone is.
+func (r *run) trialServers(ctx context.Context, step *trace.Step, side int) ([]trace.Server, []string) {
+	trial := r.cfg.Try
+	r.tried = true
+	step.Notes = append(step.Notes, "replaced by --try-ns")
+
+	var (
+		servers []trace.Server
+		names   []string
+	)
+	for _, name := range trial.NS {
+		addrs, given := trial.Addrs[name]
+		if !given {
+			names = append(names, name)
+			continue
+		}
+		for _, addr := range addrs {
+			server := trace.Server{Name: name, IP: addr}
+			if _, err := netip.ParseAddr(name); err == nil {
+				server.Name = "" // named by its address alone
+			}
+			servers = append(servers, server)
+		}
+	}
+	if len(names) == 0 || side >= maxSideResolution {
+		return servers, nil
+	}
+	if len(servers) > 0 && !r.cfg.All {
+		return servers, names
+	}
+	resolved, pending := r.resolveNames(ctx, step, names, side)
 	return append(servers, resolved...), pending
 }
 

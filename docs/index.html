@@ -443,6 +443,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--without</code> walks as though a nameserver, an address or a whole prefix were down. A backup whose own zone is served by the server it backs up stops answering along with it.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">moving</span>
+          <h3>A move to a new provider, tried first</h3>
+          <p><code>--try-ns</code> walks as though a zone were already delegated to new nameservers. The parent's DS stays what it is, so a move that would break the chain of trust breaks it here, before the registry is told.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">running out</span>
           <h3>Signatures late in their life</h3>
           <p>A zone whose signer stopped validates to the last second and then fails all at once. A verdict resting on a signature with less than a fifth of its life left says when it runs out, while there is still time to re-sign.</p>

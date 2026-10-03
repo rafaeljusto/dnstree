@@ -12,6 +12,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 	"github.com/rafaeljusto/dnstree/v2/internal/expect"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 func TestParse(t *testing.T) {
@@ -149,6 +150,17 @@ func TestParse(t *testing.T) {
 			args: []string{"--report", "--dnssec", "--no-asn", "--no-compare", "--resolver", "192.0.2.53", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Report: true,
 				Resolvers: []netip.AddrPort{netip.MustParseAddrPort("192.0.2.53:53")}},
+		},
+		"a zone tried on new nameservers, by name and by address": {
+			args: []string{"--try-ns", "Example.com=ns1.new.net", "--try-ns", "example.com.=ns2.new.net@192.0.2.9", "--try-ns", "example.com=2001:db8::9", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Try: &trace.Trial{
+				Zone: "example.com.",
+				NS:   []string{"ns1.new.net.", "ns2.new.net.", "2001:db8::9"},
+				Addrs: map[string][]netip.Addr{
+					"ns2.new.net.": {netip.MustParseAddr("192.0.2.9")},
+					"2001:db8::9":  {netip.MustParseAddr("2001:db8::9")},
+				},
+			}},
 		},
 		"a broken chain reported to the agent its zone names": {
 			args: []string{"--report", "--dnssec", "example.com"},
@@ -335,6 +347,12 @@ func TestParseRejects(t *testing.T) {
 		"designations asked of no resolver":        {"--ddr", "--no-compare", "example.com"},
 		"a walk already made, asked for ddr":       {"--from", "walk.json", "--ddr"},
 		"a report with no chain of trust to break": {"--report", "example.com"},
+		"a trial with no zone":                     {"--try-ns", "ns1.new.net", "example.com"},
+		"a trial of two zones at once":             {"--try-ns", "example.com=ns1.new.net", "--try-ns", "example.org=ns1.new.net", "example.com"},
+		"a trial of the root":                      {"--try-ns", ".=ns1.new.net", "example.com"},
+		"a trial remembered as the DNS as it is":   {"--try-ns", "example.com=ns1.new.net", "--diff", "example.com"},
+		"a trial on a server that is not one":      {"--try-ns", "example.com=ns1/new", "example.com"},
+		"a trial on a server inside it, unglued":   {"--try-ns", "example.com=ns1.example.com", "example.com"},
 		"a report every time a walk is watched":    {"--report", "--dnssec", "--watch", "30s", "example.com"},
 		"a walk already made, asked for a report":  {"--from", "walk.json", "--report", "--dnssec"},
 		"an unknown colour":                        {"--color", "sometimes", "example.com"},

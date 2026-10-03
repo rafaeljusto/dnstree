@@ -236,6 +236,16 @@ func TestFindings(t *testing.T) {
 			}()),
 			want: []string{"test. asks for failures to be reported to agent.example., and --report sends it this one (RFC 9567)"},
 		},
+		"a trial that breaks the chain says what the move would do": {
+			trace: func() *trace.Trace {
+				step := answer()
+				step.DNSSEC = &trace.DNSSECStatus{State: trace.Bogus, Zone: "test.", Reason: "no DNSKEY of the zone matches the DS its parent published"}
+				tr := walk(step)
+				tr.Trial = &trace.Trial{Zone: "test.", NS: []string{"ns1.new.example."}}
+				return tr
+			}(),
+			want: []string{"moving test. to them as it stands breaks it for every resolver that validates"},
+		},
 		"a report already sent is not offered again": {
 			trace: func() *trace.Trace {
 				step := answer()

@@ -55,9 +55,30 @@ type Trace struct {
 	// ask.
 	CAA *CAA
 
+	// Trial is the delegation --try-ns put in place of the real one, nil for a
+	// walk of the DNS as it is. A walk with one is a simulation of a zone
+	// moved to other nameservers, and has to read as one wherever it is drawn.
+	Trial *Trial
+
 	// Report is the failure report --report sent to the agent the zone named
 	// (RFC 9567), nil where none was due or none was asked for.
 	Report *Report
+}
+
+// Trial is a zone delegated, for one walk, to nameservers of the run's choosing
+// rather than the ones its parent names: a move to another provider, tried
+// before the registry is told. The parent's DS stays what it is, which is the
+// point: it is what the move would meet on the day.
+type Trial struct {
+	Zone string
+
+	// NS are the nameservers, in the order they were named. A server named
+	// by its address alone is named by the address.
+	NS []string
+
+	// Addrs are the addresses given for them, which stand in for glue. A
+	// nameserver with none is looked up the way one named outside its zone is.
+	Addrs map[string][]netip.Addr
 }
 
 // Report is a broken chain of trust reported to the agent the zone asked for

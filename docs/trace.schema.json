@@ -42,9 +42,34 @@
       "items": { "type": "string" }
     },
     "caa": { "$ref": "#/$defs/caa" },
-    "report": { "$ref": "#/$defs/report" }
+    "report": { "$ref": "#/$defs/report" },
+    "trial": { "$ref": "#/$defs/trial" }
   },
   "$defs": {
+    "trial": {
+      "description": "The delegation --try-ns put in place of a zone's real one, present only where it was asked for. Such a walk is a simulation of the zone moved to these nameservers: the referral to the zone is kept as the parent gave it, DS included, and marked replaced, and the walk goes on to the servers named here instead.",
+      "type": "object",
+      "required": ["zone", "ns"],
+      "properties": {
+        "zone": {
+          "description": "The zone whose delegation was replaced.",
+          "type": "string"
+        },
+        "ns": {
+          "description": "The nameservers named, in order; one named by its address alone is named by the address.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "addrs": {
+          "description": "The addresses given for them, which stand in for glue. A nameserver with none was looked up the way one named outside its zone is.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
     "report": {
       "description": "The failure report --report sent to the agent the zone named (RFC 9567), present only where the chain of trust was bogus, a server of the broken zone named an agent, and --report asked. The report is a TXT lookup of name through a recursive resolver; the lookup arriving is the whole of it.",
       "type": "object",

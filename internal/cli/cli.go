@@ -17,6 +17,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/idn"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
@@ -52,6 +53,7 @@ one after another, each from the root servers down.
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
   --without SERVER        treat a nameserver, address or prefix as down; repeat it
+  --try-ns ZONE=SERVER    walk as though ZONE were delegated to SERVER; repeat it
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
@@ -407,6 +409,10 @@ type Config struct {
 	// the servers it may not ask, by name or by address.
 	Without []transport.Down
 
+	// Try is the delegation --try-ns puts in place of a zone's real one, nil
+	// where the walk is of the DNS as it is.
+	Try *trace.Trial
+
 	// WebAddr is where --format web and web-3d serve the page, and Browser whether one is
 	// opened at it. A walk names the servers it asked and the addresses they
 	// answered from, so the page stays on this machine unless it is moved.
@@ -477,6 +483,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		wanted        expectList
 		resolvers     resolverList
 		without       downList
+		trial         trialList
 	)
 	flags.StringVar(&reverse, "x", "", "resolve the PTR of this address")
 	flags.StringVar(&names, "names", "", "walk every question in this file")
@@ -500,6 +507,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.Var(&without, "without", "walk as though this server or network were down")
+	flags.Var(&trial, "try-ns", "walk as though ZONE were delegated to this nameserver")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
@@ -708,6 +716,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	cfg.Port = uint16(port)
 	cfg.Expect = wanted.want
 	cfg.Without = without.down
+	cfg.Try = trial.trial
 	cfg.ASN = !noASN
 	cfg.Compare = !noCompare
 	cfg.Browser = !noBrowser
@@ -738,6 +747,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			return nil, fmt.Errorf("%w: --ddr asks the resolvers --no-compare leaves unasked", ErrUsage)
 		}
 		cfg.DDR = false
+	}
+	if cfg.Try != nil && cfg.Diff {
+		return nil, fmt.Errorf("%w: --diff remembers the DNS as it is, and --try-ns walks it as it is not", ErrUsage)
 	}
 	if cfg.Report && !cfg.DNSSEC {
 		return nil, fmt.Errorf("%w: --report tells a zone its chain of trust is bogus, which only --dnssec can find", ErrUsage)
@@ -843,7 +855,7 @@ func several(cfg *Config, expecting bool) error {
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "caa": true, "nsid": true, "cookie": true, "qmin": true,
-	"subnet": true, "without": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
+	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
 	"tls-ca": true, "tls-insecure": true,
@@ -1028,6 +1040,75 @@ func parseDown(text string) (transport.Down, error) {
 		return transport.Down{}, err
 	}
 	return transport.Down{Name: fqdn(strings.ToLower(name))}, nil
+}
+
+// trialList collects the --try-ns flags into the one delegation they stand in
+// for. Several of them name the nameservers of one zone, the way a referral
+// does; a run tries one move at a time.
+type trialList struct{ trial *trace.Trial }
+
+func (l *trialList) String() string {
+	if l.trial == nil {
+		return ""
+	}
+	return l.trial.Zone + "=" + strings.Join(l.trial.NS, ",")
+}
+
+// Set reads one --try-ns: the zone, and a nameserver for it by its name, its
+// address, or its name and address as --root writes them.
+func (l *trialList) Set(value string) error {
+	zone, server, ok := strings.Cut(value, "=")
+	if !ok || zone == "" || server == "" {
+		return fmt.Errorf("%q is not ZONE=SERVER", value)
+	}
+	zone, err := idn.ASCII(zone)
+	if err != nil {
+		return err
+	}
+	zone = fqdn(strings.ToLower(zone))
+	if zone == "." {
+		return errors.New("the root has no parent to delegate it, so it cannot be moved; use --root")
+	}
+	if l.trial == nil {
+		l.trial = &trace.Trial{Zone: zone, Addrs: map[string][]netip.Addr{}}
+	} else if l.trial.Zone != zone {
+		return fmt.Errorf("--try-ns names %s and %s, and a walk tries one zone at a time", l.trial.Zone, zone)
+	}
+
+	name, written, named := strings.Cut(server, "@")
+	if !named {
+		name, written = server, ""
+		if _, err := netip.ParseAddr(server); err == nil {
+			written = server
+		}
+	}
+	if _, err := netip.ParseAddr(name); err != nil {
+		if strings.ContainsAny(name, ":/@ \t") {
+			return fmt.Errorf("%q is neither a name nor an address", name)
+		}
+		if name, err = idn.ASCII(name); err != nil {
+			return err
+		}
+		name = fqdn(strings.ToLower(name))
+	}
+	// Like a delegation without glue, a nameserver inside the zone it serves
+	// can only be reached at an address it is given.
+	if written == "" && (name == zone || strings.HasSuffix(name, "."+zone)) {
+		return fmt.Errorf("%s is inside %s, so nothing can look its address up; give it as %s@ADDR", name, zone, strings.TrimSuffix(name, "."))
+	}
+	if !slices.Contains(l.trial.NS, name) {
+		l.trial.NS = append(l.trial.NS, name)
+	}
+	if written != "" {
+		addr, err := netip.ParseAddr(written)
+		if err != nil {
+			return fmt.Errorf("%q is not an address", written)
+		}
+		if !slices.Contains(l.trial.Addrs[name], addr.Unmap()) {
+			l.trial.Addrs[name] = append(l.trial.Addrs[name], addr.Unmap())
+		}
+	}
+	return nil
 }
 
 // asNumber reports whether text names an autonomous system, as AS13335.

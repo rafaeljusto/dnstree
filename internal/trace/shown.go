@@ -40,6 +40,12 @@ func (t *Trace) Shown() *Trace {
 	shown.Root = t.Root.Shown()
 	shown.Warnings = shownAll(t.Warnings)
 	shown.Without = shownAll(t.Without)
+	if t.Trial != nil {
+		trial := *t.Trial
+		trial.Zone, trial.NS = Shown(trial.Zone), shownAll(trial.NS)
+		trial.Addrs = shownAddrs(t.Trial.Addrs)
+		shown.Trial = &trial
+	}
 	if t.Report != nil {
 		report := *t.Report
 		report.Agent, report.Name = Shown(report.Agent), Shown(report.Name)
