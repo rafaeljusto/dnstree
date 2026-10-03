@@ -113,7 +113,7 @@ over a minute to fail. Start these from a resolver that speaks both.
 | doh | `$D $B --doh --root one.one.one.one@1.1.1.1 example.com` | exit 0 |
 | tls-ca | `$D $B --dot --root one.one.one.one@1.1.1.1 --tls-ca /etc/ssl/cert.pem example.com` | exit 0 (use the system bundle of the platform) |
 | tls-insecure | `$D $B --dot --root 1.1.1.1 --tls-insecure example.com` | exit 0 |
-| dot-no-name | `$D $B --dot --root 1.1.1.1 example.com` | exit 2, and the hop should say to name the server or pass `--tls-insecure`. At 043a63c it prints Go's `tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config` |
+| dot-no-name | `$D $B --dot --root 1.1.1.1 example.com` | exit 0: a server given only by address has its certificate checked against the address, which 1.1.1.1's names. `--doh` the same |
 | fallback | `$D $B --dot --fallback --timeout 1s example.com` | exit 0: plain DNS picks up the hops DoT could not. Expect it to be slow |
 
 ## zone
@@ -133,10 +133,10 @@ over a minute to fail. Start these from a resolver that speaks both.
 
 | id | run | expect |
 | --- | --- | --- |
-| max-queries | `$D $B --max-queries 2 example.com` | exit 2, `gave up after 2 queries`, and the summary should count 2. At 043a63c it says 3 |
-| max-depth | `$D $B --max-depth 1 example.com` | exit 2, `gave up after 1 zone cuts`, the summary counting the queries drawn. At 043a63c it says 2 for 1 |
+| max-queries | `$D $B --max-queries 2 example.com` | exit 2, `gave up after 2 queries`, and the summary counts 2: the note is no query |
+| max-depth | `$D $B --max-depth 1 example.com` | exit 2, `gave up after 1 zone cuts`, `1 query` |
 | max-cname | `$D $B --max-cname 1 www.github.com` | exit 0. One alias is all it has |
-| max-cname-0 | `$D $B --max-cname 0 www.github.com` | 0 is read as the default of 8, so the alias is followed. Nothing in the usage says so, which is a ux finding until it does |
+| budget-0 | `$D $B --max-cname 0 www.github.com`, and the same for `--max-depth` and `--max-queries`, and from a file of defaults | exit 1, `is no budget at all; the least is 1`. Left alone, a budget takes its default |
 | timeout | `$D $B --timeout 200ms --retries 0 --root 192.0.2.1 example.com` | exit 2 within about a second, `timeout` on the hop |
 | retries | the same with `--retries 2` | exit 2, `asked again after a silence`. With `--retries 0` that is absent |
 | port | `$D $B --port 9 --timeout 300ms --retries 0 --root a.root-servers.net@198.41.0.4 example.com` | exit 2, `no server answered for .`, the tree drawn |
