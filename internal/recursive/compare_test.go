@@ -34,6 +34,15 @@ func resolvers(answer *trace.Resolver) []*trace.Resolver {
 	return []*trace.Resolver{answer}
 }
 
+// compacted is a walk that ended on a compact denial (RFC 9824): an NXDOMAIN
+// the server answered as NOERROR.
+func compacted(answer *trace.Resolver) *trace.Trace {
+	tr := traceOf("NOERROR", nil, answer)
+	result := tr.Root.Children[0]
+	result.Kind, result.Compact = trace.KindNXDomain, true
+	return tr
+}
+
 func answerOf(rcode string, theirs ...string) *trace.Resolver {
 	records := make([]trace.RR, 0, len(theirs))
 	for _, data := range theirs {
@@ -76,6 +85,19 @@ func TestCompare(t *testing.T) {
 		name:  "neither has the name",
 		tr:    traceOf("NXDOMAIN", nil, answerOf("NXDOMAIN")),
 		match: "",
+	}, {
+		// RFC 9824 lets the same denial travel as NOERROR or NXDOMAIN.
+		name:  "a compact denial handed on as NXDOMAIN",
+		tr:    compacted(answerOf("NXDOMAIN")),
+		match: "",
+	}, {
+		name:  "a compact denial handed on as it came",
+		tr:    compacted(answerOf("NOERROR")),
+		match: "",
+	}, {
+		name:  "a compact denial against an address",
+		tr:    compacted(answerOf("NOERROR", "192.0.2.10")),
+		match: trace.MatchDiffers,
 	}, {
 		name:  "the resolver did not answer",
 		tr:    traceOf("NOERROR", []string{"192.0.2.10"}, &trace.Resolver{Err: "i/o timeout"}),

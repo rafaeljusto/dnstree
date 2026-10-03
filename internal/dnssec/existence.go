@@ -5,6 +5,8 @@ import (
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
+
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // Proving that something is not there is the other half of denial of existence.
@@ -312,4 +314,37 @@ func (c *Chain) zoneName() string {
 		return "."
 	}
 	return dnsutil.Canonical(c.keys[0].Hdr.Name)
+}
+
+// Compact reads a NODATA for what RFC 9824 makes of it. A zone that signs as it
+// answers cannot sign the gap a name falls in, so it says every name it has
+// nothing for is there, with a record of its own whose types include NXNAME
+// where the name does not exist after all. claimed is that record being in the
+// answer, and proved is the zone's keys having signed it: anyone able to write
+// to a response can add one, and only a signed one turns a NODATA into a name
+// that is not there.
+func (c *Chain) Compact(authority []dns.RR, qname string) (claimed, proved bool) {
+	for _, nsec := range nsecsOf(authority) {
+		if !nsecMatches(nsec, qname) {
+			continue
+		}
+		if !hasType(nsec.TypeBitMap, dns.TypeNXNAME) {
+			return false, false
+		}
+		return true, c.state == trace.Secure && c.signedBy(authority, nsec.Hdr.Name, dns.TypeNSEC) == nil
+	}
+	nsec3s, err := c.nsec3sOf(authority)
+	if err != nil {
+		return false, false
+	}
+	for _, nsec3 := range nsec3s {
+		if !nsec3Matches(nsec3, qname) {
+			continue
+		}
+		if !hasType(nsec3.TypeBitMap, dns.TypeNXNAME) {
+			return false, false
+		}
+		return true, c.state == trace.Secure && c.signedBy(authority, nsec3.Hdr.Name, dns.TypeNSEC3) == nil
+	}
+	return false, false
 }

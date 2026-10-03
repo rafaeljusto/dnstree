@@ -435,6 +435,12 @@ type Step struct {
 	// with is about that shorter name, so it is never the resolution's answer.
 	Minimised bool
 
+	// Compact marks an NXDOMAIN the server answered as NOERROR, the way a zone
+	// that signs as it answers denies a name (RFC 9824): its signed record at
+	// the name lists NXNAME, which says the name is not there at all. Rcode
+	// keeps what the server sent.
+	Compact bool
+
 	// Aside marks work that answers a different question: the address of a
 	// nameserver, or the NS set of a zone. The resolution's own answer is never
 	// inside one. Following an alias is not an aside: the target is what the

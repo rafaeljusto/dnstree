@@ -437,6 +437,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 					r.record(crossed.zone, []trace.Server{step.Server}, chain)
 				}
 			}
+			r.compact(chain, hop, qname)
 			r.denial(hop, zone, qname)
 			if side == 0 && !r.climbing {
 				r.checkECH(step)
@@ -1108,6 +1109,27 @@ func (r *run) chaseCNAME(ctx context.Context, step *trace.Step, qname string, qt
 		claim(result, r.orphan(result), trace.DanglingAlias, qname, step.Zone)
 	}
 	return result
+}
+
+// compact turns a NODATA into the NXDOMAIN it is, where the zone signed a
+// record at the name saying it is not there (RFC 9824). Online signers answer
+// every missing name this way, and read as a NODATA it is a name that exists,
+// which --expect and every sentence about it would repeat. One nothing signed
+// stays a NODATA: it is only a server's word.
+func (r *run) compact(chain *dnssec.Chain, hop *hop, qname string) {
+	step := hop.step
+	if chain == nil || hop.resp == nil || step.Kind != trace.KindNoData {
+		return
+	}
+	claimed, proved := chain.Compact(hop.resp.Ns, qname)
+	switch {
+	case proved && step.DNSSEC != nil && step.DNSSEC.State == trace.Secure:
+		step.Kind, step.Compact = trace.KindNXDomain, true
+		step.DNSSEC.Reason = "proved that " + qname + " does not exist"
+		step.Notes = append(step.Notes, "compact denial, RFC 9824")
+	case claimed:
+		step.Notes = append(step.Notes, "NXNAME, unproved")
+	}
 }
 
 // checkECH warns when an answer publishes an encrypted client hello that

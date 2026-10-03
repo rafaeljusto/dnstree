@@ -142,8 +142,11 @@ func outcome(tr *trace.Trace) Finding {
 
 	switch result.Kind {
 	case trace.KindNXDomain:
-		return Finding{Topic: Outcome, Level: Note, Text: fmt.Sprintf(
-			"%s does not exist, and %s is the zone that says so", tr.Question.Name, result.Zone)}
+		text := fmt.Sprintf("%s does not exist, and %s is the zone that says so", tr.Question.Name, result.Zone)
+		if result.Compact {
+			text += ", answering NOERROR with a signed record that says it, the way a zone that signs as it answers does (RFC 9824)"
+		}
+		return Finding{Topic: Outcome, Level: Note, Text: text}
 
 	case trace.KindNoData:
 		return Finding{Topic: Outcome, Level: Note, Text: fmt.Sprintf(

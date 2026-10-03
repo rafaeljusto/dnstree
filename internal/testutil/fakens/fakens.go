@@ -450,6 +450,11 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	default:
 		s.respond(reply, name, qtype)
 		if req.Security {
+			// A compact denial is a NODATA, and only to a client that can
+			// read the record saying otherwise (RFC 9824 section 3).
+			if s.denialKind == DenialCompact && s.signer != nil && reply.Rcode == dns.RcodeNameError {
+				reply.Rcode = dns.RcodeSuccess
+			}
 			s.signReply(reply)
 		}
 	}

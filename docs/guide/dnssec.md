@@ -53,6 +53,26 @@ stretched over has to show there was nothing closer to answer with. A denial
 that rests on an opt-out range reads `[insecure]`: the range may be hiding an
 unsigned delegation, so it proves only that the name is not signed.
 
+A zone that signs as it answers cannot sign the gap a name falls in, so it says
+every name it has nothing for is there, with a record of its own — and where the
+name is not there after all, that record lists NXNAME (RFC 9824). Cloudflare
+answers this way. The answer comes back NOERROR, and read as it came it is a
+name that exists; once the record at the name has been checked against the
+zone's keys, it is the NXDOMAIN it is, and the hop says why:
+
+```
+$ dnstree --dnssec --no-asn --explain nothing-here-dnstree.cloudflare.com A
+...
+│   │   ├── ns3.cloudflare.com. 162.159.0.33  20ms  NOERROR  AA DO  [secure]  (compact denial, RFC 9824)
+...
+· nothing-here-dnstree.cloudflare.com. does not exist, and cloudflare.com. is the zone that says so, answering NOERROR with a signed record that says it, the way a zone that signs as it answers does (RFC 9824)
+```
+
+The rcode stays what the server sent, and `--format json` marks the hop
+`compact`. A record nobody signed is anybody's to add, so one that did not check
+out leaves the hop a NODATA, noted `NXNAME, unproved`. Without `--dnssec` the
+question asks for no signatures, and the zone owes it the NXDOMAIN outright.
+
 A registry that serves its own domains from the machines of its ccTLD answers
 for a child zone with no referral to it, so the cut is invisible from the walk.
 The signatures name the zone that made them, and the same server holds the

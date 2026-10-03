@@ -270,6 +270,10 @@
           "description": "Set on a hop that asked for less of the name than the walk was after, to find where the next zone cut is (RFC 9156, --qmin). asked says what it put instead, and what it came back with is about that shorter name, so it is never the walk's answer.",
           "type": "boolean"
         },
+        "compact": {
+          "description": "Set on an nxdomain the server answered as NOERROR, the way a zone that signs as it answers denies a name (RFC 9824): its signed record at the name lists NXNAME, which says the name is not there at all. rcode keeps what the server sent. Only a record the chain of trust found signed earns it.",
+          "type": "boolean"
+        },
         "delegation": { "$ref": "#/$defs/delegation" },
         "dnssec": { "$ref": "#/$defs/dnssec" },
         "dangling": { "$ref": "#/$defs/dangling" },

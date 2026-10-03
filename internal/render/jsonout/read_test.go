@@ -47,6 +47,14 @@ func TestReadRoundTrip(t *testing.T) {
 					NSEC3: &trace.NSEC3{Zone: "example.", Iterations: 10, Salt: "aabbccdd"}},
 			}}},
 		},
+		"a name denied the way an online signer denies it": {
+			Question: trace.Question{Name: "nope.example.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindNXDomain, Rcode: "NOERROR", Compact: true,
+				Notes:  []string{"compact denial, RFC 9824"},
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "example."},
+			}}},
+		},
 		"nameservers asked for what they should keep from strangers": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{

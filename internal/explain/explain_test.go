@@ -75,6 +75,14 @@ func TestFindings(t *testing.T) {
 			trace: walk(hop(trace.KindNXDomain, "ns.test.")),
 			want:  []string{"www.test. does not exist", "test. is the zone that says so"},
 		},
+		"a compact denial says it arrived as NOERROR": {
+			trace: walk(func() *trace.Step {
+				step := hop(trace.KindNXDomain, "ns.test.")
+				step.Rcode, step.Compact = "NOERROR", true
+				return step
+			}()),
+			want: []string{"www.test. does not exist", "answering NOERROR", "RFC 9824"},
+		},
 		"a type that is not there is not a name that is not there": {
 			trace: walk(hop(trace.KindNoData, "ns.test.")),
 			want:  []string{"exists but has no A record"},

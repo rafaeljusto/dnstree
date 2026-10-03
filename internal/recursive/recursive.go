@@ -51,9 +51,17 @@ func compare(tr *trace.Trace, result *trace.Step, answer *trace.Resolver) {
 	}
 
 	// A different rcode is a difference whatever the records say, and it is the
-	// loud one: the name is there for one of them and not for the other.
-	if result.Rcode != "" && result.Rcode != answer.Rcode {
-
+	// loud one: the name is there for one of them and not for the other. A
+	// compact denial is an NXDOMAIN sent as NOERROR (RFC 9824), and a resolver
+	// may hand it on either way.
+	rcode := result.Rcode
+	if result.Compact {
+		if answer.Rcode == "NOERROR" && len(trace.Answers(answer.Records, tr.Question.Type)) == 0 {
+			return
+		}
+		rcode = "NXDOMAIN"
+	}
+	if rcode != "" && rcode != answer.Rcode {
 		answer.Match = trace.MatchDiffers
 		return
 	}

@@ -150,6 +150,7 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		Cookie:    trace.CookieState(from.Cookie),
 		Aside:     from.Aside,
 		Minimised: from.Minimised,
+		Compact:   from.Compact,
 		Err:       from.Error,
 	}
 	var err error

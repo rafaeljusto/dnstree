@@ -6,6 +6,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
+	"codeberg.org/miekg/dns/rdata"
 )
 
 // Denial is how a signed zone proves something is not there: that a child has
@@ -25,6 +26,13 @@ const (
 
 	// DenialNSEC names the gaps outright, the way a small signed zone does.
 	DenialNSEC Denial = "nsec"
+
+	// DenialCompact signs as it answers, the way Cloudflare and other online
+	// signers do (RFC 9824): a name that is not there is answered NOERROR to a
+	// query asking for signatures, with a record of its own whose types are
+	// NXNAME, NSEC and RRSIG. Every other gap is named the way DenialNSEC
+	// names it.
+	DenialCompact Denial = "compact"
 )
 
 // The NSEC3 parameters the fake zones sign with, the ones RFC 5155 uses in its
@@ -44,7 +52,13 @@ func (s *Server) denial(name string, absent bool) []dns.RR {
 	if s.signer == nil || s.behaviour.NoDenial {
 		return nil
 	}
-	if s.denialKind == DenialNSEC {
+	if s.denialKind == DenialCompact && absent {
+		return []dns.RR{&dns.NSEC{
+			Hdr:  dns.Header{Name: name, Class: dns.ClassINET, TTL: 3600},
+			NSEC: rdata.NSEC{NextDomain: "\x00." + name, TypeBitMap: []uint16{dns.TypeRRSIG, dns.TypeNSEC, dns.TypeNXNAME}},
+		}}
+	}
+	if s.denialKind == DenialNSEC || s.denialKind == DenialCompact {
 		return s.nsecDenial(name, absent)
 	}
 	return s.nsec3Denial(name, absent)
