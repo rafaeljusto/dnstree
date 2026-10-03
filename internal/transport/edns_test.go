@@ -8,6 +8,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
@@ -253,5 +254,62 @@ func TestEchoedNSIDAbsent(t *testing.T) {
 		if got := transport.EchoedNSID(resp); got != "" {
 			t.Errorf("got %q, want nothing", got)
 		}
+	}
+}
+
+// TestReportChannel reads the agent a server names (RFC 9567) off the wire. The
+// option is written out by hand, as fakens writes it: the library's own type
+// counts the agent in characters rather than octets, and packs it short.
+func TestReportChannel(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		wire string // the option's data, hex
+		want string
+	}{{
+		name: "an agent is read as its name",
+		wire: "056167656e74076578616d706c65036e657400",
+		want: "agent.example.net.",
+	}, {
+		name: "the root names no agent, and nothing is to be sent",
+		wire: "00",
+		want: "",
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := dns.NewMsg("www.example.com.", dns.TypeA)
+			msg.UDPSize = 1232
+			msg.Pseudo = []dns.RR{&dns.ERFC3597{EDNS0Code: dns.CodeREPORTING, Code: tt.wire}}
+			if err := msg.Pack(); err != nil {
+				t.Fatalf("Pack: %v", err)
+			}
+			back := &dns.Msg{Data: msg.Data}
+			if err := back.Unpack(); err != nil {
+				t.Fatalf("Unpack: %v", err)
+			}
+			if got := transport.ReportChannel(back); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	if got := transport.ReportChannel(nil); got != "" {
+		t.Errorf("got %q from no message, want nothing", got)
+	}
+}
+
+func TestReportName(t *testing.T) {
+	question := trace.Question{Name: "broken.test", Type: "A"}
+	name, ok := transport.ReportName(question, 7, "a01.agent-domain.example")
+	// The example of RFC 9567 section 6.1.1, to the letter.
+	if want := "_er.1.broken.test.7._er.a01.agent-domain.example."; !ok || name != want {
+		t.Errorf("got %q (%v), want %q", name, ok, want)
+	}
+
+	// 230 octets on its own, a name that fits, and a report on it that does not.
+	long := trace.Question{Name: strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 36), Type: "A"}
+	if name, ok := transport.ReportName(long, 6, "agent.example."); ok {
+		t.Errorf("got %q, want no report longer than a name can be", name)
+	}
+	if _, ok := transport.ReportName(trace.Question{Name: "x.test", Type: "NOSUCHTYPE"}, 6, "agent.example."); ok {
+		t.Error("got a name for a type nobody knows, want none")
 	}
 }

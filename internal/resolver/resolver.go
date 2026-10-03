@@ -920,6 +920,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	step.Extended = transport.Extended(resp)
 	step.Subnet = transport.EchoedSubnet(resp)
 	step.NSID = transport.EchoedNSID(resp)
+	step.ReportTo = transport.ReportChannel(resp)
 	if r.cfg.Cookie && udpSize > 0 && transport.CarriesCookie(step.Proto) {
 		step.Cookie, _ = transport.EchoedCookie(resp, r.clientCookie(step.Server.IP))
 		switch {

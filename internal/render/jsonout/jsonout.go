@@ -38,6 +38,10 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.Warnings = tr.Warnings
 		document.Without = tr.Without
 		document.CAA = convertCAA(tr.CAA)
+		if tr.Report != nil {
+			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
+				Rcode: tr.Report.Rcode, Error: tr.Report.Err}
+		}
 	}
 
 	encoder := json.NewEncoder(w)
@@ -55,6 +59,17 @@ type document struct {
 	Warnings      []string    `json:"warnings,omitempty"`
 	Without       []string    `json:"without,omitempty"`
 	CAA           *caa        `json:"caa,omitempty"`
+	Report        *report     `json:"report,omitempty"`
+}
+
+// report is the failure report --report sent to the agent the zone named (RFC
+// 9567).
+type report struct {
+	Agent string `json:"agent"`
+	Name  string `json:"name,omitempty"`
+	Code  uint16 `json:"code"`
+	Rcode string `json:"rcode,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // caa is who may issue certificates for the name (RFC 8659), and the climb from
@@ -182,6 +197,7 @@ type step struct {
 	SOA        *soa            `json:"soa,omitempty"`
 	NSID       string          `json:"nsid,omitempty"`
 	Cookie     string          `json:"cookie,omitempty"`
+	ReportTo   string          `json:"report_to,omitempty"`
 	Aside      bool            `json:"aside,omitempty"`
 	Minimised  bool            `json:"minimised,omitempty"`
 	Compact    bool            `json:"compact,omitempty"`
@@ -354,6 +370,7 @@ func convert(from *trace.Step, timed bool) *step {
 		SOA:        convertSOA(from.SOA),
 		NSID:       from.NSID,
 		Cookie:     string(from.Cookie),
+		ReportTo:   from.ReportTo,
 		Aside:      from.Aside,
 		Minimised:  from.Minimised,
 		Compact:    from.Compact,

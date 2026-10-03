@@ -118,6 +118,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--dnssec`](docs/guide/dnssec.md#following-the-chain-of-trust) | ask for signatures and follow the chain of trust |
 | [`--check-ns`](docs/guide/zones.md#whether-the-parent-and-the-child-agree) | ask the zone that answered for its own NS set and its nameservers' addresses, and compare them with the delegation and its glue |
 | [`--check-ds`](docs/guide/dnssec.md#what-the-zone-asks-its-parent) | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS |
+| [`--report`](docs/guide/dnssec.md#telling-the-zone-it-is-broken) | tell the agent a zone names that its chain of trust is bogus (RFC 9567) |
 | [`--serial`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of the zone which copy of it they serve, and compare |
 | [`--check-axfr`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over |
 | [`--check-recursion`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone to look up somebody else's name, and say which do |

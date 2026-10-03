@@ -54,6 +54,27 @@ type Trace struct {
 	// CAA is who may issue certificates for the name, nil where --caa did not
 	// ask.
 	CAA *CAA
+
+	// Report is the failure report --report sent to the agent the zone named
+	// (RFC 9567), nil where none was due or none was asked for.
+	Report *Report
+}
+
+// Report is a broken chain of trust reported to the agent the zone asked for
+// such reports to go to (RFC 9567). The report is a lookup of Name through a
+// recursive resolver, and the lookup arriving is the whole of it.
+type Report struct {
+	Agent string
+
+	// Name is what was looked up, empty where nothing was. Code is the extended
+	// error it reports (RFC 8914).
+	Name string
+	Code uint16
+
+	// Rcode is what the lookup came back with, and Err why it was not sent or
+	// did not get through.
+	Rcode string
+	Err   string
 }
 
 // CAA is the CAA set that decides which certificate authorities may issue for
@@ -429,6 +450,12 @@ type Step struct {
 	// Cookie is how the server handled the DNS cookie the query carried (RFC
 	// 7873), empty when the query carried none.
 	Cookie CookieState
+
+	// ReportTo is the agent the server asks DNS failures in its zone to be
+	// reported to (RFC 9567), empty where it named none. Servers send it
+	// unasked, and nothing vouches for it: it says where a report would go,
+	// which is why it is drawn.
+	ReportTo string
 
 	// Minimised marks a hop that asked for less of the name than the walk was
 	// after, to find where the next zone cut is (RFC 9156). What it came back

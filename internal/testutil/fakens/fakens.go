@@ -91,6 +91,11 @@ type Behaviour struct {
 	// nothing, which is the other case worth testing.
 	NSID string
 
+	// ReportAgent is the agent the server asks DNS failures in its zone to be
+	// reported to (RFC 9567), sent with every answer that carries EDNS0,
+	// unasked, the way such servers send it. Empty names none.
+	ReportAgent string
+
 	// Cookies is how the server answers a DNS cookie (RFC 7873). The zero
 	// value ignores it, the way a server that does not support them does.
 	Cookies Cookies
@@ -495,6 +500,9 @@ func (s *Server) echo(reply, req *dns.Msg) {
 	if ede := s.behaviour.Extended; ede != nil {
 		reply.Pseudo = append(reply.Pseudo, &dns.EDE{InfoCode: ede.Code, ExtraText: ede.Text})
 	}
+	if s.behaviour.ReportAgent != "" {
+		reply.Pseudo = append(reply.Pseudo, reportChannel(s.behaviour.ReportAgent))
+	}
 	if s.behaviour.NSID != "" && asks[*dns.NSID](req) {
 		reply.Pseudo = append(reply.Pseudo, &dns.NSID{Nsid: hex.EncodeToString([]byte(s.behaviour.NSID))})
 	}
@@ -511,6 +519,18 @@ func (s *Server) echo(reply, req *dns.Msg) {
 			})
 		}
 	}
+}
+
+// reportChannel is the Report-Channel option naming agent (RFC 9567), written
+// out by hand: the library's own type counts the agent's length in characters
+// rather than octets, and drops the root label packing it.
+func reportChannel(agent string) dns.RR {
+	var wire []byte
+	for label := range strings.SplitSeq(strings.TrimSuffix(agent, "."), ".") {
+		wire = append(wire, byte(len(label)))
+		wire = append(wire, label...)
+	}
+	return &dns.ERFC3597{EDNS0Code: dns.CodeREPORTING, Code: hex.EncodeToString(append(wire, 0))}
 }
 
 // cookie answers the cookie a query carried, and reports whether the answer

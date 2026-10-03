@@ -66,6 +66,10 @@ func Read(r io.Reader) (*trace.Trace, error) {
 		return nil, err
 	}
 	tr.Timed = timed(doc.Root)
+	if doc.Report != nil {
+		tr.Report = &trace.Report{Agent: doc.Report.Agent, Name: doc.Report.Name, Code: doc.Report.Code,
+			Rcode: doc.Report.Rcode, Err: doc.Report.Error}
+	}
 	if tr.CAA, err = readCAA(doc.CAA); err != nil {
 		return nil, err
 	}
@@ -148,6 +152,7 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		Extended:  readExtended(from.Extended),
 		NSID:      from.NSID,
 		Cookie:    trace.CookieState(from.Cookie),
+		ReportTo:  from.ReportTo,
 		Aside:     from.Aside,
 		Minimised: from.Minimised,
 		Compact:   from.Compact,

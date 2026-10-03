@@ -1249,3 +1249,53 @@ lame.               IN NS   a.root-servers.net.
 		})
 	}
 }
+
+// TestReport covers --report end to end: a root whose signatures do not hold
+// names an agent, and the report reaches the recursive server --resolver names
+// as the lookup RFC 9567 builds, once, and is drawn under the tree.
+func TestReport(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone, DNSSEC: true,
+		Behaviour: fakens.Behaviour{BadSignature: true, ReportAgent: "agent.example."}})
+	resolver := fakens.New(t, fakens.Config{Origin: "example.", Zone: "@ IN SOA ns hostmaster 1 7200 3600 1209600 3600\n"})
+
+	anchors := filepath.Join(t.TempDir(), "anchors")
+	if err := os.WriteFile(anchors, []byte(root.Anchors(t)[0].String()+"\n"), 0o600); err != nil {
+		t.Fatalf("writing the anchors: %v", err)
+	}
+
+	for name, test := range map[string]struct {
+		report bool
+		sent   int
+	}{
+		"sent when asked for": {report: true, sent: 1},
+		"never unasked":       {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := len(resolver.Queries())
+			args := []string{"--root-hints", rootHintsFile(t), "--port", strconv.Itoa(int(root.Addr.Port())),
+				"--trust-anchors", anchors, "--dnssec", "--no-asn", "--no-compare"}
+			if test.report {
+				args = append(args, "--report", "--resolver", resolver.Addr.String())
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run(t.Context(), append(args, "nothing.", "A"), &stdout, &stderr); code != exitBogus {
+				t.Fatalf("got exit %d, want %d: %s%s", code, exitBogus, stdout.String(), stderr.String())
+			}
+
+			var sent []string
+			for _, query := range resolver.Queries()[before:] {
+				sent = append(sent, query.Name)
+			}
+			if len(sent) != test.sent || (test.sent > 0 && sent[0] != "_er.1.nothing.6._er.agent.example.") {
+				t.Errorf("got %q sent to the resolver, want %d report", sent, test.sent)
+			}
+			out := stdout.String()
+			if !strings.Contains(out, "report → agent.example.") {
+				t.Errorf("got %q, want the agent drawn on the hop", out)
+			}
+			if told := strings.Contains(out, "report: told agent.example."); told != test.report {
+				t.Errorf("got %q, want the report drawn only where one was sent", out)
+			}
+		})
+	}
+}

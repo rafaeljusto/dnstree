@@ -340,7 +340,28 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		tr.Resolvers = <-timed
 		recursive.Compare(tr)
 	}
+	if cfg.Report {
+		report(ctx, cfg, tr)
+	}
 	return tr, nil
+}
+
+// report tells the agent the broken zone named that its chain of trust is
+// broken (RFC 9567), through the recursive server the comparison asks, the way
+// a resolver that hit the failure would.
+func report(ctx context.Context, cfg *cli.Config, tr *trace.Trace) {
+	server := transport.System()
+	if len(cfg.Resolvers) > 0 {
+		server = cfg.Resolvers[0]
+	}
+	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
+	fallback := transport.NewTCP(transport.Config{Timeout: cfg.Timeout})
+	recursive.Report(tr, func(name string) (string, error) {
+		if !server.IsValid() {
+			return "", errors.New("there is no recursive server to send it through; name one with --resolver")
+		}
+		return transport.SendReport(ctx, carrier, fallback, server, name)
+	})
 }
 
 // saved is a walk --format json wrote, read back to be drawn again: from a

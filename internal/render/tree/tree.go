@@ -137,6 +137,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, line := range r.authorities(tr.CAA) {
 		r.write(line + "\n")
 	}
+	if line := r.reported(tr.Report); line != "" {
+		r.write(line + "\n")
+	}
 	for _, warning := range tr.Warnings {
 		mark := "warning: "
 		if r.glyphs.icons {
@@ -257,6 +260,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	}
 	if dangling := r.dangling(step.Dangling); dangling != "" {
 		fields = append(fields, dangling)
+	}
+	if step.ReportTo != "" {
+		fields = append(fields, r.paint.dim("report "+r.glyphs.arrow+" "+step.ReportTo))
 	}
 	if probe := r.probe(step.Probe); probe != "" {
 		fields = append(fields, probe)
@@ -710,6 +716,24 @@ func (r *renderer) designations(tr *trace.Trace) []string {
 
 // authorities say who may issue certificates for the name and which set
 // decided it, only where --caa asked. The climb itself is in the tree.
+// reported is the line that says what came of the report --report sent.
+func (r *renderer) reported(report *trace.Report) string {
+	if report == nil {
+		return ""
+	}
+	mark := "report: "
+	if r.glyphs.icons {
+		mark = spaced("📮")
+	}
+	switch {
+	case report.Name == "":
+		return r.paint.paint(mark+"not sent to "+report.Agent+": "+report.Err, yellow)
+	case report.Err != "":
+		return r.paint.paint(mark+report.Agent+" was not reached: "+report.Err, yellow)
+	}
+	return r.paint.dim(mark + "told " + report.Agent + " the chain of trust is bogus, as " + report.Name + " (" + report.Rcode + ")")
+}
+
 func (r *renderer) authorities(caa *trace.CAA) []string {
 	if caa == nil {
 		return nil

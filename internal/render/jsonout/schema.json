@@ -41,9 +41,37 @@
       "type": "array",
       "items": { "type": "string" }
     },
-    "caa": { "$ref": "#/$defs/caa" }
+    "caa": { "$ref": "#/$defs/caa" },
+    "report": { "$ref": "#/$defs/report" }
   },
   "$defs": {
+    "report": {
+      "description": "The failure report --report sent to the agent the zone named (RFC 9567), present only where the chain of trust was bogus, a server of the broken zone named an agent, and --report asked. The report is a TXT lookup of name through a recursive resolver; the lookup arriving is the whole of it.",
+      "type": "object",
+      "required": ["agent", "code"],
+      "properties": {
+        "agent": {
+          "description": "The agent the zone asks failures to be reported to.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What was looked up, absent where nothing was.",
+          "type": "string"
+        },
+        "code": {
+          "description": "The extended error reported (RFC 8914): 6, DNSSEC Bogus.",
+          "type": "integer"
+        },
+        "rcode": {
+          "description": "What the lookup came back with.",
+          "type": "string"
+        },
+        "error": {
+          "description": "Why the report was not sent, or did not get through.",
+          "type": "string"
+        }
+      }
+    },
     "caa": {
       "description": "Who may issue certificates for the name (RFC 8659), present only where --caa asked. A certificate authority looks for a CAA set at the name, then at each name above it short of the root, and goes by the first it finds, following an alias for that one lookup. The steps that asked are in the tree, as asides.",
       "type": "object",
@@ -256,6 +284,10 @@
         "soa": { "$ref": "#/$defs/soa" },
         "nsid": {
           "description": "What the server called itself, as RFC 5001 asks it to, absent where the query asked for no identifier or the server published none. It belongs to the answer rather than to the server: one anycast address is many machines, and this says which of them answered. An identifier whose bytes spell no printable name is carried as the hex it arrived as, and one longer than 32 bytes is cut and ends in an ellipsis.",
+          "type": "string"
+        },
+        "report_to": {
+          "description": "The agent the server asks DNS failures in its zone to be reported to (RFC 9567), absent where it named none. Servers send it unasked, and nothing vouches for it.",
           "type": "string"
         },
         "cookie": {

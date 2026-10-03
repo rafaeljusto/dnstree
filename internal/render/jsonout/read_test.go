@@ -50,6 +50,14 @@ func TestReadRoundTrip(t *testing.T) {
 					NSEC3: &trace.NSEC3{Zone: "example.", Iterations: 10, Salt: "aabbccdd"}},
 			}}},
 		},
+		"a broken chain reported to the agent its zone named": {
+			Question: trace.Question{Name: "www.example.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindAnswer, Rcode: "NOERROR", ReportTo: "agent.example.net.",
+				DNSSEC: &trace.DNSSECStatus{State: trace.Bogus, Zone: "example."},
+			}}},
+			Report: &trace.Report{Agent: "agent.example.net.", Code: 6, Name: "_er.1.www.example.6._er.agent.example.net.", Rcode: "NOERROR"},
+		},
 		"a name denied the way an online signer denies it": {
 			Question: trace.Question{Name: "nope.example.", Type: "A", Class: "IN"},
 			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{

@@ -25,8 +25,9 @@ and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
-`no-config`, `version`, `schema`, `from`, `against`, `x`, `names` and
-`without`: those nine ask something of the run rather than set a default for it.
+`no-config`, `version`, `schema`, `from`, `against`, `x`, `names`, `without`
+and `report`: those ten ask something of the run rather than set a default for
+it.
 
 > [!NOTE]
 > A file named outright — by `$DNSTREE_CONFIG` or by `--config` — has to be

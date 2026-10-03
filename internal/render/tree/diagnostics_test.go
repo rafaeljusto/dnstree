@@ -352,6 +352,35 @@ func TestRenderMinimised(t *testing.T) {
 	}
 }
 
+// TestRenderReport covers where a zone asks failures to be reported, drawn on
+// the hop that said so, and what came of reporting one.
+func TestRenderReport(t *testing.T) {
+	tests := map[string]struct {
+		report *trace.Report
+		want   string
+	}{
+		"nothing sent": {want: "report → agent.example."},
+		"a report that arrived": {
+			report: &trace.Report{Agent: "agent.example.", Code: 6, Name: "_er.1.www.test.6._er.agent.example.", Rcode: "NOERROR"},
+			want:   "report: told agent.example. the chain of trust is bogus, as _er.1.www.test.6._er.agent.example. (NOERROR)"},
+		"a report that was not sent": {
+			report: &trace.Report{Agent: "agent.test.", Code: 6, Err: "the agent is at or below the name it would be told about, which RFC 9567 rules out"},
+			want:   "report: not sent to agent.test.: the agent is at or below the name it would be told about, which RFC 9567 rules out"},
+		"a report that did not get through": {
+			report: &trace.Report{Agent: "agent.example.", Code: 6, Name: "_er.1.www.test.6._er.agent.example.", Err: "i/o timeout"},
+			want:   "report: agent.example. was not reached: i/o timeout"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr := oneHop(&trace.Step{Kind: trace.KindAnswer, Rcode: "NOERROR", ReportTo: "agent.example."})
+			tr.Report = test.report
+			if out := draw(t, tr); !strings.Contains(out, test.want) {
+				t.Errorf("got %q, want %q", out, test.want)
+			}
+		})
+	}
+}
+
 // TestRenderSignal covers what a zone asks its parent to publish, beside the
 // verdict of the cut its DS belongs to.
 func TestRenderSignal(t *testing.T) {

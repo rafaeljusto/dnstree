@@ -5,6 +5,7 @@ DNSSEC is worth to ECH.
 
 - [Following the chain of trust](#following-the-chain-of-trust)
 - [What the zone asks its parent](#what-the-zone-asks-its-parent)
+- [Telling the zone it is broken](#telling-the-zone-it-is-broken)
 - [ECH, and what makes it worth anything](#ech-and-what-makes-it-worth-anything)
 
 ## Following the chain of trust
@@ -183,6 +184,41 @@ it is heeded by the runs that check signatures, and left alone by the rest — a
 a zone the chain did not reach secure reads `cds unchecked`. A zone that crosses into a child served by
 the same machines, with no referral, is checked against the DS fetched to cross
 it. It costs two queries, asked of the server that answered.
+
+## Telling the zone it is broken
+
+When a zone's chain of trust breaks, the first to know are the resolvers that
+check it: they answer SERVFAIL, and nobody tells the zone's owner. RFC 9567
+gives a zone a way to ask: its servers add the name of a reporting agent to
+their answers, unasked, and a resolver that hits a failure reports it by looking
+up a name built from the question and the error. Every hop that names an agent
+draws it, so where a report would go is in the tree before anything is sent:
+
+```
+│   │   ├── ns1.example.test. 192.0.2.53  18ms  NOERROR  AA DO  report → agent.example.net.  [bogus: the answer carries no signature]
+```
+
+`--report` sends it, when the chain the walk followed is bogus and the broken
+zone named an agent: a TXT lookup of the name RFC 9567 builds, through the
+recursive server the walk is compared against, which the first `--resolver`
+names:
+
+```
+report: told agent.example.net. the chain of trust is bogus, as _er.1.www.example.test.6._er.agent.example.net. (NOERROR)
+```
+
+The error reported is 6, DNSSEC Bogus. A chain that could not be checked is
+never reported, since that is this build's limit and not the zone's fault; nor
+is one with no agent, one whose agent sits at or below the name it would be told
+about, which RFC 9567 rules out, or one whose report would be longer than a name
+can be. Without `--report`, `--explain` says when a broken zone asked for one.
+
+A report tells a third party that this machine looked up this name, so it is
+only ever sent when asked for. It needs `--dnssec`, it is not sent from
+`--watch`, which would send the same report every walk, and the file of
+defaults cannot set it. The agent is only what the server said, and nothing
+vouches for it, which is why it is drawn. What came of the report is in
+`--format json` as `report`, and the agent of each hop as `report_to`.
 
 ## ECH, and what makes it worth anything
 

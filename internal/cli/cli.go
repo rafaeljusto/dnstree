@@ -56,6 +56,7 @@ one after another, each from the root servers down.
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
   --ddr                   ask each resolver which encrypted resolvers stand for it
+  --report                report a bogus chain to the agent the zone names (RFC 9567)
   --format FORMAT         how to draw the walk: tree, waterfall, json, web; see below
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
@@ -356,6 +357,7 @@ type Config struct {
 	ASN      bool
 	Compare  bool
 	DDR      bool
+	Report   bool
 	Format   string
 	Live     bool
 	Explain  bool
@@ -501,6 +503,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
+	flags.BoolVar(&cfg.Report, "report", false, "tell the agent a zone names that its chain of trust is bogus")
 	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, markdown, json, dot, mermaid, openmetrics, web or web-3d")
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
@@ -736,7 +739,13 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.DDR = false
 	}
-	if cfg.Resolvers = resolvers.servers; len(cfg.Resolvers) > 0 && !cfg.ASN && !cfg.Compare {
+	if cfg.Report && !cfg.DNSSEC {
+		return nil, fmt.Errorf("%w: --report tells a zone its chain of trust is bogus, which only --dnssec can find", ErrUsage)
+	}
+	if cfg.Report && cfg.Watch != 0 {
+		return nil, fmt.Errorf("%w: --report with --watch would send the same report every walk", ErrUsage)
+	}
+	if cfg.Resolvers = resolvers.servers; len(cfg.Resolvers) > 0 && !cfg.ASN && !cfg.Compare && !cfg.Report {
 		return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
 	}
 	if (cfg.TLSCA != "" || cfg.TLSInsecure) && cfg.Proto != "dot" && cfg.Proto != "doh" {
@@ -834,7 +843,7 @@ func several(cfg *Config, expecting bool) error {
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "caa": true, "nsid": true, "cookie": true, "qmin": true,
-	"subnet": true, "without": true, "no-asn": true, "no-compare": true, "ddr": true, "timeout": true, "retries": true,
+	"subnet": true, "without": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
 	"tls-ca": true, "tls-insecure": true,

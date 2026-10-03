@@ -40,6 +40,12 @@ func (t *Trace) Shown() *Trace {
 	shown.Root = t.Root.Shown()
 	shown.Warnings = shownAll(t.Warnings)
 	shown.Without = shownAll(t.Without)
+	if t.Report != nil {
+		report := *t.Report
+		report.Agent, report.Name = Shown(report.Agent), Shown(report.Name)
+		report.Rcode, report.Err = Shown(report.Rcode), Shown(report.Err)
+		shown.Report = &report
+	}
 	shown.Resolvers = nil
 	for _, resolver := range t.Resolvers {
 		if resolver == nil {
@@ -133,6 +139,7 @@ func (s *Step) Shown() *Step {
 	shown.Extended = shownExtended(s.Extended)
 	shown.Notes = shownAll(s.Notes)
 	shown.NSID = Shown(s.NSID)
+	shown.ReportTo = Shown(s.ReportTo)
 	shown.Err = Shown(s.Err)
 	if s.Delegation != nil {
 		d := *s.Delegation

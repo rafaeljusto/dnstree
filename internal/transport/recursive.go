@@ -215,3 +215,64 @@ func protocols(alpn []string, path bool) []string {
 	}
 	return named
 }
+
+// ReportChannel is the agent a server asks DNS failures to be reported to
+// (RFC 9567), empty where it named none. Servers send it unasked: a query is
+// not allowed to carry the option.
+func ReportChannel(resp *dns.Msg) string {
+	if resp == nil {
+		return ""
+	}
+	for _, rr := range resp.Pseudo {
+		channel, ok := rr.(*dns.REPORTING)
+		if !ok || channel.AgentDomain == "" || channel.AgentDomain == "." {
+			continue
+		}
+		return dnsutil.Fqdn(channel.AgentDomain)
+	}
+	return ""
+}
+
+// ReportName is the name a report of an extended error is looked up as (RFC
+// 9567 section 6.1.1): _er, the type asked as a number, the name asked, the
+// error code, _er again and the agent. False where there is no such name: a
+// type this build does not know, or a name longer than a name can be, which
+// the RFC says is not to be sent.
+func ReportName(question trace.Question, code uint16, agent string) (string, bool) {
+	qtype, ok := dns.StringToType[strings.ToUpper(question.Type)]
+	if !ok {
+		return "", false
+	}
+	asked := strings.TrimSuffix(dnsutil.Fqdn(question.Name), ".")
+	name := fmt.Sprintf("_er.%d.", qtype)
+	if asked != "" {
+		name += asked + "."
+	}
+	name += fmt.Sprintf("%d._er.%s", code, dnsutil.Fqdn(agent))
+	// On the wire a name takes a length octet for each label and one for the
+	// root, which is one octet more than it takes written out with its dots.
+	return name, dnsutil.IsName(name) && len(name)+1 <= maxNameOctets
+}
+
+// maxNameOctets is the longest a name can be on the wire (RFC 1035 3.1).
+const maxNameOctets = 255
+
+// SendReport looks the report up, as a TXT query with recursion desired, the
+// way any resolver would send one: the lookup is the report, and the agent's
+// answer says nothing more than that it arrived. It hands back the rcode.
+func SendReport(ctx context.Context, carrier, fallback Transport, server netip.AddrPort, name string) (string, error) {
+	req, err := NewQuery(name, dns.TypeTXT, DefaultUDPSize, false)
+	if err != nil {
+		return "", err
+	}
+	req.RecursionDesired = true
+
+	resp, _, err := carrier.Exchange(ctx, req, server, "")
+	if err == nil && resp.Truncated && fallback != nil {
+		resp, _, err = fallback.Exchange(ctx, req, server, "")
+	}
+	if err != nil {
+		return "", err
+	}
+	return dnsutil.RcodeToString(resp.Rcode), nil
+}

@@ -227,6 +227,35 @@ func TestFindings(t *testing.T) {
 			}()),
 			want: []string{"the chain of trust breaks at test.", "the answer carries no signature", "SERVFAIL"},
 		},
+		"a broken zone that names an agent says --report would tell it": {
+			trace: walk(func() *trace.Step {
+				step := answer()
+				step.ReportTo = "agent.example."
+				step.DNSSEC = &trace.DNSSECStatus{State: trace.Bogus, Zone: "test.", Reason: "the answer carries no signature"}
+				return step
+			}()),
+			want: []string{"test. asks for failures to be reported to agent.example., and --report sends it this one (RFC 9567)"},
+		},
+		"a report already sent is not offered again": {
+			trace: func() *trace.Trace {
+				step := answer()
+				step.ReportTo = "agent.example."
+				step.DNSSEC = &trace.DNSSECStatus{State: trace.Bogus, Zone: "test."}
+				tr := walk(step)
+				tr.Report = &trace.Report{Agent: "agent.example.", Code: 6, Name: "_er.1.www.test.6._er.agent.example.", Rcode: "NOERROR"}
+				return tr
+			}(),
+			avoid: []string{"--report sends"},
+		},
+		"a sound zone that names an agent has nothing to report": {
+			trace: walk(func() *trace.Step {
+				step := answer()
+				step.ReportTo = "agent.example."
+				step.DNSSEC = &trace.DNSSECStatus{State: trace.Secure, Zone: "test."}
+				return step
+			}()),
+			avoid: []string{"reported"},
+		},
 		"the zone named as broken is the one the verdict is about, not the one it is drawn on": {
 			trace: walk(&trace.Step{
 				Zone: "org.", Kind: trace.KindReferral,

@@ -428,6 +428,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--check-ds</code> holds the CDS and CDNSKEY a zone publishes against the DS its parent hands out. A request nobody acted on is a rollover stuck halfway, under a chain that reads secure all the while.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">report</span>
+          <h3>Telling a broken zone it is broken</h3>
+          <p>A zone can name an agent to hear about its failures (RFC 9567), and every hop that says so shows it. <code>--report</code> sends the agent the report a validating resolver would, when the chain is bogus.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">minimised</span>
           <h3>A name denied for being empty</h3>
           <p><code>--qmin</code> asks each zone for one label more than it has, the way resolvers do now. A server that answers NXDOMAIN for an empty name stops such a resolver dead; the walk asks again in full and names the server.</p>

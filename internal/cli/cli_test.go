@@ -145,6 +145,15 @@ func TestParse(t *testing.T) {
 			args: []string{"--ddr", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DDR: true},
 		},
+		"a report sent through a resolver nothing else asks": {
+			args: []string{"--report", "--dnssec", "--no-asn", "--no-compare", "--resolver", "192.0.2.53", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Report: true,
+				Resolvers: []netip.AddrPort{netip.MustParseAddrPort("192.0.2.53:53")}},
+		},
+		"a broken chain reported to the agent its zone names": {
+			args: []string{"--report", "--dnssec", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Report: true},
+		},
 		"a zone's nameservers asked for what they should keep": {
 			args: []string{"--check-axfr", "--check-recursion", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", CheckAXFR: true, CheckRecursion: true},
@@ -325,6 +334,9 @@ func TestParseRejects(t *testing.T) {
 		"a request weighed unsigned":               {"--check-ds", "example.com"},
 		"designations asked of no resolver":        {"--ddr", "--no-compare", "example.com"},
 		"a walk already made, asked for ddr":       {"--from", "walk.json", "--ddr"},
+		"a report with no chain of trust to break": {"--report", "example.com"},
+		"a report every time a walk is watched":    {"--report", "--dnssec", "--watch", "30s", "example.com"},
+		"a walk already made, asked for a report":  {"--from", "walk.json", "--report", "--dnssec"},
 		"an unknown colour":                        {"--color", "sometimes", "example.com"},
 		"a timeout of nothing":                     {"--timeout", "0", "example.com"},
 		"a negative retry count":                   {"--retries", "-1", "example.com"},

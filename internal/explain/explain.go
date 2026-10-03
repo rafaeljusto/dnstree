@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/recursive"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -340,9 +341,17 @@ func trust(tr *trace.Trace) []Finding {
 	status, zone := step.DNSSEC, zoneOf(step)
 	switch status.State {
 	case trace.Bogus:
-		return []Finding{{Topic: Trust, Level: Fault, Text: fmt.Sprintf(
+		findings := []Finding{{Topic: Trust, Level: Fault, Text: fmt.Sprintf(
 			"the chain of trust breaks at %s%s, so a resolver that validates answers SERVFAIL for this name",
 			zone, because(status.Reason))}}
+		// What --report did is under the tree already; what it would have
+		// done is only said here.
+		if agent, step := recursive.Agent(tr); agent != "" && tr.Report == nil {
+			findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+				"%s asks for failures to be reported to %s, and --report sends it this one (RFC 9567)",
+				step.Zone, agent)})
+		}
+		return findings
 
 	case trace.Indeterminate:
 		return []Finding{{Topic: Trust, Level: Warn, Text: fmt.Sprintf(
