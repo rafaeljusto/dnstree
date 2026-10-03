@@ -447,6 +447,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 				r.checkNS(ctx, step, referred)
 				r.checkDS(ctx, chain, step, last)
 				r.checkSerial(ctx, step, zone, servers)
+				r.checkKeys(ctx, chain, step, zone, servers)
 				r.checkExposure(ctx, step, zone, servers)
 			}
 			return step
@@ -1545,6 +1546,182 @@ func (r *run) checkSerial(ctx context.Context, answer *trace.Step, zone string, 
 		r.warnf("the budget ran out before every nameserver of %s could be asked for its serial", zone)
 	}
 	r.compareSerials(zone, hops)
+}
+
+// checkKeys asks every nameserver of the zone the walk ended in for the keys it
+// publishes and the key it signs with, and warns where one signs with a key
+// another does not publish. A validating resolver fetches the keys from one
+// server, keeps them, and checks what every other server says against them, so
+// a zone signed by two providers at once (RFC 8901), a rollover done on some
+// servers only, or an anycast site left behind fails for some resolvers some of
+// the time — and a walk asking one server sees nothing wrong.
+//
+// It takes --all, which is what says the whole set is wanted, and a zone the
+// chain reached secure, since only then are its keys worth comparing. The
+// questions go out together and join the trace afterwards, from the goroutine
+// doing the walking.
+func (r *run) checkKeys(ctx context.Context, chain *dnssec.Chain, answer *trace.Step, zone string, servers []trace.Server) {
+	if !r.cfg.All || chain == nil || chain.State() != trace.Secure || !dns.EqualName(chain.Zone(), zone) {
+		return
+	}
+
+	type question struct {
+		server trace.Server
+		rrtype uint16
+	}
+	var questions []question
+	for _, server := range dedupe(servers) {
+		if r.cfg.Family != 0 && family(server.IP) != r.cfg.Family {
+			continue
+		}
+		if r.cfg.Down != nil && r.cfg.Down(server) != "" {
+			continue
+		}
+		questions = append(questions, question{server, dns.TypeDNSKEY}, question{server, dns.TypeSOA})
+	}
+
+	var budget error
+	for i := range questions {
+		if err := r.counters.query(); err != nil {
+			questions, budget = questions[:i], err
+			break
+		}
+	}
+
+	hops := make([]*hop, len(questions))
+	limit := make(chan struct{}, maxParallel)
+	var wait sync.WaitGroup
+	for i, q := range questions {
+		wait.Go(func() {
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			hops[i] = r.query(ctx, zone, q.server, zone, q.rrtype)
+		})
+	}
+	wait.Wait()
+
+	// What each server publishes and signs with, by address, in the order the
+	// servers were delegated. One name can stand for several addresses, and
+	// an anycast site left behind is one address of it.
+	var order []netip.AddrPort
+	named := make(map[string]int)
+	label := make(map[netip.AddrPort]string)
+	published := make(map[netip.AddrPort][]uint16)
+	signing := make(map[netip.AddrPort][]uint16)
+	for i, hop := range hops {
+		step := hop.step
+		step.Aside = true
+		step.Records = nil // the comparison is the point
+		addr := netip.AddrPortFrom(step.Server.IP, step.Server.Port)
+		if _, seen := label[addr]; !seen {
+			order = append(order, addr)
+			label[addr] = at(step)
+			named[at(step)]++
+		}
+		switch {
+		case hop.resp == nil || step.Kind != trace.KindAnswer:
+			step.Notes = append(step.Notes, "keys check: "+dnsutil.TypeToString(questions[i].rrtype)+" of "+zone)
+		case questions[i].rrtype == dns.TypeDNSKEY:
+			tags := keyTags(hop.resp.Answer, zone)
+			published[addr] = tags
+			step.Notes = append(step.Notes, "keys check: publishes "+joinTags(tags))
+		default:
+			tags := signerTags(hop.resp.Answer, zone, dns.TypeSOA)
+			signing[addr] = tags
+			step.Notes = append(step.Notes, "keys check: signs with "+joinTags(tags))
+		}
+		r.attach(answer, step)
+	}
+	for addr, name := range label {
+		if named[name] > 1 {
+			label[addr] = name + " at " + addr.Addr().String()
+		}
+	}
+
+	// One warning a key, however many addresses sign with it or lack it: a
+	// large zone has dozens, and one site left behind is one fault.
+	var tags []uint16
+	for _, signer := range order {
+		for _, tag := range signing[signer] {
+			if !slices.Contains(tags, tag) {
+				tags = append(tags, tag)
+			}
+		}
+	}
+	for _, tag := range tags {
+		var signers, lacking []string
+		for _, addr := range order {
+			if slices.Contains(signing[addr], tag) {
+				signers = append(signers, label[addr])
+			}
+			if keys, asked := published[addr]; asked && !slices.Contains(keys, tag) {
+				lacking = append(lacking, label[addr])
+			}
+		}
+		if len(lacking) == 0 {
+			continue
+		}
+		r.warnf("the nameservers of %s do not publish the same keys: %s %s key %d, which %s %s with, so a resolver that took the keys from %s rejects what %s answers; publish every signer's keys from every nameserver (RFC 8901)",
+			zone, strings.Join(lacking, " and "), verb(lacking, "lacks", "lack"), tag,
+			strings.Join(signers, " and "), verb(signers, "signs", "sign"),
+			orList(lacking), orList(signers))
+	}
+	if budget != nil {
+		r.warnf("the budget ran out before every nameserver of %s could be asked for its keys", zone)
+	}
+}
+
+// keyTags are the tags of the zone keys a DNSKEY answer publishes, sorted.
+func keyTags(answer []dns.RR, zone string) []uint16 {
+	var tags []uint16
+	for _, rr := range answer {
+		if key, ok := rr.(*dns.DNSKEY); ok && dns.EqualName(key.Hdr.Name, zone) {
+			tags = append(tags, key.KeyTag())
+		}
+	}
+	slices.Sort(tags)
+	return slices.Compact(tags)
+}
+
+// signerTags are the tags of the keys the zone's signatures over one type name,
+// sorted. They are what the server says it signed with, and checking them is
+// the walk's job: this only holds one server's word against another's.
+func signerTags(answer []dns.RR, zone string, covered uint16) []uint16 {
+	var tags []uint16
+	for _, rr := range answer {
+		if signature, ok := rr.(*dns.RRSIG); ok && signature.TypeCovered == covered && dns.EqualName(signature.SignerName, zone) {
+			tags = append(tags, signature.KeyTag)
+		}
+	}
+	slices.Sort(tags)
+	return slices.Compact(tags)
+}
+
+// verb is the form of a verb that agrees with a list of names.
+func verb(names []string, one, many string) string {
+	if len(names) == 1 {
+		return one
+	}
+	return many
+}
+
+// orList is a list of names as "any of them" reads.
+func orList(names []string) string {
+	if len(names) == 1 {
+		return names[0]
+	}
+	return "any of " + strings.Join(names, ", ")
+}
+
+func joinTags(tags []uint16) string {
+	if len(tags) == 0 {
+		return "none"
+	}
+	text := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		text = append(text, fmt.Sprint(tag))
+	}
+	return strings.Join(text, " ")
 }
 
 // checkExposure asks every nameserver of the zone the walk ended in for what it

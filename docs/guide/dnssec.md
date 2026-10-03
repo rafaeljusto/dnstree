@@ -90,6 +90,40 @@ then. The time left is read against when the walk was made, which is also what
 a walk drawn again with `--from` reads it against. `--expect fresh` holds a
 script to the same thing; see [Asking rather than reading](scripting.md#asking-rather-than-reading).
 
+A validating resolver fetches a zone's keys from one of its nameservers, keeps
+them, and checks what the others say against them. A zone signed by two
+providers at once (RFC 8901) works only while each publishes the other's keys
+as well as its own; one that forgets fails for the resolvers that happened to
+take the keys from it, and only for answers the other provider signed — some of
+the time, for some people, which is the hardest outage there is to report. A
+walk asks one server and sees nothing wrong, so `--all --dnssec` asks every
+nameserver of the zone it ends in for the keys it publishes and the key it signs
+its SOA with:
+
+```
+$ dnstree --all --dnssec --no-asn --max-queries 400 isc.org SOA
+...
+│   │   ├── ns1.isc.org. 149.20.2.26  194ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   ├── isc.org. 7200 SOA ns-int.isc.org. hostmaster.isc.org. 2026100160 7200 3600 24796800 3600
+│   │   │   ├── ns1.isc.org. 149.20.2.26  196ms  NOERROR  AA DO  (DNSKEY of isc.org.)
+│   │   │   ├── ns1.isc.org. 149.20.2.26  186ms  NOERROR  AA DO  (keys check: publishes 7250 27566)
+│   │   │   ├── ns1.isc.org. 149.20.2.26  194ms  NOERROR  AA DO  (keys check: signs with 27566)
+...
+✔ answered in 8.3s · resolver in 265ms · 177 queries · 100 servers
+```
+
+Where one signs with a key another does not publish, the walk names both, once
+for each key:
+
+> the nameservers of example.test. do not publish the same keys: ns2.example.test. lacks key 2192, which ns1.example.test. signs with, so a resolver that took the keys from ns2.example.test. rejects what ns1.example.test. answers; publish every signer's keys from every nameserver (RFC 8901)
+
+A key one server publishes and nobody signs with breaks nothing, and is left
+alone. The verdict is the one the walk reached: this is about the paths it did
+not take. Servers are told apart by address, since an anycast site left behind
+is one address of a name. It costs two queries for each address, which `--all`
+is already short of for a large zone; a walk whose budget ran out before it
+entered the zone has no keys to compare, and says nothing.
+
 A chain that holds can still be set up the way the advice has moved on from, and
 `--explain` says so under the verdict, which it never changes: a zone signing
 with RSASHA1, which RFC 8624 says zones should no longer sign with and some

@@ -34,6 +34,11 @@ type signer struct {
 	stray     *dns.DNSKEY
 	strayPriv crypto.Signer
 
+	// cosigners are the zone signing keys of other servers of the same zone,
+	// published beside this one's own, the way every provider of a zone signed
+	// by several publishes the keys of all of them (RFC 8901).
+	cosigners []*dns.DNSKEY
+
 	// bad corrupts the signatures over ordinary RRsets, badKeys the one over
 	// the key set itself. They break different links of the same chain.
 	bad     bool
@@ -130,6 +135,9 @@ func (s *signer) dnskeys() []dns.RR {
 	}
 
 	keys := []dns.RR{ksk, s.zsk}
+	for _, key := range s.cosigners {
+		keys = append(keys, key)
+	}
 	return append(keys, s.sign(keys, ksk, priv, s.badKeys))
 }
 
@@ -187,6 +195,26 @@ func corrupt(signature string) string {
 		first = 'B'
 	}
 	return string(first) + signature[1:]
+}
+
+// Cosign makes the server publish the zone signing key of other, a server of
+// the same zone signing it with keys of its own: the multi-signer setup of RFC
+// 8901, in which every provider publishes the keys of every other. Without it
+// each serves only its own, which validates against whichever server a
+// resolver took the keys from and fails against the rest.
+func (s *Server) Cosign(tb testing.TB, other *Server) {
+	tb.Helper()
+
+	if s.signer == nil || other.signer == nil || !dns.EqualName(s.origin, other.origin) {
+		tb.Fatalf("fakens: %s and %s are not two signed servers of one zone", s.origin, other.origin)
+	}
+	other.signer.mu.Lock()
+	key := other.signer.zsk.Clone().(*dns.DNSKEY)
+	other.signer.mu.Unlock()
+
+	s.signer.mu.Lock()
+	defer s.signer.mu.Unlock()
+	s.signer.cosigners = append(s.signer.cosigners, key)
 }
 
 // Anchors is the trust anchor a test starts a chain from, which for a fake root
