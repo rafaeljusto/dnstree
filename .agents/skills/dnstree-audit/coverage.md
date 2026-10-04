@@ -2,18 +2,18 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `d0b7ecc`
-- **Date**: 2026-10-01
-- **Scope**: the commits since `cc0837f` (`--format markdown`, the DNSKEY and
-  DS setup findings, the resolver TTL readings, `--without`, the web-3d replay
-  and its modules, the redirect and client-address fixes, the new `Public`
-  prefixes)
+- **Commit**: `0f04f8d`
+- **Date**: 2026-10-03
+- **Scope**: the commits since `d0b7ecc` (`--caa`, compact denial, several
+  types and `--names`, `--check-ns`, alias and address nameservers,
+  `--all --dnssec` keys, `--report`, `--try-ns`, the budget fixes, DoT by
+  address, the Lambda build)
 
 ## Open findings
 
-- Low: names inside the markdown report's finding sentences are still open to
-  GitHub's autolinks, `@mentions` and `#refs`; fixing it means marking names
-  apart from the prose explain writes
+- Low: names, CAA issuer values and the report agent inside the markdown
+  report's finding sentences are open to GitHub's autolinks, `@mentions` and
+  `#refs`; fixing it means marking them apart from the prose explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 
 ## Checked and sound
@@ -78,7 +78,8 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   `netip.ParseAddr`.
 - EXTRA-TEXT in JSON is escaped whole by `convertExtended`.
 - `read.go` validates `kind`, `cookie`, `dnssec.state`, `signal.state`,
-  `match`, IPs and subnets; a fuzz of Read plus every renderer found no panic.
+  `match`, IPs and subnets; a fuzz of Read plus every renderer found no panic; a saved CAA with no
+  `wildcard` reads as any authority (`TestIssuance`).
 - `--from` skips ASN lookups and the resolver comparison, and refuses `--diff`.
 - TCP and DoT honour the length prefix and ID. DoT's `ServerName` is the
   delegation's name. UDP/TCP/DoT close on cancel.
@@ -100,7 +101,8 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - Config file: unknown flags refused; `config`, `no-config`, `version`,
   `schema`, `from` and `x` not settable; groups replace; `--from` drops the
   file's `live`/`watch`/`diff`.
-- Layering: `internal/layering` passes.
+- Layering: `internal/layering` passes, through every import for the trace,
+  the renderers, explain, expect, history and asn (`TestApartFromTheWire`).
 - NSEC3 hashing is recorded only off a record whose signature held, and its
   zone and salt go through `Shown`.
 - `Trace.Chain` reads the chain the way the exit code does: bogus anywhere,
@@ -161,3 +163,38 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - web and web-3d after the replay rewrite: walk text only through
   `textContent` or text nodes, styles only from `TONES`, the film's file name
   limited to `[A-Za-z0-9.-]`, the new modules in the served file list.
+- Compact denial: NXNAME is NXDOMAIN only on a Secure chain with a signature
+  that held; unsigned it stays NODATA; only the full-name hop reads it.
+- `ordered()`: CAA, URI and NULL sets are checked in RFC 3597 form, the shape
+  and `TypeCovered` still against the original set.
+- CAA climb: bounded by labels, every lookup and alias spends the budget,
+  steps attached on the walking goroutine, a bogus CAA hop reaches exit 3
+  through `Trace.Chain`; `dnstree_caa` takes fixed labels only.
+- `checkGlue` and `checkKeys`: spend before the fan-out, attach after
+  `wait.Wait()`, addresses through `netip.ParseAddr`, keys only on a Secure
+  chain.
+- `--try-ns`: one zone, never the root, the parent's DS through `enterZone`,
+  name-only servers capped by `maxSideResolution`; nil in dnstree-web.
+- `--report`: one TXT query, only on bogus, through the user's resolver; an
+  agent at or below the question refused; names checked against 255 octets;
+  not settable from the file, never on `--from` or in dnstree-web.
+- DoT known only by address verifies the certificate's IP SANs; a zoned IPv6
+  address fails closed.
+- Several questions: every one checked by `Askable` first; `worse` keeps 3
+  over 2 over 4 over 0; `several()` refuses the single-document formats,
+  `--expect`, `--against` and `--watch`.
+- Config file: `names`, `without`, `report` and `try-ns` refused; budgets
+  under 1 refused, the file's included.
+- `Trace.Shown` reaches `Trial`, `Report`, `CAA`, `ReportTo` and `ZoneAddrs`;
+  hostile ESC in them stays out of `--format ascii`.
+- `read.go` validates `caa.asked[].found`, the CAA DNSSEC status and every
+  glue, `zone_addrs` and trial address.
+- The Lambda bootstrap only adds `-client-header X-Forwarded-For`;
+  `internal/server` and `cmd/dnstree-web` are unchanged.
+- `go test -race -count=2 ./...` is clean at `0f04f8d`.
+- CAA failures: a referral below the walk is judged by no chain
+  (`TestCAAUnenteredZone`); the budget is blamed only when this lookup ran it
+  out (`TestCAABudgetSpentBefore`).
+- CAA tags: a critical tag the text cannot carry refuses (`TestCAA`); a wire
+  tag with `\`, `"`, a space or `;` never reads back as `issue`, since unpack
+  escapes `\` and `"` and the rest fail to parse.
