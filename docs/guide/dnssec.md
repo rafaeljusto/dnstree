@@ -212,7 +212,9 @@ The error reported is 6, DNSSEC Bogus. A chain that could not be checked is
 never reported, since that is this build's limit and not the zone's fault; nor
 is one with no agent, one whose agent sits at or below the name it would be told
 about, which RFC 9567 rules out, or one whose report would be longer than a name
-can be. Without `--report`, `--explain` says when a broken zone asked for one.
+can be. A bogus zone that names no agent is said in one line on stderr, so a
+run that asked for a report is not left to read silence as one sent. Without
+`--report`, `--explain` says when a broken zone asked for one.
 
 A report tells a third party that this machine looked up this name, so it is
 only ever sent when asked for. It needs `--dnssec`, it is not sent from
