@@ -111,9 +111,9 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`-x`](#reverse-lookups) | resolve the PTR of this address, in place of a name and a type |
 | [`--names`](docs/guide/scripting.md#several-questions-in-one-run) | walk every `NAME [TYPE...]` line of a file, or of `-` for the standard input, one after another |
 | `-4`, `-6` | ask only IPv4 or only IPv6 servers; the others are drawn unqueried |
-| `--udp`, `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
-| `--dot`, `--doh` | carry them encrypted, over TLS or HTTPS |
-| `--fallback` | let plain DNS pick up a hop the transport could not |
+| [`--udp`](docs/guide/configuring.md#carrying-the-queries), `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
+| [`--dot`](docs/guide/configuring.md#carrying-the-queries), `--doh` | carry them encrypted, over TLS or HTTPS |
+| [`--fallback`](docs/guide/configuring.md#carrying-the-queries) | let plain DNS pick up a hop the transport could not |
 | `--all` | ask every nameserver of a zone, not just the first that answers |
 | [`--dnssec`](docs/guide/dnssec.md#following-the-chain-of-trust) | ask for signatures and follow the chain of trust |
 | [`--check-ns`](docs/guide/zones.md#whether-the-parent-and-the-child-agree) | ask the zone that answered for its own NS set and its nameservers' addresses, and compare them with the delegation and its glue |
@@ -127,7 +127,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |
 | [`--qmin`](docs/guide/zones.md#asking-only-what-each-zone-needs) | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
 | [`--without`](docs/guide/zones.md#whether-it-still-answers-with-a-server-down) | walk as though this nameserver, address or prefix were down, and see whether the name still answers; repeat it |
-| [`--try-ns`](docs/guide/zones.md#whether-it-will-answer-on-new-nameservers) | walk as though `ZONE=SERVER` were already delegated to new nameservers, before the registry is told; repeat it |
+| [`--try-ns`](docs/guide/zones.md#whether-it-will-answer-on-new-nameservers) | walk as though `ZONE` were already delegated to `SERVER`, before the registry is told; repeat it for each new nameserver |
 | [`--subnet`](docs/guide/resolvers.md#asking-from-somewhere-else) | ask as though from this client subnet, and say what each server made of it |
 | [`--no-asn`](docs/guide/configuring.md#pointing-it-somewhere-else) | skip the origin AS lookups |
 | [`--no-compare`](docs/guide/resolvers.md#against-your-resolver) | skip the question put to a recursive resolver, and the comparison with it |
@@ -144,12 +144,12 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | `--color` | `auto` (the default: only on a terminal, and off where `NO_COLOR` is set or `TERM` is unset or `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries (256 with `--all`), 8 aliases |
-| [`--port`](docs/guide/configuring.md#pointing-it-somewhere-else) | the port nameservers are asked on (53) |
+| [`--port`](docs/guide/configuring.md#pointing-it-somewhere-else) | the port nameservers are asked on (53; 853 with `--dot`, 443 with `--doh`) |
 | [`--root-hints`](docs/guide/configuring.md#pointing-it-somewhere-else) | where the walk starts, instead of the built-in hints |
 | [`--trust-anchors`](docs/guide/configuring.md#pointing-it-somewhere-else) | the DS records to trust, instead of the built-in ones |
 | [`--root`](docs/guide/configuring.md#pointing-it-somewhere-else) | one server to start from, instead of a hints file; repeat it for more |
 | [`--resolver`](docs/guide/configuring.md#pointing-it-somewhere-else) | a recursive server to use, instead of the host's own; repeat it to ask several |
-| [`--tls-ca`](docs/guide/configuring.md#pointing-it-somewhere-else), `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
+| [`--tls-ca`](docs/guide/configuring.md#carrying-the-queries), `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
 | [`--config`](docs/guide/configuring.md#defaults), `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
 | [`--schema`](docs/guide/output.md#other-formats) | print the JSON Schema of `--format json` and stop |
@@ -234,27 +234,29 @@ $ dnstree -x 8.8.8.8 --no-asn
 | 4 | an expectation given with `--expect` was not met |
 
 The tree, the summary, `--explain` and the address `--format web` serves on go
-to stdout; errors, `--debug` and an unmet expectation go to stderr. `-h` prints
+to stdout; errors, `--debug`, an unmet expectation, a cache `--diff` could not
+use and a report `--report` could not send go to stderr. `-h` prints
 the usage on stderr and exits 1.
 
 ## The guide
 
 Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real output:
 
-- [Configuring](docs/guide/configuring.md): the file of defaults, and pointing a walk
-  at servers other than the real root.
-- [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, and what DNSSEC
-  is worth to ECH.
+- [Configuring](docs/guide/configuring.md): the file of defaults, pointing a walk
+  at servers other than the real root, and the transports.
+- [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, `--report`, and
+  what DNSSEC is worth to ECH.
 - [Checking a zone](docs/guide/zones.md): parent and child NS sets, serials, zone
-  transfers and open recursion, who may issue certificates, extended errors,
-  NSID, cookies, `--qmin`, `--without` and answer sizes.
+  transfers and open recursion, aliases where they may not be, who may issue
+  certificates, extended errors, NSID, cookies, `--qmin`, `--without`, `--try-ns`
+  and answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, from here or from another subnet, and whether they offer
   encryption.
 - [Reading a walk](docs/guide/output.md): `--explain`, `--live`, the waterfall and
   every other format.
-- [Scripts and monitoring](docs/guide/scripting.md): `--expect`, `--diff`,
-  `--watch`, saved walks and OpenMetrics.
+- [Scripts and monitoring](docs/guide/scripting.md): `--expect`, `--diff`, several
+  questions and `--names`, `--watch`, saved walks and OpenMetrics.
 - [dnstree-web](docs/guide/dnstree-web.md): the same walk behind a form, as a
   service.
 

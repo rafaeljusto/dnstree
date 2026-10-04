@@ -26,7 +26,7 @@ jobs:
 
       # A squash merge puts this title on main as the commit subject, and the
       # release works the version out from those subjects. So the check runs the
-      # release's own vocabulary — the levels map in cmd/next-version — rather
+      # release's own vocabulary — the `sections` table in cmd/next-version — rather
       # than a second copy of it here. An unprefixed title is not a style
       # problem: it costs the release the bump it earned.
       #

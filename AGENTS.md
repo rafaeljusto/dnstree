@@ -21,7 +21,7 @@ make check   # build, go vet, golangci-lint, go test -race ./..., the pages' tes
 ```
 
 That is what CI runs, less hadolint (`make lint-docker`), the packaging dry
-run (`make dist`) and the two image builds. Two things it does not run:
+run (`make dist` and `make web-lambda`) and the two image builds. Two things it does not run:
 
 - `make live` goes out to the real root servers. It is never part of `check`;
   CI runs it weekly, because the embedded hints and trust anchors go stale
@@ -40,13 +40,14 @@ have drifted apart.
 
 ## Releasing
 
-`make dist` builds everything but the images: the archives, a Debian, RPM and
+`make dist` builds everything but the images and the Lambda zip: the archives, a Debian, RPM and
 Alpine package per Linux architecture, the Homebrew formula and the checksums
 over all of them. It is the same target the release workflow runs, so what ships
 can be reproduced without a runner. The two images come from `make image-push
 image-web-push`, in a job of their own. [`packaging/README.md`](packaging/README.md) says
 how the pieces fit; `nfpm`, like golangci-lint, comes from the PATH or is
 fetched at the version the Makefile pins, and is not a dependency of the module.
+The Lambda zip comes from `make web-lambda`, and nothing publishes it.
 
 ## Do not commit
 
@@ -64,8 +65,9 @@ tagging by hand skips the calculation, and the tag carries no changelog.
 - Only `transport`, `resolver` and `dnssec` — plus `fakens`, which has to speak
   the wire format — may import the DNS codec. Keeping it out of the trace, the
   renderers and the AS lookups is what makes them testable without a network.
-  `internal/layering` fails on any other import of it, and on the trace, a
-  renderer or the AS lookups reaching it through another package.
+  `internal/layering` fails on any other import of it, and on the trace, the
+  renderers, explain, expect, history or the AS lookups reaching it through
+  another package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net/idna` for names typed in any script,
@@ -137,6 +139,8 @@ Each of these has been a bug, or would be a silent regression.
   replaces what the file chose instead of colliding with it.
 - **Exit codes are a contract**: 0 an answer, 1 the command line, 2 no answer,
   3 a broken chain of trust, 4 an `--expect` that did not hold. Scripts read them; do not repurpose one.
+  A run of several walks exits with the worst of them, ranked 3, 2, 4, 0 — not
+  the highest number.
 - **`--format ascii` emits nothing above codepoint 127** — a test asserts it,
   because the format exists for pasting into documents.
 - **`schema_version` in the JSON output** is bumped whenever a field changes
@@ -177,8 +181,13 @@ name inside rdata (NS, CNAME, MX, SOA, SVCB targets). Text rdata — TXT, CAA,
 HINFO, NAPTR, URI, SVCB values — comes back escaped. A name has to be escaped
 before it is drawn, but not before it is queried or checked against TLS, which
 need the octets themselves: the trace keeps the octets, and every renderer
-draws the copy `Trace.Shown` makes of it. Check any other belief about what the codec does
-with a pack and unpack round trip before building on it.
+draws the copy `Trace.Shown` makes of it.
+
+The codec sorts the trailing value of CAA, URI and NULL records shortest first
+rather than by octet, so those sets are verified, and signed in fakens, in the
+RFC 3597 generic form; a new type with a trailing variable field needs the same
+check. Check any other belief about what the codec does with a pack and unpack
+round trip before building on it.
 
 Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
 `slog.DiscardHandler`, `new(expr)`, `strings.Lines` and `strings.SplitSeq`.
@@ -190,7 +199,7 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   has a knob for each way a server misbehaves — silence, REFUSED, lameness,
   truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, six ways to
   break a chain of trust, signatures near expiry, NXDOMAIN for an empty
-  non-terminal, broken cookies and CDS, and zone transfers and recursion open
+  non-terminal, SERVFAIL for a single type, broken cookies and CDS, and zone transfers and recursion open
   to strangers. A change to the way a delegation is followed belongs with a
   scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.

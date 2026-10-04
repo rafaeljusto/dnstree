@@ -77,7 +77,7 @@ one after another, each from the root servers down.
   --max-depth N           zone cuts to follow (default 16)
   --max-queries N         queries to make in total (default 64, or 256 with --all)
   --max-cname N           aliases to chase (default 8)
-  --port N                the port nameservers are asked on (default 53)
+  --port N                the port to ask on (53; 853 with --dot, 443 with --doh)
   --root-hints FILE       where the walk starts, instead of the built-in hints
   --root [NAME@]ADDR      one server to start from, instead of a hints file
   --trust-anchors FILE    the DS records to trust, instead of the built-in ones
@@ -96,9 +96,9 @@ answers under; without a port, --port says where it is asked. A walk that starts
 somewhere other than the real root usually wants --trust-anchors with it, and
 --tls-ca or --tls-insecure to reach a --dot or --doh server holding a test
 certificate. --resolver points everything that needs a recursive server at one
-of its own: the origin AS lookups, and the question dnstree times against an
-ordinary resolution to say what the walk cost over it. --asn-resolver is the
-older name for it, and still means the same thing.
+of its own: the origin AS lookups, the question dnstree times against an
+ordinary resolution to say what the walk cost over it, and the report --report
+sends. --asn-resolver is the older name for it, and still means the same thing.
 
 Repeat --resolver to put the question to every one of them at once, which is
 how to ask from several places at the same moment: two resolvers answering
@@ -137,6 +137,14 @@ request counts only once it is signed by the keys the chain of trust reached,
 so it needs --dnssec; a file of defaults that sets it is heeded only by the
 runs that check signatures. It costs two queries.
 
+--report tells a zone its chain of trust is broken, the way RFC 9567 lets a
+zone ask: when the walk comes out bogus and the broken zone named a reporting
+agent, a TXT lookup of the name the RFC builds goes to the first --resolver,
+or the host's own. Every hop that names an agent draws it, with or without
+the flag. A report tells a third party that this machine looked up this name,
+so it needs --dnssec, is never sent from --watch, and the file of defaults
+cannot set it. A bogus zone that names no agent is said in one line on stderr.
+
 --format mermaid writes the same picture as --format dot, for the places that
 draw Mermaid rather than Graphviz: pasted into a fenced mermaid block, GitHub,
 GitLab and most wikis draw it where it stands.
@@ -163,8 +171,9 @@ own. With --from, a walk saved during an incident becomes a report afterwards.
 it ended, what it and each hop on the path took, the chain of trust, the time
 left on the signatures, what --check-ds found, which nameservers the
 --check-axfr and --check-recursion probes found open, who --caa found free to
-issue and what the resolvers answered, each labelled with the question. Run from cron into the directory of
-node_exporter's textfile collector, it is what Prometheus alerts on.
+issue and what the resolvers answered, each labelled with the question. Run from
+cron into the directory of node_exporter's textfile collector, it is what
+Prometheus alerts on.
 
 --from reads a walk that --format json wrote, from FILE or from - for the
 standard input, and draws it in whichever format was asked for, as though it
@@ -289,6 +298,14 @@ than the whole name says so in its margin. It is how to see a server that
 answers NXDOMAIN for a name only because nothing is at it yet, which stops a
 resolver that minimises and never troubles one that does not. It costs a query
 for every label below the zone that answers.
+
+--try-ns walks as though the parent already delegated ZONE to the servers named,
+one --try-ns for each, which is how to check a move to new nameservers before
+the parent is told. A server is a name, an address, or NAME@ADDR; one named
+inside the zone it serves needs its address, as glue would. The referral the
+parent really gave is drawn, marked as replaced, and the walk goes on to the
+new servers, with the parent's DS still checked against them. One zone is tried
+at a time, never the root, and neither --diff nor the file of defaults takes it.
 
 --nsid asks every server for the name it goes by (RFC 5001), and draws it
 beside the address. One anycast address is a great many machines in a great many

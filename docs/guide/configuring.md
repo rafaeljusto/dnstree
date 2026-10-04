@@ -77,9 +77,9 @@ may be given. `--trust-anchors` takes IANA's `root-anchors.xml` or DS records
 in presentation format.
 
 `--resolver ADDR` points everything that needs a recursive server at one of
-your own: the origin AS lookups and the timed comparison. `--no-asn` and
-`--no-compare` skip either; asking for both is refused, since it leaves
-`--resolver` nothing to do. `--asn-resolver` is its older name. One on the
+your own: the origin AS lookups, the timed comparison and the report `--report`
+sends. `--no-asn` and `--no-compare` skip the first two; asking for both without
+`--report` is refused, since it leaves `--resolver` nothing to do. `--asn-resolver` is its older name. One on the
 command line replaces every one the file chose. Without it, the comparison
 asks the first nameserver in `/etc/resolv.conf`; where there is none, as on
 Windows, nothing is compared until one is named.
@@ -87,6 +87,20 @@ Windows, nothing is compared until one is named.
 The origin AS lookups are TXT queries to Team Cymru's `origin.asn.cymru.com`
 zones, made through the host's resolver or the first `--resolver`; `--no-asn`
 turns them off.
+
+## Carrying the queries
+
+Queries go over UDP, and an answer that comes back truncated is asked again
+over TCP. `--tcp` sends every query over TCP from the start. `--dot` carries
+them over TLS on port 853, and `--doh` posts them over HTTPS to `/dns-query`
+on port 443; `--port` moves either. The certificate is checked against the
+nameserver's name, or against its address where only the address is known, as
+with a `--root` or `--resolver` given bare.
+
+Few authoritative servers offer TLS, so a walk over `--dot` or `--doh` is
+mostly a question about which of them do. `--fallback` lets plain DNS answer a
+hop the encrypted transport could not, and the hop says so. [Cookies](zones.md#which-servers-support-dns-cookies)
+ride only on UDP and TCP.
 
 For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your own.
 

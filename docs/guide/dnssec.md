@@ -98,7 +98,7 @@ as well as its own; one that forgets fails for the resolvers that happened to
 take the keys from it, and only for answers the other provider signed — some of
 the time, for some people, which is the hardest outage there is to report. A
 walk asks one server and sees nothing wrong, so `--all --dnssec` asks every
-nameserver of the zone it ends in for the keys it publishes and the key it signs
+nameserver of the zone it ends in, where the chain reached it secure, for the keys it publishes and the key it signs
 its SOA with:
 
 ```
@@ -123,8 +123,8 @@ alone. The verdict is the one the walk reached: this is about the paths it did
 not take. Servers are told apart by address, since an anycast site left behind
 is one address of a name. It costs two queries for each address, which is
 part of why `--all` walks on a budget of 256 queries rather than 64; a walk
-whose budget ran out before it entered the zone has no keys to compare, and
-says nothing.
+whose budget ran out before it entered the zone has no keys to compare and
+says nothing, and one that ran out partway says so.
 
 A chain that holds can still be set up the way the advice has moved on from, and
 `--explain` says so under the verdict, which it never changes: a zone signing
