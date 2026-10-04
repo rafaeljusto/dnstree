@@ -31,7 +31,8 @@ These need no network: every one exits before a query goes out.
 | help | `$D --help` | usage on stderr, exit 1 (`flag.ErrHelp` maps to the command-line code) |
 | version | `$D --version` | one line, exit 0 |
 | schema | `$D --schema` | exit 0, byte for byte the `docs/trace.schema.json` of the tree that was built |
-| bad-flag | `$D --bogus example.com` | exit 1, names the flag |
+| bad-flag | `$D --bogus example.com` | exit 1, one line: `--bogus is not a flag; --help lists them`, no usage |
+| bad-value | `$D --retries x example.com`, `--timeout x`, `--try-ns nonsense` | exit 1, one line each naming the flag with two dashes and the value (`--retries "x" is not a number`), no usage |
 | any | `$D example.com ANY`, then `AXFR`, then `IXFR` | exit 1 each, says why and what to ask instead |
 | bad-type | `$D example.com NOTATYPE` | exit 1 |
 | bad-name | `$D bad..name` | exit 1, "is not a domain name" |
@@ -52,8 +53,10 @@ These need no network: every one exits before a query goes out.
 | from-name | `$D --from ex.json example.com` | exit 1: no name to resolve |
 | from-shape | `$D --from ex.json --no-asn` | exit 1: a walk already made cannot be changed |
 | names-expect | `$D --names list --expect secure` | exit 1 |
-| names-missing | `$D --names nope.txt` | exit 1, and the message should say which flag the file came from |
+| names-missing | `$D --names nope.txt` | exit 1, `--names nope.txt: no such file or directory`. `--from`, `--against`, `--tls-ca`, `--trust-anchors` and `--config` the same, each naming its flag |
 | hints-missing | `$D --root-hints nope.txt example.com` | exit 1, same |
+| web-addr | `$D --format web --web-addr nonsense example.com` | exit 1 before any walk, `--web-addr "nonsense" is not a host and port` |
+| report-alone | `$D --report example.com` | exit 1: it needs `--dnssec` |
 | hints-junk | `$D --root-hints junk.txt example.com` | exit 1, names the file and line |
 | anchors-junk | `$D --trust-anchors junk.txt --dnssec example.com` | exit 1, names the file and line |
 | tls-ca-junk | `$D --dot --root one.one.one.one@1.1.1.1 --tls-ca junk.pem example.com` | exit 1: no certificate in it |
@@ -71,6 +74,7 @@ These need no network: every one exits before a query goes out.
 | reverse6 | `$D $B -x 2001:4860:4860::8888` | exit 0, a PTR under `ip6.arpa.` |
 | idn | `$D $B münchen.de` | exit 0, asked and drawn as `xn--mnchen-3ya.de.` |
 | all | `$D $B --all example.com` | exit 0. Every nameserver of each zone asked: dozens of queries, not 3 |
+| all-glueless | `$D $B --all www.github.com` | exit 0 on the default budget. Its nameservers are named outside it, and each is looked up asking one server a zone; the lookups do not fan out |
 | qmin | `$D $B --qmin www.example.com` | exit 0, hops marked `(minimised to …)` |
 | without | `$D $B --without a.root-servers.net example.com` | exit 0, a.root not asked, and the summary says `without a.root-servers.net.` |
 | nsid | `$D $B --nsid example.com` | exit 0, an `@identifier` beside the servers that publish one (the roots do) |
@@ -95,11 +99,12 @@ These need no network: every one exits before a query goes out.
 | insecure | `$D $B --dnssec --expect insecure google.com` | exit 0 |
 | bogus | `$D $B --dnssec dnssec-failed.org` | exit 3, `✘ bogus`, the tree still drawn |
 | denial | `$D $B --dnssec --expect nxdomain --expect secure nope-e2e-zz9.iana.org` | exit 0. The NXDOMAIN rests on a signed proof |
-| compact-denial | `$D $B --dnssec --expect nxdomain nope-e2e-zz9.example.com` | Cloudflare denies with compact NSEC (NXNAME). At 043a63c this reads as nodata and exits 4. Report what it does now |
+| compact-denial | `$D $B --dnssec --expect nxdomain nope-e2e-zz9.example.com` | exit 0. Cloudflare denies with compact NSEC (NXNAME), drawn `[secure]  (compact denial, RFC 9824)` and read as NXDOMAIN |
 | anchors | `$D $B --dnssec --trust-anchors good.ds example.com` | exit 0. `good.ds` holds the root DS for keys 20326 and 38696, in zone-file form |
 | anchors-wrong | `$D $B --dnssec --trust-anchors bad.ds example.com` | exit 3. `bad.ds` is key 20326 with a zeroed digest |
 | check-ds | `$D $B --dnssec --check-ds cloudflare.com` | exit 0, `cds matches the ds` |
 | bogus-expect | `$D $B --dnssec --expect 1.2.3.4 dnssec-failed.org` | exit 3, not 4: the broken chain wins |
+| report-no-agent | `$D $B --dnssec --report dnssec-failed.org` | exit 3, and `report: not sent: dnssec-failed.org. names no agent to report to` on stderr: the zone names none |
 
 ## transport
 
@@ -122,9 +127,12 @@ over a minute to fail. Start these from a resolver that speaks both.
 | --- | --- | --- |
 | check-ns | `$D $B --check-ns example.com` | exit 0, a `(parent/child NS check)` hop |
 | serial | `$D $B --serial example.com` | exit 0, a `(SOA of example.com.: N)` per nameserver |
-| axfr-open | `$D $B --check-axfr zonetransfer.me SOA` | exit 0, `axfr open` on its nameservers. Nothing of the zone drawn |
+| serial-glueless | `$D $B --serial zonetransfer.me SOA` | exit 0, a serial from both `nsztm1` and `nsztm2` |
+| try-ns | `$D $B --try-ns example.com=hera.ns.cloudflare.com@108.162.192.162 example.com` | exit 0, the referral marked `(replaced by --try-ns)`, the summary `as though delegated to hera.ns.cloudflare.com.` |
+| try-ns-lame | `$D $B --try-ns example.com=ns1.google.com example.com` | exit 2, the server looked up and drawn `REFUSED  lame` |
+| axfr-open | `$D $B --check-axfr zonetransfer.me SOA` | exit 0, `axfr open` on both of its nameservers, which come with no glue: the probe looks up the one the walk did not need. Nothing of the zone drawn |
 | axfr-closed | `$D $B --check-axfr example.com` | exit 0, none open |
-| axfr-doh | `$D $B --check-axfr --doh --root one.one.one.one@1.1.1.1 example.com` | the usage says `--doh` cannot ask it. Check that this is said, not silently skipped |
+| axfr-doh | `$D $B --check-axfr --doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |
 | recursion | `$D $B --check-recursion example.com` | exit 0, `recursion closed` per nameserver |
 | caa | `$D $B --caa --expect caa:pki.goog google.com` | exit 0, `caa: google.com. decides it`, `may issue: pki.goog` |
 | caa-miss | `$D $B --caa --expect caa:letsencrypt.org google.com` | exit 4 |
@@ -180,7 +188,7 @@ format with `$D --color never --from ex.json --format F`. `--from` takes no
 | from-expect | `$D --from ex.json --expect secure` | exit 0, then `--expect bogus` exits 4 |
 | against-same | `$D --color never --from ex.json --against ex.json` | exit 0, `nothing differs` |
 | against-other | `$D $B --format json example.com AAAA > aaaa.json`, then `--from aaaa.json --against ex.json` | exit 1: not the same question |
-| from-offline | any `--from` case with the network down, or `--root 192.0.2.1` | still works. `--from` asks nothing |
+| from-offline | `$D --color never --debug --from ex.json` | exit 0 and an empty stderr: `--from` asks nothing. It refuses `--root`, so that cannot stand in for the network being down |
 
 ## script
 
