@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -190,7 +191,7 @@ func names(path string) ([]cli.Question, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, unopened("--names", err)
 	}
 	defer file.Close()
 
@@ -229,7 +230,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 
 	var tr *trace.Trace
 	if cfg.From != "" {
-		if tr, err = saved(cfg.From); err == nil && reference != nil {
+		if tr, err = saved("--from", cfg.From); err == nil && reference != nil {
 			err = sameQuestion(reference, tr.Shown().Question, cfg.Against)
 		}
 	} else {
@@ -243,6 +244,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 
 	// The last frame stays up until there is something to put in its place.
 	live.Clear()
+	unreported(cfg, tr, stderr)
 
 	// A served walk is drawn in a browser rather than here, and the sentences
 	// the run asked for go to the page with it.
@@ -364,9 +366,28 @@ func report(ctx context.Context, cfg *cli.Config, tr *trace.Trace) {
 	})
 }
 
+// unreported says why --report sent nothing about a chain it found broken. A
+// zone that names no agent has asked for no report, which is its choice; but
+// the run asked for one, and silence would read as one sent.
+func unreported(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) {
+	if !cfg.Report || tr.Report != nil {
+		return
+	}
+	chain := tr.Shown().Chain()
+	if chain == nil || chain.DNSSEC.State != trace.Bogus {
+		return
+	}
+	zone := chain.DNSSEC.Zone
+	if zone == "" {
+		zone = "the zone"
+	}
+	fmt.Fprintf(stderr, "report: not sent: %s names no agent to report to (RFC 9567)\n", zone)
+}
+
 // saved is a walk --format json wrote, read back to be drawn again: from a
-// file, or from the standard input where the name is "-".
-func saved(path string) (*trace.Trace, error) {
+// file, or from the standard input where the name is "-". flag is the one that
+// named it.
+func saved(flag, path string) (*trace.Trace, error) {
 	if path == "-" {
 		tr, err := jsonout.Read(stdin)
 		if err != nil {
@@ -377,7 +398,7 @@ func saved(path string) (*trace.Trace, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, unopened(flag, err)
 	}
 	defer file.Close()
 
@@ -391,7 +412,7 @@ func saved(path string) (*trace.Trace, error) {
 // against is the walk --against named, as a comparison reads it. It is dated
 // by when it was made rather than when it was read, like any saved walk.
 func against(path string) (*history.Walk, error) {
-	tr, err := saved(path)
+	tr, err := saved("--against", path)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +615,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	}
 	if cfg.TrustAnchors != "" {
 		if config.Anchors, err = roothints.LoadAnchorsFile(cfg.TrustAnchors); err != nil {
-			return nil, err
+			return nil, unopened("--trust-anchors", err)
 		}
 	}
 
@@ -681,11 +702,21 @@ func rootServers(cfg *cli.Config) ([]trace.Server, error) {
 	hints, err := roothints.Default()
 	if cfg.RootHints != "" {
 		hints, err = roothints.LoadFile(cfg.RootHints)
+		err = unopened("--root-hints", err)
 	}
 	if err != nil {
 		return nil, err
 	}
 	return resolver.RootServers(hints), nil
+}
+
+// unopened names the flag a file that could not be opened was given to, which
+// the error from os leaves the user to guess. Any other error passes through.
+func unopened(flag string, err error) error {
+	if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
+		return fmt.Errorf("%s %s: %w", flag, pathErr.Path, pathErr.Err)
+	}
+	return err
 }
 
 // clientTLS is how the encrypted transports verify a server, nil when that is
@@ -700,7 +731,7 @@ func clientTLS(cfg *cli.Config) (*tls.Config, error) {
 
 	pem, err := os.ReadFile(cfg.TLSCA)
 	if err != nil {
-		return nil, err
+		return nil, unopened("--tls-ca", err)
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(pem) {

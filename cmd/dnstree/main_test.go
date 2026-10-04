@@ -348,6 +348,34 @@ func TestRunExitCodes(t *testing.T) {
 	}
 }
 
+// TestRunNamesTheFlagOfAMissingFile covers the files a run is pointed at.
+// Several flags take one, and "no such file or directory" alone leaves the user
+// to work out which of them it was.
+func TestRunNamesTheFlagOfAMissingFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+
+	tests := map[string][]string{
+		"--names":         {"--names", missing},
+		"--root-hints":    {"--root-hints", missing, "example.com"},
+		"--from":          {"--from", missing},
+		"--against":       {"--against", missing, "example.com"},
+		"--trust-anchors": {"--trust-anchors", missing, "--dnssec", "example.com"},
+		"--tls-ca":        {"--tls-ca", missing, "--dot", "--root", "192.0.2.1", "example.com"},
+		"--config":        {"--config", missing, "example.com"},
+	}
+	for flag, args := range tests {
+		t.Run(flag, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if got := run(t.Context(), args, &stdout, &stderr); got != exitUsage {
+				t.Errorf("got exit %d, want %d: %s", got, exitUsage, stderr.String())
+			}
+			if want := flag + " " + missing + ": "; !strings.Contains(stderr.String(), want) {
+				t.Errorf("got %q, want it to say %q", stderr.String(), want)
+			}
+		})
+	}
+}
+
 func TestRunDebug(t *testing.T) {
 	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
 
@@ -1247,6 +1275,28 @@ lame.               IN NS   a.root-servers.net.
 				}
 			}
 		})
+	}
+}
+
+// TestReportWithNoAgent covers a broken zone that names nobody to tell. Nothing
+// is sent, and the run that asked for a report says so rather than nothing.
+func TestReportWithNoAgent(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone, DNSSEC: true,
+		Behaviour: fakens.Behaviour{BadSignature: true}})
+
+	anchors := filepath.Join(t.TempDir(), "anchors")
+	if err := os.WriteFile(anchors, []byte(root.Anchors(t)[0].String()+"\n"), 0o600); err != nil {
+		t.Fatalf("writing the anchors: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{"--root-hints", rootHintsFile(t), "--port", strconv.Itoa(int(root.Addr.Port())),
+		"--trust-anchors", anchors, "--dnssec", "--no-asn", "--no-compare", "--report", "nothing.", "A"}, &stdout, &stderr)
+	if code != exitBogus {
+		t.Fatalf("got exit %d, want %d: %s%s", code, exitBogus, stdout.String(), stderr.String())
+	}
+	if want := "report: not sent: . names no agent to report to"; !strings.Contains(stderr.String(), want) {
+		t.Errorf("got %q on stderr, want %q", stderr.String(), want)
 	}
 }
 

@@ -313,6 +313,8 @@ func TestParseRejects(t *testing.T) {
 		"a watch of no time at all":                {"--watch", "-1s", "example.com"},
 		"a page nobody serves":                     {"--web-addr", "127.0.0.1:8080", "example.com"},
 		"a browser for a tree":                     {"--no-browser", "example.com"},
+		"a page served at no port":                 {"--format", "web", "--web-addr", "localhost", "example.com"},
+		"a page served at a port nothing has":      {"--format", "web", "--web-addr", "127.0.0.1:99999", "example.com"},
 		"explained json":                           {"--format", "json", "--explain", "example.com"},
 		"explained dot":                            {"--format", "dot", "--explain", "example.com"},
 		"compared json":                            {"--format", "json", "--diff", "example.com"},
@@ -490,5 +492,52 @@ func TestReadQuestionsRejects(t *testing.T) {
 				t.Errorf("got %q, want it to name %q", err, test.line)
 			}
 		})
+	}
+}
+
+// TestParseSaysWhatIsWrong covers the mistakes the flag package finds itself,
+// which it says with one dash and follows with the whole usage, burying them.
+// Each is said once, as the rest of the command line's are.
+func TestParseSaysWhatIsWrong(t *testing.T) {
+	tests := map[string]struct {
+		args []string
+		want string
+	}{
+		"a flag there is no such thing as":    {[]string{"--bogus", "example.com"}, "--bogus is not a flag; --help lists them"},
+		"a letter there is no such flag of":   {[]string{"-z", "example.com"}, "-z is not a flag; --help lists them"},
+		"a number that is not one":            {[]string{"--retries", "x", "example.com"}, `--retries "x" is not a number`},
+		"a number too large to hold":          {[]string{"--max-queries", "99999999999999999999", "example.com"}, `--max-queries "99999999999999999999" is out of range`},
+		"a length of time that is not one":    {[]string{"--timeout", "x", "example.com"}, `--timeout "x" is not a length of time, such as 2s`},
+		"a switch set to something else":      {[]string{"--dnssec=maybe", "example.com"}, `--dnssec "maybe" is neither true nor false`},
+		"a value the flag gives a reason for": {[]string{"--try-ns", "nonsense", "example.com"}, `--try-ns "nonsense" is not ZONE=SERVER`},
+		"a value missing at the very end":     {[]string{"--names"}, "--names needs a value"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var out strings.Builder
+			_, err := cli.Parse(test.args, &out)
+			if !errors.Is(err, cli.ErrUsage) {
+				t.Fatalf("got error %v, want a usage problem", err)
+			}
+			if out.Len() > 0 {
+				t.Errorf("got %q written, want the mistake said once, in the error", out.String())
+			}
+			if !strings.HasSuffix(err.Error(), ": "+test.want) {
+				t.Errorf("got %q, want it to end %q", err, test.want)
+			}
+		})
+	}
+}
+
+// TestParseHelp covers the one time the usage is written whole.
+func TestParseHelp(t *testing.T) {
+	for _, arg := range []string{"--help", "-h"} {
+		var out strings.Builder
+		if _, err := cli.Parse([]string{arg}, &out); !errors.Is(err, cli.ErrUsage) {
+			t.Fatalf("%s: got error %v, want a usage problem", arg, err)
+		}
+		if !strings.HasPrefix(out.String(), "usage: dnstree") {
+			t.Errorf("%s: got %q, want the usage", arg, out.String())
+		}
 	}
 }

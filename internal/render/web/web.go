@@ -85,7 +85,10 @@ func Serve(ctx context.Context, out io.Writer, tr *trace.Trace, findings []expla
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("web: %w", err)
+		if opErr, ok := errors.AsType[*net.OpError](err); ok {
+			err = opErr.Err // the address is said already, and the rest is Go's
+		}
+		return fmt.Errorf("web: the page cannot be served at %s: %w; name another with --web-addr", addr, err)
 	}
 
 	url := "http://" + listening(listener.Addr()).String() + "/"

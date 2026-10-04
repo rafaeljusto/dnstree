@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,6 +20,7 @@ const ConfigEnv = "DNSTREE_CONFIG"
 type configFile struct {
 	path     string
 	required bool
+	from     string // what named a required file: --config or the environment
 }
 
 // Some flags say the same thing in different ways. A command line that names
@@ -41,7 +43,7 @@ var groups = [][]string{
 // dot file. Only a file named outright has to exist.
 func defaultFile() configFile {
 	if path := os.Getenv(ConfigEnv); path != "" {
-		return configFile{path: path, required: true}
+		return configFile{path: path, required: true, from: "$" + ConfigEnv}
 	}
 	for _, path := range []string{xdgFile(), dotFile()} {
 		if path == "" {
@@ -103,7 +105,7 @@ func chosen(flags *flag.FlagSet, args []string) (configFile, error) {
 	case off:
 		return configFile{}, nil
 	case path != "":
-		return configFile{path: path, required: true}, nil
+		return configFile{path: path, required: true, from: "--config"}, nil
 	}
 	return defaultFile(), nil
 }
@@ -121,6 +123,9 @@ func defaults(flags *flag.FlagSet, file configFile) ([]string, bool, error) {
 	case errors.Is(err, os.ErrNotExist) && !file.required:
 		return nil, false, nil
 	case err != nil:
+		if pathErr, ok := errors.AsType[*fs.PathError](err); ok && file.from != "" {
+			return nil, false, fmt.Errorf("%w: %s %s: %w", ErrUsage, file.from, pathErr.Path, pathErr.Err)
+		}
 		return nil, false, fmt.Errorf("%w: %w", ErrUsage, err)
 	}
 

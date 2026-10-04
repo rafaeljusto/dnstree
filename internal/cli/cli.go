@@ -7,7 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/netip"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -453,6 +455,59 @@ var notLookups = map[string]string{
 	"NXNAME": "it marks a name that does not exist and is never asked for",
 }
 
+// The flag package says what went wrong in words of its own, and with one dash
+// before every flag. These are its messages, which plain says again.
+var (
+	undefinedFlag = regexp.MustCompile(`^flag provided but not defined: -+(.+)$`)
+	missingValue  = regexp.MustCompile(`^flag needs an argument: -+(.+)$`)
+	invalidValue  = regexp.MustCompile(`^invalid (?:boolean )?value (".*") for (?:flag )?-+([^:]+): (.*)$`)
+)
+
+// plain says a mistake the flag package found the way the rest of the command
+// line's are said: the flag as it is typed, the value, and what is wrong with
+// it.
+func plain(flags *flag.FlagSet, err error) error {
+	text := err.Error()
+	if m := undefinedFlag.FindStringSubmatch(text); m != nil {
+		return fmt.Errorf("%s is not a flag; --help lists them", dashed(m[1]))
+	}
+	if m := missingValue.FindStringSubmatch(text); m != nil {
+		return fmt.Errorf("%s needs a value", dashed(m[1]))
+	}
+	m := invalidValue.FindStringSubmatch(text)
+	if m == nil {
+		return err
+	}
+	value, name, why := m[1], m[2], m[3]
+	if why != "parse error" && why != "value out of range" {
+		return fmt.Errorf("%s %s", dashed(name), why) // the flag's own reason, which names the value
+	}
+	what := "cannot be read"
+	if getter, ok := flags.Lookup(name).Value.(flag.Getter); ok {
+		switch getter.Get().(type) {
+		case int, uint:
+			what = "is not a number"
+		case time.Duration:
+			what = "is not a length of time, such as 2s"
+		case bool:
+			what = "is neither true nor false"
+		}
+	}
+	if why == "value out of range" {
+		what = "is out of range"
+	}
+	return fmt.Errorf("%s %s %s", dashed(name), value, what)
+}
+
+// dashed writes a flag the way the usage does: one dash for a letter, two for
+// a name.
+func dashed(name string) string {
+	if len(name) == 1 {
+		return "-" + name
+	}
+	return "--" + name
+}
+
 // ErrUsage is anything the command line itself got wrong, including a request
 // for help.
 var ErrUsage = errors.New("cli: the command line cannot be read")
@@ -460,9 +515,12 @@ var ErrUsage = errors.New("cli: the command line cannot be read")
 // Parse reads the arguments. Anything it writes, including the usage, goes to
 // output.
 func Parse(args []string, output io.Writer) (*Config, error) {
+	// The flag package writes the usage after every mistake, which buries the
+	// one line that says what the mistake was. It is written for --help alone,
+	// and every other error is said once, in the words the rest of the tool uses.
 	flags := flag.NewFlagSet("dnstree", flag.ContinueOnError)
-	flags.SetOutput(output)
-	flags.Usage = func() { fmt.Fprint(output, Usage) }
+	flags.SetOutput(io.Discard)
+	flags.Usage = func() {}
 
 	var (
 		cfg           Config
@@ -556,15 +614,15 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 	if read {
 		cfg.ConfigFile = file.path
-		flags.SetOutput(io.Discard) // the file names its own lines; the usage is about the command line
-		err := flags.Parse(override(flags, fileArgs, args))
-		flags.SetOutput(output)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %s: %w", ErrUsage, file.path, err)
+		if err := flags.Parse(override(flags, fileArgs, args)); err != nil {
+			return nil, fmt.Errorf("%w: %s: %w", ErrUsage, file.path, plain(flags, err))
 		}
 	}
-	if err := flags.Parse(args); err != nil {
+	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
+		fmt.Fprint(output, Usage)
 		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
+	} else if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUsage, plain(flags, err))
 	}
 	switch mode := tree.ColorMode(color); mode {
 	case tree.ColorAuto, tree.ColorAlways, tree.ColorNever:
@@ -602,7 +660,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.Name, cfg.Type = reverseName(addr.Unmap()), "PTR"
 	case n == 0:
-		flags.Usage()
+		fmt.Fprint(output, Usage)
 		return nil, fmt.Errorf("%w: no name to resolve", ErrUsage)
 	default:
 		questions, err := ask(flags.Args())
@@ -732,6 +790,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if Serves(cfg.Format) {
 		if cfg.WebAddr == "" {
 			cfg.WebAddr = web.DefaultAddr
+		}
+		// Checked here so that a typo costs nothing, rather than the walk the
+		// page was going to show.
+		_, port, err := net.SplitHostPort(cfg.WebAddr)
+		if _, perr := strconv.ParseUint(port, 10, 16); err != nil || perr != nil {
+			return nil, fmt.Errorf("%w: --web-addr %q is not a host and port, such as 127.0.0.1:8080", ErrUsage, cfg.WebAddr)
 		}
 	} else if cfg.WebAddr != "" || noBrowser {
 		return nil, fmt.Errorf("%w: only --format web and web-3d serve a page", ErrUsage)
