@@ -1,6 +1,6 @@
 ---
 name: dnstree-e2e
-description: Use dnstree the way a user would — build the real binary, run every flag and format against the real DNS, and check that each run does what the usage text, the guide and the AGENTS.md invariants say it does, exit code included. Reports what broke, with the command that shows it. Use when asked to smoke test, end-to-end test, try every flag, check the tool still works, or before a release. Takes an optional scope (a group from cases.md, or `quick` for the runs that need no network) and an optional git ref to build instead of the working tree. Edits nothing and commits nothing unless asked.
+description: Use dnstree the way a user would — build the real binary, run every flag and format against the real DNS, and check that each run does what the usage text, the guide and the AGENTS.md invariants say it does, exit code included. Reports what broke, with the command that shows it. Use when asked to smoke test, end-to-end test, try every flag, check the tool still works, or before a release. Takes an optional scope (a group from cases.md, or `quick` for the command-line checks alone) and an optional git ref to build instead of the working tree. Edits nothing and commits nothing unless asked.
 ---
 
 # dnstree e2e
@@ -19,8 +19,8 @@ The catalogue of runs is [cases.md](cases.md). Read it before starting.
 - A scope: one group heading from `cases.md` (`cli`, `walk`, `dnssec`,
   `transport`, `zone`, `budget`, `start`, `formats`, `saved`, `script`,
   `config`, `long`, `web`), several separated by commas, or `quick`, which
-  runs only the groups that need no network (`cli`, `formats`, `saved`,
-  `config`). Nothing given means every group.
+  runs only the `cli` group: every other group walks at least once. Nothing
+  given means every group.
 - A git ref: build that instead of the working tree.
 
 ## Set up

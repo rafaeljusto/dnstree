@@ -4,7 +4,7 @@ What each run is, and what a user should see. `$D` is the binary and `$B` is
 `--no-asn --no-compare --color never`, as set up in [SKILL.md](SKILL.md). Every
 case also has to pass the checks under "Judge every run" there.
 
-The expectations were observed on 2026-10-03 at 043a63c. The targets are real
+The expectations were observed on 2026-10-03 at ffb4b79. The targets are real
 zones, chosen because they have stayed put for years:
 
 | target | why |

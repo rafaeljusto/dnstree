@@ -171,9 +171,9 @@ grep -ohE -- '--[a-z][a-z0-9-]+' README.md docs/guide/*.md docs/index.html dnstr
   tapes/*.tape | sort -u
 
 # make targets the docs name.
-grep -ohE '(`|^|<code>)make [a-z-]+' *.md docs/guide/*.md packaging/*.md docs/index.html \
-  | grep -oE 'make [a-z-]+' | sort -u
-grep -oE '^[a-z-]+:' Makefile
+grep -ohE '(`|^|<code>)make [a-z0-9-]+' *.md docs/guide/*.md packaging/*.md docs/index.html \
+  | grep -oE 'make [a-z0-9-]+' | sort -u
+grep -oE '^[a-z0-9-]+:' Makefile
 ```
 
 `readme=0` is a finding. `page=0` usually isn't: the page doesn't list every

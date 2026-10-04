@@ -47,7 +47,9 @@ Go through the `AGENTS.md` invariants against the diff, and flag any that the
 change touches without a test holding it. The ones that regress most quietly:
 
 - A renderer re-deriving a DNS fact instead of reading `internal/trace`.
-- The DNS codec imported outside `transport`, `resolver`, `dnssec` and `fakens`.
+- The DNS codec imported outside `transport`, `resolver`, `dnssec` and `fakens`,
+  or reached through another import by a package in `apart`
+  (`internal/layering/layering_test.go`).
 - A new dependency in `go.mod`. It needs an argument in the PR body.
 - A loop that follows response data without spending a budget.
 - A failure that aborts instead of becoming a step.

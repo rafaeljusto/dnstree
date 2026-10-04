@@ -40,7 +40,8 @@ finding even when nothing crashes.
   it does is checked with a pack and unpack round trip before a finding, a
   fix or a comment rests on it.
 - Only `transport`, `resolver`, `dnssec` and `fakens` may import the codec. An
-  import anywhere else is a layering finding.
+  import anywhere else is a layering finding, and so is a package in `apart`
+  (`internal/layering/layering_test.go`) reaching it through another import.
 - Budgets live in `internal/resolver/budget.go`. Find every loop or recursion
   that follows data from a response and check that it spends from a budget.
 - Look at the `hostile_test.go` files and `fakens.Behaviour` before reporting:
