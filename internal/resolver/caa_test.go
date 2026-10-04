@@ -2,6 +2,7 @@ package resolver_test
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -118,6 +119,13 @@ func TestCAA(t *testing.T) {
 		"a critical property nobody knows makes every authority refuse": {
 			extra: `www IN CAA 0 issue "letsencrypt.org"
 www IN CAA 128 tbs "unknown"`,
+			qname: "www.example.com",
+			asked: []string{"www.example.com. set"}, owner: "www.example.com.",
+			issue: []string{"letsencrypt.org"}, wildcard: []string{"letsencrypt.org"}, refused: true,
+		},
+		"a critical property whose tag is no valid one makes every authority refuse": {
+			extra: `www IN CAA 0 issue "letsencrypt.org"
+www IN CAA 128 tbs\; "unknown"`,
 			qname: "www.example.com",
 			asked: []string{"www.example.com. set"}, owner: "www.example.com.",
 			issue: []string{"letsencrypt.org"}, wildcard: []string{"letsencrypt.org"}, refused: true,
@@ -265,6 +273,51 @@ func TestCAABudget(t *testing.T) {
 	}
 	if tr.CAA.Refused != "" || !strings.Contains(tr.CAA.Undecided, "gave up after 4 queries") {
 		t.Errorf("got refused %q and undecided %q, want it undecided for the budget", tr.CAA.Refused, tr.CAA.Undecided)
+	}
+}
+
+// TestCAABudgetSpentBefore covers a budget the walk ran out before the climb:
+// the CNAME chain used it up, so it cannot be why a later lookup failed.
+func TestCAABudgetSpentBefore(t *testing.T) {
+	var chain strings.Builder
+	for i := range resolver.DefaultMaxCNAME + 2 {
+		fmt.Fprintf(&chain, "c%d IN CNAME c%d\n", i, i+1)
+	}
+	h, cfg := authorised(t, chain.String(), fakens.Behaviour{ServFailType: dns.TypeCAA}, true)
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "c0.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if tr.CAA == nil || tr.CAA.Refused == "" || tr.CAA.Undecided != "" {
+		t.Errorf("got %+v, want the signed zone's failure making every authority refuse", tr.CAA)
+	}
+}
+
+// TestCAAUnenteredZone covers a climb referred below every zone the walk
+// entered: the chain of the zone that referred says nothing of the child's,
+// so an unsigned child that never answered leaves it undecided.
+func TestCAAUnenteredZone(t *testing.T) {
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: true,
+	})
+	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2", DNSSEC: true})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.example.com.", Origin: "example.com.", Zone: caaZone, Declared: "192.0.2.3",
+		Behaviour: fakens.Behaviour{Drop: true},
+	})
+	cfg := resolver.Config{CAA: true, DNSSEC: true, Anchors: root.Anchors(t)}
+
+	tr, err := newResolver(t, harness{hierarchy, root}, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if tr.CAA == nil || tr.CAA.Refused != "" || tr.CAA.Undecided == "" {
+		t.Fatalf("got %+v, want it undecided", tr.CAA)
+	}
+	if slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, "servers of com.") }) {
+		t.Errorf("got warnings %q, want none blaming com.", tr.Warnings)
 	}
 }
 

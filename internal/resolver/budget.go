@@ -49,9 +49,12 @@ func (c *counters) query() error {
 	return nil
 }
 
-// spent reports whether a budget has run out.
-func (c *counters) spent() bool {
-	return c.queries > c.max.MaxQueries || c.cnames > c.max.MaxCNAME
+// spentSince reports whether a budget stopped what ran after the CNAME count
+// stood at cnames. The query budget stops anything once it has run out; the
+// CNAME budget only what chased an alias, so an earlier long chain does not
+// read as the reason a later lookup failed.
+func (c *counters) spentSince(cnames int) bool {
+	return c.queries > c.max.MaxQueries || c.cnames > cnames && c.cnames > c.max.MaxCNAME
 }
 
 func (c *counters) cname() error {

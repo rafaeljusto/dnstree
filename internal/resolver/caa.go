@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 
 	"codeberg.org/miekg/dns"
@@ -72,7 +73,8 @@ func (r *run) climb(ctx context.Context, under *trace.Step) {
 
 	for labels := dnsutil.Labels(name); labels > 0; labels-- {
 		asked := ancestor(name, labels)
-		lookup, records, status := r.lookupCAA(ctx, under, asked)
+		cnames := r.counters.cnames
+		lookup, records, status, judge := r.lookupCAA(ctx, under, asked)
 		caa.Asked = append(caa.Asked, lookup)
 		if status != nil {
 			last = status
@@ -83,7 +85,7 @@ func (r *run) climb(ctx context.Context, under *trace.Step) {
 
 		switch lookup.Found {
 		case trace.CAAFailed:
-			r.failed(caa, lookup)
+			r.failed(caa, lookup, judge, r.counters.spentSince(cnames))
 			return
 		case trace.CAASet:
 			caa.Owner = asked
@@ -99,17 +101,18 @@ func (r *run) climb(ctx context.Context, under *trace.Step) {
 // failed says what a lookup that stopped the climb leaves an authority to do.
 // Only a zone with a chain of trust behind it makes every one refuse: where
 // none vouches for it, an authority that retried may take the failure as leave
-// to issue (CA/Browser Forum Baseline Requirements 3.2.2.8).
-func (r *run) failed(caa *trace.CAA, lookup trace.CAALookup) {
+// to issue (CA/Browser Forum Baseline Requirements 3.2.2.8). c is the zone the
+// failure is judged by, nil where the walk holds none for it; stopped is a
+// budget that ran out on the way.
+func (r *run) failed(caa *trace.CAA, lookup trace.CAALookup, c *cut, stopped bool) {
 	name, why := r.trace.Question.Name, "the CAA lookup at "+lookup.Name+" failed: "+lookup.Err
 	zone := "the zone of " + lookup.Name
-	c := r.cutOf(lookup.Name)
 	if c != nil {
 		zone = c.zone
 	}
 
 	switch {
-	case r.counters.spent():
+	case stopped:
 		caa.Undecided = why
 		r.warnf("the CAA lookup at %s was not made (%s), so who may issue for %s is not known; raise the budget that ran out",
 			lookup.Name, lookup.Err, name)
@@ -127,12 +130,13 @@ func (r *run) failed(caa *trace.CAA, lookup trace.CAALookup) {
 // lookupCAA asks for the CAA set at one name of the climb, of the servers of
 // the zone it sits in, trying them in turn the way the walk does. An alias is
 // followed with a walk of its own, which is what an authority's lookup does.
-func (r *run) lookupCAA(ctx context.Context, under *trace.Step, name string) (trace.CAALookup, []trace.RR, *trace.DNSSECStatus) {
+// The zone it returns is the one a failure is judged by.
+func (r *run) lookupCAA(ctx context.Context, under *trace.Step, name string) (trace.CAALookup, []trace.RR, *trace.DNSSECStatus, *cut) {
 	lookup := trace.CAALookup{Name: name, Found: trace.CAAFailed}
 	c := r.cutOf(name)
 	if c == nil {
 		lookup.Err = "the walk never reached a zone it is in"
-		return lookup, nil, nil
+		return lookup, nil, nil, nil
 	}
 
 	lookup.Err = "no server of " + c.zone + " could be asked"
@@ -146,7 +150,7 @@ func (r *run) lookupCAA(ctx context.Context, under *trace.Step, name string) (tr
 		if err := r.counters.query(); err != nil {
 			r.fail(under, c.zone, err.Error())
 			lookup.Err = err.Error()
-			return lookup, nil, nil
+			return lookup, nil, nil, c
 		}
 
 		hop := r.query(ctx, c.zone, server, name, dns.TypeCAA)
@@ -162,17 +166,20 @@ func (r *run) lookupCAA(ctx context.Context, under *trace.Step, name string) (tr
 			if len(records) > 0 {
 				lookup.Found = trace.CAASet
 			}
-			return lookup, records, hop.step.DNSSEC
+			return lookup, records, hop.step.DNSSEC, c
 		case trace.KindCNAME:
 			r.verifyIn(ctx, c, hop, name)
-			return r.aliasCAA(ctx, hop.step, name, lookup)
+			lookup, records, status := r.aliasCAA(ctx, hop.step, name, lookup)
+			return lookup, records, status, c
 		case trace.KindReferral:
+			// The name sits in a zone the walk never entered, whose chain of
+			// trust, if it has one, the walk does not know.
 			lookup.Err = "it is delegated below " + c.zone + ", where the walk never went"
-			return lookup, nil, nil
+			return lookup, nil, nil, nil
 		}
 		lookup.Err = why(hop.step)
 	}
-	return lookup, nil, nil
+	return lookup, nil, nil, c
 }
 
 // aliasCAA follows an alias met on the climb to the set at its target. The
@@ -263,6 +270,12 @@ func decide(caa *trace.CAA, records []trace.RR) {
 		rr, err := dns.New(". IN CAA " + record.Data)
 		parsed, ok := rr.(*dns.CAA)
 		if err != nil || !ok {
+			// A tag the text cannot carry is no registered one, and refuses
+			// all the same when it is critical (RFC 8659 4.1).
+			flag, _, _ := strings.Cut(record.Data, " ")
+			if n, err := strconv.ParseUint(flag, 10, 8); err == nil && n&0x80 != 0 && caa.Refused == "" {
+				caa.Refused = caa.Owner + " carries a critical property whose tag is no valid one, which an authority has to refuse"
+			}
 			continue
 		}
 		tag := strings.ToLower(parsed.Tag)
