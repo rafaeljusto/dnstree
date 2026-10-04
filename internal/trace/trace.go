@@ -1093,6 +1093,37 @@ func (t *Trace) Chain() *Step {
 	return t.Trust()
 }
 
+// ReportAgent is the agent the zone whose chain of trust broke asks failures to
+// be reported to (RFC 9567), and the step that said so. It is empty where the
+// chain did not break, or nobody asked: a report is only ever about a chain the
+// walk found broken, never about one it could not check.
+func (t *Trace) ReportAgent() (string, *Step) {
+	chain := t.Chain()
+	if chain == nil || chain.DNSSEC.State != Bogus {
+		return "", nil
+	}
+	zone := chain.DNSSEC.Zone
+
+	// The servers of the zone the verdict is about are who it would want
+	// told, the deepest of them first; the one that answered stands in for a
+	// verdict that names no zone.
+	var found *Step
+	for step := range t.Mainline() {
+		if step.ReportTo != "" && zone != "" && strings.EqualFold(step.Zone, zone) {
+			found = step
+		}
+	}
+	if found == nil {
+		if result := t.Result(); result != nil && result.ReportTo != "" {
+			found = result
+		}
+	}
+	if found == nil {
+		return "", nil
+	}
+	return found.ReportTo, found
+}
+
 // Filtered is a hop where somebody decided the answer rather than serving it,
 // or nil where nothing did. It is not a [Trace.Result]: a walk that ends here
 // has not been answered, it has been turned away, and the two are worth saying

@@ -64,7 +64,8 @@ tagging by hand skips the calculation, and the tag carries no changelog.
 - Only `transport`, `resolver` and `dnssec` — plus `fakens`, which has to speak
   the wire format — may import the DNS codec. Keeping it out of the trace, the
   renderers and the AS lookups is what makes them testable without a network.
-  `internal/layering` fails on any other import of it.
+  `internal/layering` fails on any other import of it, and on the trace, a
+  renderer or the AS lookups reaching it through another package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net/idna` for names typed in any script,

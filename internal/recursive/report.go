@@ -12,43 +12,12 @@ import (
 // that maps onto the codes without claiming more than it checked.
 const bogusCode = 6
 
-// Agent is the agent the zone whose chain of trust broke asks failures to be
-// reported to (RFC 9567), and the step that said so. It is empty where the chain
-// did not break, or nobody asked: a report is only ever about a chain the walk
-// found broken, never about one it could not check.
-func Agent(tr *trace.Trace) (string, *trace.Step) {
-	chain := tr.Chain()
-	if chain == nil || chain.DNSSEC.State != trace.Bogus {
-		return "", nil
-	}
-	zone := chain.DNSSEC.Zone
-
-	// The servers of the zone the verdict is about are who it would want
-	// told, the deepest of them first; the one that answered stands in for a
-	// verdict that names no zone.
-	var found *trace.Step
-	for step := range tr.Mainline() {
-		if step.ReportTo != "" && zone != "" && strings.EqualFold(step.Zone, zone) {
-			found = step
-		}
-	}
-	if found == nil {
-		if result := tr.Result(); result != nil && result.ReportTo != "" {
-			found = result
-		}
-	}
-	if found == nil {
-		return "", nil
-	}
-	return found.ReportTo, found
-}
-
 // Report sends the report a broken chain of trust is due, through send, and
 // records it on the trace. Nothing is recorded where nothing was due. An agent
 // at or below the name it would be told about is refused, as RFC 9567 says: a
 // zone able to answer for its own reports could have them say anything.
 func Report(tr *trace.Trace, send func(name string) (string, error)) {
-	agent, _ := Agent(tr)
+	agent, _ := tr.ReportAgent()
 	if agent == "" {
 		return
 	}

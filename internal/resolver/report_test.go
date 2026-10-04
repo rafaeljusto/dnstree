@@ -3,7 +3,6 @@ package resolver_test
 import (
 	"testing"
 
-	"github.com/rafaeljusto/dnstree/v2/internal/recursive"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -39,7 +38,7 @@ func TestReportChannel(t *testing.T) {
 					t.Errorf("got %q on a hop of %s, which named none", step.ReportTo, step.Zone)
 				}
 			}
-			if agent, _ := recursive.Agent(tr); agent != test.agent {
+			if agent, _ := tr.ReportAgent(); agent != test.agent {
 				t.Errorf("got agent %q, want %q", agent, test.agent)
 			}
 			if test.agent != "" && tr.Chain().DNSSEC.State != trace.Bogus {
