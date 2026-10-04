@@ -1157,6 +1157,10 @@ func TestIssuance(t *testing.T) {
 			caa:  &trace.CAA{Owner: "test.", Issue: &trace.Issuers{CAs: []string{"letsencrypt.org"}}, Wildcard: &trace.Issuers{CAs: []string{"letsencrypt.org"}}},
 			want: "the CAA set at test. lets only letsencrypt.org issue for www.test.",
 		},
+		"a saved walk with an issuer and no wildcard set": {
+			caa:  &trace.CAA{Owner: "test.", Issue: &trace.Issuers{CAs: []string{"letsencrypt.org"}}},
+			want: "the CAA set at test. lets only letsencrypt.org issue for www.test., and any certificate authority issue wildcards below it",
+		},
 		"a set with no issue property": {
 			caa:  &trace.CAA{Owner: "test."},
 			want: "the CAA set at test. names no issuer, so any certificate authority may issue for www.test.",

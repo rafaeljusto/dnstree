@@ -1121,7 +1121,7 @@ func issuance(tr *trace.Trace) (Finding, bool) {
 			"the CAA set at %s names no issuer, so any certificate authority may issue for %s", caa.Owner, name)}, true
 	}
 	text := fmt.Sprintf("the CAA set at %s lets %s issue for %s", caa.Owner, issuers(caa.Issue), name)
-	if !slices.Equal(caa.Issue.CAs, caa.Wildcard.CAs) {
+	if caa.Wildcard == nil || !slices.Equal(caa.Issue.CAs, caa.Wildcard.CAs) {
 		text += fmt.Sprintf(", and %s issue wildcards below it", issuers(caa.Wildcard))
 	}
 	return Finding{Topic: Issuance, Level: Note, Text: text}, true
