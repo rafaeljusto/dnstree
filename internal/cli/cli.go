@@ -241,8 +241,9 @@ script that read 4 for either would go looking in the wrong place.
 start of authority, and says so when they do not all serve the same copy of it.
 A walk stops at the first nameserver that answers, so a secondary left behind by
 a zone transfer is invisible to everything else here: it answers the question
-correctly, out of an older zone. It costs a query per nameserver, and which of
-the serials is the newer one is not claimed, because serial arithmetic wraps.
+correctly, out of an older zone. It costs a query per nameserver, and a lookup
+of each one named outside the zone that the walk did not need, and which of the
+serials is the newer one is not claimed, because serial arithmetic wraps.
 
 --check-axfr asks every nameserver of the zone the walk ends in for the whole
 zone (AXFR), the way anybody could, and says on each which of them hand it
@@ -256,7 +257,7 @@ open resolver, which floods whoever an attacker points it at. It goes by what
 comes back rather than by the flag that says a server recurses, which servers
 set without doing it.
 
-Both cost a query per nameserver and are off unless asked for: a transfer
+Both cost what --serial does, and are off unless asked for: a transfer
 refused still shows up in the server's logs, so they are for zones you run or
 have been asked to check. The root is never asked either, since its servers
 hand out the root zone on purpose.

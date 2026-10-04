@@ -75,7 +75,8 @@ type Config struct {
 
 	// All asks every nameserver of a zone instead of stopping at the first one
 	// that answers, looking up every one named outside the zone to do it. The
-	// walk still follows a single path down.
+	// walk still follows a single path down, and the lookups of those names
+	// ask one server a zone, as a resolver would.
 	All bool
 
 	// Family restricts the walk to IPv4 (4) or IPv6 (6) servers. Zero uses
@@ -384,15 +385,17 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			asked, askedType = ancestor(qname, reach), dns.TypeA
 		}
 
-		hop := r.queryZone(ctx, zone, servers, parent, asked, askedType, minimised)
+		hop := r.queryZone(ctx, zone, servers, parent, asked, askedType, minimised, side)
 		if hop == nil && len(pending) > 0 {
-			if servers, pending = r.resolveNames(ctx, referred, pending, side); len(servers) > 0 {
+			if servers, pending = r.resolveNames(ctx, referred, pending, side, r.every(side)); len(servers) > 0 {
 				continue
 			}
 		}
 		if hop == nil {
 			abandoned(referred, parent, zone)
-			r.warnf("no server answered for %s", zone)
+			if !r.counters.spent() { // the tree already says the budget gave out
+				r.warnf("no server answered for %s", zone)
+			}
 			return nil
 		}
 		step := hop.step
@@ -460,6 +463,12 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 				r.checkSubnet(step)
 				r.checkNS(ctx, step, referred)
 				r.checkDS(ctx, chain, step, last)
+				if len(pending) > 0 && (r.cfg.Serial || r.cfg.CheckTransfer || r.cfg.CheckRecursion) {
+					// The probes are about every nameserver, not the one the
+					// walk needed, so the names it never looked up are now.
+					resolved, _ := r.resolveNames(ctx, referred, pending, side, true)
+					servers = append(servers, resolved...)
+				}
 				r.checkSerial(ctx, step, zone, servers)
 				r.checkKeys(ctx, chain, step, zone, servers)
 				r.checkExposure(ctx, step, zone, servers)
@@ -479,7 +488,9 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			next, rest = r.nextServers(ctx, step, side)
 		}
 		if len(next) == 0 {
-			r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
+			if !r.counters.spent() {
+				r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
+			}
 			return step
 		}
 		pending = rest
@@ -491,6 +502,14 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			delegation = hop.resp.Ns
 		}
 	}
+}
+
+// every reports whether a walk asks every nameserver of a zone. All is about
+// the question itself: under it, the lookup of a nameserver's address fanning
+// out to every server of every zone above it would spend the budget long
+// before the zone the question is about was asked at all.
+func (r *run) every(side int) bool {
+	return r.cfg.All && side == 0
 }
 
 // reach is how many labels of qname the first question put to zone asks for:
@@ -664,7 +683,7 @@ func referralSigner(resp *dns.Msg) string {
 //
 // minimised marks every hop as asking less than the whole name, which keeps what
 // they come back with from being read as the resolution's answer.
-func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16, minimised bool) *hop {
+func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server, parent *trace.Step, qname string, qtype uint16, minimised bool, side int) *hop {
 	var usable []trace.Server
 	for _, server := range dedupe(servers) {
 		// A server of the wrong family is shown rather than hidden: a zone
@@ -686,7 +705,7 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 		usable = append(usable, server)
 	}
 
-	if r.cfg.All {
+	if r.every(side) {
 		return r.queryAll(ctx, zone, usable, parent, qname, qtype, minimised)
 	}
 	return r.queryFirst(ctx, zone, usable, parent, qname, qtype, minimised)
@@ -1067,10 +1086,10 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]tr
 		}
 		return servers, nil
 	}
-	if len(servers) > 0 && !r.cfg.All {
+	if len(servers) > 0 && !r.every(side) {
 		return servers, pending
 	}
-	resolved, pending := r.resolveNames(ctx, step, pending, side)
+	resolved, pending := r.resolveNames(ctx, step, pending, side, r.every(side))
 	return append(servers, resolved...), pending
 }
 
@@ -1105,18 +1124,18 @@ func (r *run) trialServers(ctx context.Context, step *trace.Step, side int) ([]t
 	if len(names) == 0 || side >= maxSideResolution {
 		return servers, nil
 	}
-	if len(servers) > 0 && !r.cfg.All {
+	if len(servers) > 0 && !r.every(side) {
 		return servers, names
 	}
-	resolved, pending := r.resolveNames(ctx, step, names, side)
+	resolved, pending := r.resolveNames(ctx, step, names, side, r.every(side))
 	return append(servers, resolved...), pending
 }
 
 // resolveNames looks up the addresses of nameservers named outside the zone
 // they serve, each with a walk of its own under the referral that named them.
-// It stops at the first that has any unless All is set, and hands back the
+// It stops at the first that has any unless every is set, and hands back the
 // names it did not get to.
-func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string, side int) ([]trace.Server, []string) {
+func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string, side int, every bool) ([]trace.Server, []string) {
 	rrtype, typeName := uint16(dns.TypeA), "A"
 	if r.cfg.Family == 6 {
 		rrtype, typeName = dns.TypeAAAA, "AAAA"
@@ -1147,7 +1166,7 @@ func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string
 				servers = append(servers, trace.Server{Name: name, IP: addr})
 			}
 		}
-		if len(servers) > 0 && !r.cfg.All {
+		if len(servers) > 0 && !every {
 			return servers, names[i+1:] // one nameserver we can reach is enough to go on
 		}
 	}

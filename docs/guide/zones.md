@@ -157,9 +157,11 @@ arithmetic wraps around (RFC 1982), so the larger number is not reliably the
 later zone, and a tool that guessed would send somebody to restart the wrong
 server.
 
-It costs a query per nameserver and is off unless asked for. It does not need
-`--all`: the sweep is one cheap question to each of them, rather than the whole
-resolution done over again.
+It costs a query per nameserver and is off unless asked for. A walk looks up
+only as many of the nameservers named outside the zone as it needs to get an
+answer, so the sweep looks up the rest itself, at a few queries each. It does
+not need `--all`: the sweep is one cheap question to each of them, rather than
+the whole resolution done over again.
 
 `--all` sees the other half of the same thing, and needs no flag of its own to
 say it. Where it has put the question itself to every nameserver of a zone, two
@@ -223,8 +225,8 @@ Each costs a query per nameserver, is off unless asked for, and leaves the exit
 code alone. A refused
 transfer still lands in the server's logs, so these are for zones you run or
 have been asked to check. The root is never asked: its servers hand out the
-root zone on purpose (RFC 8806). Like `--serial`, only the nameservers the walk
-found an address for are asked. `--format json` carries each check as a `probe`
+root zone on purpose (RFC 8806). Like `--serial`, they look up the nameservers
+the walk did not need, and ask every one an address was found for. `--format json` carries each check as a `probe`
 on its hop, and `--format openmetrics` as `dnstree_open`.
 
 ## Who may issue certificates for it

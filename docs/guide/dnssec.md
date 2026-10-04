@@ -105,12 +105,12 @@ its SOA with:
 $ dnstree --all --dnssec --no-asn isc.org SOA
 ...
 │   │   ├── ns2.isc.org. 199.6.1.52  220ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
-│   │   │   ├── isc.org. 7200 SOA ns-int.isc.org. hostmaster.isc.org. 2026100191 7200 3600 24796800 3600
-│   │   │   ├── ns2.isc.org. 199.6.1.52  212ms  NOERROR  AA DO  (DNSKEY of isc.org.)
-│   │   │   ├── ns2.isc.org. 199.6.1.52  220ms  NOERROR  AA DO  (keys check: publishes 7250 27566)
-│   │   │   ├── ns2.isc.org. 199.6.1.52  240ms  NOERROR  AA DO  (keys check: signs with 27566)
+│   │   │   ├── isc.org. 7200 SOA ns-int.isc.org. hostmaster.isc.org. 2026100209 7200 3600 24796800 3600
+│   │   │   ├── ns2.isc.org. 199.6.1.52  277ms  NOERROR  AA DO  (DNSKEY of isc.org.)
+│   │   │   ├── ns2.isc.org. 199.6.1.52  228ms  NOERROR  AA DO  (keys check: publishes 7250 27566)
+│   │   │   ├── ns2.isc.org. 199.6.1.52  218ms  NOERROR  AA DO  (keys check: signs with 27566)
 ...
-✔ answered in 8.5s · resolver in 216ms · 177 queries · 100 servers
+✔ answered in 6s · resolver in 207ms · 77 queries · 50 servers
 ```
 
 Where one signs with a key another does not publish, the walk names both, once

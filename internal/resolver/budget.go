@@ -54,7 +54,13 @@ func (c *counters) query() error {
 // CNAME budget only what chased an alias, so an earlier long chain does not
 // read as the reason a later lookup failed.
 func (c *counters) spentSince(cnames int) bool {
-	return c.queries > c.max.MaxQueries || c.cnames > cnames && c.cnames > c.max.MaxCNAME
+	return c.spent() || c.cnames > cnames && c.cnames > c.max.MaxCNAME
+}
+
+// spent reports whether the query budget has run out, after which a server
+// left unasked is no news about the server.
+func (c *counters) spent() bool {
+	return c.queries > c.max.MaxQueries
 }
 
 func (c *counters) cname() error {
