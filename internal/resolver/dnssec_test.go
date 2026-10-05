@@ -347,6 +347,41 @@ func TestDNSSECInsecureIsInherited(t *testing.T) {
 	if root := tr.Root.DNSSEC; root == nil || root.State != trace.Secure {
 		t.Errorf("got %+v on the root, want the part above the gap to stay secure", root)
 	}
+	// It was com. that published no DS, not example.com.'s parent.
+	if want := "below com., where the parent published no DS"; answer.DNSSEC.Reason != want {
+		t.Errorf("got reason %q on the answer, want %q", answer.DNSSEC.Reason, want)
+	}
+}
+
+// TestDNSSECWrongAnchor covers a root whose keys match no trust anchor: the
+// chain breaks there, and nothing below may read as though its own keys failed.
+func TestDNSSECWrongAnchor(t *testing.T) {
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+	cfg.Anchors = slices.Clone(cfg.Anchors)
+	cfg.Anchors[0].Digest = make([]byte, len(cfg.Anchors[0].Digest))
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	root := tr.Root.DNSSEC
+	if root == nil || root.State != trace.Bogus || root.Reason != "no DNSKEY of the root matches a trust anchor" {
+		t.Fatalf("got %+v on the root, want it bogus against the anchors", root)
+	}
+	var below int
+	for step := range tr.Steps() {
+		if step == tr.Root || step.DNSSEC == nil || step.DNSSEC.State != trace.Bogus {
+			continue
+		}
+		below++
+		if !strings.HasPrefix(step.DNSSEC.Reason, "below ., where ") {
+			t.Errorf("got reason %q at %s, want it to say the break was at the root", step.DNSSEC.Reason, step.DNSSEC.Zone)
+		}
+	}
+	if below == 0 {
+		t.Errorf("got no bogus verdict below the root, want it carried down: %s", format(steps(tr)))
+	}
 }
 
 // TestDNSSECUnsignedHierarchy covers the ordinary case: nothing is signed, so

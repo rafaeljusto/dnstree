@@ -27,6 +27,9 @@ type Chain struct {
 	state   trace.DNSSECState
 	reason  string
 
+	// settled is the zone the chain left secure at, which the reason is about.
+	settled string
+
 	// keys are the validated keys of the zone the chain is in.
 	keys []*dns.DNSKEY
 
@@ -89,7 +92,7 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 	// way back to secure without a DS to hang it on.
 	if c.state != trace.Secure {
 		c.keys = nil
-		return &trace.DNSSECStatus{State: c.state, Reason: c.reason}
+		return c.inherited(zone)
 	}
 
 	delegated := dsRecords(authority, zone)
@@ -156,11 +159,15 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 
 	pointed, err := matchDS(usable, keys)
 	if err != nil {
-		state := trace.Bogus
-		if unsupported(err) {
+		state, reason := trace.Bogus, err.Error()
+		switch {
+		case unsupported(err):
 			state = trace.Indeterminate
+		case zone == ".":
+			// The root's DS is the anchors, not anything a parent published.
+			reason = "no DNSKEY of the root matches a trust anchor"
 		}
-		return c.settleAs(status, state, err.Error(), nil)
+		return c.settleAs(status, state, reason, nil)
 	}
 
 	// One of the keys the DS points at has to have signed the whole set. A DS
@@ -168,6 +175,9 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 	// one is tried.
 	signature, err := c.verify(asRRs(keys), signatures, pointed)
 	if err != nil {
+		if zone == "." {
+			return c.settleAs(status, trace.Bogus, "the DNSKEY set of the root is not signed by a key a trust anchor points at", nil)
+		}
 		return c.settleAs(status, trace.Bogus, "the DNSKEY set is not signed by a key the DS points at", nil)
 	}
 
@@ -267,13 +277,15 @@ func rsaBits(key *dns.DNSKEY) int {
 // Unchecked stops the chain where a link could not be fetched at all, which is
 // neither a break nor a pass: everything below it is reported as unchecked.
 func (c *Chain) Unchecked(zone, reason string) *trace.DNSSECStatus {
-	status := &trace.DNSSECStatus{State: c.state, Reason: c.reason}
+	zone = dnsutil.Fqdn(zone)
+	status := c.inherited(zone)
 	if c.state == trace.Secure {
 		status = c.settleAs(&trace.DNSSECStatus{}, trace.Indeterminate, reason, nil)
+		c.settled = zone
 	}
 	// The chain never reached this zone, so it is the caller that knows which
 	// one was being fetched.
-	status.Zone = dnsutil.Fqdn(zone)
+	status.Zone = zone
 	return status
 }
 
@@ -289,7 +301,7 @@ func (c *Chain) Verify(answer, authority []dns.RR, rcode uint16, qname string, q
 
 func (c *Chain) verifyAnswer(answer, authority []dns.RR, rcode uint16, qname string, qtype uint16) *trace.DNSSECStatus {
 	if c.state != trace.Secure {
-		return &trace.DNSSECStatus{State: c.state, Reason: c.reason}
+		return c.inherited(c.zone)
 	}
 
 	rrset, signatures := rrset(answer, qname, qtype)
@@ -468,9 +480,23 @@ func moment(serial uint32, now time.Time) time.Time {
 	return time.Unix(int64(serial)+wraps*dns.MaxSerialIncrement, 0).UTC()
 }
 
+// inherited is the verdict a zone takes from a chain that already left secure.
+// Below where that happened the reason is about another zone, and says so: read
+// bare, it would blame keys nobody checked.
+func (c *Chain) inherited(zone string) *trace.DNSSECStatus {
+	reason := c.reason
+	if reason != "" && !dns.EqualName(zone, c.settled) && dnsutil.IsBelow(c.settled, zone) {
+		reason = "below " + c.settled + ", where " + reason
+	}
+	return &trace.DNSSECStatus{State: c.state, Reason: reason}
+}
+
 // settleAs moves the chain to a state and reports it.
 func (c *Chain) settleAs(status *trace.DNSSECStatus, state trace.DNSSECState, reason string, keys []*dns.DNSKEY) *trace.DNSSECStatus {
 	c.state, c.reason, c.keys = state, reason, keys
+	if state != trace.Secure {
+		c.settled = c.zone
+	}
 	status.State, status.Reason = state, reason
 	return status
 }
