@@ -33,8 +33,9 @@ These need no network: every one exits before a query goes out.
 | schema | `$D --schema` | exit 0, byte for byte the `docs/trace.schema.json` of the tree that was built |
 | bad-flag | `$D --bogus example.com` | exit 1, one line: `--bogus is not a flag; --help lists them`, no usage |
 | bad-value | `$D --retries x example.com`, `--timeout x`, `--try-ns nonsense` | exit 1, one line each naming the flag with two dashes and the value (`--retries "x" is not a number`), no usage |
+| flag-value | `$D --retries --timeout example.com` | exit 1, `--retries "--timeout" is not a number`: a value that reads like a flag is still the value |
 | any | `$D example.com ANY`, then `AXFR`, then `IXFR` | exit 1 each, says why and what to ask instead |
-| bad-type | `$D example.com NOTATYPE` | exit 1 |
+| bad-type | `$D example.com NOTATYPE` | exit 1, `"NOTATYPE" is not a query type`, said like any other command-line error |
 | bad-name | `$D bad..name` | exit 1, "is not a domain name" |
 | bad-x | `$D -x 999.1.1.1` | exit 1, "is not an address" |
 | bad-format | `$D --format nope example.com` | exit 1 |
@@ -76,7 +77,7 @@ These need no network: every one exits before a query goes out.
 | reverse6 | `$D $B -x 2001:4860:4860::8888` | exit 0, a PTR under `ip6.arpa.` |
 | idn | `$D $B münchen.de` | exit 0, asked and drawn as `xn--mnchen-3ya.de.` |
 | all | `$D $B --all example.com` | exit 0. Every nameserver of each zone asked: dozens of queries, not 3 |
-| all-glueless | `$D $B --all www.github.com` | exit 0 on the default budget. Its nameservers are named outside it, and each is looked up asking one server a zone; the lookups do not fan out |
+| all-glueless | `$D $B --all www.github.com` | exit 0 on the default budget. Its nameservers are named outside it, and each is looked up asking one server a zone; the lookups do not fan out. Where its servers disagree, a server with several addresses is named with the address, never on both sides |
 | qmin | `$D $B --qmin www.example.com` | exit 0, hops marked `(minimised to …)` |
 | without | `$D $B --without a.root-servers.net example.com` | exit 0, a.root not asked, and the summary says `without a.root-servers.net.` |
 | nsid | `$D $B --nsid example.com` | exit 0, an `@identifier` beside the servers that publish one (the roots do) |
@@ -103,7 +104,7 @@ These need no network: every one exits before a query goes out.
 | denial | `$D $B --dnssec --expect nxdomain --expect secure nope-e2e-zz9.iana.org` | exit 0. The NXDOMAIN rests on a signed proof |
 | compact-denial | `$D $B --dnssec --expect nxdomain nope-e2e-zz9.example.com` | exit 0. Cloudflare denies with compact NSEC (NXNAME), drawn `[secure]  (compact denial, RFC 9824)` and read as NXDOMAIN |
 | anchors | `$D $B --dnssec --trust-anchors good.ds example.com` | exit 0. `good.ds` holds the root DS for keys 20326 and 38696, in zone-file form |
-| anchors-wrong | `$D $B --dnssec --trust-anchors bad.ds example.com` | exit 3. `bad.ds` is key 20326 with a zeroed digest |
+| anchors-wrong | `$D $B --dnssec --trust-anchors bad.ds example.com` | exit 3. `bad.ds` is key 20326 with a zeroed digest. The root says `no DNSKEY of the root matches a trust anchor`, and every zone below it `below ., where …`: none of their keys failed |
 | check-ds | `$D $B --dnssec --check-ds cloudflare.com` | exit 0, `cds matches the ds` |
 | bogus-expect | `$D $B --dnssec --expect 1.2.3.4 dnssec-failed.org` | exit 3, not 4: the broken chain wins |
 | report-no-agent | `$D $B --dnssec --report dnssec-failed.org` | exit 3, and `report: not sent: dnssec-failed.org. names no agent to report to` on stderr: the zone names none |
@@ -111,7 +112,10 @@ These need no network: every one exits before a query goes out.
 ## transport
 
 The roots speak neither DoT nor DoH, so walking from them with `--dot` takes
-over a minute to fail. Start these from a resolver that speaks both.
+over a minute to fail. Start these from a resolver that speaks both. The walk
+asks it without recursion, so it answers from its cache: a `SERVFAIL` with `no
+local cache to fulfill non recursion (RD=0) request` is 1.1.1.1 having nothing
+cached, not a bug. Run it again.
 
 | id | run | expect |
 | --- | --- | --- |
@@ -142,17 +146,23 @@ over a minute to fail. Start these from a resolver that speaks both.
 | edns-budget | `$D $B --check-edns qq.com` | exit 0, `the budget ran out before every nameserver of qq.com. could be checked for how it handles edns; raise --max-queries` |
 | caa | `$D $B --caa --expect caa:pki.goog google.com` | exit 0, `caa: google.com. decides it`, `may issue: pki.goog` |
 | caa-miss | `$D $B --caa --expect caa:letsencrypt.org google.com` | exit 4 |
+| spf | `$D --no-asn --no-compare --color never --spf --explain github.com` | exit 0, `spf: github.com. takes N of 10 lookups, asked of <the host's resolver>`, the includes drawn as a tree with `(lookup n)` on each, a closing `spf: ok…` line, and a sentence under the tree |
+| spf-ok | `$D $B --spf --expect spf:ok google.com` | exit 0 |
+| spf-none | `$D $B --spf --expect spf:ok nope-e2e-zz9.iana.org` | exit 4, `got none: … publishes no SPF policy` |
+| spf-alone | `$D $B --expect spf:ok example.com` | exit 4, `got a walk that looked up no spf` |
+| spf-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --spf iana.org` | exit 0, `asked of 1.1.1.1` |
+| spf-formats | `$D $B --spf --format json github.com`, then `--format openmetrics`, then `--from` the JSON | `.spf.lookups` in the JSON; `dnstree_spf_lookups` and `dnstree_spf{…,result="ok"} 1`; the same SPF tree drawn back |
 
 ## budget
 
 | id | run | expect |
 | --- | --- | --- |
 | max-queries | `$D $B --max-queries 2 example.com` | exit 2, `gave up after 2 queries`, and the summary counts 2: the note is no query |
-| max-depth | `$D $B --max-depth 1 example.com` | exit 2, `gave up after 1 zone cuts`, `1 query` |
+| max-depth | `$D $B --max-depth 1 example.com` | exit 2, `gave up after 1 zone cut`, `1 query` |
 | max-cname | `$D $B --max-cname 1 www.github.com` | exit 0. One alias is all it has |
-| budget-0 | `$D $B --max-cname 0 www.github.com`, and the same for `--max-depth` and `--max-queries`, and from a file of defaults | exit 1, `is no budget at all; the least is 1`. Left alone, a budget takes its default |
+| budget-0 | `$D $B --max-cname 0 www.github.com`, and the same for `--max-depth` and `--max-queries`, and from a file of defaults | exit 1, `is no budget at all; the least is 1`, naming the file where the file set it. Left alone, a budget takes its default |
 | timeout | `$D $B --timeout 200ms --retries 0 --root 192.0.2.1 example.com` | exit 2 within about a second, `timeout` on the hop |
-| retries | the same with `--retries 2` | exit 2, `asked again after a silence`. With `--retries 0` that is absent |
+| retries | the same with `--retries 2` | exit 2, one note: `asked again after 2 silences`. With `--retries 0` there is none |
 | port | `$D $B --port 9 --timeout 300ms --retries 0 --root a.root-servers.net@198.41.0.4 example.com` | exit 2, `no server answered for .`, the tree drawn |
 
 ## start
@@ -202,7 +212,7 @@ format with `$D --color never --from ex.json --format F`. `--from` takes no
 | --- | --- | --- |
 | expect-rdata | `$D $B --expect <an A of example.com> example.com` | exit 0. Take the address from `ex.json` |
 | expect-miss | `$D $B --expect 203.0.113.8 example.com` | exit 4, `expected 203.0.113.8, got …` on stderr |
-| expect-eq | `$D $B --expect =answer example.com TXT` | exit 4: `=` forces rdata, and no TXT reads `answer` |
+| expect-eq | `$D $B --expect =answer example.com TXT` | exit 4: `=` forces rdata, and no TXT reads `answer`. Said back as `expected =answer` |
 | expect-no-chain | `$D $B --expect secure example.com` | exit 4: `got a walk that followed no chain of trust` |
 | expect-fresh-3d | `$D $B --dnssec --expect fresh:3d example.com` | exit 4 while Cloudflare signs for a day at a time: `run out in 1 day …` |
 | names-file | a file with `example.com A`, a `#` comment, a blank line and `iana.org MX`, passed as `--names list` | exit 0, two walks each under its name, the comment and the blank skipped |
