@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1376,5 +1377,67 @@ func TestReport(t *testing.T) {
 				t.Errorf("got %q, want the report drawn only where one was sent", out)
 			}
 		})
+	}
+}
+
+// TestRunPcap captures two walks into one file, with the nameserver of the
+// zone truncating every answer over UDP: each query it was sent appears in the
+// capture, over whichever protocol carried it, and nothing else does.
+func TestRunPcap(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+	child := fakens.New(t, fakens.Config{Name: "ns.test.", Origin: "test.", Zone: splitChildZone,
+		Behaviour: fakens.Behaviour{TruncateUDP: true}})
+	path := filepath.Join(t.TempDir(), "walk.pcap")
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())),
+		"--pcap", path,
+		"--no-asn", "--no-compare", "--color", "never", "www.test", "A", "AAAA",
+	}, &stdout, &stderr)
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the capture: %v", err)
+	}
+	if len(data) < 24 || !bytes.Equal(data[:4], []byte{0xd4, 0xc3, 0xb2, 0xa1}) {
+		t.Fatalf("got no pcap header: % x", data[:min(len(data), 24)])
+	}
+
+	// A query is a packet from dnstree's side with something in it: a
+	// datagram, or a segment past the handshake.
+	asked := map[string]int{}
+	for rest := data[24:]; len(rest) >= 16; {
+		size := int(rest[8]) | int(rest[9])<<8 | int(rest[10])<<16 | int(rest[11])<<24
+		pkt := rest[16 : 16+size]
+		rest = rest[16+size:]
+		if !bytes.Equal(pkt[12:16], []byte{192, 0, 2, 1}) {
+			continue
+		}
+		switch body := pkt[20:]; pkt[9] {
+		case 17:
+			asked["udp"]++
+		case 6:
+			if len(body) > int(body[12]>>4)*4 {
+				asked["tcp"]++
+			}
+		}
+	}
+
+	want := map[string]int{}
+	for _, server := range []*fakens.Server{root, child} {
+		for _, query := range server.Queries() {
+			want[query.Proto]++
+		}
+	}
+	if want["tcp"] == 0 {
+		t.Fatalf("got no query retried over tcp, which the test is about: %v", want)
+	}
+	if !maps.Equal(asked, want) {
+		t.Errorf("got %v queries in the capture, want the %v the servers saw", asked, want)
 	}
 }

@@ -130,8 +130,9 @@ kept: a run without `--dnssec` follows no chain and remembers no verdict, and
 that is not a zone that stopped being signed.
 
 > [!NOTE]
-> `--diff` is the only thing in `dnstree` that writes to the disk, and it writes
-> the names you looked up and when. One small file per question goes under
+> Besides [`--pcap`](output.md#the-bytes-on-the-wire), which writes the file it
+> is given, `--diff` is the only thing in `dnstree` that writes to the disk,
+> and it writes the names you looked up and when. One small file per question goes under
 > `$DNSTREE_CACHE`, or `$XDG_CACHE_HOME/dnstree`, or `~/.cache/dnstree`
 > (`%LocalAppData%\dnstree` on Windows) — readable, and safe to delete at any
 > time. Without the flag, nothing is read and nothing is kept. A cache that

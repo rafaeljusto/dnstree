@@ -77,6 +77,7 @@ var apart = []string{
 	"internal/expect",
 	"internal/history",
 	"internal/asn",
+	"internal/capture",
 }
 
 // TestApartFromTheWire holds the layering rule through every import, so that

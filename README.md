@@ -142,6 +142,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--expect`](docs/guide/scripting.md#asking-rather-than-reading) | require this of the walk, and exit 4 where it does not hold; repeat it |
 | [`--from`](docs/guide/scripting.md#drawing-a-walk-again) | draw a walk `--format json` saved, from a file or `-`, instead of making one |
 | [`--against`](docs/guide/scripting.md#drawing-a-walk-again) | say how the walk differs from one `--format json` saved, from a file or `-` |
+| [`--pcap`](docs/guide/output.md#the-bytes-on-the-wire) | save the walk's queries and answers as a packet capture, for Wireshark or `tcpdump -r` |
 | `--color` | `auto` (the default: only on a terminal, and off where `NO_COLOR` is set or `TERM` is unset or `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries (256 with `--all`), 8 aliases |

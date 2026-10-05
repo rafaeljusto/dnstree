@@ -383,6 +383,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"a file that lists the names to walk":      {file: "names = names.txt\n"},
 		"a file that reports to third parties":     {file: "dnssec\nreport\n"},
 		"a file that moves a zone":                 {file: "try-ns = example.com=ns1.new.net\n"},
+		"a file that writes a capture every run":   {file: "pcap = walk.pcap\n"},
 	}
 
 	for name, test := range tests {

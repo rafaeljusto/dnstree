@@ -503,3 +503,44 @@ The same schema is served at
 [rafaeljusto.github.io/dnstree/trace.schema.json](https://rafaeljusto.github.io/dnstree/trace.schema.json),
 which is the address its `$id` names, so a validator can be pointed at it with
 no binary to hand.
+
+## The bytes on the wire
+
+`--pcap FILE` writes every query the walk sent, and every answer that came back,
+as a packet capture that Wireshark and `tcpdump -r` read. It is for when the tree
+is not enough: a strange flag, an option, a record type dnstree does not
+decode. No second terminal, no root and no filter are needed, and nothing
+else on the machine ends up in it.
+
+```
+$ dnstree --pcap walk.pcap www.example.com
+$ tcpdump -nn -r walk.pcap
+reading from file walk.pcap, link-type RAW (Raw IP)
+12:37:24.058246 IP 192.0.2.1.49153 > 198.41.0.4.53: 14133 [1au] A? www.example.com. (44)
+12:37:24.305576 IP 198.41.0.4.53 > 192.0.2.1.49153: 14133- 0/13/27 (840)
+12:37:24.306017 IP 192.0.2.1.49154 > 192.41.162.30.53: 31959 [1au] A? www.example.com. (44)
+12:37:24.557488 IP 192.41.162.30.53 > 192.0.2.1.49154: 31959- 0/2/13 (363)
+12:37:24.557587 IP 192.0.2.1.49155 > 108.162.192.162.53: 52117 [1au] A? www.example.com. (44)
+12:37:24.793016 IP 108.162.192.162.53 > 192.0.2.1.49155: 52117*- 2/0/1 A 172.66.147.243, A 104.20.23.154 (76)
+```
+
+The capture is rebuilt, not taken off the wire. The DNS messages are the bytes
+that were sent and received, and the servers, ports and times are real. The IP,
+UDP and TCP headers around them are made up, though. dnstree's side is written as
+`192.0.2.1` or `2001:db8::1` on a made-up port, so a capture pasted into a ticket
+says nothing about the machine it was made on. A query over TCP is drawn as a
+connection of its own, handshake included, so Wireshark puts the stream back
+together.
+
+Every query the walk sends goes in, retries and the `--check-*` probes included:
+a query nobody answered appears without a reply, and so does one whose answer
+did not read as DNS or was to another question, since that answer never made
+it past dnstree. One whose connection was never made does not appear at all. The question timed against a resolver and
+the origin AS lookups are not part of the walk and stay out. Every walk of the
+run goes into the one file, which is written over.
+
+`--dot` and `--doh` are refused. What crossed the wire there was TLS, and plain
+DNS on port 853 or 443 would misrepresent it. `--from` has nothing to capture,
+and `--watch` would hold every round in memory until it was interrupted, so
+both are refused too. The file of defaults cannot set `--pcap`: a default that
+writes a file over on every run is a trap.

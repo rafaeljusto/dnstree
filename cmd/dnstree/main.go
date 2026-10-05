@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/asn"
+	"github.com/rafaeljusto/dnstree/v2/internal/capture"
 	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 	"github.com/rafaeljusto/dnstree/v2/internal/expect"
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
@@ -126,13 +127,24 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return watch(ctx, cfg, log, lookups, reference, stdout, stderr)
 	}
 	if cfg.From != "" {
-		return one(ctx, cfg, log, lookups, reference, stdout, stderr)
+		return one(ctx, cfg, log, lookups, nil, reference, stdout, stderr)
 	}
 
 	questions, err := asked(cfg)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
+	}
+
+	// The file is made before any server is asked, so that a path that cannot
+	// be written costs nothing but the line that says so.
+	var rec *recording
+	if cfg.Pcap != "" {
+		if rec, err = record(cfg.Pcap); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		defer rec.close(stderr)
 	}
 
 	// Each question is a walk of its own from the root servers down, and the
@@ -151,7 +163,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			// A report heads itself with its question already.
 			tree.Asked(stdout, trace.Question{Name: fqdn(question.Name), Type: question.Type}, treeOptions(cfg))
 		}
-		code := one(ctx, &walk, log, lookups, reference, stdout, stderr)
+		code := one(ctx, &walk, log, lookups, rec, reference, stdout, stderr)
 		if code == exitUsage {
 			return code
 		}
@@ -216,7 +228,7 @@ func worse(a, b int) int {
 // one draws one walk, made now or read back with --from, with everything the
 // run asked to be said under it.
 func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, reference *history.Walk, stdout, stderr io.Writer) int {
+	lookups *asn.Resolver, rec *recording, reference *history.Walk, stdout, stderr io.Writer) int {
 
 	var err error
 
@@ -234,7 +246,8 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			err = sameQuestion(reference, tr.Shown().Question, cfg.Against)
 		}
 	} else {
-		tr, err = made(ctx, cfg, log, lookups, live)
+		tr, err = made(ctx, cfg, log, lookups, rec, live)
+		rec.save(stderr)
 	}
 	if err != nil {
 		live.Clear()
@@ -321,14 +334,14 @@ func outcome(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) int {
 // the question put to a recursive server for comparison. A run makes one of
 // these; --watch makes one after another.
 func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, live *tree.Live) (*trace.Trace, error) {
+	lookups *asn.Resolver, rec *recording, live *tree.Live) (*trace.Trace, error) {
 
 	// The comparison runs beside the walk rather than after it: a recursive
 	// server answers in the time one hop of the walk takes, so waiting for it
 	// separately would be time spent on metadata.
 	timed := compare(ctx, cfg, log)
 
-	tr, err := resolve(ctx, cfg, log, lookups, live)
+	tr, err := resolve(ctx, cfg, log, lookups, rec, live)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +473,7 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			live = tree.NewLive(stdout, treeOptions(cfg))
 		}
 
-		tr, err := made(ctx, cfg, log, lookups, live)
+		tr, err := made(ctx, cfg, log, lookups, nil, live)
 		live.Clear()
 		if err != nil {
 			fmt.Fprintln(stderr, err)
@@ -555,7 +568,8 @@ func changed(tr *trace.Trace, stderr io.Writer) []explain.Finding {
 }
 
 // resolve builds the resolution the flags asked for and runs it.
-func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *asn.Resolver, live *tree.Live) (*trace.Trace, error) {
+func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
+	lookups *asn.Resolver, rec *recording, live *tree.Live) (*trace.Trace, error) {
 	roots, err := rootServers(cfg)
 	if err != nil {
 		return nil, err
@@ -568,7 +582,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	carrier := transport.Config{Timeout: cfg.Timeout, Port: cfg.Port, TLS: tlsConfig}
 	outage := newOutage(cfg.Without)
 	config := resolver.Config{
-		Transport: outage.carry(carry(cfg.Proto, carrier)),
+		Transport: outage.carry(rec.carry(carry(cfg.Proto, carrier))),
 		Roots:     roots,
 		DNSSEC:    cfg.DNSSEC,
 		All:       cfg.All,
@@ -609,10 +623,10 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	// Only a datagram can be truncated, and only plain DNS is worth falling
 	// back to.
 	if cfg.Proto == "udp" {
-		config.TCP = outage.carry(transport.NewTCP(carrier))
+		config.TCP = outage.carry(rec.carry(transport.NewTCP(carrier)))
 	}
 	if cfg.Fallback {
-		config.Fallback = outage.carry(transport.NewUDP(carrier))
+		config.Fallback = outage.carry(rec.carry(transport.NewUDP(carrier)))
 	}
 	if cfg.TrustAnchors != "" {
 		if config.Anchors, err = roothints.LoadAnchorsFile(cfg.TrustAnchors); err != nil {
@@ -627,6 +641,61 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 	tr, err := engine.Resolve(ctx, cfg.Name, cfg.Type)
 	outage.record(tr)
 	return tr, err
+}
+
+// recording is what --pcap keeps of the run's walks, and the file it keeps it
+// in. A nil recording keeps nothing.
+type recording struct {
+	path    string
+	file    *os.File
+	packets *capture.Capture
+}
+
+func record(path string) (*recording, error) {
+	file, err := os.Create(path)
+	if err != nil {
+		return nil, unopened("--pcap", err)
+	}
+	return &recording{path: path, file: file, packets: capture.New()}, nil
+}
+
+// carry is inner, with what it sends kept. It goes inside --without, which
+// sends nothing.
+func (r *recording) carry(inner transport.Transport) transport.Transport {
+	if r == nil {
+		return inner
+	}
+	return transport.Recorded(inner, r.packets.Record)
+}
+
+// save writes the file over with every walk so far, so that it is whole after
+// each of them: --format web serves its walk until it is interrupted. A file
+// that cannot be written costs the capture, never the walk.
+func (r *recording) save(stderr io.Writer) {
+	if r == nil || r.file == nil {
+		return
+	}
+	_, err := r.file.Seek(0, io.SeekStart)
+	if err == nil {
+		err = r.file.Truncate(0)
+	}
+	if err == nil {
+		_, err = r.packets.WriteTo(r.file)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "the capture could not be written to %s: %v\n", r.path, err)
+		_ = r.file.Close()
+		r.file = nil
+	}
+}
+
+func (r *recording) close(stderr io.Writer) {
+	if r == nil || r.file == nil {
+		return
+	}
+	if err := r.file.Close(); err != nil {
+		fmt.Fprintf(stderr, "the capture could not be written to %s: %v\n", r.path, err)
+	}
 }
 
 // outage is what --without leaves out of a walk, and which of it the walk

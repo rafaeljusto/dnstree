@@ -166,6 +166,10 @@ func TestParse(t *testing.T) {
 				},
 			}},
 		},
+		"a walk saved as a packet capture": {
+			args: []string{"--pcap", "walk.pcap", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Pcap: "walk.pcap"},
+		},
 		"a broken chain reported to the agent its zone names": {
 			args: []string{"--report", "--dnssec", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Report: true},
@@ -365,6 +369,11 @@ func TestParseRejects(t *testing.T) {
 		"a trial on a server inside it, unglued":   {"--try-ns", "example.com=ns1.example.com", "example.com"},
 		"a report every time a walk is watched":    {"--report", "--dnssec", "--watch", "30s", "example.com"},
 		"a walk already made, asked for a report":  {"--from", "walk.json", "--report", "--dnssec"},
+		"a capture of queries carried in tls":      {"--dot", "--pcap", "walk.pcap", "example.com"},
+		"a capture of queries carried in https":    {"--doh", "--pcap", "walk.pcap", "example.com"},
+		"a capture of a walk already made":         {"--from", "walk.json", "--pcap", "walk.pcap"},
+		"a capture of every walk watched":          {"--watch", "30s", "--pcap", "walk.pcap", "example.com"},
+		"a capture written into the drawing":       {"--pcap", "-", "example.com"},
 		"an unknown colour":                        {"--color", "sometimes", "example.com"},
 		"a timeout of nothing":                     {"--timeout", "0", "example.com"},
 		"a negative retry count":                   {"--retries", "-1", "example.com"},

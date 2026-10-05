@@ -72,6 +72,7 @@ one after another, each from the root servers down.
   --expect VALUE          require this of the walk, and exit 4 where it fails
   --from FILE             draw a walk --format json saved, instead of walking
   --against FILE          say how the walk differs from one --format json saved
+  --pcap FILE             save the walk's queries and answers as a packet capture
   --color WHEN            auto, always or never (default auto)
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
@@ -193,6 +194,17 @@ walks made before and after a change, or from two places. The file is read as th
 walk before the one drawn, and the first line says how far apart the two were
 made. Both have to be of the same question, and nothing is written to the disk.
 It takes the place of --diff.
+
+--pcap writes every query the walk sent, and every answer that came back, to
+FILE as a packet capture for Wireshark or tcpdump -r. The messages are the bytes
+that crossed the wire, and the servers, ports and times are real; the IP, UDP
+and TCP headers around them are rebuilt, with dnstree's side written as
+192.0.2.1 or 2001:db8::1, so the capture says nothing of the machine it was made
+on. Only the walk's own queries are kept, retries and probes included: the
+question timed against a resolver and the origin AS lookups are not. Over --dot
+and --doh what crossed the wire was TLS, which a capture of plain DNS would
+misrepresent, so they are refused. Every walk of the run goes into the one file,
+which is written over; the file of defaults cannot set it.
 
 --names reads the questions from FILE, or from the standard input where it is
 -, one to a line and written as on the command line: a name, then the types to
@@ -462,6 +474,9 @@ type Config struct {
 	// from it: a path, or "-" for the standard input.
 	Against string
 
+	// Pcap is the file --pcap writes the walk's packets to, empty for none.
+	Pcap string
+
 	// Schema asks for the JSON Schema of the json format and nothing else. Like
 	// Version it answers a question about the command rather than resolving a
 	// name, so it needs no name to resolve.
@@ -610,6 +625,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.Var(&wanted, "expect", "require this of the walk")
 	flags.StringVar(&cfg.From, "from", "", "draw a walk --format json saved")
 	flags.StringVar(&cfg.Against, "against", "", "say how the walk differs from one --format json saved")
+	flags.StringVar(&cfg.Pcap, "pcap", "", "save the walk's queries and answers as a packet capture")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
 	flags.DurationVar(&timeout, "timeout", transport.DefaultTimeout, "how long one query may take")
 	flags.IntVar(&cfg.Retries, "retries", 1, "how often to ask again after a silence")
@@ -757,6 +773,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			return nil, fmt.Errorf("%w: --from draws a walk already made, so there is nothing to watch change", ErrUsage)
 		case cfg.Diff:
 			return nil, fmt.Errorf("%w: --from draws a walk already made, and remembering it would put an old walk in place of the last one", ErrUsage)
+		case cfg.Pcap != "":
+			return nil, fmt.Errorf("%w: --from draws a walk already made, so nothing is sent to capture", ErrUsage)
 		}
 	}
 	// Every round is a whole walk from the root servers down. There is nothing
@@ -860,6 +878,15 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 	if cfg.Resolvers = resolvers.servers; len(cfg.Resolvers) > 0 && !cfg.ASN && !cfg.Compare && !cfg.Report {
 		return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
+	}
+	if cfg.Pcap != "" && (cfg.Proto == "dot" || cfg.Proto == "doh") {
+		return nil, fmt.Errorf("%w: --%s carries the queries in TLS, which --pcap cannot write as plain DNS", ErrUsage, cfg.Proto)
+	}
+	if cfg.Pcap == "-" {
+		return nil, fmt.Errorf("%w: --pcap - would write the capture into the drawing; name a file", ErrUsage)
+	}
+	if cfg.Pcap != "" && cfg.Watch != 0 {
+		return nil, fmt.Errorf("%w: --pcap with --watch would keep every walk in memory until it is interrupted", ErrUsage)
 	}
 	if (cfg.TLSCA != "" || cfg.TLSInsecure) && cfg.Proto != "dot" && cfg.Proto != "doh" {
 		return nil, fmt.Errorf("%w: only --dot and --doh use TLS", ErrUsage)

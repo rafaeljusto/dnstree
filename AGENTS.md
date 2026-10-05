@@ -115,9 +115,12 @@ Each of these has been a bug, or would be a silent regression.
   was made, and keeps the goldens still. Staleness is a share of the life a
   signature was made for, not a fixed margin: online signers hand out
   signatures that last a day, fresh every time.
-- **Nothing reaches the disk unless `--diff` asks for it.** `internal/history`
-  is the only writer, it keeps one file per question, and the file names what
-  was looked up and when. A cache that cannot be read or written costs the
+- **Nothing reaches the disk unless `--diff` or `--pcap` asks for it.**
+  `internal/history` is the only writer of the cache: it keeps one file per
+  question, and the file names what was looked up and when. `--pcap` writes
+  the one file it is named, and the file of defaults cannot name one. A capture
+  is rebuilt, never sniffed: it holds plain DNS only, so it refuses `--dot` and
+  `--doh` rather than misrepresent TLS. A cache that cannot be read or written costs the
   comparison and says so in one line, never the resolution. What the file does
   not carry cannot be compared, which is what keeps a comparison from claiming
   to have watched something no walk recorded.
