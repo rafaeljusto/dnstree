@@ -381,7 +381,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 
 	for depth := 0; ; {
 		if depth >= r.counters.max.MaxDepth {
-			return r.fail(parent, zone, fmt.Sprintf("gave up after %d zone cuts", r.counters.max.MaxDepth))
+			return r.fail(parent, zone, "gave up after "+counted(r.counters.max.MaxDepth, "zone cut"))
 		}
 
 		asked, askedType, minimised := qname, qtype, reach < dnsutil.Labels(qname)
@@ -1004,6 +1004,7 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 	server := netip.AddrPortFrom(step.Server.IP, cmp.Or(port, carrier.Port()))
 
 	var err error
+	silences := -1 // the note that counts them, once there is one
 	for attempt := 0; ; attempt++ {
 		var req *dns.Msg
 		if req, err = transport.NewQuery(qname, qtype, udpSize, r.cfg.DNSSEC); err != nil {

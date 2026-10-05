@@ -1,6 +1,10 @@
 package resolver
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 // Defaults for one resolution.
 const (
@@ -44,7 +48,7 @@ func newCounters(budget Budget) *counters {
 func (c *counters) query() error {
 	c.queries++
 	if c.queries > c.max.MaxQueries {
-		return fmt.Errorf("gave up after %d queries", c.max.MaxQueries)
+		return errors.New("gave up after " + counted(c.max.MaxQueries, "query"))
 	}
 	return nil
 }
@@ -66,7 +70,18 @@ func (c *counters) spent() bool {
 func (c *counters) cname() error {
 	c.cnames++
 	if c.cnames > c.max.MaxCNAME {
-		return fmt.Errorf("gave up after %d CNAME hops", c.max.MaxCNAME)
+		return errors.New("gave up after " + counted(c.max.MaxCNAME, "CNAME hop"))
 	}
 	return nil
+}
+
+// counted is n of a thing, in the plural where it is not one.
+func counted(n int, thing string) string {
+	switch {
+	case n == 1:
+		return "1 " + thing
+	case strings.HasSuffix(thing, "y"):
+		return fmt.Sprintf("%d %sies", n, strings.TrimSuffix(thing, "y"))
+	}
+	return fmt.Sprintf("%d %ss", n, thing)
 }

@@ -2,6 +2,7 @@ package resolver_test
 
 import (
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -473,6 +474,7 @@ func TestResolveBudget(t *testing.T) {
 	}{
 		"queries": {budget: resolver.Budget{MaxQueries: 2}, steps: 3, reason: "gave up after 2 queries"},
 		"depth":   {budget: resolver.Budget{MaxDepth: 2}, steps: 3, reason: "gave up after 2 zone cuts"},
+		"one cut": {budget: resolver.Budget{MaxDepth: 1}, steps: 2, reason: "gave up after 1 zone cut"},
 	}
 
 	for name, test := range tests {
@@ -532,6 +534,28 @@ func TestResolveUnreachable(t *testing.T) {
 	}
 	if len(tr.Warnings) != 1 {
 		t.Errorf("got warnings %q, want one about the root", tr.Warnings)
+	}
+}
+
+// TestResolveRetriesAreCounted covers a server asked several times over: one
+// note says how often, rather than the same note once a time.
+func TestResolveRetriesAreCounted(t *testing.T) {
+	res, err := resolver.New(resolver.Config{
+		Transport: transport.NewUDP(transport.Config{Timeout: 50 * time.Millisecond}),
+		Roots:     []trace.Server{{Name: "dead.root.", IP: netip.MustParseAddr("192.0.2.99"), Port: 53}},
+		Retries:   2,
+	})
+	if err != nil {
+		t.Fatalf("resolver.New: %v", err)
+	}
+
+	tr, err := res.Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	steps := steps(tr)
+	if len(steps) != 1 || !slices.Equal(steps[0].Notes, []string{"asked again after 2 silences"}) {
+		t.Errorf("got %s, want one hop noting both retries", format(steps))
 	}
 }
 
