@@ -178,6 +178,46 @@ func TestAnswersDisagree(t *testing.T) {
 	}
 }
 
+// TestAnswersDisagreeWithinOneName covers two addresses of one nameserver, the
+// way anycast sites behind one name answer from where they are. Named by host
+// alone, the server would be on both sides of the disagreement.
+func TestAnswersDisagreeWithinOneName(t *testing.T) {
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Declared: "192.0.2.1", Zone: `
+@                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                   IN NS   a.root-servers.net.
+a.root-servers.net. IN A    192.0.2.1
+test.               IN NS   ns1.test.
+ns1.test.           IN A    192.0.2.5
+ns1.test.           IN A    192.0.2.7
+`,
+	})
+	for _, site := range []struct{ addr, answer string }{{"192.0.2.5", "192.0.2.10"}, {"192.0.2.7", "192.0.2.99"}} {
+		hierarchy.Add(fakens.Config{
+			Name: "ns1.test.", Origin: "test.", Declared: site.addr, Zone: `
+@    IN SOA  ns1 hostmaster 2 7200 3600 1209600 3600
+@    IN NS   ns1
+ns1  IN A    192.0.2.5
+ns1  IN A    192.0.2.7
+www  IN A    ` + site.answer + `
+`,
+		})
+	}
+
+	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{All: true}).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	warning := warning(tr, "do not answer")
+	for _, want := range []string{"192.0.2.10 at ns1.test. (192.0.2.5)", "192.0.2.99 at ns1.test. (192.0.2.7)"} {
+		if !strings.Contains(warning, want) {
+			t.Errorf("got %q, want it to name %q", warning, want)
+		}
+	}
+}
+
 // TestAnswersAgree covers the ordinary case, which is worth no room: two
 // nameservers serving one zone answer alike, and saying so every time would
 // bury the run that does not.

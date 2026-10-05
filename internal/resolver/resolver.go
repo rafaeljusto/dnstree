@@ -812,6 +812,7 @@ func minimise(step *trace.Step, minimised bool) {
 func (r *run) compareAnswers(zone, qname string, qtype uint16, hops []*hop) {
 	typeName := dnsutil.TypeToString(qtype)
 
+	name := naming(hops)
 	var order []string
 	saying := make(map[string][]string)
 	for _, hop := range hops {
@@ -824,7 +825,7 @@ func (r *run) compareAnswers(zone, qname string, qtype uint16, hops []*hop) {
 		if _, seen := saying[what]; !seen {
 			order = append(order, what)
 		}
-		saying[what] = append(saying[what], at(hop.step))
+		saying[what] = append(saying[what], name(hop.step))
 	}
 	if len(order) < 2 {
 		return
@@ -2241,6 +2242,7 @@ func serialNote(zone string, soa *trace.SOA) string {
 // arithmetic wraps (RFC 1982), and a walk that named the wrong one as behind
 // would send somebody to restart the wrong server.
 func (r *run) compareSerials(zone string, hops []*hop) {
+	name := naming(hops)
 	var order []uint32
 	serving := make(map[uint32][]string)
 	for _, hop := range hops {
@@ -2251,7 +2253,7 @@ func (r *run) compareSerials(zone string, hops []*hop) {
 		if _, seen := serving[serial]; !seen {
 			order = append(order, serial)
 		}
-		serving[serial] = append(serving[serial], at(hop.step))
+		serving[serial] = append(serving[serial], name(hop.step))
 	}
 	if len(order) < 2 {
 		return
@@ -2270,6 +2272,27 @@ func at(step *trace.Step) string {
 		return step.Server.Name
 	}
 	return step.Server.IP.String()
+}
+
+// naming names the servers of a sweep, with the address where one name stands
+// for several: anycast sites behind one name can disagree, and naming only the
+// host would put it on both sides.
+func naming(hops []*hop) func(*trace.Step) string {
+	addrs := make(map[string]map[netip.Addr]bool)
+	for _, hop := range hops {
+		name := at(hop.step)
+		if addrs[name] == nil {
+			addrs[name] = make(map[netip.Addr]bool)
+		}
+		addrs[name][hop.step.Server.IP] = true
+	}
+	return func(step *trace.Step) string {
+		name := at(step)
+		if len(addrs[name]) > 1 {
+			return name + " (" + step.Server.IP.String() + ")"
+		}
+		return name
+	}
 }
 
 // attach hangs a step under its parent and tells whoever is watching. Every

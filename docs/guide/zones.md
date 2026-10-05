@@ -175,7 +175,10 @@ Answers are held against each other as sets, so a nameserver rotating an RRset
 between one question and the next is not a nameserver that disagrees. A real
 difference is not by itself a fault — a zone served by something that answers by
 where the question came from will do this honestly, and so will an RRset caught
-halfway through a change — but nothing else in a trace says it at all.
+halfway through a change — but nothing else in a trace says it at all. Where
+one nameserver has several addresses, each is named with its address, since
+the sites behind one name can disagree among themselves. The same goes for
+`--serial`.
 
 ## What they give a stranger
 
