@@ -8,6 +8,7 @@
 package expect
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -36,6 +37,10 @@ type Expectation struct {
 	about about
 	want  string
 
+	// escaped is the value as typed where a leading "=" made it rdata, which
+	// read back without the "=" would look like one of the words.
+	escaped string
+
 	// left is how long every signature the chain rests on has to have left,
 	// for an expectation about freshness. Zero asks only that none is stale.
 	left time.Duration
@@ -43,7 +48,7 @@ type Expectation struct {
 
 // String is the expectation as it was asked for, which is what has to appear in
 // a message about it: somebody who typed it has to recognise it.
-func (e Expectation) String() string { return e.want }
+func (e Expectation) String() string { return cmp.Or(e.escaped, e.want) }
 
 // Parse reads one --expect value. It is either one of the words that names how
 // far the chain of trust got — secure, insecure, bogus, indeterminate — or what
@@ -61,7 +66,7 @@ func Parse(text string) (Expectation, error) {
 		if rdata == "" {
 			return Expectation{}, errors.New(`"=" on its own expects nothing`)
 		}
-		return Expectation{about: answer, want: rdata}, nil
+		return Expectation{about: answer, want: rdata, escaped: text}, nil
 	}
 	if text == "" {
 		return Expectation{}, errors.New("there is nothing to expect")
@@ -111,7 +116,7 @@ func Unmet(tr *trace.Trace, want []Expectation) []string {
 		if got, ok := expectation.met(tr); !ok {
 			// What was found is held against the octets, and said escaped: an
 			// NS or a CNAME is a name the server wrote.
-			unmet = append(unmet, fmt.Sprintf("expected %s, got %s", expectation.want, trace.Shown(got)))
+			unmet = append(unmet, fmt.Sprintf("expected %s, got %s", expectation, trace.Shown(got)))
 		}
 	}
 	return unmet

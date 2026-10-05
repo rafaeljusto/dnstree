@@ -116,6 +116,11 @@ func TestUnmet(t *testing.T) {
 			expect: []string{"=secure"},
 			trace:  walk("TXT", answered("TXT", "secure")),
 		},
+		"rdata asked for with a leading = is read back with it": {
+			expect: []string{"=answer"},
+			trace:  walk("TXT", answered("TXT", "question")),
+			want:   []string{"expected =answer, got question"},
+		},
 
 		"the chain of trust is read where one was followed": {
 			expect: []string{"secure"},
