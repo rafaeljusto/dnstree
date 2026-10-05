@@ -52,8 +52,8 @@ const (
 	SPFPermError SPFResult = "permerror"
 	SPFTempError SPFResult = "temperror"
 
-	// SPFUndecided is a policy the budget ran out on, or that no recursive
-	// server could be asked about.
+	// SPFUndecided is a policy the budget ran out on, one too long to read,
+	// or one no recursive server could be asked about.
 	SPFUndecided SPFResult = "undecided"
 )
 

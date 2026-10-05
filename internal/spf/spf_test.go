@@ -250,6 +250,45 @@ func TestBudget(t *testing.T) {
 	}
 }
 
+// TestLongPolicy covers a policy of tens of thousands of terms, which a 64 KB
+// TXT answer holds and each include can fetch again: it is not read into
+// terms, whether at the name or behind an include, and the check says why.
+func TestLongPolicy(t *testing.T) {
+	filler := strings.Repeat(" a", 32000)
+	tests := map[string]struct {
+		zone zone
+		cut  string
+	}{
+		"at the name": {
+			zone: zone{"example.com. TXT": {"v=spf1 -all" + filler}},
+			cut:  "example.com.",
+		},
+		"behind an include": {
+			zone: zone{
+				"example.com. TXT":     {"v=spf1 include:big.example.net -all"},
+				"big.example.net. TXT": {"v=spf1 -all" + filler},
+			},
+			cut: "big.example.net.",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var asked int
+			got := spf.Check(t.Context(), "example.com", tt.zone.lookup(&asked), 64)
+			if got.Result != trace.SPFUndecided || !strings.Contains(got.Why, tt.cut+" publishes a policy of 32001 terms") {
+				t.Errorf("%q (%s), want undecided over %s", got.Result, got.Why, tt.cut)
+			}
+			var terms int
+			for _, term := range got.Terms {
+				terms += 1 + len(term.Terms)
+			}
+			if terms > 2 {
+				t.Errorf("%d terms read, want the long policy left unread", terms)
+			}
+		})
+	}
+}
+
 // TestNoResolver covers a lookup that cannot be made at all.
 func TestNoResolver(t *testing.T) {
 	got := spf.Check(t.Context(), "example.com", func(context.Context, string, string) *trace.Resolver { return nil }, 64)

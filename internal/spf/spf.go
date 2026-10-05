@@ -117,10 +117,27 @@ func (c *checker) policy(name string) found {
 	case 0:
 		return found{void: void, result: trace.SPFNone, why: name + " publishes no SPF policy"}
 	case 1:
+		if n := words(policies[0]) - 1; n > maxTerms {
+			return found{result: trace.SPFUndecided,
+				why: fmt.Sprintf("%s publishes a policy of %d terms, past the %d dnstree reads", name, n, maxTerms)}
+		}
 		return found{record: policies[0], result: trace.SPFOK}
 	}
 	return found{result: trace.SPFPermError,
 		why: fmt.Sprintf("%s publishes %d SPF policies, where a check needs exactly one", name, len(policies))}
+}
+
+// maxTerms is far past any policy in use: one that fits the 512 octets RFC
+// 7208 3.4 asks for holds a few dozen. A longer one only spends the memory of
+// the check and of every renderer after it.
+const maxTerms = 512
+
+func words(record string) int {
+	n := 0
+	for range strings.FieldsSeq(record) {
+		n++
+	}
+	return n
 }
 
 // term is one term of a policy, read.
@@ -269,6 +286,10 @@ func (c *checker) follow(t *trace.SPFTerm, spec string, path []string, final boo
 	}
 	switch found.result {
 	case trace.SPFUndecided:
+		// Without a reason it is the budget, which Check says once.
+		if found.why != "" {
+			c.fail(t, found.result, found.why)
+		}
 	case trace.SPFOK:
 		t.Record = found.record
 		t.Terms = c.terms(found.record, name, append(slices.Clone(path), canonical(name)), final)

@@ -21,9 +21,10 @@ func (r *renderer) policy(spf *trace.SPF) []string {
 
 	var lines []string
 	if spf.Record != "" {
-		count := fmt.Sprintf("%s takes %s of %d lookups", spf.Name, floor(spf.Lookups, spf.Cut), trace.SPFLookupLimit)
+		short := spf.Cut || spf.Result == trace.SPFUndecided
+		count := fmt.Sprintf("%s takes %s of %d lookups", spf.Name, floor(spf.Lookups, short), trace.SPFLookupLimit)
 		if spf.Void > 0 {
-			count += fmt.Sprintf(", %s of %d finding nothing", floor(spf.Void, spf.Cut), trace.SPFVoidLimit)
+			count += fmt.Sprintf(", %s of %d finding nothing", floor(spf.Void, short), trace.SPFVoidLimit)
 		}
 		if spf.Server.IP.IsValid() {
 			count += ", asked of " + spf.Server.IP.String()
@@ -49,7 +50,7 @@ func (r *renderer) policy(spf *trace.SPF) []string {
 	return lines
 }
 
-// floor is a count, said as the least it can be where the budget cut it short.
+// floor is a count, said as the least it can be where the check was cut short.
 func floor(n int, cut bool) string {
 	if cut {
 		return "at least " + strconv.Itoa(n)

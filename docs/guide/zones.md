@@ -390,7 +390,8 @@ no policy, two policies on one name, a term that does not parse, and a lookup
 that fails, which is a temperror. `+all`, a final `?all`, and `ptr` are said
 too, though a check survives them. The check spends a budget of
 `--max-queries` apart from the walk's, and one cut short says its counts are a
-floor. The exit code is left alone,
+floor. A policy of more than 512 terms is not read, and leaves the check
+undecided. The exit code is left alone,
 unless `--expect spf:ok` asks for a policy no check fails on
 ([Asking rather than reading](scripting.md#asking-rather-than-reading)).
 `--format json` carries it as `spf`, and `--format openmetrics` as
