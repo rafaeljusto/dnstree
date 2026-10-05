@@ -248,12 +248,12 @@ in for its SOA in the four shapes RFC 8906 tests: EDNS0 alone, version 1, option
 ```
 $ dnstree --check-edns --max-queries 120 --explain --no-asn --no-compare qq.com
 ...
-│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  361ms  NOERROR  AA  edns0 ok
-│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  359ms  BADVERS  AA  edns version 1 broken: answered anyway
-│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  366ms  NOERROR  AA  edns option 100 ok
-│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  355ms  NOERROR  AA  edns flag 0x40 ok
+│   │   │   ├── ns1.qq.com. 203.205.220.251  435ms  NOERROR  AA  edns0 ok
+│   │   │   ├── ns1.qq.com. 203.205.220.251  444ms  BADVERS  AA  edns version 1 broken: answered anyway
+│   │   │   ├── ns1.qq.com. 203.205.220.251  534ms  NOERROR  AA  edns option 100 ok
+│   │   │   ├── ns1.qq.com. 203.205.220.251  455ms  NOERROR  AA  edns flag 0x40 ok
 ...
-· ns1.qq.com. (203.205.220.251) and ns2.qq.com. (1.12.96.10) did not answer EDNS version 1 with BADVERS and nothing else, which leaves a resolver that tries a newer version no way back; fix the server, or the firewall in front of it (RFC 8906)
+· ns1.qq.com. (203.205.220.251) did not answer EDNS version 1 with BADVERS and nothing else, which leaves a resolver that tries a newer version no way back; fix the server, or the firewall in front of it (RFC 8906)
 ```
 
 A name's addresses are often different machines, and only some of them may be
@@ -263,10 +263,10 @@ servers all pass says so once:
 ```
 $ dnstree --check-edns --explain --no-asn --no-compare www.isc.org
 ...
-│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  192ms  NOERROR  AA  edns0 ok
-│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  201ms  BADVERS  edns version 1 ok
-│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  193ms  NOERROR  AA  edns option 100 ok
-│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  186ms  NOERROR  AA  edns flag 0x40 ok
+│   │   │   ├── ns1.isc.org. 149.20.2.26  414ms  NOERROR  AA  edns0 ok
+│   │   │   ├── ns1.isc.org. 149.20.2.26  391ms  BADVERS  edns version 1 ok
+│   │   │   ├── ns1.isc.org. 149.20.2.26  386ms  NOERROR  AA  edns option 100 ok
+│   │   │   ├── ns1.isc.org. 149.20.2.26  378ms  NOERROR  AA  edns flag 0x40 ok
 ...
 · every nameserver of isc.org. that was asked passed the RFC 8906 edns tests
 ```

@@ -250,14 +250,14 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
 - [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, `--report`, and
   what DNSSEC is worth to ECH.
 - [Checking a zone](docs/guide/zones.md): parent and child NS sets, serials, zone
-  transfers and open recursion, aliases where they may not be, who may issue
-  certificates, extended errors, NSID, cookies, `--qmin`, `--without`, `--try-ns`
-  and answer sizes.
+  transfers and open recursion, how they handle EDNS, aliases where they may not
+  be, who may issue certificates, what a check of its mail costs, extended
+  errors, NSID, cookies, `--qmin`, `--without`, `--try-ns` and answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, from here or from another subnet, and whether they offer
   encryption.
-- [Reading a walk](docs/guide/output.md): `--explain`, `--live`, the waterfall and
-  every other format.
+- [Reading a walk](docs/guide/output.md): `--explain`, `--live`, the waterfall,
+  every other format, `--schema` and `--pcap`.
 - [Scripts and monitoring](docs/guide/scripting.md): `--expect`, `--diff`, several
   questions and `--names`, `--watch`, saved walks and OpenMetrics.
 - [dnstree-web](docs/guide/dnstree-web.md): the same walk behind a form, as a

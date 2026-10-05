@@ -66,8 +66,8 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   the wire format — may import the DNS codec. Keeping it out of the trace, the
   renderers and the AS lookups is what makes them testable without a network.
   `internal/layering` fails on any other import of it, and on the trace, the
-  renderers, explain, expect, history, the AS lookups or the SPF check
-  reaching it through another package.
+  renderers, explain, expect, history, the capture, the AS lookups or the SPF
+  check reaching it through another package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net/idna` for names typed in any script,
@@ -202,9 +202,10 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   has a knob for each way a server misbehaves — silence, REFUSED, lameness,
   truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, six ways to
   break a chain of trust, signatures near expiry, NXDOMAIN for an empty
-  non-terminal, SERVFAIL for a single type, broken cookies and CDS, and zone transfers and recursion open
-  to strangers. A change to the way a delegation is followed belongs with a
-  scenario that reproduces it on purpose.
+  non-terminal, SERVFAIL for a single type, broken cookies and CDS, eight ways
+  to mishandle EDNS (RFC 8906), and zone transfers and recursion open to
+  strangers or reset. A change to the way a delegation is followed belongs
+  with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
 - The pages' logic lives in `walk.js` beside each page (and `space.js`,
   `pack.js` and `film.js` beside the scene), which touch neither the DOM nor

@@ -217,9 +217,9 @@ that names it; a NAME given several types on the command line is the same.
 Every name and type is checked before anything is asked. The run exits with
 the worst any of them earned: a broken chain of trust over no answer, and no
 answer over an answer. Several questions cannot be written as one json, dot,
-mermaid, openmetrics or served page, held to one --expect or --against, or
-watched, so those are refused; --diff compares each with the last walk of its
-own question.
+mermaid, waterfall-mermaid, openmetrics or served page, held to one --expect
+or --against, or watched, so those are refused; --diff compares each with the
+last walk of its own question.
 
 --subnet asks every server the question as though it came from somebody inside
 that prefix, which is how a server that tailors its answers by network can be

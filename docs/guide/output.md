@@ -6,6 +6,7 @@ What the walk says in sentences, and the ways it can be drawn.
 - [Watching it happen](#watching-it-happen)
 - [Where the time went](#where-the-time-went)
 - [Other formats](#other-formats)
+- [The bytes on the wire](#the-bytes-on-the-wire)
 
 ## Saying what happened
 

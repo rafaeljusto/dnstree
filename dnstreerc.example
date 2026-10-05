@@ -136,7 +136,6 @@
 
 # auto, always or never. auto colours a terminal and nothing else, and not
 # even that where NO_COLOR is set or TERM is unset or dumb.
-
 # color = auto
 
 # Skip the origin AS lookups. They are questions to Team Cymru, through a
@@ -146,14 +145,16 @@
 
 # Do not put the same question to a recursive server. The timing that comes
 # back is what says whether a slow walk was the name's doing or the method's,
-# and it is the one thing that sends the name being resolved to a resolver.
+# and, --spf and --report aside, it is the one thing that sends the name being
+# resolved to a resolver.
 # no-compare = true
 
-# The recursive server to use for all three, instead of the host's own: the
-# origin AS lookups, the question timed against an ordinary resolution, and a
-# report --report sends. Write a line for each one the question should go to,
-# and it goes to all of them at once; the origin AS lookups use the first. One
-# --resolver on the command line replaces every one of them.
+# The recursive server to use for all four, instead of the host's own: the
+# origin AS lookups, the question timed against an ordinary resolution, a
+# report --report sends and the lookups --spf makes. Write a line for each one
+# the question should go to, and it goes to all of them at once; the origin AS
+# lookups use the first. One --resolver on the command line replaces every one
+# of them.
 # resolver = 9.9.9.9
 
 # Ask each of those resolvers which encrypted resolvers stand for it (RFC

@@ -183,6 +183,7 @@ make live         # goes out to the real root servers; never part of check
 make demos        # re-record the terminal demos in docs/ from tapes/, and the 3d still
 make demo-3d      # take only the still of --format web-3d in docs/
 make roothints    # refresh the embedded root hints and trust anchors
+make man          # render the man page from the usage text into build/; CI fails a usage it cannot read
 make dist         # cross compile a release into dist/
 make image        # build the container image for this machine
 make image-web    # build the dnstree-web image for this machine
