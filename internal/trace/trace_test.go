@@ -267,8 +267,8 @@ func nests(t reflect.Type) bool {
 	if t.Kind() != reflect.Struct {
 		return false
 	}
-	for i := range t.NumField() {
-		if field := t.Field(i).Type; field.Kind() == reflect.Slice && field.Elem() == t {
+	for field := range t.Fields() {
+		if field := field.Type; field.Kind() == reflect.Slice && field.Elem() == t {
 			return true
 		}
 	}
