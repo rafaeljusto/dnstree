@@ -186,7 +186,10 @@ func asked(cfg *cli.Config) ([]cli.Question, error) {
 	}
 	for _, question := range questions {
 		if err := resolver.Askable(question.Name, question.Type); err != nil {
-			return nil, err
+			if cfg.Names != "" {
+				return nil, fmt.Errorf("%w: --names %s: %w", cli.ErrUsage, cfg.Names, err)
+			}
+			return nil, fmt.Errorf("%w: %w", cli.ErrUsage, err)
 		}
 	}
 	return questions, nil

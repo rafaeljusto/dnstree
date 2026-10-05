@@ -377,6 +377,36 @@ func TestRunNamesTheFlagOfAMissingFile(t *testing.T) {
 	}
 }
 
+// TestRunRefusesAQuestionLikeAnyCommandLine covers a name or type nothing can
+// ask, which is the user's typing and said like the rest of it, with the list it
+// came from where it came from one.
+func TestRunRefusesAQuestionLikeAnyCommandLine(t *testing.T) {
+	list := filepath.Join(t.TempDir(), "names")
+	if err := os.WriteFile(list, []byte("bad..name\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := map[string]struct {
+		args []string
+		want string
+	}{
+		"a name":            {args: []string{"bad..name"}, want: `cannot be read: "bad..name" is not a domain name`},
+		"a type":            {args: []string{"example.com", "nonsense"}, want: `cannot be read: "NONSENSE" is not a query type`},
+		"a name in --names": {args: []string{"--names", list}, want: "--names " + list + `: "bad..name" is not a domain name`},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if got := run(t.Context(), append([]string{"--no-config"}, test.args...), &stdout, &stderr); got != exitUsage {
+				t.Errorf("got exit %d, want %d: %s", got, exitUsage, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), test.want) {
+				t.Errorf("got %q, want it to say %q", stderr.String(), test.want)
+			}
+		})
+	}
+}
+
 func TestRunDebug(t *testing.T) {
 	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
 

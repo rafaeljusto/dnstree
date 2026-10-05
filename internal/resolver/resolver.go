@@ -249,11 +249,11 @@ func Askable(name, qtype string) error {
 func question(name, qtype string) (string, uint16, error) {
 	qname := dnsutil.Fqdn(name)
 	if !dnsutil.IsName(qname) {
-		return "", 0, fmt.Errorf("resolver: %q is not a domain name", name)
+		return "", 0, fmt.Errorf("%q is not a domain name", name)
 	}
 	rrtype, ok := dns.StringToType[strings.ToUpper(qtype)]
 	if !ok {
-		return "", 0, fmt.Errorf("resolver: unknown query type %q", strings.ToUpper(qtype))
+		return "", 0, fmt.Errorf("%q is not a query type", strings.ToUpper(qtype))
 	}
 	return qname, rrtype, nil
 }
@@ -1039,7 +1039,12 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 		if err == nil || attempt >= r.cfg.Retries || !transport.IsTimeout(err) {
 			return resp, err
 		}
-		step.Notes = append(step.Notes, "asked again after a silence")
+		if silences < 0 {
+			silences = len(step.Notes)
+			step.Notes = append(step.Notes, "asked again after a silence")
+		} else {
+			step.Notes[silences] = fmt.Sprintf("asked again after %d silences", attempt+1)
+		}
 	}
 }
 
