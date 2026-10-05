@@ -215,6 +215,42 @@ func TestRenderProbes(t *testing.T) {
 	}
 }
 
+// TestRenderEDNS covers --check-edns: a sample for every test that was read,
+// none for a server that answered nothing, and a dropped test counted once.
+func TestRenderEDNS(t *testing.T) {
+	test := func(ip string, kind trace.EDNSKind, state trace.EDNSState, how trace.StepKind) *trace.Step {
+		return &trace.Step{
+			Zone: "test.", Kind: how, Aside: true,
+			Server: trace.Server{Name: "ns.test.", IP: netip.MustParseAddr(ip)},
+			Asked:  trace.Question{Name: "test.", Type: "SOA"},
+			EDNS:   &trace.EDNSTest{Kind: kind, State: state},
+		}
+	}
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
+			test("192.0.2.5", trace.EDNSPlain, trace.EDNSOK, trace.KindAnswer),
+			test("192.0.2.5", trace.EDNSFlag, trace.EDNSBroken, trace.KindTimeout),
+			test("192.0.2.6", trace.EDNSPlain, trace.EDNSUnchecked, trace.KindTimeout),
+		}},
+	}
+
+	out := render(t, tr)
+	valid(t, out)
+	for _, want := range []string{
+		`dnstree_edns_ok{name="www.test.",type="A",test="edns",zone="test.",server="ns.test.",address="192.0.2.5"} 1`,
+		`dnstree_edns_ok{name="www.test.",type="A",test="flag",zone="test.",server="ns.test.",address="192.0.2.5"} 0`,
+		`dnstree_failed_queries{name="www.test.",type="A"} 1`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("got\n%s\nwant %s", out, want)
+		}
+	}
+	if strings.Contains(out, "192.0.2.6") {
+		t.Errorf("got\n%s\nwant no sample for the server that answered nothing", out)
+	}
+}
+
 func TestRenderCAA(t *testing.T) {
 	for name, tt := range map[string]struct {
 		caa   *trace.CAA

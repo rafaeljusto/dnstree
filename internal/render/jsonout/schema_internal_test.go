@@ -119,6 +119,23 @@ func TestSchemaEnums(t *testing.T) {
 			def: "resolver", property: "kept",
 			want: []string{string(trace.KeptLonger), string(trace.KeptStale)},
 		},
+		"the shapes --check-edns asks in": {
+			def: "edns", property: "kind",
+			want: []string{
+				string(trace.EDNSPlain), string(trace.EDNSVersion), string(trace.EDNSOption), string(trace.EDNSFlag),
+			},
+		},
+		"what can come of an edns test": {
+			def: "edns", property: "state",
+			want: []string{string(trace.EDNSOK), string(trace.EDNSBroken), string(trace.EDNSUnchecked)},
+		},
+		"what an edns test can get wrong": {
+			def: "edns", property: "fault",
+			want: []string{
+				string(trace.EDNSSilent), string(trace.EDNSRcode), string(trace.EDNSNoOPT), string(trace.EDNSBadVers),
+				string(trace.EDNSNoSOA), string(trace.EDNSEchoed), string(trace.EDNSAnswer),
+			},
+		},
 	}
 
 	for name, test := range tests {

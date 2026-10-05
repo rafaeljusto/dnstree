@@ -316,6 +316,10 @@ export function factsOf(step) {
   if (step.probe) {
     row(step.probe.kind === "recursion" ? "recursion" : "axfr", step.probe.state, { open: "bad", unchecked: "warn" }[step.probe.state]);
   }
+  if (step.edns) {
+    const e = step.edns;
+    row(`edns ${e.kind}`, [e.state, e.fault].filter(Boolean).join(": "), { broken: "bad", unchecked: "warn" }[e.state]);
+  }
   row("error", step.error, "bad");
   row("notes", step.notes?.join("; "));
   return rows;

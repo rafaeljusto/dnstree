@@ -112,6 +112,18 @@ type Behaviour struct {
 	// recursion, the way an open resolver does: the root's NS set, with RA
 	// and without AA. Without it such a question is refused.
 	OpenRecursion bool
+
+	// The ways a server mishandles what EDNS lets grow (RFC 8906). Without
+	// them a server answers an EDNS version above 0 with BADVERS, and ignores
+	// an option or a flag it does not know, as RFC 6891 says it must.
+	IgnoreEDNSVersion bool  // answer any version as though it were 0
+	FormErrEDNSOption bool  // answer FORMERR to an option it does not know
+	DropEDNSFlags     bool  // never answer a query with a flag it does not know
+	EchoEDNSFlags     bool  // copy the flags it does not know back into the reply
+	EchoEDNSOption    bool  // copy an option it does not know back into the reply
+	BadVersAnswer     bool  // answer BADVERS, and the question along with it
+	NoEDNSReply       bool  // answer EDNS0 without an OPT record
+	EDNSReplyVersion  uint8 // answer with an OPT record of this version
 	// ServFailType answers SERVFAIL to any question for this type, the way a
 	// server whose software or backend cannot serve a newer type does. Zero
 	// answers every type.
@@ -408,7 +420,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	})
 	s.mu.Unlock()
 
-	if s.behaviour.Drop {
+	if s.behaviour.Drop || s.behaviour.DropEDNSFlags && req.Z != 0 {
 		return
 	}
 	if s.behaviour.Delay > 0 {
@@ -438,6 +450,15 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	case s.behaviour.FormErrEDNS && req.UDPSize > 0:
 		reply.Rcode = dns.RcodeFormatError
 		reply.UDPSize = 0
+	case req.Version > 0 && req.UDPSize > 0 && !s.behaviour.IgnoreEDNSVersion:
+		reply.Rcode = dns.RcodeBadVers
+		reply.Pseudo = nil
+		if s.behaviour.BadVersAnswer {
+			s.respond(reply, name, qtype)
+			reply.Rcode = dns.RcodeBadVers
+		}
+	case s.behaviour.FormErrEDNSOption && asks[*dns.ERFC3597](req):
+		reply.Rcode = dns.RcodeFormatError
 	case s.behaviour.Refuse:
 		reply.Rcode = dns.RcodeRefused
 	case s.behaviour.ServFailType != 0 && qtype == s.behaviour.ServFailType:
@@ -464,6 +485,22 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		}
 	}
 
+	if s.behaviour.EchoEDNSFlags {
+		reply.Z = req.Z
+	}
+	if s.behaviour.EchoEDNSOption {
+		for _, rr := range req.Pseudo {
+			if unknown, ok := rr.(*dns.ERFC3597); ok {
+				reply.Pseudo = append(reply.Pseudo, unknown)
+			}
+		}
+	}
+	if s.behaviour.EDNSReplyVersion > 0 && reply.UDPSize > 0 {
+		reply.Version = s.behaviour.EDNSReplyVersion
+	}
+	if s.behaviour.NoEDNSReply {
+		reply.UDPSize, reply.Pseudo = 0, nil
+	}
 	if s.behaviour.TruncateUDP && dnsutil.Network(w) == "udp" {
 		dnsutil.Truncate(reply)
 	}

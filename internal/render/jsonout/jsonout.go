@@ -216,6 +216,7 @@ type step struct {
 	DNSSEC     *dnssec         `json:"dnssec,omitempty"`
 	Dangling   *dangling       `json:"dangling,omitempty"`
 	Probe      *probe          `json:"probe,omitempty"`
+	EDNS       *edns           `json:"edns,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	Children   []*step         `json:"children,omitempty"`
 }
@@ -326,6 +327,20 @@ func convertProbe(from *trace.Probe) *probe {
 	return &probe{Kind: string(from.Kind), State: string(from.State)}
 }
 
+// edns is a nameserver asked in one of the shapes RFC 8906 tests.
+type edns struct {
+	Kind  string `json:"kind"`
+	State string `json:"state"`
+	Fault string `json:"fault,omitempty"`
+}
+
+func convertEDNS(from *trace.EDNSTest) *edns {
+	if from == nil {
+		return nil
+	}
+	return &edns{Kind: string(from.Kind), State: string(from.State), Fault: string(from.Fault)}
+}
+
 // dangling is a name left pointing at something that is not there.
 type dangling struct {
 	Kind    string `json:"kind"`
@@ -389,6 +404,7 @@ func convert(from *trace.Step, timed bool) *step {
 		DNSSEC:     convertDNSSEC(from.DNSSEC),
 		Dangling:   convertDangling(from.Dangling),
 		Probe:      convertProbe(from.Probe),
+		EDNS:       convertEDNS(from.EDNS),
 		Error:      from.Err,
 	}
 	// Written wherever it is known, a start of zero included: the first query

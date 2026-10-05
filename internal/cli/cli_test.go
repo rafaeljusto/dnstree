@@ -174,6 +174,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--check-axfr", "--check-recursion", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", CheckAXFR: true, CheckRecursion: true},
 		},
+		"a zone's nameservers asked how they handle edns": {
+			args: []string{"--check-edns", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", CheckEDNS: true},
+		},
 		"a walk that sends each server a cookie": {
 			args: []string{"--cookie", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Cookie: true},

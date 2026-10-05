@@ -49,6 +49,9 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		if step.Probe != nil && step.Probe.State != trace.ProbeUnchecked {
 			continue // a server that refused a probe did its job
 		}
+		if step.EDNS != nil && step.EDNS.State != trace.EDNSUnchecked {
+			continue // dnstree_edns_ok counts a test that went unanswered
+		}
 		switch step.Kind {
 		case trace.KindTimeout, trace.KindError, trace.KindLame:
 			failed++
@@ -121,6 +124,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 	}
 
 	probes(m, tr)
+	ednsTests(m, tr)
 	resolvers(m, tr)
 
 	m.family("dnstree_warnings", "", "what the walk could not do")
@@ -147,6 +151,29 @@ func probes(m *metrics, tr *trace.Trace) {
 	for _, step := range found {
 		m.sample("dnstree_open", flag(step.Probe.State == trace.ProbeOpen),
 			label{"check", string(step.Probe.Kind)},
+			label{"zone", step.Zone},
+			label{"server", step.Server.Name},
+			label{"address", address(step.Server)})
+	}
+}
+
+// ednsTests writes what --check-edns found, one sample per nameserver and
+// shape. A server that did not answer the baseline is left out: a zero for it
+// would read as one that answered wrongly.
+func ednsTests(m *metrics, tr *trace.Trace) {
+	var found []*trace.Step
+	for step := range tr.Steps() {
+		if step.EDNS != nil && step.EDNS.State != trace.EDNSUnchecked {
+			found = append(found, step)
+		}
+	}
+	if len(found) == 0 {
+		return
+	}
+	m.family("dnstree_edns_ok", "", "whether a nameserver of the zone answered an RFC 8906 test as EDNS says it must: EDNS0 alone (edns), version 1 (version), an unknown option (option) or an unknown flag (flag)")
+	for _, step := range found {
+		m.sample("dnstree_edns_ok", flag(step.EDNS.State == trace.EDNSOK),
+			label{"test", string(step.EDNS.Kind)},
 			label{"zone", step.Zone},
 			label{"server", step.Server.Name},
 			label{"address", address(step.Server)})

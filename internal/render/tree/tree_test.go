@@ -426,3 +426,43 @@ func TestRenderProbes(t *testing.T) {
 		t.Errorf("got no open transfer painted as a fault:\n%q", out.String())
 	}
 }
+
+// TestRenderEDNS covers the asides --check-edns leaves. A broken one says what
+// it got wrong, in the colour of a fault.
+func TestRenderEDNS(t *testing.T) {
+	test := func(kind trace.EDNSKind, state trace.EDNSState, fault trace.EDNSFault, rcode string) *trace.Step {
+		return &trace.Step{
+			Zone: "example.com.", Kind: trace.KindAnswer, Aside: true, Rcode: rcode,
+			Server: trace.Server{Name: "ns1.example.com.", IP: netip.MustParseAddr("192.0.2.5"), Port: 53},
+			EDNS:   &trace.EDNSTest{Kind: kind, State: state, Fault: fault},
+		}
+	}
+	tr := resolution()
+	answer := tr.Result()
+	answer.Children = append(answer.Children,
+		test(trace.EDNSPlain, trace.EDNSOK, "", "NOERROR"),
+		test(trace.EDNSVersion, trace.EDNSBroken, trace.EDNSRcode, "NOERROR"),
+		test(trace.EDNSFlag, trace.EDNSBroken, trace.EDNSEchoed, "NOERROR"),
+		test(trace.EDNSOption, trace.EDNSUnchecked, "", ""),
+	)
+
+	var out bytes.Buffer
+	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, want := range []string{
+		"edns0 ok", "edns version 1 broken: not BADVERS", "edns flag 0x40 broken: copied back", "edns option 100 unchecked",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("got no %q in:\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorAlways}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out.String(), "\x1b[31medns flag 0x40 broken") {
+		t.Errorf("got no broken test painted as a fault:\n%q", out.String())
+	}
+}

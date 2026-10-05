@@ -206,6 +206,9 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	if to.Probe, err = readProbe(from.Probe); err != nil {
 		return nil, err
 	}
+	if to.EDNS, err = readEDNS(from.EDNS); err != nil {
+		return nil, err
+	}
 	for _, child := range from.Children {
 		read, err := readStep(child, depth+1)
 		if err != nil {
@@ -378,6 +381,35 @@ func readProbe(from *probe) (*trace.Probe, error) {
 		return nil, fmt.Errorf("jsonout: %q is not what can come of asking a nameserver", from.State)
 	}
 	return &trace.Probe{Kind: kind, State: state}, nil
+}
+
+func readEDNS(from *edns) (*trace.EDNSTest, error) {
+	if from == nil {
+		return nil, nil
+	}
+	test := &trace.EDNSTest{
+		Kind: trace.EDNSKind(from.Kind), State: trace.EDNSState(from.State), Fault: trace.EDNSFault(from.Fault),
+	}
+	switch test.Kind {
+	case trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not a shape a nameserver is asked in", from.Kind)
+	}
+	switch test.State {
+	case trace.EDNSOK, trace.EDNSUnchecked:
+		if test.Fault != "" {
+			return nil, fmt.Errorf("jsonout: an edns test that is %s cannot have a fault", from.State)
+		}
+	case trace.EDNSBroken:
+		switch test.Fault {
+		case trace.EDNSSilent, trace.EDNSRcode, trace.EDNSNoOPT, trace.EDNSBadVers, trace.EDNSNoSOA, trace.EDNSEchoed, trace.EDNSAnswer:
+		default:
+			return nil, fmt.Errorf("jsonout: %q is not what an edns test can get wrong", from.Fault)
+		}
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not what can come of an edns test", from.State)
+	}
+	return test, nil
 }
 
 func readDangling(from *dangling) (*trace.Dangling, error) {

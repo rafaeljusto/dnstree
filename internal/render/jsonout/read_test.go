@@ -84,6 +84,22 @@ func TestReadRoundTrip(t *testing.T) {
 				Probe: &trace.Probe{Kind: trace.ProbeRecursion, State: trace.ProbeUnchecked},
 			}}},
 		},
+		"nameservers asked how they handle edns": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindAnswer, Aside: true, Rcode: "BADVERS",
+				Asked: trace.Question{Name: "example.", Type: "SOA"},
+				EDNS:  &trace.EDNSTest{Kind: trace.EDNSVersion, State: trace.EDNSOK},
+			}, {
+				Zone: "example.", Kind: trace.KindAnswer, Aside: true, Rcode: "NOERROR",
+				Asked: trace.Question{Name: "example.", Type: "SOA"},
+				EDNS:  &trace.EDNSTest{Kind: trace.EDNSFlag, State: trace.EDNSBroken, Fault: trace.EDNSEchoed},
+			}, {
+				Zone: "example.", Kind: trace.KindTimeout, Aside: true,
+				Asked: trace.Question{Name: "example.", Type: "SOA"},
+				EDNS:  &trace.EDNSTest{Kind: trace.EDNSPlain, State: trace.EDNSUnchecked},
+			}}},
+		},
 		"a resolver asked which encrypted resolvers it designates": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -293,6 +309,21 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "transfer", "state": "ajar"}}]}}`,
 			want: `"ajar"`,
+		},
+		"an edns test of a shape nothing here asks in": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "edns": {"kind": "padding", "state": "ok"}}]}}`,
+			want: `"padding"`,
+		},
+		"an edns test broken in a way nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "edns": {"kind": "flag", "state": "broken", "fault": "\u001b[31mred"}}]}}`,
+			want: `not what an edns test can get wrong`,
+		},
+		"an edns test that passed with a fault": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "edns": {"kind": "flag", "state": "ok", "fault": "echoed"}}]}}`,
+			want: `cannot have a fault`,
 		},
 		"a way to answer a cookie nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

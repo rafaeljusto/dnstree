@@ -112,6 +112,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, servers(tr)...)
 	findings = append(findings, cookies(tr)...)
 	findings = append(findings, exposure(tr)...)
+	findings = append(findings, ednsTests(tr)...)
 	if finding, ok := issuance(tr); ok {
 		findings = append(findings, finding)
 	}
@@ -923,6 +924,95 @@ func exposure(tr *trace.Trace) []Finding {
 	return findings
 }
 
+// ednsTests is what --check-edns found, a zone at a time: a line for each
+// shape some server got wrong, naming them, one for each shape some server
+// could not be asked, one for the servers the budget left with the baseline
+// alone, and one to say so when every server was asked everything and passed.
+func ednsTests(tr *trace.Trace) []Finding {
+	kinds := []trace.EDNSKind{trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag}
+	type held struct {
+		addresses []string
+		states    map[string]map[trace.EDNSKind]trace.EDNSState
+	}
+	var (
+		order []string
+		zones = make(map[string]*held)
+	)
+	for step := range tr.Steps() {
+		if step.EDNS == nil {
+			continue
+		}
+		zone := zones[step.Zone]
+		if zone == nil {
+			order = append(order, step.Zone)
+			zone = &held{states: make(map[string]map[trace.EDNSKind]trace.EDNSState)}
+			zones[step.Zone] = zone
+		}
+		who := addressed(step)
+		if zone.states[who] == nil {
+			zone.addresses = append(zone.addresses, who)
+			zone.states[who] = make(map[trace.EDNSKind]trace.EDNSState)
+		}
+		zone.states[who][step.EDNS.Kind] = step.EDNS.State
+	}
+
+	const fix = "; fix the server, or the firewall in front of it (RFC 8906)"
+	broken := map[trace.EDNSKind]string{
+		trace.EDNSPlain:   "did not answer EDNS0 as RFC 6891 says, which every validating resolver sends",
+		trace.EDNSVersion: "did not answer EDNS version 1 with BADVERS and nothing else, which leaves a resolver that tries a newer version no way back",
+		trace.EDNSOption:  "did not ignore an EDNS option nobody has defined, which breaks resolvers the day they send a new one",
+		trace.EDNSFlag:    "did not ignore an EDNS flag nobody has defined, which breaks resolvers the day they set a new one",
+	}
+	var findings []Finding
+	for _, name := range order {
+		zone := zones[name]
+		found := make(map[trace.EDNSKind]map[trace.EDNSState][]string)
+		var unasked []string
+		for _, who := range zone.addresses {
+			states := zone.states[who]
+			for kind, state := range states {
+				if found[kind] == nil {
+					found[kind] = make(map[trace.EDNSState][]string)
+				}
+				found[kind][state] = add(found[kind][state], who)
+			}
+			if states[trace.EDNSPlain] == trace.EDNSOK && len(states) == 1 {
+				unasked = add(unasked, who)
+			}
+		}
+
+		everything := len(unasked) == 0
+		for _, kind := range kinds {
+			if servers := found[kind][trace.EDNSBroken]; len(servers) > 0 {
+				everything = false
+				findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: fmt.Sprintf(
+					"%s %s%s", list(servers), broken[kind], fix)})
+			}
+		}
+		if servers := found[trace.EDNSPlain][trace.EDNSUnchecked]; len(servers) > 0 {
+			everything = false
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+				"%s could not be tested: they gave no usable answer to EDNS0 alone, so how they handle the rest of EDNS is unknown", list(servers))})
+		}
+		for _, kind := range kinds[1:] {
+			if servers := found[kind][trace.EDNSUnchecked]; len(servers) > 0 {
+				everything = false
+				findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+					"%s answered EDNS0 but could not be asked the %s test, so whether they handle it is unknown", list(servers), kind)})
+			}
+		}
+		if len(unasked) > 0 {
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+				"%s passed EDNS0 alone, and the budget left the rest of the tests unasked", list(unasked))})
+		}
+		if everything {
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+				"every nameserver of %s that was asked passed the RFC 8906 edns tests", name)})
+		}
+	}
+	return findings
+}
+
 // comparison is worth a line only where the two disagree. Agreement is what the
 // reader is expecting, and the summary already says the walk was timed against
 // an ordinary resolution.
@@ -1000,6 +1090,16 @@ func at2(server trace.Server) string {
 		return server.IP.String()
 	}
 	return "a resolver"
+}
+
+// addressed is the server a step went to, with the address it was asked at
+// where it has a name: the addresses of one name are often different machines,
+// and only some of them may be at fault.
+func addressed(step *trace.Step) string {
+	if step.Server.Name != "" && step.Server.IP.IsValid() {
+		return step.Server.Name + " (" + step.Server.IP.String() + ")"
+	}
+	return at(step)
 }
 
 // at is the server a step went to, as a reader would name it.

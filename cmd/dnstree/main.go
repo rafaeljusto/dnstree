@@ -579,6 +579,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger, lookups *as
 
 		CheckTransfer:  cfg.CheckAXFR,
 		CheckRecursion: cfg.CheckRecursion,
+		CheckEDNS:      cfg.CheckEDNS,
 		CAA:            cfg.CAA,
 
 		NSID:     cfg.NSID,

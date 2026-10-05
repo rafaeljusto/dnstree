@@ -1142,6 +1142,80 @@ func TestExposure(t *testing.T) {
 	}
 }
 
+func TestEDNSTests(t *testing.T) {
+	test := func(server string, kind trace.EDNSKind, state trace.EDNSState) *trace.Step {
+		step := hop(trace.KindAnswer, server)
+		step.Aside, step.EDNS = true, &trace.EDNSTest{Kind: kind, State: state}
+		return step
+	}
+
+	for name, tt := range map[string]struct {
+		tests  []*trace.Step
+		want   []string
+		unsaid []string
+	}{
+		"a server that answers a new version as though it were 0": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSVersion, trace.EDNSOK),
+				test("ns2.test.", trace.EDNSVersion, trace.EDNSBroken),
+			},
+			want:   []string{"ns2.test. (192.0.2.5) did not answer EDNS version 1 with BADVERS and nothing else", "fix the server, or the firewall in front of it"},
+			unsaid: []string{"ns1.test.", "passed the"},
+		},
+		"servers that drop an unknown flag": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSFlag, trace.EDNSBroken),
+				test("ns2.test.", trace.EDNSFlag, trace.EDNSBroken),
+			},
+			want: []string{"ns1.test. (192.0.2.5) and ns2.test. (192.0.2.5) did not ignore an EDNS flag nobody has defined"},
+		},
+		"every server answers as it should": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSPlain, trace.EDNSOK), test("ns1.test.", trace.EDNSVersion, trace.EDNSOK),
+				test("ns1.test.", trace.EDNSOption, trace.EDNSOK), test("ns1.test.", trace.EDNSFlag, trace.EDNSOK),
+			},
+			want: []string{"every nameserver of test. that was asked passed the RFC 8906 edns tests"},
+		},
+		"a server the budget left with the baseline alone": {
+			tests:  []*trace.Step{test("ns1.test.", trace.EDNSPlain, trace.EDNSOK)},
+			want:   []string{"ns1.test. (192.0.2.5) passed EDNS0 alone, and the budget left the rest of the tests unasked"},
+			unsaid: []string{"passed the RFC"},
+		},
+		"a server that reset the connection a test came on": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSPlain, trace.EDNSOK), test("ns1.test.", trace.EDNSVersion, trace.EDNSOK),
+				test("ns1.test.", trace.EDNSOption, trace.EDNSOK), test("ns1.test.", trace.EDNSFlag, trace.EDNSUnchecked),
+			},
+			want:   []string{"ns1.test. (192.0.2.5) answered EDNS0 but could not be asked the flag test"},
+			unsaid: []string{"passed the RFC", "no usable answer"},
+		},
+		"a server that could not be tested": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSPlain, trace.EDNSOK),
+				test("ns2.test.", trace.EDNSPlain, trace.EDNSUnchecked),
+			},
+			want:   []string{"ns2.test. (192.0.2.5) could not be tested: they gave no usable answer to EDNS0 alone"},
+			unsaid: []string{"passed the"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			answer := answered(300)
+			answer.Children = tt.tests
+			got := said(walk(answer))
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("got %q, want it to say %q", got, want)
+				}
+			}
+			for _, unsaid := range tt.unsaid {
+				if strings.Contains(got, unsaid) {
+					t.Errorf("got %q, want nothing about %q", got, unsaid)
+				}
+			}
+		})
+	}
+}
+
 func TestIssuance(t *testing.T) {
 	for name, tt := range map[string]struct {
 		caa  *trace.CAA

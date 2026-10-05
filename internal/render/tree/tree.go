@@ -267,6 +267,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if probe := r.probe(step.Probe); probe != "" {
 		fields = append(fields, probe)
 	}
+	if edns := r.edns(step.EDNS); edns != "" {
+		fields = append(fields, edns)
+	}
 	if subnet := r.subnet(step.Subnet); subnet != "" {
 		fields = append(fields, subnet)
 	}
@@ -567,6 +570,52 @@ func (r *renderer) probe(probe *trace.Probe) string {
 		return r.paint.paint(label, yellow)
 	}
 	return r.paint.dim(label)
+}
+
+// edns is how a nameserver answered one of the shapes --check-edns asks in,
+// named by what was sent, and by what it got wrong where it did.
+func (r *renderer) edns(test *trace.EDNSTest) string {
+	if test == nil {
+		return ""
+	}
+	label := map[trace.EDNSKind]string{
+		trace.EDNSPlain:   "edns0",
+		trace.EDNSVersion: "edns version 1",
+		trace.EDNSOption:  "edns option 100",
+		trace.EDNSFlag:    "edns flag 0x40",
+	}[test.Kind] + " " + string(test.State)
+	switch test.State {
+	case trace.EDNSBroken:
+		return r.paint.paint(label+": "+ednsFault(test), red)
+	case trace.EDNSUnchecked:
+		return r.paint.paint(label, yellow)
+	}
+	return r.paint.dim(label)
+}
+
+// ednsFault says what a broken answer got wrong. The rcode it came with is
+// drawn beside it, so a wrong one says only which was wanted.
+func ednsFault(test *trace.EDNSTest) string {
+	switch test.Fault {
+	case trace.EDNSSilent:
+		return "no answer"
+	case trace.EDNSRcode:
+		if test.Kind == trace.EDNSVersion {
+			return "not BADVERS"
+		}
+		return "not NOERROR"
+	case trace.EDNSNoOPT:
+		return "no opt record"
+	case trace.EDNSBadVers:
+		return "opt not version 0"
+	case trace.EDNSNoSOA:
+		return "no soa"
+	case trace.EDNSEchoed:
+		return "copied back"
+	case trace.EDNSAnswer:
+		return "answered anyway"
+	}
+	return string(test.Fault)
 }
 
 func (r *renderer) subnet(subnet *trace.Subnet) string {

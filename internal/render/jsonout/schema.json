@@ -335,6 +335,7 @@
         "dnssec": { "$ref": "#/$defs/dnssec" },
         "dangling": { "$ref": "#/$defs/dangling" },
         "probe": { "$ref": "#/$defs/probe" },
+        "edns": { "$ref": "#/$defs/edns" },
         "error": { "type": "string" },
         "children": {
           "description": "The hops this one led to, in the order they were made.",
@@ -608,6 +609,28 @@
           "description": "open where the server gave it, closed where it did not, and unchecked where it could not be asked, which says nothing either way.",
           "type": "string",
           "enum": ["open", "closed", "unchecked"]
+        }
+      }
+    },
+    "edns": {
+      "description": "Set on the aside that asked a nameserver of the zone the walk ended in for the zone's SOA in one of the shapes RFC 8906 tests, with --check-edns.",
+      "type": "object",
+      "required": ["kind", "state"],
+      "properties": {
+        "kind": {
+          "description": "edns is EDNS0 and nothing else, the baseline; version is EDNS version 1, to be answered BADVERS; option is option 100 and flag is flag 0x40, neither defined, to be ignored and not copied back.",
+          "type": "string",
+          "enum": ["edns", "version", "option", "flag"]
+        },
+        "state": {
+          "description": "ok where the server answered as RFC 6891 says it must, broken where it did not, and unchecked where it did not answer the baseline, which says nothing about the rest.",
+          "type": "string",
+          "enum": ["ok", "broken", "unchecked"]
+        },
+        "fault": {
+          "description": "What a broken answer got wrong: silent is no answer where the baseline got one, rcode the wrong rcode (the step's own), no-opt no OPT record, version an OPT record of a version other than 0, no-soa NOERROR without the SOA, echoed the option or flag copied back, answer BADVERS with the SOA anyway.",
+          "type": "string",
+          "enum": ["silent", "rcode", "no-opt", "version", "no-soa", "echoed", "answer"]
         }
       }
     },

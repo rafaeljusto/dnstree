@@ -50,6 +50,7 @@ one after another, each from the root servers down.
   --serial                ask every nameserver of the zone which copy it serves
   --check-axfr            ask each nameserver of the zone to hand over all of it
   --check-recursion       ask each nameserver of the zone to resolve another name
+  --check-edns            ask each nameserver of the zone the RFC 8906 edns tests
   --caa                   say which certificate authorities may issue for NAME
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
@@ -170,8 +171,8 @@ own. With --from, a walk saved during an incident becomes a report afterwards.
 --format openmetrics writes the walk as numbers for a monitoring system: how
 it ended, what it and each hop on the path took, the chain of trust, the time
 left on the signatures, what --check-ds found, which nameservers the
---check-axfr and --check-recursion probes found open, who --caa found free to
-issue and what the resolvers answered, each labelled with the question. Run from
+--check-axfr and --check-recursion probes found open, which --check-edns tests
+passed, who --caa found free to issue and what the resolvers answered, each labelled with the question. Run from
 cron into the directory of node_exporter's textfile collector, it is what
 Prometheus alerts on.
 
@@ -273,6 +274,15 @@ refused still shows up in the server's logs, so they are for zones you run or
 have been asked to check. The root is never asked either, since its servers
 hand out the root zone on purpose.
 
+--check-edns asks every nameserver of the zone the walk ends in for its SOA in
+the four shapes RFC 8906 tests: with EDNS0 alone, then with an EDNS version, an
+option and a flag nobody has defined yet. A server has to answer the version
+BADVERS and ignore the option and the flag, and one that drops them instead, or
+a firewall in front of it that does, is unreachable for resolvers that stopped
+working around it on DNS Flag Day 2019. Only a server that passed the first is
+asked the rest: one that fails EDNS0, or does not serve the zone, would fail
+them all for the same reason. It costs up to four queries per nameserver address.
+
 --caa says which certificate authorities may issue a certificate for NAME, and
 which CAA set decides it (RFC 8659). An authority looks at the name, then at
 each name above it short of the root, and goes by the first set it finds,
@@ -371,6 +381,7 @@ type Config struct {
 
 	CheckAXFR      bool
 	CheckRecursion bool
+	CheckEDNS      bool
 	CAA            bool
 
 	NSID     bool
@@ -577,6 +588,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.CheckAXFR, "check-axfr", false, "ask every nameserver of the zone for all of it")
 	flags.BoolVar(&cfg.CheckRecursion, "check-recursion", false, "ask every nameserver of the zone to look up somebody else's name")
+	flags.BoolVar(&cfg.CheckEDNS, "check-edns", false, "ask every nameserver of the zone the RFC 8906 edns tests")
 	flags.BoolVar(&cfg.CAA, "caa", false, "say which certificate authorities may issue for the name")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
@@ -946,7 +958,7 @@ func several(cfg *Config, expecting bool) error {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "caa": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

@@ -419,6 +419,8 @@ test("the inspector marks what is wrong with a hop", () => {
     "a zone handed to anyone": [{ probe: { kind: "axfr", state: "open" } }, "axfr", ["open", "bad"]],
     "recursion that could not be checked": [{ probe: { kind: "recursion", state: "unchecked" } }, "recursion", ["unchecked", "warn"]],
     "recursion refused": [{ probe: { kind: "recursion", state: "closed" } }, "recursion", ["closed", null]],
+    "an edns flag copied back": [{ edns: { kind: "flag", state: "broken", fault: "echoed" } }, "edns flag", ["broken: echoed", "bad"]],
+    "an edns version answered as it should": [{ edns: { kind: "version", state: "ok" } }, "edns version", ["ok", null]],
     "an extended error withheld": [{ extended: [{ code: 15, reason: "Blocked", withheld: true }] }, "ede", ["Blocked", "warn"]],
     "a delegation without glue": [{ delegation: { zone: "a.example.", ns: ["x.", "y."], glueless: true } }, "nameservers", ["2, none with glue", null]],
   };

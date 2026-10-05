@@ -534,6 +534,35 @@ func TestRunExposure(t *testing.T) {
 	}
 }
 
+// TestRunEDNS puts the RFC 8906 tests to a nameserver that copies an unknown
+// flag back. The tree and the explanation say so, and the walk still answers.
+func TestRunEDNS(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+	child := fakens.New(t, fakens.Config{Name: "ns.test.", Origin: "test.", Zone: splitChildZone,
+		Behaviour: fakens.Behaviour{EchoEDNSFlags: true}})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())),
+		"--check-edns", "--explain",
+		"--no-asn", "--no-compare", "--color", "never", "--format", "ascii", "www.test", "A",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"edns0 ok", "edns version 1 ok", "edns option 100 ok", "edns flag 0x40 broken: copied back",
+		"did not ignore an EDNS flag nobody has defined",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("got no %q:\n%s", want, out)
+		}
+	}
+}
+
 // TestRunRootWithoutName leaves the name off, which is all a walk needs when
 // nothing has to verify a certificate.
 func TestRunRootWithoutName(t *testing.T) {

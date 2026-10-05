@@ -509,6 +509,10 @@ type Step struct {
 	// should keep from strangers, and says whether it gave it.
 	Probe *Probe
 
+	// EDNS is set on the aside that put one of the RFC 8906 questions to a
+	// nameserver, and says whether it answered as EDNS says it should.
+	EDNS *EDNSTest
+
 	Children []*Step
 	Err      string
 }
@@ -704,6 +708,50 @@ const (
 	ProbeOpen      ProbeState = "open"
 	ProbeClosed    ProbeState = "closed"
 	ProbeUnchecked ProbeState = "unchecked"
+)
+
+// EDNSTest is a nameserver asked a question that EDNS lets grow (RFC 6891),
+// in one of the shapes RFC 8906 tests for.
+type EDNSTest struct {
+	Kind  EDNSKind
+	State EDNSState
+	Fault EDNSFault // why it is broken; empty unless it is
+}
+
+// EDNSKind is the shape the question was asked in.
+type EDNSKind string
+
+// The shapes a nameserver is asked in.
+const (
+	EDNSPlain   EDNSKind = "edns"    // EDNS version 0 and nothing else, the baseline
+	EDNSVersion EDNSKind = "version" // a version it should answer BADVERS to
+	EDNSOption  EDNSKind = "option"  // an option it should ignore
+	EDNSFlag    EDNSKind = "flag"    // a flag it should ignore and not copy back
+)
+
+// EDNSState is what came of it. Unchecked is a server that did not answer even
+// the baseline, which says nothing about how it handles the rest.
+type EDNSState string
+
+// What can come of an EDNS test.
+const (
+	EDNSOK        EDNSState = "ok"
+	EDNSBroken    EDNSState = "broken"
+	EDNSUnchecked EDNSState = "unchecked"
+)
+
+// EDNSFault is what a broken answer got wrong.
+type EDNSFault string
+
+// What an answer can get wrong.
+const (
+	EDNSSilent  EDNSFault = "silent"  // no answer, though the baseline got one
+	EDNSRcode   EDNSFault = "rcode"   // the wrong rcode, which the step carries
+	EDNSNoOPT   EDNSFault = "no-opt"  // no OPT record in the reply
+	EDNSBadVers EDNSFault = "version" // an OPT record of a version other than 0
+	EDNSNoSOA   EDNSFault = "no-soa"  // NOERROR without the SOA it was asked for
+	EDNSEchoed  EDNSFault = "echoed"  // the unknown option or flag copied back
+	EDNSAnswer  EDNSFault = "answer"  // BADVERS carrying the answer anyway
 )
 
 // DNSSECState is how far the chain of trust got.

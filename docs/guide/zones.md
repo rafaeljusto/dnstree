@@ -229,6 +229,59 @@ root zone on purpose (RFC 8806). Like `--serial`, they look up the nameservers
 the walk did not need, and ask every one an address was found for. `--format json` carries each check as a `probe`
 on its hop, and `--format openmetrics` as `dnstree_open`.
 
+## How they handle EDNS
+
+EDNS (RFC 6891) is the record in every query that carries the bigger buffer, the
+DNSSEC flag, cookies and the rest. It was made to grow: a server has to answer
+a version it does not know with BADVERS, and ignore an option or a flag it does
+not know. Some servers, and many firewalls in front of them, drop those queries
+or answer them wrongly instead, and since DNS Flag Day 2019 resolvers no longer
+work around them. `--check-edns` asks every nameserver of the zone the walk ends
+in for its SOA in the four shapes RFC 8906 tests: EDNS0 alone, version 1, option
+100 and flag 0x40, the last two defined by nobody:
+
+```
+$ dnstree --check-edns --max-queries 120 --explain --no-asn --no-compare qq.com
+...
+│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  361ms  NOERROR  AA  edns0 ok
+│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  359ms  BADVERS  AA  edns version 1 broken: answered anyway
+│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  366ms  NOERROR  AA  edns option 100 ok
+│   │   │   ├── 🎯  ns1.qq.com. 203.205.220.251  355ms  NOERROR  AA  edns flag 0x40 ok
+...
+· ns1.qq.com. (203.205.220.251) and ns2.qq.com. (1.12.96.10) did not answer EDNS version 1 with BADVERS and nothing else, which leaves a resolver that tries a newer version no way back; fix the server, or the firewall in front of it (RFC 8906)
+```
+
+A name's addresses are often different machines, and only some of them may be
+at fault, so a finding names the address as well as the server. A zone whose
+servers all pass says so once:
+
+```
+$ dnstree --check-edns --explain --no-asn --no-compare www.isc.org
+...
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  192ms  NOERROR  AA  edns0 ok
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  201ms  BADVERS  edns version 1 ok
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  193ms  NOERROR  AA  edns option 100 ok
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  186ms  NOERROR  AA  edns flag 0x40 ok
+...
+· every nameserver of isc.org. that was asked passed the RFC 8906 edns tests
+```
+
+A broken test says what it got wrong: `no answer`, the wrong rcode
+(`not BADVERS`, `not NOERROR`), `no opt record`, `opt not version 0`, `no soa`,
+the option or flag `copied back`, or BADVERS `answered anyway`. Only a server
+that passed EDNS0 alone is asked the other three. One that failed it would fail
+them all for the same reason, and one that cannot be reached, refuses the zone
+or answers without its SOA is `unchecked`, since that says nothing about EDNS. A
+`no answer` comes only after the retries every query gets, but a lossy path can
+still cost a test its reply. None of the queries is asked again without EDNS0, which is how
+the walk itself gets past a server like that.
+
+It costs up to four queries per nameserver address, so a zone with many
+addresses needs a bigger `--max-queries`; a warning says when the budget ran
+out. Like `--serial`, it looks up the nameservers the walk did not need. It is
+off unless asked for and leaves the exit code alone. `--format json` carries
+each test as `edns` on its hop, and `--format openmetrics` as `dnstree_edns_ok`.
+
 ## Who may issue certificates for it
 
 A CAA record (RFC 8659) says which certificate authorities may issue for a
