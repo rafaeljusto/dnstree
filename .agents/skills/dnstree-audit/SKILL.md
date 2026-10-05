@@ -109,9 +109,11 @@ Work through them in this order unless the scope names one.
    DOT and Mermaid label escaping. Autolinks, `@mentions` and `#refs` in
    `--format markdown`. OpenMetrics label escaping. `--format ascii` staying
    below codepoint 128. Width counting on hostile runes.
-6. **disk: `internal/history`.** File names built from the question (path
-   traversal, separators, case, IDNs), permissions, atomic writes, and a
-   corrupt or hostile cache file being read back.
+6. **disk: `internal/history` and `internal/capture`.** File names built from
+   the question (path traversal, separators, case, IDNs), permissions, atomic
+   writes, and a corrupt or hostile cache file being read back. A capture
+   writes only the path `--pcap` names, and a hostile answer must not be able
+   to make the headers it is rebuilt into lie about its length.
 7. **concurrency.** `run.attach` from any goroutine other than the walk's,
    `Config.Asking` or the live tail reading the trace, AS lookups outliving the
    run, goroutines left blocked after ctx is cancelled, and shared state in
@@ -148,7 +150,7 @@ stall a resolution.
 
 - **Critical**: attacker-controlled validation bypass (`secure` for forged
   data, or an exit code other than 3 for a broken chain), or code execution or
-  file write outside the history directory.
+  file write outside the history directory and the `--pcap` file.
 - **High**: a crafted response crashes the process or hangs it past the budget
   and timeouts. Terminal or HTML injection that can forge output.
 - **Medium**: resource exhaustion bounded only by the timeouts, a leak across

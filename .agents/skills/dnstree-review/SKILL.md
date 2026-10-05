@@ -59,7 +59,8 @@ change touches without a test holding it. The ones that regress most quietly:
   for a DS nobody signed, or `secure` because a record was absent.
 - A signature checked against the zone the walk was referred to rather than
   the one its signer names.
-- Anything written to disk outside `internal/history`, or without `--diff`.
+- Anything written to disk outside `internal/history` and the one file
+  `--pcap` names, or without `--diff` or `--pcap` asking.
 - A dnstree-web walk on a transport that skips `transport.Guard` with
   `transport.Public`, a resolver option the service sets on its own, a
   redirect built from the path asked, or a forwarded address read from

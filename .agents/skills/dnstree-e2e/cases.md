@@ -46,6 +46,8 @@ These need no network: every one exits before a query goes out.
 | dot-doh | `$D --dot --doh example.com` | exit 1 |
 | check-ds-alone | `$D --check-ds example.com` | exit 1: it needs `--dnssec` |
 | ddr-no-compare | `$D --ddr --no-compare example.com` | exit 1 |
+| pcap-tls | `$D --dot --pcap x.pcap example.com`, then `--doh` | exit 1: TLS cannot be written as plain DNS. No `x.pcap` is left behind |
+| pcap-refused | `$D --pcap - example.com`, `--from ex.json --pcap x.pcap`, `--watch 30s --pcap x.pcap example.com` | exit 1 each, one line |
 | diff-against | `$D --diff --against x.json example.com` | exit 1: ask for one |
 | watch-short | `$D --watch 500ms example.com` | exit 1: a second is the least |
 | live-waterfall | `$D --live --format waterfall example.com` | exit 1 |
@@ -120,6 +122,8 @@ over a minute to fail. Start these from a resolver that speaks both.
 | tls-insecure | `$D $B --dot --root 1.1.1.1 --tls-insecure example.com` | exit 0 |
 | dot-no-name | `$D $B --dot --root 1.1.1.1 example.com` | exit 0: a server given only by address has its certificate checked against the address, which 1.1.1.1's names. `--doh` the same |
 | fallback | `$D $B --dot --fallback --timeout 1s example.com` | exit 0: plain DNS picks up the hops DoT could not. Expect it to be slow |
+| pcap | `$D $B --pcap w.pcap example.com`, then `tcpdump -nn -r w.pcap` | exit 0; one query from `192.0.2.1` and one answer per hop the tree drew, the answer last |
+| pcap-tcp | `$D $B --tcp --dnssec --pcap t.pcap example.com`, then `tcpdump -nn -vv -r t.pcap` | exit 0; each query its own connection, `[S]`, `[S.]`, `[.]`, `[P.]`; no checksum tcpdump calls bad |
 
 ## zone
 
