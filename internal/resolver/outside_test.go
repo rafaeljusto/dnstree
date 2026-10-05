@@ -1,6 +1,8 @@
 package resolver_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
@@ -155,5 +157,47 @@ func TestSpentBudgetBlamesNoServer(t *testing.T) {
 				t.Errorf("with %d queries got %q, want the budget blamed, not the servers", budget, tr.Warnings)
 			}
 		}
+	}
+}
+
+// TestSweepStopsAtTheBudget covers a referral naming hundreds of nameservers
+// outside the zone, each a walk of its own for the sweeps that look them all
+// up. Once the budget is spent the walks ask nothing, and one saying it gave
+// up is all the tree needs: the rest are lines a hostile zone chose to add.
+func TestSweepStopsAtTheBudget(t *testing.T) {
+	var root, test strings.Builder
+	root.WriteString(strings.Replace(outsideRootZone, "test.               IN NS   ns2.host.net.\n", "", 1))
+	test.WriteString(outsideTestZone)
+	for i := 3; i <= 200; i++ {
+		fmt.Fprintf(&root, "test. IN NS ns%d.host.net.\n", i)
+	}
+
+	hierarchy := fakens.NewHierarchy(t)
+	top := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: root.String(), Declared: "192.0.2.1"})
+	hierarchy.Add(fakens.Config{Name: "ns1.net.", Origin: "net.", Zone: outsideNetZone, Declared: "192.0.2.6"})
+	hierarchy.Add(fakens.Config{Name: "ns2.net.", Origin: "net.", Zone: outsideNetZone, Declared: "192.0.2.8"})
+	hierarchy.Add(fakens.Config{Name: "ns.host.net.", Origin: "host.net.", Zone: outsideHostZone, Declared: "192.0.2.20"})
+	hierarchy.Add(fakens.Config{Name: "ns1.host.net.", Origin: "test.", Zone: test.String(), Declared: "192.0.2.21"})
+	h := harness{hierarchy, top}
+
+	const budget = 30
+	cfg := resolver.Config{Serial: true, Budget: resolver.Budget{MaxQueries: budget}}
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if tr.Result() == nil {
+		t.Fatalf("got no answer: %s", format(steps(tr)))
+	}
+	var walks int
+	for step := range tr.Steps() {
+		for _, note := range step.Notes {
+			if strings.HasPrefix(note, "resolving ") {
+				walks++
+			}
+		}
+	}
+	if walks > budget {
+		t.Errorf("got %d nameserver walks on a budget of %d queries, want none past it", walks, budget)
 	}
 }

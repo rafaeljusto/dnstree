@@ -1150,6 +1150,11 @@ func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string
 
 	var servers []trace.Server
 	for i, name := range names {
+		// Past the budget, one walk has already said it gave up; the rest
+		// would only say it again.
+		if i > 0 && r.counters.spent() {
+			return servers, names[i:]
+		}
 		root := &trace.Step{Zone: ".", Kind: trace.KindZone, Aside: true,
 			Notes: []string{"resolving " + name}}
 		r.attach(step, root)
