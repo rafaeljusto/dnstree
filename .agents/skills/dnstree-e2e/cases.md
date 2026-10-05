@@ -134,6 +134,8 @@ over a minute to fail. Start these from a resolver that speaks both.
 | axfr-closed | `$D $B --check-axfr example.com` | exit 0, none open |
 | axfr-doh | `$D $B --check-axfr --doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |
 | recursion | `$D $B --check-recursion example.com` | exit 0, `recursion closed` per nameserver |
+| edns | `$D $B --check-edns --explain www.isc.org` | exit 0, `edns0 ok`, `BADVERS  edns version 1 ok`, `edns option 100 ok`, `edns flag 0x40 ok` per address, `every nameserver of isc.org. that was asked passed the RFC 8906 edns tests` |
+| edns-budget | `$D $B --check-edns qq.com` | exit 0, `the budget ran out before every nameserver of qq.com. could be checked for how it handles edns; raise --max-queries` |
 | caa | `$D $B --caa --expect caa:pki.goog google.com` | exit 0, `caa: google.com. decides it`, `may issue: pki.goog` |
 | caa-miss | `$D $B --caa --expect caa:letsencrypt.org google.com` | exit 4 |
 
