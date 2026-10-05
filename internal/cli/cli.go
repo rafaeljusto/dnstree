@@ -541,8 +541,12 @@ func plain(flags *flag.FlagSet, err error) error {
 	if why != "parse error" && why != "value out of range" {
 		return fmt.Errorf("%s %s", dashed(name), why) // the flag's own reason, which names the value
 	}
+	f := flags.Lookup(name)
+	if f == nil {
+		return err // a value whose own text the pattern took for the flag
+	}
 	what := "cannot be read"
-	if getter, ok := flags.Lookup(name).Value.(flag.Getter); ok {
+	if getter, ok := f.Value.(flag.Getter); ok {
 		switch getter.Get().(type) {
 		case int, uint:
 			what = "is not a number"
