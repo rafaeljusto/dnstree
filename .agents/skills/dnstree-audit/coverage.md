@@ -2,18 +2,22 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `0f04f8d`
-- **Date**: 2026-10-03
-- **Scope**: the commits since `d0b7ecc` (`--caa`, compact denial, several
-  types and `--names`, `--check-ns`, alias and address nameservers,
-  `--all --dnssec` keys, `--report`, `--try-ns`, the budget fixes, DoT by
-  address, the Lambda build)
+- **Commit**: `05467fe`
+- **Date**: 2026-10-05
+- **Scope**: the commits since `0f04f8d` (`--spf`, `--pcap`, `--check-edns`,
+  out-of-zone nameservers on any budget, one-line CLI errors, the layering
+  refactor, the Go 1.27 fixes)
 
 ## Open findings
 
-- Low: names, CAA issuer values and the report agent inside the markdown
-  report's finding sentences are open to GitHub's autolinks, `@mentions` and
-  `#refs`; fixing it means marking them apart from the prose explain writes
+- Low: the SPF check keeps asking after a temperror, so a resolver that times
+  out on the policy's names costs a timeout per budgeted query rather than
+  one; left as is, since stopping makes every count after it a floor
+  ([spf.go:60](../../../internal/spf/spf.go#L60)).
+- Low: names, CAA issuer values, SPF names and the report agent inside the
+  markdown report's finding sentences are open to GitHub's autolinks,
+  `@mentions` and `#refs`; fixing it means marking them apart from the prose
+  explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 
 ## Checked and sound
@@ -191,10 +195,34 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   glue, `zone_addrs` and trial address.
 - The Lambda bootstrap only adds `-client-header X-Forwarded-For`;
   `internal/server` and `cmd/dnstree-web` are unchanged.
-- `go test -race -count=2 ./...` is clean at `0f04f8d`.
+- `go test -race -count=2 ./...` is clean at `05467fe`.
 - CAA failures: a referral below the walk is judged by no chain
   (`TestCAAUnenteredZone`); the budget is blamed only when this lookup ran it
   out (`TestCAABudgetSpentBefore`).
 - CAA tags: a critical tag the text cannot carry refuses (`TestCAA`); a wire
   tag with `\`, `"`, a space or `;` never reads back as `issue`, since unpack
   escapes `\` and `"` and the rest fail to parse.
+- SPF parsing: `Fields(record)[1:]` only after the `v=spf1` check; CIDR,
+  prefix lengths, macros and modifier names index within bounds; include and
+  redirect cycles caught on canonical names; every `follow` spends a query.
+- SPF output: every string goes through `Shown`, ESC and high bytes stay out
+  of `--format ascii`, openmetrics labels are fixed; `readSPF` checks the
+  result enum and server; SPF reaches the exit code only by `--expect spf:ok`.
+- SPF runs on its own transports and checker, joins the trace after the walk
+  through a buffered channel, sits in `apart`, and never reaches dnstree-web.
+- `--pcap`: writes only the named file, refuses `--dot`, `--doh`, `-`,
+  `--from` and `--watch`, not settable from the file; UDP and IPv4 lengths
+  drop rather than wrap, TCP segments stay under 1480; `Record` is under a
+  mutex; never reaches dnstree-web.
+- `--check-edns`: spends before each fan-out, attaches after `wait.Wait()`,
+  every step `Aside`; OPT read after `Unpack`, a missing one is `no-opt`;
+  `read.go` validates kind, state and fault; off in dnstree-web.
+- Out-of-zone nameservers on any budget: every side walk spends the run-wide
+  counter, `maxSideResolution` still caps nesting, `pending` shrinks.
+- CLI errors echo only the user's arguments, quoted by the flag package.
+- A policy of more than 512 terms, at the name or behind an include, is not
+  read and leaves the check undecided (`TestLongPolicy`).
+- The nameserver sweep stops starting walks once the budget is spent, after
+  the one that says it gave up (`TestSweepStopsAtTheBudget`).
+- `plain()` returns the flag package's error when the name it matched is no
+  flag.
