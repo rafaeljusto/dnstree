@@ -30,17 +30,18 @@ alias `cat` or `grep`. Everything goes in a run directory in the scratchpad,
 never in the repository.
 
 ```bash
-E2E=<scratchpad>/e2e-$(date +%Y%m%dT%H%M%S); mkdir -p $E2E/{home,xdg-cache,xdg-config,cases}
+R=$PWD; E2E=<scratchpad>/e2e-$(date +%Y%m%dT%H%M%S); mkdir -p $E2E/{home,xdg-cache,xdg-config,cases}
 git status --porcelain > $E2E/git-before
+cd $E2E  # the files cases name, such as --pcap w.pcap, land here
 ```
 
 Build with the race detector: a walk under `--all`, `--live` or `--watch` is the
 only concurrent run anything makes against real servers.
 
-- Working tree: `go build -race -o $E2E/dnstree ./cmd/dnstree` and the same for
-  `./cmd/dnstree-web`.
-- A ref: `git archive <ref> | tar -x -C $E2E/src` and build from there. Never
-  check out, stash or touch the user's tree. Somebody may be editing it.
+- Working tree: `go -C $R build -race -o $E2E/dnstree ./cmd/dnstree` and the
+  same for `./cmd/dnstree-web`.
+- A ref: `git -C $R archive <ref> | tar -x -C $E2E/src` and build from there.
+  Never check out, stash or touch the user's tree. Somebody may be editing it.
 
 If the build fails, report that as the result and stop. Don't fix it.
 
@@ -95,10 +96,11 @@ these. A case only passes when all of them hold:
    question.
 6. **`--color never` writes no escape; `ascii` and `waterfall-ascii` write
    nothing above 127** (`LC_ALL=C grep -c '[^ -~]'` on stdout is 0).
-7. **Nothing reaches the disk unless `--diff` asks.** After any case without
-   `--diff`, `$E2E/home`, `$E2E/xdg-cache` and `$E2E/xdg-config` hold only what
-   the case put there itself (a config file it wrote). After a `--diff` case,
-   exactly one file per question appeared under the cache.
+7. **Nothing reaches the disk unless `--diff` or `--pcap` asks.** After any
+   case without either, `$E2E/home`, `$E2E/xdg-cache` and `$E2E/xdg-config`
+   hold only what the case put there itself (a config file it wrote). After a
+   `--diff` case, exactly one file per question appeared under the cache; after
+   a `--pcap` case, the one file it named and nothing else.
 
 Read the output too, not just the patterns. You are the user: if a line is
 confusing, a hop is drawn twice, a warning contradicts the summary or a flag
@@ -143,7 +145,7 @@ the case it needs, run it, and propose adding it to `cases.md`.
 ## Clean up
 
 Stop every background process the run started: `--format web`, `dnstree-web`
-and `--watch`. Check `git status --porcelain` against `$E2E/git-before`. A
+and `--watch`. Check `git -C $R status --porcelain` against `$E2E/git-before`. A
 difference that the run made is a finding against the skill. Leave `$E2E` in
 place, since the report points into it.
 

@@ -84,7 +84,9 @@ Work through them in this order unless the scope names one.
    the *answering* server serves (see AGENTS.md; narrowing it is also a bug).
    Cache poisoning across side walks. `--all` fan-out that can outspend the
    budget. TC handling, TCP fallback and EDNS0/FORMERR retries staying inside
-   one hop. Every failure has to become a step, never an abort.
+   one hop. Every failure has to become a step, never an abort. The SPF check
+   (`internal/spf`): include and redirect cycles, and every lookup spending
+   from its budget.
 3. **dnssec: never claims more than it checked.** RRSIG validity windows,
    signer name versus zone, labels field versus owner (wildcard expansion),
    key tag collisions (several keys with one tag must all be tried),
@@ -130,7 +132,7 @@ stall a resolution.
 ## Method
 
 - For a whole-repo audit, if your agent can run subagents, give areas 1–3 to
-  one and areas 4–7 to another, in parallel. Tell each the threat model and the
+  one and areas 4–8 to another, in parallel. Tell each the threat model and the
   ground truth above. Then verify what comes back yourself: subagents
   over-report.
 - **A finding has to be reproduced.** Prefer a `fakens` scenario or a
