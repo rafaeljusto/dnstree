@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -230,12 +231,7 @@ func timed(from *step) bool {
 	if from.StartMS != nil {
 		return true
 	}
-	for _, child := range from.Children {
-		if timed(child) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(from.Children, timed)
 }
 
 func readResolver(from *resolver) (*trace.Resolver, error) {

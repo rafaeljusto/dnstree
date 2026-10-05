@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -68,9 +69,7 @@ func get(t *testing.T, h http.Handler, path string, header http.Header) *httptes
 	t.Helper()
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	request.RemoteAddr = "198.51.100.7:40000"
-	for name, values := range header {
-		request.Header[name] = values
-	}
+	maps.Copy(request.Header, header)
 	recorder := httptest.NewRecorder()
 	h.ServeHTTP(recorder, request)
 	return recorder

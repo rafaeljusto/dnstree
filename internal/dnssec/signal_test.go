@@ -57,30 +57,30 @@ func TestSignal(t *testing.T) {
 		},
 		"a request to remove the DS": {
 			held: []dns.RR{current.ds()},
-			cds:  []dns.RR{&dns.CDS{DS: dns.DS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}}},
+			cds:  []dns.RR{&dns.CDS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}},
 			want: trace.SignalDelete,
 		},
 		"a request to remove the DS beside a request for a key": {
 			held: []dns.RR{current.ds()},
 			cds: []dns.RR{asCDS(current.ds()),
-				&dns.CDS{DS: dns.DS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}}},
+				&dns.CDS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}},
 			want: trace.SignalInconsistent,
 		},
 		"a request to remove the DS in the CDS, and a key in the CDNSKEY": {
 			held:    []dns.RR{current.ds()},
-			cds:     []dns.RR{&dns.CDS{DS: dns.DS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}}},
+			cds:     []dns.RR{&dns.CDS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}},
 			cdnskey: []dns.RR{asCDNSKEY(current.key)},
 			want:    trace.SignalInconsistent,
 		},
 		"a key in the CDS, and a request to remove the DS in the CDNSKEY": {
 			held: []dns.RR{current.ds()}, cds: []dns.RR{asCDS(current.ds())},
-			cdnskey: []dns.RR{&dns.CDNSKEY{DNSKEY: dns.DNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}}},
+			cdnskey: []dns.RR{&dns.CDNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}},
 			want:    trace.SignalInconsistent,
 		},
 		"a request to remove the DS in both": {
 			held:    []dns.RR{current.ds()},
-			cds:     []dns.RR{&dns.CDS{DS: dns.DS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}}},
-			cdnskey: []dns.RR{&dns.CDNSKEY{DNSKEY: dns.DNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}}},
+			cds:     []dns.RR{&dns.CDS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}},
+			cdnskey: []dns.RR{&dns.CDNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}},
 			want:    trace.SignalDelete,
 		},
 		"a CDS and a CDNSKEY for two different keys": {

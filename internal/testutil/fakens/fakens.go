@@ -24,7 +24,6 @@ import (
 	"codeberg.org/miekg/dns/dnshttp"
 	"codeberg.org/miekg/dns/dnstest"
 	"codeberg.org/miekg/dns/dnsutil"
-	"codeberg.org/miekg/dns/rdata"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -471,7 +470,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		reply.RecursionAvailable = true
 		reply.Answer = []dns.RR{&dns.NS{
 			Hdr: dns.Header{Name: ".", Class: dns.ClassINET, TTL: 518400},
-			NS:  rdata.NS{Ns: "a.root-servers.net."},
+			Ns:  "a.root-servers.net.",
 		}}
 	default:
 		s.respond(reply, name, qtype)

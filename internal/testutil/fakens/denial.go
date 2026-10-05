@@ -6,7 +6,6 @@ import (
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
-	"codeberg.org/miekg/dns/rdata"
 )
 
 // Denial is how a signed zone proves something is not there: that a child has
@@ -54,8 +53,8 @@ func (s *Server) denial(name string, absent bool) []dns.RR {
 	}
 	if s.denialKind == DenialCompact && absent {
 		return []dns.RR{&dns.NSEC{
-			Hdr:  dns.Header{Name: name, Class: dns.ClassINET, TTL: 3600},
-			NSEC: rdata.NSEC{NextDomain: "\x00." + name, TypeBitMap: []uint16{dns.TypeRRSIG, dns.TypeNSEC, dns.TypeNXNAME}},
+			Hdr:        dns.Header{Name: name, Class: dns.ClassINET, TTL: 3600},
+			NextDomain: "\x00." + name, TypeBitMap: []uint16{dns.TypeRRSIG, dns.TypeNSEC, dns.TypeNXNAME},
 		}}
 	}
 	if s.denialKind == DenialNSEC || s.denialKind == DenialCompact {
