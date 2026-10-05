@@ -678,11 +678,22 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A value checked after the parse is blamed on the file when only the file
+	// set it: the command line has nothing to point at.
+	fromFile := make(map[string]bool)
 	if read {
 		cfg.ConfigFile = file.path
 		if err := flags.Parse(override(flags, fileArgs, args)); err != nil {
 			return nil, fmt.Errorf("%w: %s: %w", ErrUsage, file.path, plain(flags, err))
 		}
+		flags.Visit(func(f *flag.Flag) { fromFile[f.Name] = true })
+		scan(flags, args, func(name, _ string) { delete(fromFile, name) })
+	}
+	inFile := func(name string) string {
+		if fromFile[name] {
+			return file.path + ": "
+		}
+		return ""
 	}
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
 		fmt.Fprint(output, Usage)
@@ -694,7 +705,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	case tree.ColorAuto, tree.ColorAlways, tree.ColorNever:
 		cfg.Color = mode
 	default:
-		return nil, fmt.Errorf("%w: %q is not a colour setting", ErrUsage, color)
+		return nil, fmt.Errorf("%w: %s%q is not a colour setting", ErrUsage, inFile("color"), color)
 	}
 
 	switch format {
@@ -702,7 +713,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		"json", "dot", "mermaid", "openmetrics", "web", "web-3d":
 		cfg.Format = format
 	default:
-		return nil, fmt.Errorf("%w: %q is not a format", ErrUsage, format)
+		return nil, fmt.Errorf("%w: %s%q is not a format", ErrUsage, inFile("format"), format)
 	}
 
 	if cfg.Version || cfg.Schema {
@@ -819,11 +830,11 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			ErrUsage, cfg.Format)
 	}
 	if timeout <= 0 {
-		return nil, fmt.Errorf("%w: a timeout of %s leaves no time to answer", ErrUsage, timeout)
+		return nil, fmt.Errorf("%w: %sa timeout of %s leaves no time to answer", ErrUsage, inFile("timeout"), timeout)
 	}
 	cfg.Timeout = timeout
 	if cfg.Retries < 0 {
-		return nil, fmt.Errorf("%w: %d retries is not a number of retries", ErrUsage, cfg.Retries)
+		return nil, fmt.Errorf("%w: %s%d retries is not a number of retries", ErrUsage, inFile("retries"), cfg.Retries)
 	}
 	// Left alone they are zero, which the resolver reads as its default; set to
 	// zero, they would quietly mean the opposite of what was typed.
@@ -831,7 +842,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	var none error
 	flags.Visit(func(f *flag.Flag) {
 		if value, ok := budgets[f.Name]; ok && value < 1 && none == nil {
-			none = fmt.Errorf("%w: --%s %d is no budget at all; the least is 1", ErrUsage, f.Name, value)
+			none = fmt.Errorf("%w: %s--%s %d is no budget at all; the least is 1", ErrUsage, inFile(f.Name), f.Name, value)
 		}
 	})
 	if none != nil {

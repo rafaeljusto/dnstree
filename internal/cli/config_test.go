@@ -435,6 +435,35 @@ func TestParseDefaultsBlames(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsBlamesValues covers values the parse takes and the checks
+// after it refuse. The command line never typed them, so the file is named.
+func TestParseDefaultsBlamesValues(t *testing.T) {
+	tests := map[string]string{
+		"a budget of nothing":   "max-queries = 0\n",
+		"an unknown format":     "format = runes\n",
+		"an unknown colour":     "color = sometimes\n",
+		"a timeout of none":     "timeout = 0s\n",
+		"fewer than no retries": "retries = -1\n",
+	}
+	for name, file := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := write(t, file)
+			_, err := cli.Parse([]string{"--config", path, "example.com"}, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), path+": ") {
+				t.Errorf("got %v, want it to name %s", err, path)
+			}
+		})
+	}
+
+	t.Run("a value the command line typed", func(t *testing.T) {
+		path := write(t, "max-queries = 5\n")
+		_, err := cli.Parse([]string{"--config", path, "--max-queries", "0", "example.com"}, io.Discard)
+		if err == nil || strings.Contains(err.Error(), path) {
+			t.Errorf("got %v, want the command line blamed, not %s", err, path)
+		}
+	})
+}
+
 // write puts a file of defaults where only this test can find it.
 func write(t *testing.T, content string) string {
 	t.Helper()
