@@ -14,6 +14,17 @@ walked on 2026-09-24 12:00 UTC
 differs: 198.51.100.53 answers 198.51.100.1, 198.51.100.2, 198.51.100.3 (and 1 more), the walk found 93.184.216.34
 caa: none at www.example.com.; example.com. decides it [secure ECDSAP256SHA256]
 caa: may issue: letsencrypt.org; wildcards: nobody
+spf: www.example.com. takes at least 5 of 10 lookups, at least 1 of 2 finding nothing, asked of 192.0.2.53
+├── include:_spf.example.net (lookup 1)
+│   ├── 1 address range
+│   └── ~all
+├── mx (lookup 2, 1 mail server)
+├── exists:%{i}.x.example.com (lookup 3, depends on the sender)
+├── a:gone.example.com (lookup 4, found nothing): lookup 3 to find nothing, past the limit of 2
+├── ptr (lookup 5, depends on the sender): it rests on the sender's reverse zone
+├── -all
+└── never reached: redirect=never.example.net
+spf: undecided: the budget ran out
 warning: the delegation to example.com. lists a nameserver the zone does not
 ✔ answered in 42ms · without ns1.example.com., 192.0.2.0/24 · resolvers in 9ms-23ms (1 of 3 differ, 1 did not answer) · 5 queries · 4 servers
 ```
@@ -27,6 +38,7 @@ warning: the delegation to example.com. lists a nameserver the zone does not
 - ⚠ 1 server did not answer in time: b.gtld-servers.net.
 - ⚠ 1 server answered with almost nothing left of the datagram the answer had to fit in (a.iana-servers.net. with 1187 of 1232 bytes), so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it
 - the CAA set at example.com. lets only letsencrypt.org issue for www.example.com., and no certificate authority issue wildcards below it
+- ⚠ the SPF policy of www.example.com. could not be followed to its end: the budget ran out
 - ⚠ 198.51.100.53 answered this question differently, which a name whose answer is tailored to where it is asked from does honestly, and nothing else should
 
 **resolvers**

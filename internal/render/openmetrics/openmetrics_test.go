@@ -402,3 +402,38 @@ func compare(tb testing.TB, name, got string) {
 		tb.Errorf("output does not match %s, run go test -update to see the change\n--- got ---\n%s", golden, got)
 	}
 }
+
+func TestRenderSPF(t *testing.T) {
+	for name, tt := range map[string]struct {
+		spf *trace.SPF
+	}{
+		"a policy within the limits": {spf: &trace.SPF{Lookups: 7, Result: trace.SPFOK}},
+		"a policy past them":         {spf: &trace.SPF{Lookups: 12, Result: trace.SPFPermError}},
+		"a walk that did not look":   {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := &trace.Trace{
+				Question: trace.Question{Name: "www.test.", Type: "A"},
+				Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+				SPF:      tt.spf,
+			}
+			out := render(t, tr)
+			valid(t, out)
+			if tt.spf == nil {
+				if strings.Contains(out, "dnstree_spf") {
+					t.Errorf("got\n%s\nwant no SPF family", out)
+				}
+				return
+			}
+			if want := fmt.Sprintf(`dnstree_spf_lookups{name="www.test.",type="A"} %d`, tt.spf.Lookups); !strings.Contains(out, want) {
+				t.Errorf("got\n%s\nwant %s", out, want)
+			}
+			for _, result := range []string{"ok", "none", "permerror", "temperror", "undecided"} {
+				want := fmt.Sprintf(`dnstree_spf{name="www.test.",type="A",result=%q} %s`, result, map[bool]string{true: "1", false: "0"}[result == string(tt.spf.Result)])
+				if !strings.Contains(out, want) {
+					t.Errorf("got\n%s\nwant %s", out, want)
+				}
+			}
+		})
+	}
+}

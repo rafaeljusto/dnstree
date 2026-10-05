@@ -67,6 +67,7 @@ func (t *Trace) Shown() *Trace {
 		shown.Resolvers = append(shown.Resolvers, &r)
 	}
 	shown.CAA = t.CAA.Shown()
+	shown.SPF = t.SPF.Shown()
 	return &shown
 }
 

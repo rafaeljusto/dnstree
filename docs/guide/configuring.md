@@ -77,9 +77,10 @@ may be given. `--trust-anchors` takes IANA's `root-anchors.xml` or DS records
 in presentation format.
 
 `--resolver ADDR` points everything that needs a recursive server at one of
-your own: the origin AS lookups, the timed comparison and the report `--report`
-sends. `--no-asn` and `--no-compare` skip the first two; asking for both without
-`--report` is refused, since it leaves `--resolver` nothing to do. `--asn-resolver` is its older name. One on the
+your own: the origin AS lookups, the timed comparison, the report `--report`
+sends and the lookups `--spf` makes, which go to the first one named.
+`--no-asn` and `--no-compare` skip the first two; asking for both without
+`--report` or `--spf` is refused, since it leaves `--resolver` nothing to do. `--asn-resolver` is its older name. One on the
 command line replaces every one the file chose. Without it, the comparison
 asks the first nameserver in `/etc/resolv.conf`; where there is none, as on
 Windows, nothing is compared until one is named.

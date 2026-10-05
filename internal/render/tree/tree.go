@@ -137,6 +137,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, line := range r.authorities(tr.CAA) {
 		r.write(line + "\n")
 	}
+	for _, line := range r.policy(tr.SPF) {
+		r.write(line + "\n")
+	}
 	if line := r.reported(tr.Report); line != "" {
 		r.write(line + "\n")
 	}

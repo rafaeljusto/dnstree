@@ -41,6 +41,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 			document.Trial = &trial{Zone: tr.Trial.Zone, NS: tr.Trial.NS, Addrs: addrStrings(tr.Trial.Addrs)}
 		}
 		document.CAA = convertCAA(tr.CAA)
+		document.SPF = convertSPF(tr.SPF)
 		if tr.Report != nil {
 			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
 				Rcode: tr.Report.Rcode, Error: tr.Report.Err}
@@ -62,6 +63,7 @@ type document struct {
 	Warnings      []string    `json:"warnings,omitempty"`
 	Without       []string    `json:"without,omitempty"`
 	CAA           *caa        `json:"caa,omitempty"`
+	SPF           *spf        `json:"spf,omitempty"`
 	Report        *report     `json:"report,omitempty"`
 	Trial         *trial      `json:"trial,omitempty"`
 }

@@ -123,6 +123,17 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 	}
 
+	if spf := tr.SPF; spf != nil {
+		m.family("dnstree_spf_lookups", "", "the DNS lookups the name's SPF policy costs a check, which is allowed 10; past them every check is a permerror")
+		m.sample("dnstree_spf_lookups", strconv.Itoa(spf.Lookups))
+		m.family("dnstree_spf", "", "what an SPF check of mail sent as the name comes to before the sender is known")
+		for _, value := range []trace.SPFResult{
+			trace.SPFOK, trace.SPFNone, trace.SPFPermError, trace.SPFTempError, trace.SPFUndecided,
+		} {
+			m.sample("dnstree_spf", flag(value == spf.Result), label{"result", string(value)})
+		}
+	}
+
 	probes(m, tr)
 	ednsTests(m, tr)
 	resolvers(m, tr)

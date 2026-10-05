@@ -7,7 +7,9 @@ server says about its own answer.
 - [Records that point where they may not](#records-that-point-where-they-may-not)
 - [Whether they all have the same zone](#whether-they-all-have-the-same-zone)
 - [What they give a stranger](#what-they-give-a-stranger)
+- [How they handle EDNS](#how-they-handle-edns)
 - [Who may issue certificates for it](#who-may-issue-certificates-for-it)
+- [What a check of its mail costs](#what-a-check-of-its-mail-costs)
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
 - [Which machine answered](#which-machine-answered)
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
@@ -334,6 +336,65 @@ alone, unless `--expect caa:` asks for an authority by name
 costs a query for each name asked, or a walk for one that is an alias.
 `--format json` carries it as `caa`, and `--format openmetrics` as
 `dnstree_caa`.
+
+## What a check of its mail costs
+
+An SPF record (RFC 7208) says which servers may send mail as a domain, and a
+receiving mail server checks it on every message. It rarely names servers
+outright: most of it is `include`s of other domains' policies, which include
+more in turn. To keep one check from turning into hundreds of queries, the RFC
+allows it ten lookups over the whole tree, and two that find nothing; past
+either, the check is a permerror, which many receivers treat as a failure. The
+count usually creeps up in a provider's record, which the domain's owner never
+touches. `--spf` draws the policy as the tree it really is, with the running
+count on every term that costs a lookup:
+
+```
+$ dnstree --spf --explain --no-asn --no-compare github.com
+...
+spf: github.com. takes 10 of 10 lookups, asked of 8.8.8.8
+├── 5 address ranges
+├── include:spf.protection.outlook.com (lookup 1)
+│   ├── 11 address ranges
+│   └── -all
+├── include:_netblocks.google.com (lookup 2)
+...
+├── include:_spf.salesforce.com (lookup 5)
+│   ├── exists:%{i}._spf.mta.salesforce.com (lookup 6, depends on the sender)
+│   └── -all
+...
+├── include:sendgrid.net (lookup 9)
+│   ├── 11 address ranges
+│   ├── include:ab.sendgrid.net (lookup 10)
+│   │   ├── 4 address ranges
+│   │   └── ~all
+│   └── ~all
+└── ~all
+spf: ok, at the limit: one more lookup in any policy it includes is a permerror
+...
+· the SPF policy of github.com. takes all 10 lookups a check is allowed, so one more in any policy it includes makes every check a permerror
+```
+
+The lookups go to the first `--resolver`, or the host's own, which is where a
+mail server asks them, and they are not in the tree of the walk. Which term a
+check stops at depends on who is sending, so every term up to `all` is
+followed, the way a sender that matches none of them is checked; what comes
+after `all`, and a `redirect` beside one, is drawn as never reached. A term with
+a macro in it, such as `%{i}`, and `ptr`, depend on the sender too: they are
+counted and not looked up. The `ip4` and `ip6` ranges cost nothing and are
+drawn as a count.
+
+What fails a check is said on the term it fails at: the eleventh lookup, the
+third that finds nothing, an `include` that loops back or names a domain with
+no policy, two policies on one name, a term that does not parse, and a lookup
+that fails, which is a temperror. `+all`, a final `?all`, and `ptr` are said
+too, though a check survives them. The check spends a budget of
+`--max-queries` apart from the walk's, and one cut short says its counts are a
+floor. The exit code is left alone,
+unless `--expect spf:ok` asks for a policy no check fails on
+([Asking rather than reading](scripting.md#asking-rather-than-reading)).
+`--format json` carries it as `spf`, and `--format openmetrics` as
+`dnstree_spf_lookups` and `dnstree_spf`.
 
 ## What a server said about its answer
 

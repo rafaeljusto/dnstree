@@ -143,6 +143,26 @@ func resolution() *trace.Trace {
 			Wildcard: &trace.Issuers{CAs: []string{}},
 			DNSSEC:   &trace.DNSSECStatus{State: trace.Secure, Zone: "example.com.", Algorithm: "ECDSAP256SHA256"},
 		},
+		SPF: &trace.SPF{
+			Name:   "www.example.com.",
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+			Record: "v=spf1 include:_spf.example.net mx exists:%{i}.x.example.com a:gone.example.com ptr -all",
+			Terms: []trace.SPFTerm{
+				{Term: "include:_spf.example.net", Kind: "include", Lookup: 1, Target: "_spf.example.net.", Record: "v=spf1 ip4:192.0.2.0/24 ~all",
+					Terms: []trace.SPFTerm{{Term: "ip4:192.0.2.0/24", Kind: "ip4"}, {Term: "~all", Kind: "all"}}},
+				{Term: "mx", Kind: "mx", Lookup: 2, Target: "www.example.com.", Found: []string{"mail.example.com."}},
+				{Term: "exists:%{i}.x.example.com", Kind: "exists", Lookup: 3, Target: "%{i}.x.example.com", Sender: true},
+				{Term: "a:gone.example.com", Kind: "a", Lookup: 4, Target: "gone.example.com.", Void: true, Problem: "lookup 3 to find nothing, past the limit of 2", Fatal: true},
+				{Term: "ptr", Kind: "ptr", Lookup: 5, Sender: true, Problem: "it rests on the sender's reverse zone"},
+				{Term: "-all", Kind: "all"},
+				{Term: "redirect=never.example.net", Kind: "redirect", Unreached: true},
+			},
+			Lookups: 5,
+			Void:    1,
+			Cut:     true,
+			Result:  trace.SPFUndecided,
+			Why:     "the budget ran out",
+		},
 	}
 }
 

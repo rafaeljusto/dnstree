@@ -42,6 +42,7 @@
       "items": { "type": "string" }
     },
     "caa": { "$ref": "#/$defs/caa" },
+    "spf": { "$ref": "#/$defs/spf" },
     "report": { "$ref": "#/$defs/report" },
     "trial": { "$ref": "#/$defs/trial" }
   },
@@ -121,6 +122,57 @@
           "description": "The first verdict on the way up that is not secure, or else the one over the set that decided. A name with no set has to prove it, since dropping a set is all it takes to lift a restriction.",
           "$ref": "#/$defs/dnssec"
         }
+      }
+    },
+    "spf": {
+      "description": "The sender policy the name publishes (RFC 7208), present only where --spf asked, as the tree of lookups a receiving mail server makes to check it. The lookups go to a recursive server, the way a mail server makes them, and are not in the tree of the walk. Which term a check stops at depends on who is sending, so every term up to all is followed: this is the check of a sender that matches none of them.",
+      "type": "object",
+      "required": ["name", "lookups", "void", "result"],
+      "properties": {
+        "name": { "description": "The name whose policy this is.", "type": "string" },
+        "server": { "description": "The recursive server the lookups were asked of.", "$ref": "#/$defs/server" },
+        "record": { "description": "The policy at the name, its strings joined. Absent where there is none.", "type": "string" },
+        "terms": {
+          "description": "What the policy says, one term each, in the order it says it.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/spf_term" }
+        },
+        "lookups": { "description": "The terms that cost a DNS lookup, over the whole tree. A check is allowed 10.", "type": "integer" },
+        "void": { "description": "The lookups that found nothing. A check is allowed 2.", "type": "integer" },
+        "cut": { "description": "Present where the query budget ran out before every term was followed, which leaves lookups and void the least they can be.", "type": "boolean" },
+        "result": {
+          "description": "What any check of the policy comes to before the sender is known: ok where nothing in it fails one, none where the name publishes no policy, permerror past a limit or for a policy that does not parse, temperror where a lookup failed, undecided where the budget ran out or no recursive server could be asked.",
+          "type": "string",
+          "enum": ["ok", "none", "permerror", "temperror", "undecided"]
+        },
+        "why": { "description": "What made the result, absent for ok: the first term a check fails at, and why.", "type": "string" }
+      }
+    },
+    "spf_term": {
+      "description": "One mechanism or modifier of a policy, and what it cost.",
+      "type": "object",
+      "required": ["term"],
+      "properties": {
+        "term": { "description": "The term as written.", "type": "string" },
+        "kind": { "description": "The mechanism or the modifier, lowercase and without its qualifier: all, include, a, mx, ptr, ip4, ip6, exists, redirect, exp, or the name of a modifier nobody defined. Absent for a term that does not parse.", "type": "string" },
+        "lookup": { "description": "The running count of lookups at this term, absent for one that costs none.", "type": "integer" },
+        "target": { "description": "The name it looks up, as written where it depends on the sender.", "type": "string" },
+        "record": { "description": "The policy an include or a redirect found at target.", "type": "string" },
+        "terms": {
+          "description": "What that policy says.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/spf_term" }
+        },
+        "found": {
+          "description": "The addresses an a or an exists found, or the mail servers an mx found, in order of preference.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "void": { "description": "Present where the lookup found nothing.", "type": "boolean" },
+        "sender": { "description": "Present where the name depends on who is sending (a macro, or ptr), which is counted and not looked up.", "type": "boolean" },
+        "unreached": { "description": "Present for a term no check comes to: after all, or a redirect beside one.", "type": "boolean" },
+        "problem": { "description": "What is wrong with the term.", "type": "string" },
+        "fatal": { "description": "Present where the problem fails a check, rather than being advice.", "type": "boolean" }
       }
     },
     "caa_lookup": {

@@ -124,6 +124,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--check-recursion`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone to look up somebody else's name, and say which do |
 | [`--check-edns`](docs/guide/zones.md#how-they-handle-edns) | ask every nameserver of the zone the RFC 8906 EDNS tests, and say which fail them |
 | [`--caa`](docs/guide/zones.md#who-may-issue-certificates-for-it) | say which certificate authorities may issue for the name, and which CAA set decides it (RFC 8659) |
+| [`--spf`](docs/guide/zones.md#what-a-check-of-its-mail-costs) | draw the name's SPF policy as the tree of lookups a mail server makes, and count them against the limit of ten (RFC 7208) |
 | [`--nsid`](docs/guide/zones.md#which-machine-answered) | ask each server which of itself answered, and draw it beside the address |
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |
 | [`--qmin`](docs/guide/zones.md#asking-only-what-each-zone-needs) | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |

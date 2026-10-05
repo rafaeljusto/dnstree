@@ -9,4 +9,12 @@
     |   `-- . (root)  (resolving ns.outside.net.)
     |       `-- c.root-servers.net. 192.33.4.12  7ms  NOERROR  timeout
     `-- error: gave up after 4 queries
+spf: www.example.com. takes 2 of 10 lookups, asked of 192.0.2.53
+|-- 2 address ranges
+|-- include:_spf.example.net (lookup 1)
+|   |-- a (lookup 2, 1 address)
+|   `-- ~all
+|-- +all: it lets anyone send mail as www.example.com.
+`-- never reached: mx
+spf: ok: nothing in it fails a check
 warning: no server answered for com.

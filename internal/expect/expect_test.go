@@ -337,3 +337,33 @@ func TestParseCAA(t *testing.T) {
 		t.Errorf("got %q, want the rdata found", got)
 	}
 }
+
+func TestSPF(t *testing.T) {
+	for name, tt := range map[string]struct {
+		spf   *trace.SPF
+		unmet []string
+	}{
+		"a policy no check fails on": {
+			spf: &trace.SPF{Result: trace.SPFOK, Lookups: 9},
+		},
+		"a policy past the limit": {
+			spf:   &trace.SPF{Result: trace.SPFPermError, Why: "include:_spf.test.: lookup 11, past the limit of 10"},
+			unmet: []string{"expected spf:ok, got permerror: include:_spf.test.: lookup 11, past the limit of 10"},
+		},
+		"no policy at all": {
+			spf:   &trace.SPF{Result: trace.SPFNone, Why: "test. publishes no SPF policy"},
+			unmet: []string{"expected spf:ok, got none: test. publishes no SPF policy"},
+		},
+		"a walk that looked up no spf": {
+			unmet: []string{"expected spf:ok, got a walk that looked up no spf"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := walk("A", answered("A", "192.0.2.10"))
+			tr.SPF = tt.spf
+			if got := expect.Unmet(tr, parse(t, "SPF:ok")); !slices.Equal(got, tt.unmet) {
+				t.Errorf("got %q, want %q", got, tt.unmet)
+			}
+		})
+	}
+}

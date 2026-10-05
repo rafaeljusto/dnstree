@@ -66,8 +66,8 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   the wire format — may import the DNS codec. Keeping it out of the trace, the
   renderers and the AS lookups is what makes them testable without a network.
   `internal/layering` fails on any other import of it, and on the trace, the
-  renderers, explain, expect, history or the AS lookups reaching it through
-  another package.
+  renderers, explain, expect, history, the AS lookups or the SPF check
+  reaching it through another package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net/idna` for names typed in any script,

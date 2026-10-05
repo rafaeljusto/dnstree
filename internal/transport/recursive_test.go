@@ -1,12 +1,15 @@
 package transport_test
 
 import (
+	"context"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
+
+	"codeberg.org/miekg/dns"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -185,5 +188,61 @@ func TestDiscoverTruncated(t *testing.T) {
 	found = transport.Discover(t.Context(), carrier, nil, server.Addr)
 	if found.Err == "" || len(found.Designated) != 0 {
 		t.Errorf("got %+v, want the truncation said rather than read as no offers", found)
+	}
+}
+
+// TestLookupTruncated covers a policy too long for a datagram, which is asked
+// again over TCP rather than read short.
+func TestLookupTruncated(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "example.test.", Zone: `
+@     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
+@     IN NS   ns
+ns    IN A    127.0.0.1
+@     IN TXT  "v=spf1 include:_spf.example.test -all"
+`, Behaviour: fakens.Behaviour{TruncateUDP: true}})
+	carrier := transport.NewUDP(transport.Config{})
+
+	got, err := transport.Lookup(t.Context(), carrier, transport.NewTCP(transport.Config{}), server.Addr, "example.test.", "TXT", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Err != "" || len(got.Records) != 1 || got.Records[0].Data != `"v=spf1 include:_spf.example.test -all"` {
+		t.Errorf("got %+v, want the policy asked again over tcp", got)
+	}
+}
+
+// silent is a carrier whose answers never arrive, the way a datagram too big
+// for something on the path is dropped.
+type silent struct{ asked int }
+
+func (s *silent) Proto() string { return transport.ProtoUDP }
+func (s *silent) Port() uint16  { return 53 }
+func (s *silent) Exchange(context.Context, *dns.Msg, netip.AddrPort, string) (*dns.Msg, time.Duration, error) {
+	s.asked++
+	return nil, 0, context.DeadlineExceeded
+}
+
+// TestLookupSilent covers a resolver whose answer never arrives over UDP: it is
+// asked again as many times as retries allows, and then over TCP.
+func TestLookupSilent(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "example.test.", Zone: `
+@     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
+@     IN NS   ns
+ns    IN A    127.0.0.1
+@     IN TXT  "v=spf1 -all"
+`})
+	carrier := &silent{}
+	got, err := transport.Lookup(t.Context(), carrier, transport.NewTCP(transport.Config{}), server.Addr, "example.test.", "TXT", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if carrier.asked != 2 || got.Err != "" || len(got.Records) != 1 {
+		t.Errorf("asked %d times over udp, got %+v; want 2, then the answer over tcp", carrier.asked, got)
+	}
+
+	carrier = &silent{}
+	got, _ = transport.Lookup(t.Context(), carrier, nil, server.Addr, "example.test.", "TXT", 0)
+	if carrier.asked != 1 || got.Err == "" {
+		t.Errorf("asked %d times, got %+v; want once, and the silence said", carrier.asked, got)
 	}
 }

@@ -270,5 +270,78 @@
       "zone": "example.com.",
       "algorithm": "ECDSAP256SHA256"
     }
+  },
+  "spf": {
+    "name": "www.example.com.",
+    "server": {
+      "ip": "192.0.2.53",
+      "port": 53
+    },
+    "record": "v=spf1 include:_spf.example.net mx exists:%{i}.x.example.com a:gone.example.com ptr -all",
+    "terms": [
+      {
+        "term": "include:_spf.example.net",
+        "kind": "include",
+        "lookup": 1,
+        "target": "_spf.example.net.",
+        "record": "v=spf1 ip4:192.0.2.0/24 ~all",
+        "terms": [
+          {
+            "term": "ip4:192.0.2.0/24",
+            "kind": "ip4"
+          },
+          {
+            "term": "~all",
+            "kind": "all"
+          }
+        ]
+      },
+      {
+        "term": "mx",
+        "kind": "mx",
+        "lookup": 2,
+        "target": "www.example.com.",
+        "found": [
+          "mail.example.com."
+        ]
+      },
+      {
+        "term": "exists:%{i}.x.example.com",
+        "kind": "exists",
+        "lookup": 3,
+        "target": "%{i}.x.example.com",
+        "sender": true
+      },
+      {
+        "term": "a:gone.example.com",
+        "kind": "a",
+        "lookup": 4,
+        "target": "gone.example.com.",
+        "void": true,
+        "problem": "lookup 3 to find nothing, past the limit of 2",
+        "fatal": true
+      },
+      {
+        "term": "ptr",
+        "kind": "ptr",
+        "lookup": 5,
+        "sender": true,
+        "problem": "it rests on the sender's reverse zone"
+      },
+      {
+        "term": "-all",
+        "kind": "all"
+      },
+      {
+        "term": "redirect=never.example.net",
+        "kind": "redirect",
+        "unreached": true
+      }
+    ],
+    "lookups": 5,
+    "void": 1,
+    "cut": true,
+    "result": "undecided",
+    "why": "the budget ran out"
   }
 }

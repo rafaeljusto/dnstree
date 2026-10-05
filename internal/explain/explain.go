@@ -31,6 +31,7 @@ const (
 	Spread                // what the nameservers of the zone have in common
 	Servers               // the servers that made the walk harder
 	Issuance              // who may issue certificates for the name
+	Mail                  // what a check of mail sent as the name comes to
 	Resolver              // what an ordinary resolution made of the same question
 	Change                // what is not what it was when this walk was last made
 )
@@ -51,6 +52,8 @@ func (t Topic) String() string {
 		return "servers"
 	case Issuance:
 		return "issuance"
+	case Mail:
+		return "mail"
 	case Resolver:
 		return "resolver"
 	case Change:
@@ -114,6 +117,9 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, exposure(tr)...)
 	findings = append(findings, ednsTests(tr)...)
 	if finding, ok := issuance(tr); ok {
+		findings = append(findings, finding)
+	}
+	if finding, ok := sender(tr); ok {
 		findings = append(findings, finding)
 	}
 	if finding, ok := comparison(tr); ok {
@@ -1224,6 +1230,36 @@ func issuance(tr *trace.Trace) (Finding, bool) {
 		text += fmt.Sprintf(", and %s issue wildcards below it", issuers(caa.Wildcard))
 	}
 	return Finding{Topic: Issuance, Level: Note, Text: text}, true
+}
+
+// sender is what a check of mail sent as the name comes to, where --spf
+// followed its policy.
+func sender(tr *trace.Trace) (Finding, bool) {
+	spf := tr.SPF
+	if spf == nil {
+		return Finding{}, false
+	}
+	switch spf.Result {
+	case trace.SPFNone:
+		return Finding{Topic: Mail, Level: Note, Text: fmt.Sprintf(
+			"%s publishes no SPF policy, so a receiver cannot tell mail sent as it from a forgery by SPF alone", spf.Name)}, true
+	case trace.SPFPermError:
+		return Finding{Topic: Mail, Level: Warn, Text: fmt.Sprintf(
+			"every SPF check of mail sent as %s is a permerror, which many receivers treat as a failure: %s", spf.Name, spf.Why)}, true
+	case trace.SPFTempError:
+		return Finding{Topic: Mail, Level: Warn, Text: fmt.Sprintf(
+			"an SPF check of mail sent as %s fails for now, and the receiver may defer the mail: %s", spf.Name, spf.Why)}, true
+	case trace.SPFUndecided:
+		return Finding{Topic: Mail, Level: Warn, Text: fmt.Sprintf(
+			"the SPF policy of %s could not be followed to its end: %s", spf.Name, spf.Why)}, true
+	}
+	if spf.Lookups == trace.SPFLookupLimit {
+		return Finding{Topic: Mail, Level: Warn, Text: fmt.Sprintf(
+			"the SPF policy of %s takes all %d lookups a check is allowed, so one more in any policy it includes makes every check a permerror",
+			spf.Name, trace.SPFLookupLimit)}, true
+	}
+	return Finding{Topic: Mail, Level: Note, Text: fmt.Sprintf(
+		"the SPF policy of %s takes %d of the %d lookups a check is allowed", spf.Name, spf.Lookups, trace.SPFLookupLimit)}, true
 }
 
 // issuers names the authorities a set lets issue.

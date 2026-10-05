@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -38,6 +39,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
 	"github.com/rafaeljusto/dnstree/v2/internal/roothints"
+	"github.com/rafaeljusto/dnstree/v2/internal/spf"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
@@ -340,10 +342,14 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	// server answers in the time one hop of the walk takes, so waiting for it
 	// separately would be time spent on metadata.
 	timed := compare(ctx, cfg, log)
+	checked := policy(ctx, cfg)
 
 	tr, err := resolve(ctx, cfg, log, lookups, rec, live)
 	if err != nil {
 		return nil, err
+	}
+	if checked != nil {
+		tr.SPF = <-checked
 	}
 
 	if lookups != nil {
@@ -359,6 +365,41 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		report(ctx, cfg, tr)
 	}
 	return tr, nil
+}
+
+// policy checks the sender policy of the name beside the walk, through the
+// recursive server a mail server would ask. It never touches the trace the walk
+// is building: what it found joins it once the walk is over.
+func policy(ctx context.Context, cfg *cli.Config) <-chan *trace.SPF {
+	if !cfg.SPF {
+		return nil
+	}
+	server := transport.System()
+	if len(cfg.Resolvers) > 0 {
+		server = cfg.Resolvers[0]
+	}
+	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
+	fallback := transport.NewTCP(transport.Config{Timeout: cfg.Timeout})
+
+	checked := make(chan *trace.SPF, 1)
+	go func() {
+		if !server.IsValid() {
+			checked <- &trace.SPF{Name: cfg.Name, Result: trace.SPFUndecided,
+				Why: "there is no recursive server to ask; name one with --resolver"}
+			return
+		}
+		lookup := func(ctx context.Context, name, qtype string) *trace.Resolver {
+			answer, err := transport.Lookup(ctx, carrier, fallback, server, name, qtype, cfg.Retries)
+			if err != nil {
+				return nil
+			}
+			return answer
+		}
+		found := spf.Check(ctx, cfg.Name, lookup, cmp.Or(cfg.MaxQueries, resolver.DefaultMaxQueries))
+		found.Server = trace.Server{IP: server.Addr(), Port: server.Port()}
+		checked <- found
+	}()
+	return checked
 }
 
 // report tells the agent the broken zone named that its chain of trust is

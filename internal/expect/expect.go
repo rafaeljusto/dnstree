@@ -28,6 +28,7 @@ const (
 	answer                 // the records that answered
 	fresh                  // how long the signatures have left to run
 	authority              // a certificate authority free to issue for the name
+	sender                 // a sender policy no check fails on
 )
 
 // Expectation is one thing the command line asked to be true of the walk.
@@ -50,7 +51,7 @@ func (e Expectation) String() string { return e.want }
 // a secure chain none of whose signatures is late in the life it was made for,
 // or none of which runs out within the time after a colon, such as fresh:3d; or
 // caa: and the certificate authority that has to be free to issue for the
-// name; or else the rdata of a record that has to be among the answers.
+// name; or spf:ok, a sender policy no check fails on; or else the rdata of a record that has to be among the answers.
 //
 // The words win, because they are what is nearly always meant. A zone that
 // serves a record whose rdata reads like one of them is asked for with a
@@ -82,6 +83,9 @@ func Parse(text string) (Expectation, error) {
 			return Expectation{}, fmt.Errorf("%s: name the certificate authority, such as caa:letsencrypt.org", text)
 		}
 		return Expectation{about: authority, want: lower}, nil
+	}
+	if lower == "spf:ok" {
+		return Expectation{about: sender, want: lower}, nil
 	}
 	switch trace.DNSSECState(lower) {
 	case trace.Secure, trace.Insecure, trace.Bogus, trace.Indeterminate:
@@ -141,6 +145,9 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 
 	case authority:
 		return e.issuer(tr)
+
+	case sender:
+		return policy(tr)
 	}
 
 	result := tr.Result()
@@ -290,6 +297,18 @@ func list(items []string) string {
 		return strings.Join(items[:most], ", ") + fmt.Sprintf(" and %d more", len(items)-most)
 	}
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+}
+
+// policy reports whether --spf found a policy no check fails on. A name with
+// none has not met it: somebody who expects a policy expects one there.
+func policy(tr *trace.Trace) (got string, ok bool) {
+	switch {
+	case tr.SPF == nil:
+		return "a walk that looked up no spf", false
+	case tr.SPF.Result == trace.SPFOK:
+		return "ok", true
+	}
+	return string(tr.SPF.Result) + ": " + tr.SPF.Why, false
 }
 
 // issuer reports whether the authority after caa: may issue for the name, or,

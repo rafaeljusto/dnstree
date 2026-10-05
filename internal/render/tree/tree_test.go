@@ -129,6 +129,21 @@ func kinds() *trace.Trace {
 		Question: trace.Question{Name: "alias.example.com.", Type: "A", Class: "IN"},
 		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{lame, referral}},
 		Warnings: []string{"no server answered for com."},
+		SPF: &trace.SPF{
+			Name:   "www.example.com.",
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+			Record: "v=spf1 ip4:192.0.2.0/24 ip6:2001:db8::/32 include:_spf.example.net +all mx",
+			Terms: []trace.SPFTerm{
+				{Term: "ip4:192.0.2.0/24", Kind: "ip4"},
+				{Term: "ip6:2001:db8::/32", Kind: "ip6"},
+				{Term: "include:_spf.example.net", Kind: "include", Lookup: 1, Target: "_spf.example.net.", Record: "v=spf1 a ~all",
+					Terms: []trace.SPFTerm{{Term: "a", Kind: "a", Lookup: 2, Target: "_spf.example.net.", Found: []string{"192.0.2.25"}}, {Term: "~all", Kind: "all"}}},
+				{Term: "+all", Kind: "all", Problem: "it lets anyone send mail as www.example.com."},
+				{Term: "mx", Kind: "mx", Unreached: true},
+			},
+			Lookups: 2,
+			Result:  trace.SPFOK,
+		},
 	}
 }
 

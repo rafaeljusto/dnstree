@@ -1264,3 +1264,42 @@ func TestIssuance(t *testing.T) {
 		t.Errorf("got %q, want nothing said of CAA a walk did not look up", got)
 	}
 }
+
+func TestSender(t *testing.T) {
+	for name, tt := range map[string]struct {
+		spf  *trace.SPF
+		want string
+	}{
+		"a policy within the limits": {
+			spf:  &trace.SPF{Name: "test.", Lookups: 4, Result: trace.SPFOK},
+			want: "the SPF policy of test. takes 4 of the 10 lookups a check is allowed",
+		},
+		"a policy at the limit": {
+			spf:  &trace.SPF{Name: "test.", Lookups: 10, Result: trace.SPFOK},
+			want: "takes all 10 lookups a check is allowed, so one more in any policy it includes makes every check a permerror",
+		},
+		"a policy past the limit": {
+			spf:  &trace.SPF{Name: "test.", Lookups: 12, Result: trace.SPFPermError, Why: "include:a.test.: lookup 11, past the limit of 10"},
+			want: "every SPF check of mail sent as test. is a permerror, which many receivers treat as a failure: include:a.test.: lookup 11, past the limit of 10",
+		},
+		"no policy": {
+			spf:  &trace.SPF{Name: "test.", Result: trace.SPFNone},
+			want: "test. publishes no SPF policy",
+		},
+		"a lookup that failed": {
+			spf:  &trace.SPF{Name: "test.", Result: trace.SPFTempError, Why: "include:a.test.: the TXT lookup of a.test. failed: SERVFAIL"},
+			want: "fails for now, and the receiver may defer the mail",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := walk(answered(300))
+			tr.SPF = tt.spf
+			if got := said(tr); !strings.Contains(got, tt.want) {
+				t.Errorf("got %q, want it to say %q", got, tt.want)
+			}
+		})
+	}
+	if got := said(walk(answered(300))); strings.Contains(got, "SPF") {
+		t.Errorf("got %q, want nothing said of SPF a walk did not look up", got)
+	}
+}

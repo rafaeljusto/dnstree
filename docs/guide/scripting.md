@@ -29,8 +29,8 @@ $ echo $?
 It takes one of the words that name how far the chain of trust got — `secure`,
 `insecure`, `bogus`, `indeterminate` — or what the walk came to — `answer`,
 `cname`, `nodata`, `nxdomain` — or `fresh`, below — or `caa:` and a
-certificate authority, below that — or else the rdata of a record that has to
-be among the answers. Repeat it for each thing that has to
+certificate authority, below that — or `spf:ok`, below that — or else the rdata
+of a record that has to be among the answers. Repeat it for each thing that has to
 hold:
 
 ```
@@ -71,6 +71,12 @@ expected caa:letsencrypt.org, got pki.goog
 $ echo $?
 4
 ```
+
+`spf:ok` asks that `--spf` found a policy no check fails on: within the limits,
+every lookup answered, and something there to check. It is how a provider
+pushing the count past ten is caught the day it happens rather than the day
+mail starts bouncing; `dnstree_spf_lookups`, below, is how the count is watched
+before it gets there.
 
 Addresses are compared as addresses and names the way DNS compares names, so
 `2001:0db8::1` finds a record written `2001:db8::1`, the case of a name does not
@@ -304,7 +310,7 @@ on the path took, how many queries failed, the chain of trust, the time left on
 the first signature to run out, what `--check-ds` found, which nameservers
 `--check-axfr` and `--check-recursion` found open, which `--check-edns` tests
 passed, who `--caa` found free to
-issue, the TTL the zone gives the answer, and how long each resolver took,
+issue, how many lookups `--spf` counted and what a check comes to, the TTL the zone gives the answer, and how long each resolver took,
 whether it agreed and the TTL it handed out. Only gauges are used, so the older
 Prometheus text format reads it too. A family the walk has nothing to say about
 is left out rather than written as zero: a walk without `--dnssec` says nothing

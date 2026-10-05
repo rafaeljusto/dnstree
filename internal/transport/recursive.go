@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsconf"
@@ -56,6 +57,21 @@ func SystemFrom(path string) netip.AddrPort {
 // not be asked at all.
 func Ask(ctx context.Context, carrier Transport, server netip.AddrPort,
 	question trace.Question, dnssec bool, subnet netip.Prefix) (*trace.Resolver, error) {
+	return ask(ctx, carrier, nil, server, question, dnssec, subnet, 0)
+}
+
+// Lookup is Ask for a question of the run's own, read whole: an answer too big
+// for a datagram is asked again over fallback, since a policy cut short is not
+// the policy. A resolver still resolving when the time ran out is asked again
+// up to retries more times, the way the walk asks a silent server again, and
+// then over fallback.
+func Lookup(ctx context.Context, carrier, fallback Transport, server netip.AddrPort,
+	name, qtype string, retries int) (*trace.Resolver, error) {
+	return ask(ctx, carrier, fallback, server, trace.Question{Name: name, Type: qtype, Class: "IN"}, false, netip.Prefix{}, retries)
+}
+
+func ask(ctx context.Context, carrier, fallback Transport, server netip.AddrPort,
+	question trace.Question, dnssec bool, subnet netip.Prefix, retries int) (*trace.Resolver, error) {
 
 	qtype, ok := dns.StringToType[strings.ToUpper(question.Type)]
 	if !ok {
@@ -71,6 +87,16 @@ func Ask(ctx context.Context, carrier Transport, server netip.AddrPort,
 	req.RecursionDesired = true
 
 	resp, rtt, err := carrier.Exchange(ctx, req, server, "")
+	for attempt := 0; attempt < retries && err != nil && IsTimeout(err); attempt++ {
+		resp, rtt, err = carrier.Exchange(ctx, req, server, "")
+	}
+	// A big answer that never arrives is as common as one that arrives cut
+	// short: something on the way drops the datagram it would have come in.
+	if fallback != nil && (err == nil && resp.Truncated || err != nil && IsTimeout(err)) {
+		var more time.Duration
+		resp, more, err = fallback.Exchange(ctx, req, server, "")
+		rtt += more
+	}
 	answer := &trace.Resolver{
 		Server:  trace.Server{IP: server.Addr(), Port: server.Port()},
 		Elapsed: rtt,

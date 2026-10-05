@@ -55,6 +55,10 @@ type Trace struct {
 	// ask.
 	CAA *CAA
 
+	// SPF is the sender policy of the name and the lookups it costs, nil where
+	// --spf did not ask.
+	SPF *SPF
+
 	// Trial is the delegation --try-ns put in place of the real one, nil for a
 	// walk of the DNS as it is. A walk with one is a simulation of a zone
 	// moved to other nameservers, and has to read as one wherever it is drawn.

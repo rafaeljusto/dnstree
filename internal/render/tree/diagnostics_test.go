@@ -524,3 +524,52 @@ func TestRenderCAA(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderSPF(t *testing.T) {
+	for name, tt := range map[string]struct {
+		spf  *trace.SPF
+		want []string
+	}{
+		"a policy past the limit": {
+			spf: &trace.SPF{Name: "test.", Record: "v=spf1 include:a.test -all", Lookups: 11,
+				Terms:  []trace.SPFTerm{{Term: "include:a.test", Kind: "include", Lookup: 11, Problem: "lookup 11, past the limit of 10", Fatal: true}, {Term: "-all", Kind: "all"}},
+				Result: trace.SPFPermError, Why: "include:a.test: lookup 11, past the limit of 10"},
+			want: []string{
+				"spf: test. takes 11 of 10 lookups",
+				"spf: permerror: include:a.test: lookup 11, past the limit of 10",
+			},
+		},
+		"a policy at the limit": {
+			spf:  &trace.SPF{Name: "test.", Record: "v=spf1 -all", Lookups: 10, Terms: []trace.SPFTerm{{Term: "-all", Kind: "all"}}, Result: trace.SPFOK},
+			want: []string{"spf: test. takes 10 of 10 lookups", "spf: ok, at the limit: one more lookup in any policy it includes is a permerror"},
+		},
+		"no policy": {
+			spf:  &trace.SPF{Name: "test.", Result: trace.SPFNone, Why: "test. publishes no SPF policy"},
+			want: []string{"spf: none: test. publishes no SPF policy"},
+		},
+		"a budget that ran out": {
+			spf: &trace.SPF{Name: "test.", Record: "v=spf1 a mx -all", Lookups: 2, Void: 1, Cut: true,
+				Terms:  []trace.SPFTerm{{Term: "a", Kind: "a", Lookup: 1, Void: true}, {Term: "mx", Kind: "mx", Lookup: 2}, {Term: "-all", Kind: "all"}},
+				Result: trace.SPFUndecided, Why: "the budget of 64 queries ran out"},
+			want: []string{
+				"spf: test. takes at least 2 of 10 lookups, at least 1 of 2 finding nothing",
+				"spf: undecided: the budget of 64 queries ran out",
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := oneHop(&trace.Step{Kind: trace.KindAnswer, Rcode: "NOERROR"})
+			tr.SPF = tt.spf
+			out := draw(t, tr)
+			var got []string
+			for line := range strings.Lines(out) {
+				if strings.HasPrefix(line, "spf: ") {
+					got = append(got, strings.TrimSuffix(line, "\n"))
+				}
+			}
+			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

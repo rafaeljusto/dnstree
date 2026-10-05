@@ -418,6 +418,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--caa</code> climbs from the name towards the root the way a certificate authority does, and says which CAA set decides who may issue. A lookup that fails is said too, since in a signed zone it makes every authority refuse.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">mail</span>
+          <h3>An SPF policy one include from failing</h3>
+          <p><code>--spf</code> draws the policy as the tree of lookups a mail server makes, and counts them against the limit of ten. The count creeps up in a provider's record, and past ten every check is a permerror.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">disagreeing</span>
           <h3>A delegation the zone does not recognise</h3>
           <p><code>--check-ns</code> holds the zone's own NS records, and its nameservers' addresses, against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed.</p>

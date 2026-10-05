@@ -52,6 +52,7 @@ one after another, each from the root servers down.
   --check-recursion       ask each nameserver of the zone to resolve another name
   --check-edns            ask each nameserver of the zone the RFC 8906 edns tests
   --caa                   say which certificate authorities may issue for NAME
+  --spf                   draw NAME's SPF policy and count the lookups it costs
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
@@ -99,8 +100,8 @@ somewhere other than the real root usually wants --trust-anchors with it, and
 --tls-ca or --tls-insecure to reach a --dot or --doh server holding a test
 certificate. --resolver points everything that needs a recursive server at one
 of its own: the origin AS lookups, the question dnstree times against an
-ordinary resolution to say what the walk cost over it, and the report --report
-sends. --asn-resolver is the older name for it, and still means the same thing.
+ordinary resolution to say what the walk cost over it, the report --report
+sends and the lookups --spf makes. --asn-resolver is the older name for it, and still means the same thing.
 
 Repeat --resolver to put the question to every one of them at once, which is
 how to ask from several places at the same moment: two resolvers answering
@@ -173,9 +174,10 @@ own. With --from, a walk saved during an incident becomes a report afterwards.
 it ended, what it and each hop on the path took, the chain of trust, the time
 left on the signatures, what --check-ds found, which nameservers the
 --check-axfr and --check-recursion probes found open, which --check-edns tests
-passed, who --caa found free to issue and what the resolvers answered, each labelled with the question. Run from
-cron into the directory of node_exporter's textfile collector, it is what
-Prometheus alerts on.
+passed, who --caa found free to issue, how many lookups --spf counted and what
+the resolvers answered, each labelled with the question. Run from cron into the
+directory of node_exporter's textfile collector, it is what Prometheus alerts
+on.
 
 --from reads a walk that --format json wrote, from FILE or from - for the
 standard input, and draws it in whichever format was asked for, as though it
@@ -249,7 +251,9 @@ trust got (secure, insecure, bogus, indeterminate), or what the walk came to
 that holds and none of whose signatures is late in the life it was made for;
 fresh:3d or fresh:36h asks instead that none runs out that soon. caa:CA, such as
 caa:letsencrypt.org, asks that --caa found that authority free to issue for the
-name, which is how a renewal about to be refused is caught. Or else it
+name, which is how a renewal about to be refused is caught. spf:ok asks that
+--spf found a policy no check fails on, which is how a provider pushing the
+count past ten is caught. Or else it
 takes the rdata of a record that has to be among the answers, such as an
 address. Repeat it for every one that has to hold.
 Those words win where a value could be read either way, so a record whose rdata
@@ -308,6 +312,17 @@ left undecided. Either is said in a warning. With --dnssec the
 verdict is the weakest on the way up: a name that has no set has to prove it,
 since dropping a set is all it takes to lift a restriction. It costs a query
 for each name asked.
+
+--spf draws the SPF policy NAME publishes (RFC 7208) as the tree of lookups a
+receiving mail server makes to check it, and counts them against the limits a
+check is held to: ten lookups, and two that find nothing. Past either the check
+is a permerror, which many receivers treat as a failure, and the count usually
+creeps up in a provider's record rather than in NAME's own. The lookups go to
+the first --resolver, or the host's own, which is where a mail server asks
+them. Which term a check stops at depends on who is sending, so every term up
+to all is followed, the way a sender that matches none of them is checked. A
+term with a macro in it, and ptr, depend on the sender too, and are counted
+without being asked. It spends a budget of --max-queries apart from the walk's.
 
 --all sees the other half of the same thing without being asked to: where it
 puts the question itself to every nameserver of a zone, it says so when they do
@@ -395,6 +410,7 @@ type Config struct {
 	CheckRecursion bool
 	CheckEDNS      bool
 	CAA            bool
+	SPF            bool
 
 	NSID     bool
 	Cookie   bool
@@ -605,6 +621,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.CheckRecursion, "check-recursion", false, "ask every nameserver of the zone to look up somebody else's name")
 	flags.BoolVar(&cfg.CheckEDNS, "check-edns", false, "ask every nameserver of the zone the RFC 8906 edns tests")
 	flags.BoolVar(&cfg.CAA, "caa", false, "say which certificate authorities may issue for the name")
+	flags.BoolVar(&cfg.SPF, "spf", false, "draw the name's SPF policy and count the lookups it costs")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
@@ -876,7 +893,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Report && cfg.Watch != 0 {
 		return nil, fmt.Errorf("%w: --report with --watch would send the same report every walk", ErrUsage)
 	}
-	if cfg.Resolvers = resolvers.servers; len(cfg.Resolvers) > 0 && !cfg.ASN && !cfg.Compare && !cfg.Report {
+	if cfg.Resolvers = resolvers.servers; len(cfg.Resolvers) > 0 && !cfg.ASN && !cfg.Compare && !cfg.Report && !cfg.SPF {
 		return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
 	}
 	if cfg.Pcap != "" && (cfg.Proto == "dot" || cfg.Proto == "doh") {
@@ -985,7 +1002,7 @@ func several(cfg *Config, expecting bool) error {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

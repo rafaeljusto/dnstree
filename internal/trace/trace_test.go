@@ -243,6 +243,13 @@ func fill(v reflect.Value, text string, depth int) {
 			}
 		}
 	case reflect.Slice:
+		// A slice of the struct that holds it nests the way a pointer does.
+		if nests(v.Type().Elem()) {
+			if depth == 0 {
+				return
+			}
+			depth--
+		}
 		v.Set(reflect.MakeSlice(v.Type(), 1, 1))
 		fill(v.Index(0), text, depth)
 	case reflect.Map:
@@ -253,6 +260,19 @@ func fill(v reflect.Value, text string, depth int) {
 			v.SetMapIndex(reflect.ValueOf(text).Convert(v.Type().Key()), value)
 		}
 	}
+}
+
+// nests reports whether a struct holds a slice of itself.
+func nests(t reflect.Type) bool {
+	if t.Kind() != reflect.Struct {
+		return false
+	}
+	for i := range t.NumField() {
+		if field := t.Field(i).Type; field.Kind() == reflect.Slice && field.Elem() == t {
+			return true
+		}
+	}
+	return false
 }
 
 // walk calls see with every plain string reachable from v and where it is.
