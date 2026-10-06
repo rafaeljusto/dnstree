@@ -298,6 +298,48 @@ func TestLongPolicy(t *testing.T) {
 	}
 }
 
+// TestOutOfTime covers a check stopped halfway: it is cut short and says what
+// stopped it, time or an interruption, rather than blaming the resolver or the
+// budget.
+func TestOutOfTime(t *testing.T) {
+	tests := map[string]struct {
+		cause error
+		late  *trace.Resolver
+		why   string
+	}{
+		"time up, a lookup that could not be made": {
+			cause: context.DeadlineExceeded, why: "ran out of time",
+		},
+		"time up, a lookup that came back with an error": {
+			cause: context.DeadlineExceeded, late: &trace.Resolver{Err: "context canceled"}, why: "ran out of time",
+		},
+		"interrupted, a lookup that came back with an error": {
+			cause: context.Canceled, late: &trace.Resolver{Err: "context canceled"}, why: "interrupted",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			var asked int
+			lookup := chain(5).lookup(&asked)
+			got := spf.Check(ctx, "example.com", func(ctx context.Context, name, qtype string) *trace.Resolver {
+				if asked == 2 {
+					cancel(tt.cause)
+					return tt.late
+				}
+				return lookup(ctx, name, qtype)
+			}, 64)
+			if asked != 2 {
+				t.Errorf("%d queries, want none once the check was stopped", asked)
+			}
+			if !got.Cut || got.Result != trace.SPFUndecided || !strings.Contains(got.Why, tt.why) {
+				t.Errorf("cut %v, %q (%s); want cut and undecided, %s", got.Cut, got.Result, got.Why, tt.why)
+			}
+		})
+	}
+}
+
 // TestNoResolver covers a lookup that cannot be made at all.
 func TestNoResolver(t *testing.T) {
 	got := spf.Check(t.Context(), "example.com", func(context.Context, string, string) *trace.Resolver { return nil }, 64)

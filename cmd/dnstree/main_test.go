@@ -1706,3 +1706,46 @@ www   IN A    192.0.2.10
 		})
 	}
 }
+
+// TestRunSPFOutOfTime covers --spf asking a resolver that never answers: the
+// tree is drawn once the walk and a short grace are over, rather than after
+// every lookup has spent its whole timeout.
+func TestRunSPFOutOfTime(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: `
+@                     IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                     IN NS   a.root-servers.net.
+a.root-servers.net.   IN A    127.0.0.1
+example.test.         IN NS   ns.example.test.
+ns.example.test.      IN A    127.0.0.1
+`})
+	child := fakens.New(t, fakens.Config{Name: "ns.example.test.", Origin: "example.test.", Zone: `
+@     IN SOA  ns hostmaster 7 7200 3600 1209600 3600
+@     IN NS   ns
+ns    IN A    127.0.0.1
+www   IN A    192.0.2.10
+`})
+	silent := fakens.New(t, fakens.Config{Name: "resolver.", Origin: ".", Zone: `
+@     IN SOA  resolver. hostmaster 1 7200 3600 1209600 3600
+`, Behaviour: fakens.Behaviour{Drop: true}})
+
+	spfGrace = 100 * time.Millisecond
+	defer func() { spfGrace = defaultSPFGrace }()
+
+	var stdout, stderr bytes.Buffer
+	args := []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())), "--resolver", silent.Addr.String(),
+		"--no-asn", "--no-compare", "--color", "never", "--format", "ascii",
+		"--timeout", "10s", "--spf", "www.example.test", "A",
+	}
+	start := time.Now()
+	if code := run(t.Context(), args, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("took %v, want the tree drawn soon after the walk", took)
+	}
+	if !strings.Contains(stdout.String(), "ran out of time") {
+		t.Errorf("got no word of the time running out:\n%s", stdout.String())
+	}
+}

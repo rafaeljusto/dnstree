@@ -65,6 +65,14 @@ const asnGrace = 2 * time.Second
 // until the walk has said which it is.
 const rdapGrace = 5 * time.Second
 
+// defaultSPFGrace is how long --spf may carry on once the walk is over. It
+// starts with the walk, and every lookup it makes has a timeout of its own,
+// so only a policy with slow includes is still at it by here.
+const defaultSPFGrace = 3 * time.Second
+
+// spfGrace is defaultSPFGrace, which the tests shorten.
+var spfGrace = defaultSPFGrace
+
 // Where --rdap finds the registries, and what it asks them with: the tests
 // point both at a registry of their own.
 var (
@@ -366,7 +374,9 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	// server answers in the time one hop of the walk takes, so waiting for it
 	// separately would be time spent on metadata.
 	timed := compare(ctx, cfg, log)
-	checked := policy(ctx, cfg)
+	checking, late := context.WithCancelCause(ctx)
+	defer late(nil)
+	checked := policy(checking, cfg)
 	if registry != nil {
 		registry.Prepare(ctx)
 	}
@@ -376,7 +386,9 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		return nil, err
 	}
 	if checked != nil {
+		cut := time.AfterFunc(spfGrace, func() { late(context.DeadlineExceeded) })
 		tr.SPF = <-checked
+		cut.Stop()
 	}
 	if registry != nil {
 		grace, cancel := context.WithTimeout(ctx, rdapGrace)

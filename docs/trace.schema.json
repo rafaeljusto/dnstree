@@ -237,9 +237,9 @@
         },
         "lookups": { "description": "The terms that cost a DNS lookup, over the whole tree. A check is allowed 10.", "type": "integer" },
         "void": { "description": "The lookups that found nothing. A check is allowed 2.", "type": "integer" },
-        "cut": { "description": "Present where the query budget ran out before every term was followed, which leaves lookups and void the least they can be.", "type": "boolean" },
+        "cut": { "description": "Present where the query budget or the time ran out, or the check was interrupted, before every term was followed, which leaves lookups and void the least they can be.", "type": "boolean" },
         "result": {
-          "description": "What any check of the policy comes to before the sender is known: ok where nothing in it fails one, none where the name publishes no policy, permerror past a limit or for a policy that does not parse, temperror where a lookup failed, undecided where the budget ran out, a policy was too long to read, or no recursive server could be asked.",
+          "description": "What any check of the policy comes to before the sender is known: ok where nothing in it fails one, none where the name publishes no policy, permerror past a limit or for a policy that does not parse, temperror where a lookup failed, undecided where the budget or the time ran out or the check was interrupted, a policy was too long to read, or no recursive server could be asked.",
           "type": "string",
           "enum": ["ok", "none", "permerror", "temperror", "undecided"]
         },

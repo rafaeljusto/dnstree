@@ -7,6 +7,7 @@ package spf
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -21,7 +22,8 @@ import (
 type Lookup func(ctx context.Context, name, qtype string) *trace.Resolver
 
 // Check follows the policy at name through every term a check can come to,
-// asking no more than budget queries. It always comes back with a policy:
+// asking no more than budget queries. A ctx cancelled with DeadlineExceeded
+// as its cause is the check running out of time, and any other an interruption. It always comes back with a policy:
 // whatever went wrong is its result, and the term it went wrong at says so.
 func Check(ctx context.Context, name string, lookup Lookup, budget int) *trace.SPF {
 	c := &checker{
@@ -41,7 +43,14 @@ func Check(ctx context.Context, name string, lookup Lookup, budget int) *trace.S
 		c.spf.Record = found.record
 		c.spf.Terms = c.terms(found.record, c.spf.Name, []string{canonical(c.spf.Name)}, true)
 	}
-	if c.spf.Cut && c.spf.Result == trace.SPFOK {
+	switch {
+	case c.stopped && (c.spf.Result == trace.SPFOK || c.spf.Result == trace.SPFUndecided && c.spf.Why == ""):
+		c.spf.Result = trace.SPFUndecided
+		c.spf.Why = "the check was interrupted before the policy was followed to its end"
+		if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
+			c.spf.Why = "the check ran out of time before the policy was followed to its end"
+		}
+	case c.spf.Cut && c.spf.Result == trace.SPFOK:
 		c.spf.Result = trace.SPFUndecided
 		c.spf.Why = fmt.Sprintf("the budget of %d queries ran out before the policy was followed to its end; raise --max-queries", budget)
 	}
@@ -53,17 +62,24 @@ type checker struct {
 	lookup  Lookup
 	budget  int
 	queries int
+	stopped bool // ctx is done, which cuts the check short like the budget
 	spf     *trace.SPF
 }
 
-// ask spends a query of the budget, and is nil once there is none left.
+// ask spends a query of the budget, and is nil once there is none left, or no
+// time.
 func (c *checker) ask(name, qtype string) *trace.Resolver {
-	if c.queries >= c.budget {
+	if c.queries >= c.budget || c.ctx.Err() != nil {
 		c.spf.Cut = true
+		c.stopped = c.ctx.Err() != nil
 		return nil
 	}
 	c.queries++
 	answer := c.lookup(c.ctx, name, qtype)
+	if c.ctx.Err() != nil && (answer == nil || answer.Err != "") {
+		c.spf.Cut, c.stopped = true, true
+		return nil
+	}
 	if answer == nil {
 		return &trace.Resolver{Err: "the resolver could not be asked"}
 	}
@@ -286,7 +302,7 @@ func (c *checker) follow(t *trace.SPFTerm, spec string, path []string, final boo
 	}
 	switch found.result {
 	case trace.SPFUndecided:
-		// Without a reason it is the budget, which Check says once.
+		// Without a reason it is the budget, or ctx, which Check says once.
 		if found.why != "" {
 			c.fail(t, found.result, found.why)
 		}

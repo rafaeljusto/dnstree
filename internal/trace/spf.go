@@ -22,8 +22,9 @@ type SPF struct {
 	Lookups int
 	Void    int
 
-	// Cut is set where the query budget ran out before every term was
-	// followed, which leaves the counts a floor.
+	// Cut is set where the query budget or the time ran out, or the check
+	// was interrupted, before every term was followed, which leaves the
+	// counts a floor.
 	Cut bool
 
 	// Result is what any check of the policy comes to before the sender is
