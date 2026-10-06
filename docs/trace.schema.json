@@ -45,6 +45,7 @@
     "spf": { "$ref": "#/$defs/spf" },
     "mail": { "$ref": "#/$defs/mail" },
     "registration": { "$ref": "#/$defs/registration" },
+    "propagation": { "$ref": "#/$defs/propagation" },
     "report": { "$ref": "#/$defs/report" },
     "trial": { "$ref": "#/$defs/trial" }
   },
@@ -79,6 +80,40 @@
         "ds_only_registry": { "description": "Key tags of DS the registry holds and the parent does not publish.", "type": "array", "items": { "type": "integer" } },
         "ds_only_parent": { "description": "Key tags of DS the parent publishes and the registry does not hold.", "type": "array", "items": { "type": "integer" } },
         "ds_differ": { "description": "Set where one side has DS and the other none, which is compared where the key tags of both are not to hand.", "type": "boolean" }
+      }
+    },
+    "propagation": {
+      "description": "How long each kind of change to the zone the walk ended in takes to reach every cache, present only where --propagation asked. Each wait is the worst case, a cache filled just before the change, read off TTLs the walk recorded; a change the walk read no TTL for is left out. It is worked out from the rest of the document, and not read back by --from.",
+      "type": "object",
+      "required": ["zone", "waits"],
+      "properties": {
+        "zone": { "description": "The zone the walk ended in.", "type": "string" },
+        "waits": { "type": "array", "items": { "$ref": "#/$defs/wait" } }
+      }
+    },
+    "wait": {
+      "description": "How long one kind of change takes to reach every cache.",
+      "type": "object",
+      "required": ["change", "seconds", "type", "held"],
+      "properties": {
+        "change": {
+          "description": "answer: the records that answered. denial: a name or type that did not exist, created; the shorter of the SOA's TTL and its minimum (RFC 2308). nameservers: the zone moved to other nameservers; the longer of the parent's NS TTL and the zone's own, read only with --check-ns. ds: the DS at the parent. keys: the zone's DNSKEY set.",
+          "type": "string",
+          "enum": ["answer", "denial", "nameservers", "ds", "keys"]
+        },
+        "seconds": { "type": "integer", "minimum": 0 },
+        "type": { "description": "The record type whose TTL decides the wait.", "type": "string" },
+        "held": { "description": "Each TTL the wait was worked out from, where it was served.", "type": "array", "items": { "$ref": "#/$defs/held" } }
+      }
+    },
+    "held": {
+      "description": "One TTL a wait was worked out from.",
+      "type": "object",
+      "required": ["zone", "ttl"],
+      "properties": {
+        "zone": { "type": "string" },
+        "ttl": { "type": "integer", "minimum": 0 },
+        "field": { "description": "Where the number is not the record's TTL, the field it is: minimum, the last field of an SOA.", "type": "string", "enum": ["minimum"] }
       }
     },
     "trial": {
@@ -724,7 +759,9 @@
           "description": "The DS records the parent signed for the zone, on a secure verdict about entering it, each held against the zone's keys. Absent for the root, whose DS are the trust anchors.",
           "type": "array",
           "items": { "$ref": "#/$defs/ds" }
-        }
+        },
+        "keys_ttl": { "description": "The TTL of the zone's DNSKEY set, in seconds, beside keys.", "type": "integer", "minimum": 0 },
+        "ds_ttl": { "description": "The TTL of the DS set the parent publishes for the zone, in seconds, beside ds.", "type": "integer", "minimum": 0 }
       }
     },
     "key": {

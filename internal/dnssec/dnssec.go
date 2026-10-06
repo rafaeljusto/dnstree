@@ -184,8 +184,9 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 	status.Algorithm = algorithm(signature.Algorithm)
 	status.KeyTags = []uint16{signature.KeyTag}
 	status.Keys, status.DS = setupOf(keys, signatures, delegated)
+	status.KeysTTL, status.DSTTL = shortest(keys), shortest(delegated)
 	if zone == "." {
-		status.DS = nil
+		status.DS, status.DSTTL = nil, 0
 	}
 	return c.settleAs(status, trace.Secure, "", keys)
 }
@@ -252,6 +253,18 @@ func setupOf(keys []*dns.DNSKEY, signatures []*dns.RRSIG, delegated []*dns.DS) (
 		return cmp.Or(cmp.Compare(a.Tag, b.Tag), cmp.Compare(a.Digest, b.Digest))
 	})
 	return set, records
+}
+
+// shortest is the TTL a cache keeps a set for: the lowest of its records,
+// where a server hands out a set whose TTLs disagree.
+func shortest[R dns.RR](set []R) uint32 {
+	var ttl uint32
+	for i, rr := range set {
+		if i == 0 || rr.Header().TTL < ttl {
+			ttl = rr.Header().TTL
+		}
+	}
+	return ttl
 }
 
 // rsaBits is the length of an RSA key's modulus (RFC 3110 2), zero for a key of

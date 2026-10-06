@@ -44,6 +44,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.SPF = convertSPF(tr.SPF)
 		document.Mail = convertMail(tr.Mail)
 		document.Registration = convertRegistration(tr.Registration)
+		document.Propagation = convertPropagation(tr.Propagation)
 		if tr.Report != nil {
 			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
 				Rcode: tr.Report.Rcode, Error: tr.Report.Err}
@@ -68,8 +69,45 @@ type document struct {
 	SPF           *spf          `json:"spf,omitempty"`
 	Mail          *mail         `json:"mail,omitempty"`
 	Registration  *registration `json:"registration,omitempty"`
+	Propagation   *propagation  `json:"propagation,omitempty"`
 	Report        *report       `json:"report,omitempty"`
 	Trial         *trial        `json:"trial,omitempty"`
+}
+
+// propagation is how long each kind of change to the zone the walk ended in
+// takes to reach every cache. It is worked out from the rest of the document,
+// so it is written and never read back.
+type propagation struct {
+	Zone  string `json:"zone"`
+	Waits []wait `json:"waits"`
+}
+
+type wait struct {
+	Change  string `json:"change"`
+	Seconds uint32 `json:"seconds"`
+	Type    string `json:"type"`
+	Held    []held `json:"held"`
+}
+
+type held struct {
+	Zone  string `json:"zone"`
+	TTL   uint32 `json:"ttl"`
+	Field string `json:"field,omitempty"`
+}
+
+func convertPropagation(from *trace.Propagation) *propagation {
+	if from == nil {
+		return nil
+	}
+	to := &propagation{Zone: from.Zone, Waits: []wait{}}
+	for _, w := range from.Waits {
+		converted := wait{Change: string(w.Change), Seconds: w.Seconds, Type: w.Type}
+		for _, h := range w.Held {
+			converted.Held = append(converted.Held, held{Zone: h.Zone, TTL: h.TTL, Field: h.Field})
+		}
+		to.Waits = append(to.Waits, converted)
+	}
+	return to
 }
 
 // trial is the delegation --try-ns put in place of a zone's real one.
@@ -299,6 +337,8 @@ type dnssec struct {
 	NSEC3      *nsec3      `json:"nsec3,omitempty"`
 	Keys       []key       `json:"keys,omitempty"`
 	DS         []ds        `json:"ds,omitempty"`
+	KeysTTL    uint32      `json:"keys_ttl,omitempty"`
+	DSTTL      uint32      `json:"ds_ttl,omitempty"`
 }
 
 // key is one zone key of a secure zone's DNSKEY set.
@@ -625,6 +665,8 @@ func convertDNSSEC(from *trace.DNSSECStatus) *dnssec {
 		KeyTags:   from.KeyTags,
 		Algorithm: from.Algorithm,
 		Digest:    from.Digest,
+		KeysTTL:   from.KeysTTL,
+		DSTTL:     from.DSTTL,
 	}
 	if from.Signal != nil {
 		to.Signal = &signal{State: string(from.Signal.State), Reason: from.Signal.Reason,

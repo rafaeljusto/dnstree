@@ -12,6 +12,7 @@ server says about its own answer.
 - [What a check of its mail costs](#what-a-check-of-its-mail-costs)
 - [Whether its mail can be sent verified](#whether-its-mail-can-be-sent-verified)
 - [Whether its registration is about to run out](#whether-its-registration-is-about-to-run-out)
+- [How long a change takes to reach everyone](#how-long-a-change-takes-to-reach-everyone)
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
 - [Which machine answered](#which-machine-answered)
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
@@ -518,6 +519,47 @@ The exit code is left alone unless `--expect registered:30d` asks for that long
 left ([Asking rather than reading](scripting.md#asking-rather-than-reading)).
 `--format json` carries it as `registration`, and `--format openmetrics` as
 `dnstree_registration_left_seconds` and its neighbours.
+
+## How long a change takes to reach everyone
+
+Nothing is pushed out when a zone changes: every cache holding the old copy
+keeps it until its TTL runs out, and most changes wait on more than one TTL,
+kept in more than one zone. `--propagation` reads the ones the walk saw and
+says how long each kind of change to the zone it ended in takes to reach every
+cache:
+
+```
+$ dnstree --propagation --dnssec --check-ns --serial --no-asn --no-compare example.com
+...
+propagation: how long a change to example.com. takes to reach every cache, at worst
+propagation:   change the answer        5m   A 300 at example.com.
+propagation:   create a missing record  30m  SOA 1800, minimum 1800 at example.com.
+propagation:   move the nameservers     2d   NS 172800 at com., 86400 at example.com.
+propagation:   change the DS            1d   DS 86400 at com.
+propagation:   change the keys          1h   DNSKEY 3600 at example.com.
+✔ answered in 2.9s · 19 queries · 14 servers
+```
+
+Each line is the worst case, for a cache filled just before the change; most
+caches let go sooner, and a resolver that caps TTLs, as many do at a day or a
+week, sooner still. A record that did not exist is kept missing for the shorter
+of the SOA's TTL and its minimum (RFC 2308), which is why a name created after
+somebody asked for it can take a while to appear. The nameservers take the
+longer of the two NS TTLs: the parent's, which is often the registry's to
+choose, and the zone's own, since resolvers differ over which they keep. A key
+rollover is steps that each wait on the DS or the DNSKEY TTL; removing an old
+DS before the longer one has passed leaves the caches still holding it with a
+chain that breaks.
+
+A TTL lowered ahead of a move counts only once the old, longer one has run out
+of the caches, so lower it at least that long before.
+
+It asks nothing more than the walk: the parent's NS TTL comes with the
+referral, the zone's own only with `--check-ns`, the SOA with a denial or
+`--serial`, and the DS and DNSKEY TTLs only with `--dnssec`. A line the walk
+had no TTL for is left out, and the flag that reads it is named under the
+others. It is worked out again for a walk read back with `--from`, and
+`--format json` carries it as `propagation`.
 
 ## What a server said about its answer
 

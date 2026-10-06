@@ -26,4 +26,8 @@
 📅 example.com. is on server hold: the registry has taken it out of the zone
 📅 nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.
 📅 a change is stuck between the registry and the zone, or the registry's copy is stale
+⏳ how long a change to example.com. takes to reach every cache, at worst
+⏳   change the answer        5m   A 300 at example.com.
+⏳   create a missing record  15m  SOA 3600, minimum 900 at example.com.
+⏳   move the nameservers     2d   NS 172800 at com., 3600 at example.com.
 ⚠️  no server answered for com.

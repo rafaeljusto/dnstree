@@ -1077,6 +1077,14 @@ func TestRunFrom(t *testing.T) {
 			args: []string{"--from", path, "--expect", "nxdomain"},
 			code: exitExpect, want: "expected nxdomain, got answer",
 		},
+		"how long a change takes, worked out again": {
+			args: []string{"--from", path, "--propagation", "--color", "never"},
+			code: exitAnswer, want: "propagation:   change the answer",
+		},
+		"how long a change takes, written for a program": {
+			args: []string{"--from", path, "--propagation", "--format", "json"},
+			code: exitAnswer, want: `"change": "answer"`,
+		},
 		"a file that is not a walk": {
 			args: []string{"--from", hints},
 			code: exitUsage, want: "not a trace",

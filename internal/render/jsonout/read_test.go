@@ -173,8 +173,20 @@ func TestReadRoundTrip(t *testing.T) {
 			if err := jsonout.Render(&again, read); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
-			if again.String() != saved.String() {
-				t.Errorf("got\n%s\nwant\n%s", again.String(), saved.String())
+
+			// What --propagation worked out is worked out again from the rest,
+			// never read back.
+			if read.Propagation != nil {
+				t.Errorf("got %+v, want the propagation left unread", read.Propagation)
+			}
+			unworked := *tr
+			unworked.Propagation = nil
+			var want bytes.Buffer
+			if err := jsonout.Render(&want, &unworked); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if again.String() != want.String() {
+				t.Errorf("got\n%s\nwant\n%s", again.String(), want.String())
 			}
 		})
 	}

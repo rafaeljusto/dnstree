@@ -268,6 +268,9 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		if tr, err = saved("--from", cfg.From); err == nil && reference != nil {
 			err = sameQuestion(reference, tr.Shown().Question, cfg.Against)
 		}
+		if err == nil && cfg.Propagation {
+			tr.Propagation = tr.Propagated()
+		}
 	} else {
 		tr, err = made(ctx, cfg, log, lookups, registry, rec, live)
 		rec.save(stderr)
@@ -392,6 +395,9 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	}
 	if cfg.Report {
 		report(ctx, cfg, tr)
+	}
+	if cfg.Propagation {
+		tr.Propagation = tr.Propagated()
 	}
 	return tr, nil
 }

@@ -87,7 +87,8 @@ func resolution() *trace.Trace {
 				{Tag: 31589, Algorithm: "ECDSAP256SHA256", SEP: true, Pointed: true, Signs: true},
 				{Tag: 20757, Algorithm: "RSASHA256", Bits: 2048},
 			},
-			DS: []trace.DS{{Tag: 31589, Algorithm: "ECDSAP256SHA256", Digest: "SHA256", Match: trace.DSMatched}},
+			DS:      []trace.DS{{Tag: 31589, Algorithm: "ECDSAP256SHA256", Digest: "SHA256", Match: trace.DSMatched}},
+			KeysTTL: 3600, DSTTL: 86400,
 		},
 		Children: []*trace.Step{answer, skipped},
 	}
@@ -194,6 +195,13 @@ func resolution() *trace.Trace {
 			NSOnlyRegistry: []string{"b.iana-servers.net."}, NSOnlyParent: []string{"c.iana-servers.net."},
 			DSChecked: true, DSOnlyRegistry: []uint16{370}, DSOnlyParent: []uint16{2371}, DSDiffer: false,
 		},
+		Propagation: &trace.Propagation{Zone: "example.com.", Waits: []trace.Wait{
+			{Change: trace.ChangeAnswer, Seconds: 300, Type: "A", Held: []trace.Held{{Zone: "example.com.", TTL: 300}}},
+			{Change: trace.ChangeDenial, Seconds: 900, Type: "SOA", Held: []trace.Held{
+				{Zone: "example.com.", TTL: 3600}, {Zone: "example.com.", TTL: 900, Field: "minimum"}}},
+			{Change: trace.ChangeNameservers, Seconds: 172800, Type: "NS", Held: []trace.Held{
+				{Zone: "com.", TTL: 172800}, {Zone: "example.com.", TTL: 3600}}},
+		}},
 	}
 }
 

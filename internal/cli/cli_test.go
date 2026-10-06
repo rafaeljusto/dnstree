@@ -40,6 +40,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "web", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "web", WebAddr: "127.0.0.1:0"},
 		},
+		"how long a change takes, written for a program": {
+			args: []string{"--propagation", "--format", "json", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "json", Propagation: true},
+		},
 		"a walk in a scene": {
 			args: []string{"--format", "web-3d", "--no-browser", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "web-3d", WebAddr: "127.0.0.1:0"},
@@ -324,6 +328,8 @@ func TestParseRejects(t *testing.T) {
 		"a page served at no port":                 {"--format", "web", "--web-addr", "localhost", "example.com"},
 		"a page served at a port nothing has":      {"--format", "web", "--web-addr", "127.0.0.1:99999", "example.com"},
 		"explained json":                           {"--format", "json", "--explain", "example.com"},
+		"how long a change takes, drawn as dot":    {"--format", "dot", "--propagation", "example.com"},
+		"how long a change takes, as a waterfall":  {"--format", "waterfall", "--propagation", "example.com"},
 		"explained dot":                            {"--format", "dot", "--explain", "example.com"},
 		"compared json":                            {"--format", "json", "--diff", "example.com"},
 		"compared dot":                             {"--format", "dot", "--diff", "example.com"},

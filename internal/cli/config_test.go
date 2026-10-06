@@ -231,6 +231,29 @@ func TestParseDefaultsCheckDS(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsPropagation covers a file that asks how long a change takes,
+// on a run drawn in a format that cannot say it: the setting waits for one
+// that can, rather than refusing every run that cannot.
+func TestParseDefaultsPropagation(t *testing.T) {
+	path := write(t, "propagation\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--format", "dot", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Propagation {
+		t.Error("got --propagation drawn as dot, want it left for a format that draws it")
+	}
+
+	got, err = cli.Parse([]string{"--config", path, "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !got.Propagation {
+		t.Error("got no --propagation on a tree, want the file's setting")
+	}
+}
+
 // TestParseDefaultsDDR covers a file that asks for the designations on a run
 // that asks no resolver anything: the setting waits for a run that does.
 func TestParseDefaultsDDR(t *testing.T) {

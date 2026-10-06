@@ -55,6 +55,7 @@ one after another, each from the root servers down.
   --spf                   draw NAME's SPF policy and count the lookups it costs
   --mail                  check NAME's MX hosts for DANE, and its mail policies
   --rdap                  ask the registry when the domain expires, and compare
+  --propagation           say how long a change takes to reach every cache
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
@@ -141,6 +142,14 @@ the parent; a zone asking for no DS at all is asking to be made insecure. The
 request counts only once it is signed by the keys the chain of trust reached,
 so it needs --dnssec; a file of defaults that sets it is heeded only by the
 runs that check signatures. It costs two queries.
+
+--propagation reads the TTLs the walk saw and says how long each kind of
+change to the zone it ended in takes to reach every cache: the answer, a
+record that did not exist, the nameservers, the DS and the keys. Each is the
+worst case, a cache filled just before the change; a resolver that caps TTLs
+lets go sooner. The parent's NS TTL is read from the referral and the zone's
+own only with --check-ns, the SOA from a denial or --serial, and the DS and
+DNSKEY TTLs only with --dnssec. It asks nothing more, and works with --from.
 
 --report tells a zone its chain of trust is broken, the way RFC 9567 lets a
 zone ask: when the walk comes out bogus and the broken zone named a reporting
@@ -444,6 +453,7 @@ type Config struct {
 	SPF            bool
 	Mail           bool
 	RDAP           bool
+	Propagation    bool
 
 	NSID     bool
 	Cookie   bool
@@ -677,6 +687,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
 	flags.DurationVar(&cfg.Watch, "watch", 0, "walk again this often, and say only what changed")
 	flags.BoolVar(&cfg.Explain, "explain", false, "say in sentences what the walk came to")
+	flags.BoolVar(&cfg.Propagation, "propagation", false, "say how long a change takes to reach every cache")
 	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
 	flags.Var(&wanted, "expect", "require this of the walk")
 	flags.StringVar(&cfg.From, "from", "", "draw a walk --format json saved")
@@ -859,6 +870,14 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: --against and --diff each hold the walk against another; ask for one", ErrUsage)
 	case cfg.Against == "-" && cfg.From == "-":
 		return nil, fmt.Errorf("%w: --from and --against cannot both read the standard input", ErrUsage)
+	}
+	// A default from the file is heeded only by the formats that draw it.
+	if cfg.Propagation && !propagates(cfg.Format) {
+		if !fromFile["propagation"] {
+			return nil, fmt.Errorf("%w: %s does not draw what --propagation works out; use tree, ascii, emoji, markdown or json",
+				ErrUsage, cfg.Format)
+		}
+		cfg.Propagation = false
 	}
 	if (cfg.Explain || cfg.Diff || cfg.Against != "") && Programs(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
@@ -1066,6 +1085,15 @@ var walkFlags = map[string]bool{
 func once(format string) bool {
 	return Programs(format) || Serves(format) ||
 		format == "waterfall" || format == "waterfall-ascii" || format == "markdown"
+}
+
+// propagates reports whether a format draws what --propagation works out.
+func propagates(format string) bool {
+	switch format {
+	case "tree", "ascii", "emoji", "markdown", "json":
+		return true
+	}
+	return false
 }
 
 // Serves reports whether a format is a page served to a browser rather than

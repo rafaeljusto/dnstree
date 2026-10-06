@@ -72,6 +72,12 @@ type Trace struct {
 	// moved to other nameservers, and has to read as one wherever it is drawn.
 	Trial *Trial
 
+	// Propagation is how long changes to the zone the walk ended in take to
+	// reach every cache, nil where --propagation did not ask. It is worked out
+	// from the rest of the trace once the walk is over, never read back from a
+	// file.
+	Propagation *Propagation
+
 	// Report is the failure report --report sent to the agent the zone named
 	// (RFC 9567), nil where none was due or none was asked for.
 	Report *Report
@@ -815,6 +821,12 @@ type DNSSECStatus struct {
 	// The root's DS are the trust anchors, and are not repeated here.
 	Keys []Key
 	DS   []DS
+
+	// KeysTTL and DSTTL are how long a cache may keep the zone's DNSKEY set and
+	// the parent's DS set, set beside Keys and DS. A key rollover waits on
+	// both, one step at a time.
+	KeysTTL uint32
+	DSTTL   uint32
 }
 
 // Key is one zone key of a zone's DNSKEY set.

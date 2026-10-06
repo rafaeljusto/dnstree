@@ -70,6 +70,7 @@ func (t *Trace) Shown() *Trace {
 	shown.SPF = t.SPF.Shown()
 	shown.Mail = t.Mail.Shown()
 	shown.Registration = t.Registration.Shown()
+	shown.Propagation = t.Propagation.Shown()
 	return &shown
 }
 

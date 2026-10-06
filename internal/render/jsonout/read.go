@@ -489,6 +489,8 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 		KeyTags:   from.KeyTags,
 		Algorithm: from.Algorithm,
 		Digest:    from.Digest,
+		KeysTTL:   from.KeysTTL,
+		DSTTL:     from.DSTTL,
 	}
 	if from.Signal != nil {
 		state := trace.SignalState(from.Signal.State)

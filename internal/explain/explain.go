@@ -246,7 +246,7 @@ func cache(tr *trace.Trace) []Finding {
 // the two to reach everybody. The parent's is often the registry's to choose,
 // so a difference is the ordinary case and not a fault.
 func nameservers(tr *trace.Trace) (Finding, bool) {
-	zone := ended(tr)
+	zone := tr.Ended()
 	delegation := delegated(tr, zone)
 	if delegation == nil || delegation.ZoneTTL == 0 || delegation.ZoneTTL == delegation.TTL {
 		return Finding{}, false
@@ -269,7 +269,7 @@ func lifetimes(tr *trace.Trace) (Finding, bool) {
 	answer, what := held(result, tr.Question.Type)
 
 	var cut uint32
-	zone := ended(tr)
+	zone := tr.Ended()
 	if delegation := delegated(tr, zone); delegation != nil {
 		cut = delegation.TTL
 	}
@@ -640,7 +640,7 @@ func zoneOf(step *trace.Step) string {
 // read — the zones above it are somebody else's to answer for, and how they are
 // spread is not news.
 func spread(tr *trace.Trace) []Finding {
-	zone := ended(tr)
+	zone := tr.Ended()
 	delegation := delegated(tr, zone)
 	if delegation == nil || len(delegation.NS) == 0 {
 		return nil
@@ -702,22 +702,6 @@ func shared(glue []netip.Addr, v4 bool) (netip.Prefix, bool) {
 		network, count = prefix, count+1
 	}
 	return network, count > 1
-}
-
-// ended is the zone the walk came to rest in: the one that answered, or the
-// last it reached when nothing did.
-func ended(tr *trace.Trace) string {
-	if result := tr.Result(); result != nil {
-		return result.Zone
-	}
-
-	var zone string
-	for step := range tr.Mainline() {
-		if step.Kind != trace.KindZone {
-			zone = step.Zone
-		}
-	}
-	return zone
 }
 
 // delegated is the referral that pointed the walk at zone, nil for a zone

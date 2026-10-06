@@ -127,6 +127,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--spf`](docs/guide/zones.md#what-a-check-of-its-mail-costs) | draw the name's SPF policy as the tree of lookups a mail server makes, and count them against the limit of ten (RFC 7208) |
 | [`--mail`](docs/guide/zones.md#whether-its-mail-can-be-sent-verified) | check the name's MX hosts the way a sender that checks DANE does, and its MTA-STS, TLS-RPT and DMARC records (RFC 7672) |
 | [`--rdap`](docs/guide/zones.md#whether-its-registration-is-about-to-run-out) | ask the domain's registry when the registration runs out and whether it is held, and compare its nameservers and DS with the TLD's (RFC 9083) |
+| [`--propagation`](docs/guide/zones.md#how-long-a-change-takes-to-reach-everyone) | say how long each kind of change to the zone takes to reach every cache, from the TTLs the walk saw |
 | [`--nsid`](docs/guide/zones.md#which-machine-answered) | ask each server which of itself answered, and draw it beside the address |
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |
 | [`--qmin`](docs/guide/zones.md#asking-only-what-each-zone-needs) | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
@@ -253,8 +254,9 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
   what DNSSEC is worth to ECH.
 - [Checking a zone](docs/guide/zones.md): parent and child NS sets, serials, zone
   transfers and open recursion, how they handle EDNS, aliases where they may not
-  be, who may issue certificates, what a check of its mail costs, extended
-  errors, NSID, cookies, `--qmin`, `--without`, `--try-ns` and answer sizes.
+  be, who may issue certificates, what a check of its mail costs, how long a
+  change takes to reach every cache, extended errors, NSID, cookies, `--qmin`,
+  `--without`, `--try-ns` and answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, from here or from another subnet, and whether they offer
   encryption.

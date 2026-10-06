@@ -160,6 +160,13 @@ func kinds() *trace.Trace {
 			NS: []string{"a.iana-servers.net.", "b.iana-servers.net."}, Parent: "com.",
 			NSOnlyRegistry: []string{"b.iana-servers.net."}, NSOnlyParent: []string{"c.iana-servers.net."},
 		},
+		Propagation: &trace.Propagation{Zone: "example.com.", Waits: []trace.Wait{
+			{Change: trace.ChangeAnswer, Seconds: 300, Type: "A", Held: []trace.Held{{Zone: "example.com.", TTL: 300}}},
+			{Change: trace.ChangeDenial, Seconds: 900, Type: "SOA", Held: []trace.Held{
+				{Zone: "example.com.", TTL: 3600}, {Zone: "example.com.", TTL: 900, Field: "minimum"}}},
+			{Change: trace.ChangeNameservers, Seconds: 172800, Type: "NS", Held: []trace.Held{
+				{Zone: "com.", TTL: 172800}, {Zone: "example.com.", TTL: 3600}}},
+		}},
 	}
 }
 

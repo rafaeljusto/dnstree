@@ -130,7 +130,9 @@
                   "digest": "SHA256",
                   "match": "matched"
                 }
-              ]
+              ],
+              "keys_ttl": 3600,
+              "ds_ttl": 86400
             },
             "children": [
               {
@@ -462,6 +464,53 @@
     ],
     "ds_only_parent": [
       2371
+    ]
+  },
+  "propagation": {
+    "zone": "example.com.",
+    "waits": [
+      {
+        "change": "answer",
+        "seconds": 300,
+        "type": "A",
+        "held": [
+          {
+            "zone": "example.com.",
+            "ttl": 300
+          }
+        ]
+      },
+      {
+        "change": "denial",
+        "seconds": 900,
+        "type": "SOA",
+        "held": [
+          {
+            "zone": "example.com.",
+            "ttl": 3600
+          },
+          {
+            "zone": "example.com.",
+            "ttl": 900,
+            "field": "minimum"
+          }
+        ]
+      },
+      {
+        "change": "nameservers",
+        "seconds": 172800,
+        "type": "NS",
+        "held": [
+          {
+            "zone": "com.",
+            "ttl": 172800
+          },
+          {
+            "zone": "example.com.",
+            "ttl": 3600
+          }
+        ]
+      }
     ]
   }
 }

@@ -26,4 +26,8 @@ rdap: example.com. is registered; the registry does not say until when
 rdap: example.com. is on server hold: the registry has taken it out of the zone
 rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.
 rdap: a change is stuck between the registry and the zone, or the registry's copy is stale
+propagation: how long a change to example.com. takes to reach every cache, at worst
+propagation:   change the answer        5m   A 300 at example.com.
+propagation:   create a missing record  15m  SOA 3600, minimum 900 at example.com.
+propagation:   move the nameservers     2d   NS 172800 at com., 3600 at example.com.
 warning: no server answered for com.

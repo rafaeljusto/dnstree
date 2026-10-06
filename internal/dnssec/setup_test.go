@@ -179,3 +179,26 @@ func TestSetupOfTheRoot(t *testing.T) {
 		t.Errorf("got DS %+v, want none for the root", status.DS)
 	}
 }
+
+// TestSetupTTLs covers what --propagation reads off a secure zone: how long
+// its DNSKEY set and the parent's DS may be cached. The root's DS are the
+// trust anchors, which nothing caches.
+func TestSetupTTLs(t *testing.T) {
+	root, child := newZone(t, "."), newZone(t, "example.")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	status := chain.Enter(".", nil, root.dnskeys(t))
+	if status.KeysTTL != 3600 || status.DSTTL != 0 {
+		t.Errorf("got keys ttl %d and DS ttl %d for the root, want 3600 and none", status.KeysTTL, status.DSTTL)
+	}
+
+	ds := child.ds()
+	ds.Hdr.TTL = 86400
+	authority := []dns.RR{ds, root.sign(t, []dns.RR{ds}, time.Now().Add(time.Hour))}
+	status = chain.Enter("example.", authority, child.dnskeys(t))
+	if status.State != trace.Secure {
+		t.Fatalf("got %+v, want it secure", status)
+	}
+	if status.KeysTTL != 3600 || status.DSTTL != 86400 {
+		t.Errorf("got keys ttl %d and DS ttl %d, want 3600 and 86400", status.KeysTTL, status.DSTTL)
+	}
+}
