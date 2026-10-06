@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -205,6 +206,24 @@ func TestLoadIgnores(t *testing.T) {
 			walk := history.Of(resolution(), seen)
 			walk.Zones[1].NS = []string{"ns.caf\u00e9.test."}
 			write(tb, dir, question(), marshal(tb, walk))
+		},
+		// A cache somebody else can write to can hold a link to anywhere, and
+		// a link to /dev/zero would be read until the memory ran out.
+		"a link to a walk outside the cache": func(tb testing.TB, dir string) {
+			outside := tb.TempDir()
+			if err := history.Save(outside, history.Of(resolution(), seen)); err != nil {
+				tb.Fatal(err)
+			}
+			entries, err := os.ReadDir(outside)
+			if err != nil || len(entries) != 1 {
+				tb.Fatalf("got %v, %v, want the one walk saved", entries, err)
+			}
+			if err := os.Symlink(filepath.Join(outside, entries[0].Name()), filepath.Join(dir, entries[0].Name())); err != nil {
+				tb.Skipf("no symlinks here: %v", err)
+			}
+		},
+		"a file larger than any walk": func(tb testing.TB, dir string) {
+			write(tb, dir, question(), strings.Repeat(" ", 1<<20)+marshal(tb, history.Of(resolution(), seen)))
 		},
 	}
 

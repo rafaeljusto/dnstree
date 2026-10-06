@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -158,13 +159,24 @@ func Dir() (string, error) {
 	return filepath.Join(dir, "dnstree"), nil
 }
 
+// maxFile is far past what any walk is kept in: a summary of the zones and the
+// answer, not the trace.
+const maxFile = 1 << 20
+
 // Load is the last walk remembered for this question, nil where there is none
 // to be held against. A file that cannot be read, that was written by another
 // version, or that turns out to hold another question is no file at all: a
 // cache that has gone bad costs one run its comparison and nothing more.
 func Load(dir string, question trace.Question) *Walk {
-	data, err := os.ReadFile(filepath.Join(dir, file(question.Name, question.Type)))
+	// Opened within the cache, so that a link planted there cannot point the
+	// read anywhere else, and read no further than any walk comes to.
+	f, err := os.OpenInRoot(dir, file(question.Name, question.Type))
 	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxFile+1))
+	if err != nil || len(data) > maxFile {
 		return nil
 	}
 
