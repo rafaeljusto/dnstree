@@ -91,6 +91,7 @@ These need no network: every one exits before a query goes out.
 | resolvers | `$D --no-asn --color never --resolver 1.1.1.1 --resolver 8.8.8.8 example.com` | exit 0, `resolvers in …-…`, and any that disagreed named under the tree |
 | asn-resolver | `$D --no-asn --color never --asn-resolver 1.1.1.1 example.com` | same as one `--resolver`: the old name still works |
 | ddr | `$D --no-asn --color never --resolver 1.1.1.1 --ddr example.com` | exit 0, a `ddr: 1.1.1.1 offers doh …, dot …` line |
+| servfail | `$D --no-asn --color never --resolver 1.1.1.1 dnssec-failed.org` | exit 0, `(SERVFAIL)` in the summary and `servfail: 1.1.1.1 … with checking disabled it answers, so it fails validation` under the tree; with `--dnssec`, exit 3 and `fails validation as the walk does` |
 | ipv4 | `$D $B -4 example.com` | exit 0, only IPv4 addresses asked |
 | ipv6 | `$D $B -6 example.com` | exit 0, only IPv6 addresses asked. Skip it if the environment has no IPv6 |
 | color | `$D --no-asn --no-compare --color always example.com` | escapes on stdout even though it is a pipe |
