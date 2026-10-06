@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -37,6 +38,10 @@ var groups = [][]string{
 	{"tls-ca", "tls-insecure"},
 	{"diff", "against"},
 }
+
+// askedFor are the flags that ask for one run of their own, and that a file of
+// defaults cannot set for every run.
+var askedFor = []string{"version", "schema", "from", "against", "x", "names", "without", "report", "try-ns", "pcap"}
 
 // defaultFile is where the defaults are read from when the command line does
 // not say: the file named by the environment, then the XDG location, then the
@@ -144,7 +149,8 @@ func defaults(flags *flag.FlagSet, file configFile) ([]string, bool, error) {
 		case "config", "no-config":
 			return nil, false, fmt.Errorf("%w: %s: --%s says which file to read, so it cannot be read from one",
 				ErrUsage, where, name)
-		case "version", "schema", "from", "against", "x", "names", "without", "report", "try-ns", "pcap":
+		}
+		if slices.Contains(askedFor, name) {
 			return nil, false, fmt.Errorf("%w: %s: --%s is asked for, not set", ErrUsage, where, name)
 		}
 

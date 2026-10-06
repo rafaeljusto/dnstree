@@ -636,6 +636,10 @@ func dashed(name string) string {
 	return "--" + name
 }
 
+// testHookFlags is handed the flags once they are all defined, so that a test
+// can hold each of them to the usage and to the lists that sort them.
+var testHookFlags = func(*flag.FlagSet) {}
+
 // ErrUsage is anything the command line itself got wrong, including a request
 // for help.
 var ErrUsage = errors.New("cli: the command line cannot be read")
@@ -704,7 +708,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
 	flags.BoolVar(&cfg.Report, "report", false, "tell the agent a zone names that its chain of trust is bogus")
-	flags.StringVar(&format, "format", "tree", "tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, markdown, json, dot, mermaid, openmetrics, web or web-3d")
+	flags.StringVar(&format, "format", "tree", orList(formatNames(nil)))
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
 	flags.BoolVar(&noBrowser, "no-browser", false, "do not open a browser at the served page")
 	flags.BoolVar(&cfg.Live, "live", false, "draw the tree as the walk makes it")
@@ -735,6 +739,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Debug, "debug", false, "report every hop on stderr")
 	flags.BoolVar(&cfg.Schema, "schema", false, "print the JSON Schema of the json format and stop")
 	flags.BoolVar(&cfg.Version, "version", false, "print the version and stop")
+	testHookFlags(flags)
 
 	// The file is parsed first and the command line over it, so a flag typed
 	// out wins by being read last, and only the command line leaves positional
@@ -777,13 +782,10 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s%q is not a colour setting", ErrUsage, inFile("color"), color)
 	}
 
-	switch format {
-	case "tree", "ascii", "emoji", "waterfall", "waterfall-ascii", "waterfall-mermaid", "markdown",
-		"json", "dot", "mermaid", "openmetrics", "web", "web-3d":
-		cfg.Format = format
-	default:
+	if _, ok := lookupFormat(format); !ok {
 		return nil, fmt.Errorf("%w: %s%q is not a format", ErrUsage, inFile("format"), format)
 	}
+	cfg.Format = format
 
 	if cfg.Version || cfg.Schema {
 		return &cfg, nil
@@ -846,8 +848,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	// A default from the file is heeded only by the formats that draw it.
 	if cfg.Check && !propagates(cfg.Format) {
 		if !fromFile["check"] {
-			return nil, fmt.Errorf("%w: %s does not draw what --check grades; use tree, ascii, emoji, markdown or json",
-				ErrUsage, cfg.Format)
+			return nil, fmt.Errorf("%w: %s does not draw what --check grades; use %s",
+				ErrUsage, cfg.Format, orList(formatNames(propagates)))
 		}
 		cfg.Check = false
 	}
@@ -912,8 +914,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	// A default from the file is heeded only by the formats that draw it.
 	if cfg.Propagation && !propagates(cfg.Format) {
 		if !fromFile["propagation"] {
-			return nil, fmt.Errorf("%w: %s does not draw what --propagation works out; use tree, ascii, emoji, markdown or json",
-				ErrUsage, cfg.Format)
+			return nil, fmt.Errorf("%w: %s does not draw what --propagation works out; use %s",
+				ErrUsage, cfg.Format, orList(formatNames(propagates)))
 		}
 		cfg.Propagation = false
 	}
@@ -1123,39 +1125,89 @@ var walkFlags = map[string]bool{
 	"tls-ca": true, "tls-insecure": true,
 }
 
-// once reports whether a format is written once, at the end, which leaves
-// nothing to draw live and nothing to watch change. A waterfall is one of them
-// because its scale is the whole walk, which is not known until it is over, and
-// a report because it is pasted whole.
-func once(format string) bool {
-	return Programs(format) || Serves(format) ||
-		format == "waterfall" || format == "waterfall-ascii" || format == "markdown"
+// format is what the rest of the run needs to know about one --format.
+type format struct {
+	name string
+	// once is a format written once, at the end, which leaves nothing to draw
+	// live and nothing to watch change. A waterfall is one because its scale
+	// is the whole walk, which is not known until it is over, and a report
+	// because it is pasted whole.
+	once bool
+	// propagates is a format that draws what --propagation works out, and what
+	// --check grades.
+	propagates bool
+	serves     bool // a page served to a browser
+	programs   bool // read by a program rather than a person
 }
 
-// propagates reports whether a format draws what --propagation works out, and
-// what --check grades.
-func propagates(format string) bool {
-	switch format {
-	case "tree", "ascii", "emoji", "markdown", "json":
-		return true
+// formats are every --format there is, in the order the help lists them. A
+// new one is a row here, a renderer in main, and the usage text.
+var formats = []format{
+	{name: "tree", propagates: true},
+	{name: "ascii", propagates: true},
+	{name: "emoji", propagates: true},
+	{name: "waterfall", once: true},
+	{name: "waterfall-ascii", once: true},
+	{name: "waterfall-mermaid", once: true, programs: true},
+	{name: "markdown", once: true, propagates: true},
+	{name: "json", once: true, propagates: true, programs: true},
+	{name: "dot", once: true, programs: true},
+	{name: "mermaid", once: true, programs: true},
+	{name: "openmetrics", once: true, programs: true},
+	{name: "web", once: true, serves: true},
+	{name: "web-3d", once: true, serves: true},
+}
+
+// lookupFormat is the format called name, false where there is none.
+func lookupFormat(name string) (format, bool) {
+	i := slices.IndexFunc(formats, func(f format) bool { return f.name == name })
+	if i < 0 {
+		return format{}, false
 	}
-	return false
+	return formats[i], true
+}
+
+// formatNames are the formats keep says yes to, every one where keep is nil.
+func formatNames(keep func(string) bool) []string {
+	var names []string
+	for _, f := range formats {
+		if keep == nil || keep(f.name) {
+			names = append(names, f.name)
+		}
+	}
+	return names
+}
+
+// orList is names as a sentence would list them: "a, b or c".
+func orList(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+}
+
+func once(name string) bool {
+	f, _ := lookupFormat(name)
+	return f.once
+}
+
+func propagates(name string) bool {
+	f, _ := lookupFormat(name)
+	return f.propagates
 }
 
 // Serves reports whether a format is a page served to a browser rather than
 // anything written here.
-func Serves(format string) bool {
-	return format == "web" || format == "web-3d"
+func Serves(name string) bool {
+	f, _ := lookupFormat(name)
+	return f.serves
 }
 
 // Programs reports whether a format is read by a program rather than a person,
 // which has the whole trace already and no use for prose under it.
-func Programs(format string) bool {
-	switch format {
-	case "json", "dot", "mermaid", "waterfall-mermaid", "openmetrics":
-		return true
-	}
-	return false
+func Programs(name string) bool {
+	f, _ := lookupFormat(name)
+	return f.programs
 }
 
 // reverseName is the name the PTR of an address is kept under: its octets in
