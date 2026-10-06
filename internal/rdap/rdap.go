@@ -308,8 +308,7 @@ func reason(err error) string {
 	if err == nil {
 		return "nothing came back"
 	}
-	var request *url.Error
-	if errors.As(err, &request) {
+	if request, ok := errors.AsType[*url.Error](err); ok {
 		err = request.Err
 	}
 	return err.Error()
@@ -348,8 +347,8 @@ func below(name string, cuts []string) (string, bool) {
 // the only names a registry holds and the only ones that go into a URL as
 // they are.
 func ldh(name string) bool {
-	labels := strings.Split(strings.TrimSuffix(name, "."), ".")
-	for _, label := range labels {
+	labels := strings.SplitSeq(strings.TrimSuffix(name, "."), ".")
+	for label := range labels {
 		if label == "" || len(label) > 63 {
 			return false
 		}
