@@ -160,6 +160,9 @@ cached, not a bug. Run it again.
 | rdap-expect | `$D $B --rdap --expect registered:30d example.com`, then `--expect registered:3650d` | exit 0, then exit 4 with `got example.com. running out in …` |
 | rdap-alone | `$D $B --expect registered example.com` | exit 4, `got a walk that asked no registry` |
 | rdap-formats | `$D $B --rdap --format json example.com`, then `--format openmetrics`, then `--from` the JSON | `.registration.expires` in the JSON; `dnstree_registration_left_seconds` and `dnstree_registration{…,state="registered"} 1`; the same `rdap:` lines drawn back |
+| propagation | `$D $B --propagation --dnssec --check-ns --serial example.com` | exit 0, `propagation:` lines for the answer, a missing record, the nameservers (`NS 172800 at com., … at example.com.`), the DS and the keys, and no flag named under them |
+| propagation-hints | `$D $B --propagation www.wikipedia.org` | exit 0, the zone the alias ends in named in the first line, and `--serial`, `--check-ns` and `--dnssec` each named under the waits |
+| propagation-formats | `$D $B --propagation --format json example.com`, then `--format dot`, then `--from` the JSON without and with `--propagation` | `.propagation.waits` in the JSON; exit 1 for dot; nothing drawn back without the flag, the same lines with it |
 
 ## budget
 
