@@ -91,7 +91,7 @@ func (r *run) climb(ctx context.Context, under *trace.Step) {
 			caa.Owner = asked
 			decide(caa, records)
 			if caa.Refused != "" {
-				r.warnf("%s, so no authority may issue for %s; remove it or ask the authority whether it knows it", caa.Refused, name)
+				r.warnf("", "%s, so no authority may issue for %s; remove it or ask the authority whether it knows it", caa.Refused, name)
 			}
 			return
 		}
@@ -114,15 +114,15 @@ func (r *run) failed(caa *trace.CAA, lookup trace.CAALookup, c *cut, stopped boo
 	switch {
 	case stopped:
 		caa.Undecided = why
-		r.warnf("the CAA lookup at %s was not made (%s), so who may issue for %s is not known; raise the budget that ran out",
+		r.warnf("", "the CAA lookup at %s was not made (%s), so who may issue for %s is not known; raise the budget that ran out",
 			lookup.Name, lookup.Err, name)
 	case c != nil && c.chain != nil && c.chain.State() == trace.Secure:
 		caa.Refused = why
-		r.warnf("the CAA lookup at %s failed (%s), and %s is signed, so every authority has to refuse to issue for %s; fix the servers of %s",
+		r.warnf("", "the CAA lookup at %s failed (%s), and %s is signed, so every authority has to refuse to issue for %s; fix the servers of %s",
 			lookup.Name, lookup.Err, zone, name, zone)
 	default:
 		caa.Undecided = why
-		r.warnf("the CAA lookup at %s failed (%s), so an authority may refuse to issue for %s, and only one that finds no chain of trust to %s may take it as leave to; fix the servers of %s",
+		r.warnf("", "the CAA lookup at %s failed (%s), so an authority may refuse to issue for %s, and only one that finds no chain of trust to %s may take it as leave to; fix the servers of %s",
 			lookup.Name, lookup.Err, name, zone, zone)
 	}
 }

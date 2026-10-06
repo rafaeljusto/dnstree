@@ -57,7 +57,7 @@ func (r *run) mail(ctx context.Context, under *trace.Step) {
 		if m.Stopped == "" {
 			m.Stopped = "the budget ran out before every lookup was made"
 		}
-		r.warnf("the mail check of %s ran out of budget before every lookup was made; raise the budget that ran out", name)
+		r.warnf("", "the mail check of %s ran out of budget before every lookup was made; raise the budget that ran out", name)
 	}
 	r.warnMail(m)
 }
@@ -73,13 +73,13 @@ func (r *run) exchangers(ctx context.Context, under *trace.Step, m *trace.Mail) 
 		return false
 	case lookup.Err != "":
 		m.Stopped = "the MX lookup failed: " + lookup.Err
-		r.warnf("the MX lookup of %s failed (%s), so mail to it waits until it answers; fix the servers of its zone", m.Name, lookup.Err)
+		r.warnf(trace.AreaMail, "the MX lookup of %s failed (%s), so mail to it waits until it answers; fix the servers of its zone", m.Name, lookup.Err)
 		return false
 	case r.cfg.DNSSEC && lookup.DNSSEC != nil && lookup.DNSSEC.State == trace.Bogus:
 		// A sender that validates gets no MX set at all, and holds the mail
 		// (RFC 7672 2.2.1); the hosts it names are nobody's word.
 		m.Stopped = "the MX set does not validate: " + lookup.DNSSEC.Reason
-		r.warnf("the MX set of %s does not validate (%s), so a sender that validates holds all mail for it; fix the signatures of its zone",
+		r.warnf(trace.AreaMail, "the MX set of %s does not validate (%s), so a sender that validates holds all mail for it; fix the signatures of its zone",
 			m.Name, lookup.DNSSEC.Reason)
 		return false
 	case result.Kind == trace.KindNXDomain:
@@ -115,7 +115,7 @@ func (r *run) exchangers(ctx context.Context, under *trace.Step, m *trace.Mail) 
 		m.Implicit = true
 		hosts = []trace.MailHost{{Name: owner}}
 	case null:
-		r.warnf("%s has a null MX beside other MX records, which RFC 7505 forbids; remove the one or the others", owner)
+		r.warnf(trace.AreaMail, "%s has a null MX beside other MX records, which RFC 7505 forbids; remove the one or the others", owner)
 	}
 
 	// Hosts of one preference are tried in any order, and drawn in one, so
@@ -477,10 +477,10 @@ func (r *run) warnMail(m *trace.Mail) {
 	for _, host := range m.Hosts {
 		switch host.DANE {
 		case trace.DANEFailed:
-			r.warnf("a sender that checks DANE treats %s as unreachable, since %s; fix the servers of its zone", host.Name, host.Why)
+			r.warnf("", "a sender that checks DANE treats %s as unreachable, since %s; fix the servers of its zone", host.Name, host.Why)
 		case trace.DANEInsecure:
 			if len(host.Records) > 0 {
-				r.warnf("%s has a TLSA set nothing signed, which senders ignore; sign the zone it is in",
+				r.warnf(trace.AreaMail, "%s has a TLSA set nothing signed, which senders ignore; sign the zone it is in",
 					cmp.Or(host.TLSA.Alias, host.TLSA.Name))
 			}
 		}
@@ -494,7 +494,7 @@ func (r *run) warnMail(m *trace.Mail) {
 	}
 	// A check the budget cut short cannot say which hosts are covered.
 	if dane, hosts := m.Covered(); dane > 0 && dane < hosts && len(uncovered) > 0 && !r.mailStopped {
-		r.warnf("DANE covers %d of the %d MX hosts of %s, so a sender may deliver to %s unverified; publish TLSA for %s",
+		r.warnf("", "DANE covers %d of the %d MX hosts of %s, so a sender may deliver to %s unverified; publish TLSA for %s",
 			dane, hosts, m.Name, orList(uncovered), verb(uncovered, "it", "them"))
 	}
 	for _, p := range []struct {
@@ -502,7 +502,7 @@ func (r *run) warnMail(m *trace.Mail) {
 		reader string
 	}{{m.MTASTS, "sender"}, {m.TLSRPT, "sender"}, {m.DMARC, "receiver"}} {
 		if p.policy != nil && p.policy.Found == trace.PolicyInvalid {
-			r.warnf("the policy at %s is no policy to a %s: %s; publish one record that parses", p.policy.Name, p.reader, p.policy.Why)
+			r.warnf(trace.AreaMail, "the policy at %s is no policy to a %s: %s; publish one record that parses", p.policy.Name, p.reader, p.policy.Why)
 		}
 	}
 }

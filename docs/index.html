@@ -433,6 +433,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--rdap</code> asks the registry when the domain expires and whether it is on hold, and compares the nameservers and DS it holds with the TLD's. A lapsed domain drops out of its TLD everywhere at once.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-accent">health</span>
+          <h3>Every check, one verdict</h3>
+          <p><code>--check</code> runs dnstree's checks on a zone together and grades it one area at a time: the answer, delegation, consistency, DNSSEC, servers, EDNS, CAA, mail and the registration. <code>--expect check:ok</code> holds a zone to it in CI.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-accent">propagation</span>
           <h3>A move that takes two days</h3>
           <p><code>--propagation</code> reads the TTLs the walk saw and says how long a new answer, new nameservers, a new DS or new keys take to reach every cache. The parent's NS TTL is the one people forget.</p>

@@ -31,6 +31,7 @@ const (
 	authority              // a certificate authority free to issue for the name
 	sender                 // a sender policy no check fails on
 	registry               // a registration with time left to run
+	health                 // a zone --check found nothing broken in, or nothing at all
 )
 
 // Expectation is one thing the command line asked to be true of the walk.
@@ -60,8 +61,9 @@ func (e Expectation) String() string { return cmp.Or(e.escaped, e.want) }
 // caa: and the certificate authority that has to be free to issue for the
 // name; or spf:ok, a sender policy no check fails on; or registered, a
 // domain the registry holds and does not hold back, with registered:30d asking
-// that it has that long left; or else the rdata of a record that has to be
-// among the answers.
+// that it has that long left; or check:ok, a zone --check found nothing broken
+// in, or check:clean, one it found nothing to look at in either; or else the
+// rdata of a record that has to be among the answers.
 //
 // The words win, because they are what is nearly always meant. A zone that
 // serves a record whose rdata reads like one of them is asked for with a
@@ -96,6 +98,9 @@ func Parse(text string) (Expectation, error) {
 	}
 	if lower == "spf:ok" {
 		return Expectation{about: sender, want: lower}, nil
+	}
+	if lower == "check:ok" || lower == "check:clean" {
+		return Expectation{about: health, want: lower}, nil
 	}
 	if lower == "registered" {
 		return Expectation{about: registry, want: lower}, nil
@@ -171,6 +176,9 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 
 	case registry:
 		return e.registered(tr)
+
+	case health:
+		return e.healthy(tr)
 	}
 
 	result := tr.Result()
@@ -357,6 +365,25 @@ func (e Expectation) registered(tr *trace.Trace) (got string, ok bool) {
 		return reg.Domain + " expired " + spell(-left) + " ago", false
 	}
 	return reg.Domain + " running out in " + spell(left), left >= e.left
+}
+
+// healthy reports whether --check found nothing broken in the zone, or, for
+// check:clean, nothing to look at either. A walk --check did not grade has not
+// met it.
+func (e Expectation) healthy(tr *trace.Trace) (got string, ok bool) {
+	if tr.Check == nil {
+		return "a walk that --check did not grade", false
+	}
+	var found []string
+	for _, area := range tr.Check.Areas {
+		if area.Grade == trace.GradeBroken || (e.want == "check:clean" && area.Grade == trace.GradeLook) {
+			found = append(found, string(area.Area)+" "+string(area.Grade))
+		}
+	}
+	if len(found) > 0 {
+		return list(found), false
+	}
+	return "nothing broken", true
 }
 
 // issuer reports whether the authority after caa: may issue for the name, or,

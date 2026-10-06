@@ -118,6 +118,9 @@ func TestSerialsDisagree(t *testing.T) {
 		t.Fatalf("got %q, want the disagreement reported", tr.Warnings)
 	}
 	warning := warning(tr, "different copies")
+	if concern := tr.About[warning]; concern.Area != trace.AreaConsistency {
+		t.Errorf("got the warning about %q, want it about %q, where --check grades it", concern.Area, trace.AreaConsistency)
+	}
 	for _, want := range []string{"2 at ns1.test.", "1 at ns2.test."} {
 		if !strings.Contains(warning, want) {
 			t.Errorf("got %q, want it to name %q", warning, want)

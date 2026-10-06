@@ -512,5 +512,31 @@
         ]
       }
     ]
+  },
+  "check": {
+    "zone": "example.com.",
+    "areas": [
+      {
+        "area": "answer",
+        "grade": "passed",
+        "text": "www.example.com. A is 93.184.216.34"
+      },
+      {
+        "area": "delegation",
+        "grade": "look",
+        "text": "example.com. lists c.iana-servers.net., which the delegation does not carry",
+        "more": 1
+      },
+      {
+        "area": "dnssec",
+        "grade": "broken",
+        "text": "the chain of trust breaks at example.com."
+      },
+      {
+        "area": "strangers",
+        "grade": "skipped",
+        "text": "not asked; --check-axfr and --check-recursion probe the nameservers"
+      }
+    ]
   }
 }

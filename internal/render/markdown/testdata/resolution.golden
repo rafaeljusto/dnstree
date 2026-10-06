@@ -37,6 +37,12 @@ rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands 
 rdap: DS: only the registry holds key 370; only com. hands out key 2371
 rdap: a change is stuck between the registry and the zone, or the registry's copy is stale
 warning: the delegation to example.com. lists a nameserver the zone does not
+check example.com.
+  ✔ answer      www.example.com. A is 93.184.216.34
+  ⚠ delegation  example.com. lists c.iana-servers.net., which the delegation does not carry (and 1 more)
+  ✘ dnssec      the chain of trust breaks at example.com.
+  · strangers   not asked; --check-axfr and --check-recursion probe the nameservers
+1 broken · 1 to look at · 1 passed · 1 skipped
 ✔ answered in 42ms · without ns1.example.com., 192.0.2.0/24 · resolvers in 9ms-23ms (1 of 3 differ, 1 did not answer) · 5 queries · 4 servers
 ```
 

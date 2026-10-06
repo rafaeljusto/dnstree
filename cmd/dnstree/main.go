@@ -399,6 +399,9 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	if cfg.Propagation {
 		tr.Propagation = tr.Propagated()
 	}
+	if cfg.Check {
+		tr.Check = explain.Check(tr)
+	}
 	return tr, nil
 }
 

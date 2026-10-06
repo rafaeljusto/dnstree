@@ -296,7 +296,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	run.trace.Timed = true
 	end := run.walk(ctx, qname, rrtype, run.trace.Root, 0)
 	if r.cfg.Try != nil && !run.tried {
-		run.warnf("the walk never came to a delegation of %s, so --try-ns changed nothing; name the zone a referral on the way delegates",
+		run.warnf("", "the walk never came to a delegation of %s, so --try-ns changed nothing; name the zone a referral on the way delegates",
 			r.cfg.Try.Zone)
 	}
 	if r.cfg.CAA {
@@ -428,7 +428,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 		if hop == nil {
 			abandoned(referred, parent, zone)
 			if !r.counters.spent() { // the tree already says the budget gave out
-				r.warnf("no server answered for %s", zone)
+				r.warnIn(trace.AreaServers, zone, "no server answered for %s", zone)
 			}
 			return nil
 		}
@@ -454,7 +454,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 		}
 
 		if denied != nil && step.Kind != trace.KindNXDomain && step.Kind != trace.KindFiltered && step.Server.IP.IsValid() {
-			r.warnf("%s answered NXDOMAIN for %s, which has names below it, so a resolver that minimises its questions stops there (RFC 8020); it should answer NODATA",
+			r.warnIn(trace.AreaServers, denied.Zone, "%s answered NXDOMAIN for %s, which has names below it, so a resolver that minimises its questions stops there (RFC 8020); it should answer NODATA",
 				at(denied), denied.Asked.Name)
 		}
 		denied = nil
@@ -524,7 +524,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 		}
 		if len(next) == 0 {
 			if !r.counters.spent() {
-				r.warnf("the delegation to %s came with no usable address", step.Delegation.Zone)
+				r.warnIn(trace.AreaDelegation, step.Delegation.Zone, "the delegation to %s came with no usable address", step.Delegation.Zone)
 			}
 			return step
 		}
@@ -864,7 +864,7 @@ func (r *run) compareAnswers(zone, qname string, qtype uint16, hops []*hop) {
 	for _, answer := range order {
 		differing = append(differing, answer+" at "+strings.Join(saying[answer], " and "))
 	}
-	r.warnf("the nameservers of %s do not answer %s %s alike: %s",
+	r.warnIn(trace.AreaConsistency, zone, "the nameservers of %s do not answer %s %s alike: %s",
 		zone, qname, typeName, strings.Join(differing, ", "))
 }
 
@@ -987,7 +987,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		if r.cfg.TCP == nil {
 			step.Err += "; no TCP transport to fetch it with"
 		}
-		r.warnf("%s answered %s truncated, and the whole answer could not be fetched",
+		r.warnIn(trace.AreaServers, step.Zone, "%s answered %s truncated, and the whole answer could not be fetched",
 			step.Server.IP, qname)
 		return &hop{step: step}
 	}
@@ -1003,7 +1003,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		case step.Cookie == trace.CookieSupported && resp.Rcode == dns.RcodeBadCookie && cookieRetried:
 			step.Cookie = trace.CookieRejected
 		case step.Cookie == trace.CookieMismatch:
-			r.warnf("%s answered with a client cookie other than the one sent, so the answer may not be its own",
+			r.warnf("", "%s answered with a client cookie other than the one sent, so the answer may not be its own",
 				step.Server.IP)
 		}
 	}
@@ -1111,12 +1111,12 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]tr
 
 	for _, name := range delegation.NS {
 		if addressShaped(name) {
-			r.warnOnce("%s delegates to %s, which is an address written as a name, and nothing resolves it; name the nameserver instead (RFC 1035 section 3.3.11)",
+			r.warnOnceIn(trace.AreaDelegation, delegation.Zone, "%s delegates to %s, which is an address written as a name, and nothing resolves it; name the nameserver instead (RFC 1035 section 3.3.11)",
 				delegation.Zone, name)
 		}
 	}
 	if len(delegation.GlueLess) > 0 {
-		r.warnf("%s delegates to %s inside the zone, with no glue to reach them",
+		r.warnIn(trace.AreaDelegation, delegation.Zone, "%s delegates to %s inside the zone, with no glue to reach them",
 			delegation.Zone, strings.Join(delegation.GlueLess, ", "))
 	}
 	servers, pending := glueServers(delegation), delegation.OutOfBailiwick
@@ -1125,7 +1125,7 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]tr
 	}
 	if side >= maxSideResolution {
 		if len(servers) == 0 {
-			r.warnf("the nameservers of %s are named too far away to keep chasing", delegation.Zone)
+			r.warnIn(trace.AreaDelegation, delegation.Zone, "the nameservers of %s are named too far away to keep chasing", delegation.Zone)
 		}
 		return servers, nil
 	}
@@ -1226,13 +1226,13 @@ func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string
 func (r *run) chaseCNAME(ctx context.Context, step *trace.Step, qname string, qtype uint16, side int) *trace.Step {
 	target := cnameTarget(step.Records, qname)
 	if target == "" {
-		r.warnf("%s is an alias for a name the answer did not carry", qname)
+		r.warnf(trace.AreaAnswer, "%s is an alias for a name the answer did not carry", qname)
 		return step
 	}
 	// Names are compared the way DNS compares them: B.x and b.x are one name,
 	// and a loop spelled in both would otherwise run until the budget ended it.
 	if r.chased[dnsutil.Canonical(target)] {
-		r.warnf("the alias chain for %s comes back to %s", qname, target)
+		r.warnf(trace.AreaAnswer, "the alias chain for %s comes back to %s", qname, target)
 		return step
 	}
 	if err := r.counters.cname(); err != nil {
@@ -1290,11 +1290,11 @@ func (r *run) checkECH(step *trace.Step) {
 
 	switch {
 	case !r.cfg.DNSSEC:
-		r.warnf("%s publishes an ECH configuration, and without --dnssec nothing here checked that it arrived as the zone wrote it", name)
+		r.warnf(trace.AreaDNSSEC, "%s publishes an ECH configuration, and without --dnssec nothing here checked that it arrived as the zone wrote it", name)
 	case step.DNSSEC == nil:
-		r.warnf("%s publishes an ECH configuration in an answer whose signatures were never checked", name)
+		r.warnf(trace.AreaDNSSEC, "%s publishes an ECH configuration in an answer whose signatures were never checked", name)
 	case step.DNSSEC.State != trace.Secure:
-		r.warnf("%s publishes an ECH configuration in an answer that is %s, so a client cannot tell whether it was stripped on the way",
+		r.warnf(trace.AreaDNSSEC, "%s publishes an ECH configuration in an answer that is %s, so a client cannot tell whether it was stripped on the way",
 			name, step.DNSSEC.State)
 	}
 }
@@ -1311,7 +1311,7 @@ func (r *run) checkSubnet(step *trace.Step) {
 	if who == "" {
 		who = step.Server.IP.String()
 	}
-	r.warnf("%s ignored the client subnet, so this answer is not tailored to %s", who, r.cfg.Subnet)
+	r.warnf("", "%s ignored the client subnet, so this answer is not tailored to %s", who, r.cfg.Subnet)
 }
 
 // checkNS asks the zone that answered for its own NS RRset and warns when it
@@ -1343,14 +1343,14 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 	step.Records = nil // the comparison is the point, not the records
 
 	if len(child) == 0 {
-		r.warnf("%s did not return its own NS records", delegated.Zone)
+		r.warnf(trace.AreaDelegation, "%s did not return its own NS records", delegated.Zone)
 	} else {
 		if missing := missing(delegated.NS, child); len(missing) > 0 {
-			r.warnf("%s delegates to %s, which the zone itself does not list",
+			r.warnf(trace.AreaDelegation, "%s delegates to %s, which the zone itself does not list",
 				delegated.Zone, strings.Join(missing, ", "))
 		}
 		if extra := missing(child, delegated.NS); len(extra) > 0 {
-			r.warnf("%s lists %s, which the delegation does not carry",
+			r.warnf(trace.AreaDelegation, "%s lists %s, which the delegation does not carry",
 				delegated.Zone, strings.Join(extra, ", "))
 		}
 	}
@@ -1423,7 +1423,7 @@ func (r *run) checkGlue(ctx context.Context, check *trace.Step, server trace.Ser
 			ofFamily(glue, q.rrtype), ofFamily(glue, otherFamily(q.rrtype)), held, q.rrtype)
 	}
 	if budget != nil {
-		r.warnf("the budget ran out before the glue of %s could be checked", delegated.Zone)
+		r.warnf(trace.AreaDelegation, "the budget ran out before the glue of %s could be checked", delegated.Zone)
 	}
 }
 
@@ -1432,7 +1432,7 @@ func (r *run) checkGlue(ctx context.Context, check *trace.Step, server trace.Ser
 // 10.3), so the zone resolves through some resolvers and not others, and this
 // walk, which does not follow it, may not reach the zone at all.
 func (r *run) warnAliasedNS(zone, name, target string) {
-	r.warnOnce("%s delegates to %s, which is an alias for %s; name the nameserver by its own name, since resolvers need not follow an alias to find one (RFC 2181 section 10.3)",
+	r.warnOnceIn(trace.AreaDelegation, zone, "%s delegates to %s, which is an alias for %s; name the nameserver by its own name, since resolvers need not follow an alias to find one (RFC 2181 section 10.3)",
 		zone, name, target)
 }
 
@@ -1445,7 +1445,7 @@ func (r *run) checkApexAlias(step *trace.Step, zone, qname string) {
 	if !step.Flags.AA || !dns.EqualName(zone, qname) || zone == "." {
 		return
 	}
-	r.warnOnce("%s is an alias at the top of its zone, which hides the zone's SOA and NS from every resolver that asks (RFC 1034 section 3.6.2); serve the records there rather than an alias",
+	r.warnOnceIn(trace.AreaDelegation, zone, "%s is an alias at the top of its zone, which hides the zone's SOA and NS from every resolver that asks (RFC 1034 section 3.6.2); serve the records there rather than an alias",
 		zone)
 }
 
@@ -1481,13 +1481,13 @@ func (r *run) compareGlue(parent, zone, name string, glue, other, held []netip.A
 	switch {
 	case slices.Equal(glue, held):
 	case len(glue) == 0 && len(other) > 0:
-		r.warnf("%s hands out no %s address for %s, which %s gives as %s; have the registrar add it to the glue",
+		r.warnf(trace.AreaDelegation, "%s hands out no %s address for %s, which %s gives as %s; have the registrar add it to the glue",
 			parent, familyName(rrtype), name, zone, joinAddrs(held))
 	case len(held) == 0:
-		r.warnf("%s hands out %s for %s, which %s itself does not give; have the registrar remove it from the glue",
+		r.warnf(trace.AreaDelegation, "%s hands out %s for %s, which %s itself does not give; have the registrar remove it from the glue",
 			parent, joinAddrs(glue), name, zone)
 	default:
-		r.warnf("%s hands out %s for %s, which %s itself gives as %s; have the registrar update the glue",
+		r.warnf(trace.AreaDelegation, "%s hands out %s for %s, which %s itself gives as %s; have the registrar update the glue",
 			parent, joinAddrs(glue), name, zone, joinAddrs(held))
 	}
 }
@@ -1567,7 +1567,7 @@ func (r *run) checkDS(ctx context.Context, chain *dnssec.Chain, answer *trace.St
 		records, reason := r.fetchSigned(ctx, chain, answer, zone, qtype)
 		if reason != "" {
 			verdict.Signal = &trace.Signal{State: trace.SignalUnchecked, Reason: reason}
-			r.warnf("the request %s makes of its parent could not be checked: %s", zone, reason)
+			r.warnf(trace.AreaDNSSEC, "the request %s makes of its parent could not be checked: %s", zone, reason)
 			return
 		}
 		fetched[i] = records
@@ -1577,13 +1577,13 @@ func (r *run) checkDS(ctx context.Context, chain *dnssec.Chain, answer *trace.St
 	verdict.Signal = signal
 	switch signal.State {
 	case trace.SignalPending:
-		r.warnf("%s asks its parent for a DS it does not publish (%s), so a key rollover is waiting on the parent; if it has waited longer than the parent polls, ask the registrar why",
+		r.warnf(trace.AreaDNSSEC, "%s asks its parent for a DS it does not publish (%s), so a key rollover is waiting on the parent; if it has waited longer than the parent polls, ask the registrar why",
 			zone, signal.Reason)
 	case trace.SignalDelete:
-		r.warnf("%s asks its parent to remove its DS (RFC 8078), which leaves it unsigned once the parent acts; if that is not the plan, remove its CDS and CDNSKEY",
+		r.warnf(trace.AreaDNSSEC, "%s asks its parent to remove its DS (RFC 8078), which leaves it unsigned once the parent acts; if that is not the plan, remove its CDS and CDNSKEY",
 			zone)
 	case trace.SignalInconsistent:
-		r.warnf("the CDS and CDNSKEY of %s do not describe the same keys (%s), so a parent acts on neither; publish both from one key set",
+		r.warnf(trace.AreaDNSSEC, "the CDS and CDNSKEY of %s do not describe the same keys (%s), so a parent acts on neither; publish both from one key set",
 			zone, signal.Reason)
 	}
 }
@@ -1669,7 +1669,7 @@ func (r *run) checkSerial(ctx context.Context, answer *trace.Step, zone string, 
 		r.attach(answer, step)
 	}
 	if budget != nil {
-		r.warnf("the budget ran out before every nameserver of %s could be asked for its serial", zone)
+		r.warnf(trace.AreaConsistency, "the budget ran out before every nameserver of %s could be asked for its serial", zone)
 	}
 	r.compareSerials(zone, hops)
 }
@@ -1787,13 +1787,13 @@ func (r *run) checkKeys(ctx context.Context, chain *dnssec.Chain, answer *trace.
 		if len(lacking) == 0 {
 			continue
 		}
-		r.warnf("the nameservers of %s do not publish the same keys: %s %s key %d, which %s %s with, so a resolver that took the keys from %s rejects what %s answers; publish every signer's keys from every nameserver (RFC 8901)",
+		r.warnf(trace.AreaDNSSEC, "the nameservers of %s do not publish the same keys: %s %s key %d, which %s %s with, so a resolver that took the keys from %s rejects what %s answers; publish every signer's keys from every nameserver (RFC 8901)",
 			zone, strings.Join(lacking, " and "), verb(lacking, "lacks", "lack"), tag,
 			strings.Join(signers, " and "), verb(signers, "signs", "sign"),
 			orList(lacking), orList(signers))
 	}
 	if budget != nil {
-		r.warnf("the budget ran out before every nameserver of %s could be asked for its keys", zone)
+		r.warnf(trace.AreaDNSSEC, "the budget ran out before every nameserver of %s could be asked for its keys", zone)
 	}
 }
 
@@ -1874,7 +1874,7 @@ func (r *run) checkExposure(ctx context.Context, answer *trace.Step, zone string
 	checkTransfer := r.cfg.CheckTransfer
 	if checkTransfer && transfer == nil {
 		checkTransfer = false
-		r.warnf("zone transfers of %s were not checked: they need tcp, and %s carries none; walk with --udp, --tcp or --dot to check them",
+		r.warnf(trace.AreaStrangers, "zone transfers of %s were not checked: they need tcp, and %s carries none; walk with --udp, --tcp or --dot to check them",
 			zone, r.cfg.Transport.Proto())
 	}
 
@@ -1924,7 +1924,7 @@ func (r *run) checkExposure(ctx context.Context, answer *trace.Step, zone string
 		r.attach(answer, step)
 	}
 	if budget != nil {
-		r.warnf("the budget ran out before every nameserver of %s could be checked for what it gives strangers", zone)
+		r.warnf(trace.AreaStrangers, "the budget ran out before every nameserver of %s could be checked for what it gives strangers", zone)
 	}
 }
 
@@ -2081,7 +2081,7 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 		}
 	}
 	if budget != nil {
-		r.warnf("the budget ran out before every nameserver of %s could be checked for how it handles edns; raise --max-queries to check them all", zone)
+		r.warnf(trace.AreaEDNS, "the budget ran out before every nameserver of %s could be checked for how it handles edns; raise --max-queries to check them all", zone)
 	}
 }
 
@@ -2298,7 +2298,7 @@ func (r *run) compareSerials(zone string, hops []*hop) {
 	for _, serial := range order {
 		held = append(held, fmt.Sprintf("%d at %s", serial, strings.Join(serving[serial], " and ")))
 	}
-	r.warnf("the nameservers of %s are serving different copies of it: %s", zone, strings.Join(held, ", "))
+	r.warnf(trace.AreaConsistency, "the nameservers of %s are serving different copies of it: %s", zone, strings.Join(held, ", "))
 }
 
 // at is a server as a reader would name it.
@@ -2347,22 +2347,41 @@ func (r *run) fail(parent *trace.Step, zone, reason string) *trace.Step {
 	return step
 }
 
-// warnOnce is warnf for what more than one walk of a run can come across: an
-// alias walks the delegations above its target again, and --all asks after
+// warnOnceIn is warnIn for what more than one walk of a run can come across:
+// an alias walks the delegations above its target again, and --all asks after
 // every nameserver.
-func (r *run) warnOnce(format string, args ...any) {
+func (r *run) warnOnceIn(area trace.Area, zone, format string, args ...any) {
 	warning := fmt.Sprintf(format, args...)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !slices.Contains(r.trace.Warnings, warning) {
-		r.trace.Warnings = append(r.trace.Warnings, warning)
+		r.warn(trace.Concern{Area: area, Zone: zone}, warning)
 	}
 }
 
-func (r *run) warnf(format string, args ...any) {
+// warnf records a warning, and the area of the zone's health it is about where
+// it is about one, for --check to grade.
+func (r *run) warnf(area trace.Area, format string, args ...any) {
+	r.warnIn(area, "", format, args...)
+}
+
+// warnIn is warnf for a warning about one zone of the many a walk passes
+// through, which --check holds only against that zone.
+func (r *run) warnIn(area trace.Area, zone, format string, args ...any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.trace.Warnings = append(r.trace.Warnings, fmt.Sprintf(format, args...))
+	r.warn(trace.Concern{Area: area, Zone: zone}, fmt.Sprintf(format, args...))
+}
+
+func (r *run) warn(concern trace.Concern, warning string) {
+	r.trace.Warnings = append(r.trace.Warnings, warning)
+	if concern.Area == "" {
+		return
+	}
+	if r.trace.About == nil {
+		r.trace.About = make(map[string]trace.Concern)
+	}
+	r.trace.About[warning] = concern
 }
 
 // cnameTarget is what the alias for qname points at.

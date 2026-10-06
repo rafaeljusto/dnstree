@@ -195,6 +195,12 @@ func resolution() *trace.Trace {
 			NSOnlyRegistry: []string{"b.iana-servers.net."}, NSOnlyParent: []string{"c.iana-servers.net."},
 			DSChecked: true, DSOnlyRegistry: []uint16{370}, DSOnlyParent: []uint16{2371}, DSDiffer: false,
 		},
+		Check: &trace.Check{Zone: "example.com.", Areas: []trace.Graded{
+			{Area: trace.AreaAnswer, Grade: trace.GradePassed, Text: "www.example.com. A is 93.184.216.34"},
+			{Area: trace.AreaDelegation, Grade: trace.GradeLook, Text: "example.com. lists c.iana-servers.net., which the delegation does not carry", More: 1},
+			{Area: trace.AreaDNSSEC, Grade: trace.GradeBroken, Text: "the chain of trust breaks at example.com."},
+			{Area: trace.AreaStrangers, Grade: trace.GradeSkipped, Text: "not asked; --check-axfr and --check-recursion probe the nameservers"},
+		}},
 		Propagation: &trace.Propagation{Zone: "example.com.", Waits: []trace.Wait{
 			{Change: trace.ChangeAnswer, Seconds: 300, Type: "A", Held: []trace.Held{{Zone: "example.com.", TTL: 300}}},
 			{Change: trace.ChangeDenial, Seconds: 900, Type: "SOA", Held: []trace.Held{

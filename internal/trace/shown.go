@@ -39,6 +39,13 @@ func (t *Trace) Shown() *Trace {
 	shown.Question = t.Question.Shown()
 	shown.Root = t.Root.Shown()
 	shown.Warnings = shownAll(t.Warnings)
+	if t.About != nil {
+		shown.About = make(map[string]Concern, len(t.About))
+		for warning, concern := range t.About {
+			concern.Zone = Shown(concern.Zone)
+			shown.About[Shown(warning)] = concern
+		}
+	}
 	shown.Without = shownAll(t.Without)
 	if t.Trial != nil {
 		trial := *t.Trial
@@ -61,7 +68,21 @@ func (t *Trace) Shown() *Trace {
 	shown.Mail = t.Mail.Shown()
 	shown.Registration = t.Registration.Shown()
 	shown.Propagation = t.Propagation.Shown()
+	shown.Check = t.Check.Shown()
 	return &shown
+}
+
+// Shown is the grade of every area with the text of each escaped: a check read
+// back from a file says whatever the file does.
+func (c *Check) Shown() *Check {
+	if c == nil {
+		return nil
+	}
+	shown := &Check{Zone: Shown(c.Zone), Areas: slices.Clone(c.Areas)}
+	for i := range shown.Areas {
+		shown.Areas[i].Text = Shown(shown.Areas[i].Text)
+	}
+	return shown
 }
 
 // Shown is the resolver's answer with every name and text it sent escaped.

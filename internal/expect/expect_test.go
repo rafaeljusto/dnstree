@@ -373,6 +373,52 @@ func TestSPF(t *testing.T) {
 	}
 }
 
+func TestCheck(t *testing.T) {
+	graded := func(grades ...trace.Grade) *trace.Check {
+		check := &trace.Check{Zone: "test."}
+		for i, grade := range grades {
+			check.Areas = append(check.Areas, trace.Graded{Area: trace.Areas[i], Grade: grade})
+		}
+		return check
+	}
+	for name, tt := range map[string]struct {
+		check *trace.Check
+		want  string
+		unmet []string
+	}{
+		"nothing broken, held to nothing broken": {
+			check: graded(trace.GradePassed, trace.GradeLook, trace.GradeSkipped),
+			want:  "check:ok",
+		},
+		"something broken, held to nothing broken": {
+			check: graded(trace.GradePassed, trace.GradeLook, trace.GradeBroken),
+			want:  "check:ok",
+			unmet: []string{"expected check:ok, got consistency broken"},
+		},
+		"something to look at, held to nothing to look at": {
+			check: graded(trace.GradePassed, trace.GradeLook, trace.GradeBroken),
+			want:  "CHECK:clean",
+			unmet: []string{"expected check:clean, got delegation look and consistency broken"},
+		},
+		"everything passed or skipped, held to nothing to look at": {
+			check: graded(trace.GradePassed, trace.GradeSkipped),
+			want:  "check:clean",
+		},
+		"a walk --check did not grade": {
+			want:  "check:ok",
+			unmet: []string{"expected check:ok, got a walk that --check did not grade"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := walk("A", answered("A", "192.0.2.10"))
+			tr.Check = tt.check
+			if got := expect.Unmet(tr, parse(t, tt.want)); !slices.Equal(got, tt.unmet) {
+				t.Errorf("got %q, want %q", got, tt.unmet)
+			}
+		})
+	}
+}
+
 func TestRegistered(t *testing.T) {
 	started := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
 	for name, tt := range map[string]struct {

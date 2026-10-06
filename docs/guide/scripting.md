@@ -29,8 +29,8 @@ $ echo $?
 It takes one of the words that name how far the chain of trust got — `secure`,
 `insecure`, `bogus`, `indeterminate` — or what the walk came to — `answer`,
 `cname`, `nodata`, `nxdomain` — or `fresh`, below — or `caa:` and a
-certificate authority, below that — or `spf:ok` or `registered:30d`, below
-that — or else the rdata of a record that has to be among the answers. Repeat it for each thing that has to
+certificate authority, below that — or `spf:ok`, `check:ok` or
+`registered:30d`, below that — or else the rdata of a record that has to be among the answers. Repeat it for each thing that has to
 hold:
 
 ```
@@ -77,6 +77,11 @@ every lookup answered, and something there to check. It is how a provider
 pushing the count past ten is caught the day it happens rather than the day
 mail starts bouncing; `dnstree_spf_lookups`, below, is how the count is watched
 before it gets there.
+
+`check:ok` asks that `--check` found nothing broken in the zone, and
+`check:clean` that it found nothing to look at either; a walk `--check` did
+not grade fails both
+([All of it at once](zones.md#all-of-it-at-once)).
 
 `registered` asks that `--rdap` found the domain registered and not on a status
 that takes it out of its zone, and `registered:30d` that it has at least that

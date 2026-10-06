@@ -31,3 +31,9 @@
 ⏳   create a missing record  15m  SOA 3600, minimum 900 at example.com.
 ⏳   move the nameservers     2d   NS 172800 at com., 3600 at example.com.
 ⚠️  no server answered for com.
+check example.com.
+  ✅ answer      www.example.com. A is 93.184.216.34
+  ⚠️  delegation  example.com. lists c.iana-servers.net., which the delegation does not carry (and 1 more)
+  ❌ dnssec      the chain of trust breaks at example.com.
+  ➖ strangers   not asked; --check-axfr and --check-recursion probe the nameservers
+1 broken · 1 to look at · 1 passed · 1 skipped

@@ -3,6 +3,7 @@
 The questions a walk can put to a zone beyond the one it was given, and what a
 server says about its own answer.
 
+- [All of it at once](#all-of-it-at-once)
 - [Whether the parent and the child agree](#whether-the-parent-and-the-child-agree)
 - [Records that point where they may not](#records-that-point-where-they-may-not)
 - [Whether they all have the same zone](#whether-they-all-have-the-same-zone)
@@ -20,6 +21,56 @@ server says about its own answer.
 - [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
 - [Whether it will answer on new nameservers](#whether-it-will-answer-on-new-nameservers)
 - [How much room an answer had](#how-much-room-an-answer-had)
+
+## All of it at once
+
+Most checks below have a flag of their own. `--check` turns on the ones that
+grade a zone and ends the walk with one verdict on the zone it reached, a line
+for each area:
+
+```
+$ dnstree --check --no-compare --expect check:clean example.com
+...
+check example.com.
+  ✔ answer        example.com. A is 104.20.23.154 and 172.66.147.243, answered by elliott.ns.cloudflare.com. for example.com.
+  ✔ delegation    the parent and example.com. agree on 2 nameservers
+  ✔ consistency   every nameserver asked serves one copy of example.com., serial 2416374680 (2 nameservers, 12 addresses)
+  ✔ dnssec        the chain of trust holds from the root to example.com., signed with ECDSAP256SHA256
+  ⚠ servers       all 2 nameservers of example.com. are in AS13335, so one operator's outage takes the whole zone with it
+  ✔ edns          every nameserver of example.com. that was asked passed the RFC 8906 edns tests
+  · strangers     not asked; --check-axfr and --check-recursion probe the nameservers, which is for your own zone
+  ✔ caa           no name from example.com. up has a CAA set, so any certificate authority may issue for it
+  ✔ mail          the SPF policy of example.com. takes 0 of the 10 lookups a check is allowed
+  ✔ registration  the registration of example.com. runs until 2027-08-13
+1 to look at · 8 passed · 1 skipped
+✔ answered in 10s · 160 queries · 64 servers
+expected check:clean, got servers look
+```
+
+It is `--dnssec`, `--all`, `--check-ns`, `--check-ds`, `--serial`,
+`--check-edns`, `--cookie`, `--caa`, `--spf`, `--mail` and `--rdap` in one,
+with a budget of 512 queries unless `--max-queries` says otherwise. An area is
+broken where the walk has no answer, or none to trust; worth a look where a
+check warned, or where the zone is not signed; passed where it was checked and
+nothing came up; and skipped where nothing checked it. Each line says the
+worst of what the area found, with a count of the rest, which the warnings
+above it and `--explain` spell out. The grades are read off what the flags
+themselves say, so an area cannot pass while its flag warns.
+
+The servers area is about the zone's own nameservers: a root or TLD server
+short of room is somebody else's to fix. Zone transfers and recursion are
+asked of the servers as a stranger would, which is for the zone's owner to
+choose, so `strangers` is graded only when `--check-axfr` or
+`--check-recursion` is named as well. A name that is an alias is graded at the
+zone its target is in, which is where the checks run: `--check` on a name
+pointed at a CDN grades the CDN's zone, so point it at the zone's own apex.
+
+The exit code is the walk's own: a broken chain of trust is still 3.
+`--expect check:ok` fails on anything broken, and `--expect check:clean` on
+anything to look at as well, which is how a zone is held to its health in CI
+([Asking rather than reading](scripting.md#asking-rather-than-reading)).
+Tree, ascii, emoji, markdown and json draw the grades; `--format json` carries
+them as `check`, and `--from` draws a saved one again without being asked.
 
 ## Whether the parent and the child agree
 

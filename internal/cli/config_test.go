@@ -254,6 +254,29 @@ func TestParseDefaultsPropagation(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsCheck covers a file that grades every zone, read by a run
+// in a format that cannot draw the grades: none of the checks it turns on are
+// made for nothing.
+func TestParseDefaultsCheck(t *testing.T) {
+	path := write(t, "check\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--format", "dot", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Check || got.All || got.RDAP {
+		t.Errorf("got --check, --all %v and --rdap %v drawn as dot, want them left for a format that draws them", got.All, got.RDAP)
+	}
+
+	got, err = cli.Parse([]string{"--config", path, "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !got.Check || !got.DNSSEC {
+		t.Error("got no --check on a tree, want the file's setting")
+	}
+}
+
 // TestParseDefaultsDDR covers a file that asks for the designations on a run
 // that asks no resolver anything: the setting waits for a run that does.
 func TestParseDefaultsDDR(t *testing.T) {

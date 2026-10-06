@@ -99,6 +99,10 @@ type Finding struct {
 	// Text is the sentence itself, lowercase and without a full stop, the way
 	// the rest of the output is written.
 	Text string
+
+	// Unknown marks a note about something that could not be checked, which
+	// --check may never read as passed.
+	Unknown bool
 }
 
 // Findings is what a finished trace says about itself. There is always an
@@ -417,6 +421,11 @@ func expiring(tr *trace.Trace) (Finding, bool) {
 // cost every validator work and let one stop trusting the proofs as the count
 // grows, or with a salt, which can only be changed by re-signing the zone.
 func hashing(tr *trace.Trace) []Finding {
+	return hashingOf(tr, "")
+}
+
+// hashingOf is hashing for one zone, or for every zone where zone is empty.
+func hashingOf(tr *trace.Trace, zone string) []Finding {
 	var (
 		findings []Finding
 		seen     = make(map[string]bool)
@@ -426,11 +435,11 @@ func hashing(tr *trace.Trace) []Finding {
 			continue
 		}
 		hashed := step.DNSSEC.NSEC3
-		zone := strings.ToLower(hashed.Zone)
-		if seen[zone] || (hashed.Iterations == 0 && hashed.Salt == "") {
+		key := strings.ToLower(hashed.Zone)
+		if seen[key] || (hashed.Iterations == 0 && hashed.Salt == "") || (zone != "" && !strings.EqualFold(hashed.Zone, zone)) {
 			continue
 		}
-		seen[zone] = true
+		seen[key] = true
 
 		if hashed.Iterations == 0 {
 			findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
@@ -471,6 +480,11 @@ const shortRSA = 2048
 // zone at a hosting provider often cannot choose its algorithm, and a DS or a
 // key with nothing to do is how a planned rollover looks halfway through.
 func setup(tr *trace.Trace) []Finding {
+	return setupOf(tr, "")
+}
+
+// setupOf is setup for one zone, or for every secure zone where only is empty.
+func setupOf(tr *trace.Trace, only string) []Finding {
 	var (
 		findings []Finding
 		seen     = make(map[string]bool)
@@ -483,7 +497,7 @@ func setup(tr *trace.Trace) []Finding {
 		// A walk always names the zone a verdict is about; a file that does not
 		// leaves nothing for the sentences to be about.
 		zone := status.Zone
-		if zone == "" || seen[strings.ToLower(zone)] {
+		if zone == "" || seen[strings.ToLower(zone)] || (only != "" && !strings.EqualFold(zone, only)) {
 			continue
 		}
 		seen[strings.ToLower(zone)] = true
@@ -793,9 +807,20 @@ func four(addr netip.Addr) bool {
 // answer in the end: a resolution that succeeded over a dead nameserver is one
 // outage away from failing.
 func servers(tr *trace.Trace) []Finding {
+	return serversOf(tr, "")
+}
+
+// serversOf is servers for the servers of one zone, or of every zone where
+// zone is empty.
+func serversOf(tr *trace.Trace, zone string) []Finding {
 	var silent, lame, tight []string
 	unsigned := true
 	for step := range tr.Steps() {
+		// A probe that went unanswered is said by the probe, and a server
+		// that dropped an odd EDNS query has not stopped answering.
+		if zone != "" && (!strings.EqualFold(step.Zone, zone) || step.EDNS != nil || step.Probe != nil) {
+			continue
+		}
 		switch step.Kind {
 		case trace.KindTimeout:
 			silent = add(silent, at(step))
@@ -837,8 +862,17 @@ func servers(tr *trace.Trace) []Finding {
 // without one, or wrongly. One address can be many machines, so a server may
 // be named under more than one of them.
 func cookies(tr *trace.Trace) []Finding {
+	return cookiesOf(tr, "")
+}
+
+// cookiesOf is cookies for the servers of one zone, or of every zone where
+// zone is empty.
+func cookiesOf(tr *trace.Trace, zone string) []Finding {
 	said := map[trace.CookieState][]string{}
 	for step := range tr.Steps() {
+		if zone != "" && !strings.EqualFold(step.Zone, zone) {
+			continue
+		}
 		if step.Cookie != "" {
 			said[step.Cookie] = add(said[step.Cookie], at(step))
 		}
@@ -913,7 +947,7 @@ func exposure(tr *trace.Trace) []Finding {
 				"no nameserver of %s looked up another name for a stranger", key.zone)})
 		}
 		if len(unchecked) > 0 {
-			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
 				"%s could not be asked for %s, so whether %s is open there is unknown",
 				list(unchecked), asked, asked)})
 		}
@@ -988,18 +1022,18 @@ func ednsTests(tr *trace.Trace) []Finding {
 		}
 		if servers := found[trace.EDNSPlain][trace.EDNSUnchecked]; len(servers) > 0 {
 			everything = false
-			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
 				"%s could not be tested: they gave no usable answer to EDNS0 alone, so how they handle the rest of EDNS is unknown", list(servers))})
 		}
 		for _, kind := range kinds[1:] {
 			if servers := found[kind][trace.EDNSUnchecked]; len(servers) > 0 {
 				everything = false
-				findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+				findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
 					"%s answered EDNS0 but could not be asked the %s test, so whether they handle it is unknown", list(servers), kind)})
 			}
 		}
 		if len(unasked) > 0 {
-			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
 				"%s passed EDNS0 alone, and the budget left the rest of the tests unasked", list(unasked))})
 		}
 		if everything {

@@ -89,6 +89,9 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	if tr.Registration, err = readRegistration(doc.Registration); err != nil {
 		return nil, err
 	}
+	if tr.Check, err = readCheck(doc.Check); err != nil {
+		return nil, err
+	}
 	return tr, nil
 }
 

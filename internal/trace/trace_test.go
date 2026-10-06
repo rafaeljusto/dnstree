@@ -365,3 +365,33 @@ func TestChain(t *testing.T) {
 		})
 	}
 }
+
+// TestShownCheck covers what --check graded when it is drawn again from a file,
+// which can say anything: its zone and its texts are escaped like the rest, and
+// the area each warning is about follows the warning it is keyed by.
+func TestShownCheck(t *testing.T) {
+	tr := &trace.Trace{
+		Warnings: []string{"x\x1b[2J lists ns2"},
+		About:    map[string]trace.Concern{"x\x1b[2J lists ns2": {Area: trace.AreaDelegation}},
+		Check: &trace.Check{Zone: "x\x1b.", Areas: []trace.Graded{
+			{Area: trace.AreaDelegation, Grade: trace.GradeLook, Text: "x\x1b[2J lists ns2"},
+			{Area: trace.AreaDNSSEC, Grade: trace.GradeBroken},
+		}},
+	}
+	shown := tr.Shown()
+	if got, want := shown.Check.Zone, `x\027.`; got != want {
+		t.Errorf("got the zone %q, want %q", got, want)
+	}
+	if got, want := shown.Check.Areas[0].Text, `x\027[2J lists ns2`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := shown.About[shown.Warnings[0]].Area; got != trace.AreaDelegation {
+		t.Errorf("got the shown warning about %q, want %q", got, trace.AreaDelegation)
+	}
+	if tr.Check.Areas[0].Text != "x\x1b[2J lists ns2" {
+		t.Error("got the walk's own check escaped, want a copy")
+	}
+	if got := shown.Check.Count(trace.GradeLook); got != 1 {
+		t.Errorf("got %d areas to look at, want 1", got)
+	}
+}

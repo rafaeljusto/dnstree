@@ -46,10 +46,39 @@
     "mail": { "$ref": "#/$defs/mail" },
     "registration": { "$ref": "#/$defs/registration" },
     "propagation": { "$ref": "#/$defs/propagation" },
+    "check": { "$ref": "#/$defs/check" },
     "report": { "$ref": "#/$defs/report" },
     "trial": { "$ref": "#/$defs/trial" }
   },
   "$defs": {
+    "check": {
+      "description": "The grade --check gave each area of the health of the zone the walk ended in, present only where it asked. Each grade is read off the warnings the walk raised and what --explain says, so an area cannot pass while the flag that checks it warns. Unlike propagation it is read back by --from.",
+      "type": "object",
+      "required": ["zone", "areas"],
+      "properties": {
+        "zone": { "description": "The zone the walk ended in.", "type": "string" },
+        "areas": { "type": "array", "items": { "$ref": "#/$defs/graded" } }
+      }
+    },
+    "graded": {
+      "description": "One area of the zone's health and how it came out.",
+      "type": "object",
+      "required": ["area", "grade"],
+      "properties": {
+        "area": {
+          "description": "answer: what the walk came to. delegation: the parent and the zone agree on the nameservers and their glue. consistency: every nameserver serves the same copy of the zone. dnssec: the chain of trust, and what the zone asks its parent. servers: the zone's own servers answer, with authority and room to spare. edns: EDNS and DNS cookies. strangers: zone transfers and recursion, checked only where --check-axfr or --check-recursion asked. caa: who may issue certificates. mail: the MX hosts, DANE, SPF and the mail policies. registration: what the registry holds.",
+          "type": "string",
+          "enum": ["answer", "delegation", "consistency", "dnssec", "servers", "edns", "strangers", "caa", "mail", "registration"]
+        },
+        "grade": {
+          "description": "passed: checked, and nothing came up. look: worth a look, such as a warning or an unsigned zone, but nothing broken. broken: no answer, or none to trust. skipped: not checked, or nothing there to check.",
+          "type": "string",
+          "enum": ["passed", "look", "broken", "skipped"]
+        },
+        "text": { "description": "What passed, what to look at or what broke; for an area with more than one thing to say, the worst of them.", "type": "string" },
+        "more": { "description": "How many other things the area had to say, absent where none.", "type": "integer", "minimum": 0 }
+      }
+    },
     "registration": {
       "description": "What the registry of the domain says about it over RDAP (RFC 9083), present only where --rdap asked, held against the referral the zone above the domain handed the walk. The domain is the zone the walk was delegated to below the TLD, or the TLD and one label of the name where nothing delegated it; the registry is the one IANA's bootstrap file names for the TLD (RFC 9224).",
       "type": "object",

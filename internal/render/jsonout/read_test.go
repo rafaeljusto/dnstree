@@ -296,6 +296,16 @@ func TestReadRefuses(t *testing.T) {
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "victory"}]}}`,
 			want: `"victory"`,
 		},
+		"a grade nothing here gives": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"check": {"zone": "x.", "areas": [{"area": "dnssec", "grade": "splendid"}]}}`,
+			want: `"splendid"`,
+		},
+		"an area nothing here grades": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"check": {"zone": "x.", "areas": [{"area": "vibes", "grade": "passed"}]}}`,
+			want: `"vibes"`,
+		},
 		"a registry that said something nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"registration": {"domain": "x.", "state": "forever"}}`,

@@ -45,6 +45,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.Mail = convertMail(tr.Mail)
 		document.Registration = convertRegistration(tr.Registration)
 		document.Propagation = convertPropagation(tr.Propagation)
+		document.Check = convertCheck(tr.Check)
 		if tr.Report != nil {
 			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
 				Rcode: tr.Report.Rcode, Error: tr.Report.Err}
@@ -70,6 +71,7 @@ type document struct {
 	Mail          *mail         `json:"mail,omitempty"`
 	Registration  *registration `json:"registration,omitempty"`
 	Propagation   *propagation  `json:"propagation,omitempty"`
+	Check         *check        `json:"check,omitempty"`
 	Report        *report       `json:"report,omitempty"`
 	Trial         *trial        `json:"trial,omitempty"`
 }

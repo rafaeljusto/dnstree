@@ -56,6 +56,7 @@ one after another, each from the root servers down.
   --mail                  check NAME's MX hosts for DANE, and its mail policies
   --rdap                  ask the registry when the domain expires, and compare
   --propagation           say how long a change takes to reach every cache
+  --check                 run the checks that grade a zone, and grade its health
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
@@ -81,7 +82,7 @@ one after another, each from the root servers down.
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
   --max-depth N           zone cuts to follow (default 16)
-  --max-queries N         queries to make in total (default 64, or 256 with --all)
+  --max-queries N         queries to make in all (64; 256 --all, 512 --check)
   --max-cname N           aliases to chase (default 8)
   --port N                the port to ask on (53; 853 with --dot, 443 with --doh)
   --root-hints FILE       where the walk starts, instead of the built-in hints
@@ -150,6 +151,21 @@ worst case, a cache filled just before the change; a resolver that caps TTLs
 lets go sooner. The parent's NS TTL is read from the referral and the zone's
 own only with --check-ns, the SOA from a denial or --serial, and the DS and
 DNSKEY TTLs only with --dnssec. It asks nothing more, and works with --from.
+
+--check runs together the checks that grade the zone the walk ends in, and
+grades it one area at a time: the answer, the delegation, whether every
+nameserver serves the same copy, the chain of trust, the zone's own servers,
+EDNS and cookies, CAA, mail and the registration. It is --dnssec, --all,
+--check-ns, --check-ds, --serial, --check-edns, --cookie, --caa, --spf, --mail
+and --rdap together, with a budget of 512 queries unless --max-queries says
+otherwise. Each area passed, is worth a look, is broken, or was skipped, and the
+line says the worst of what it found. Zone transfers and recursion are asked of
+the servers as a stranger would, which is for the zone's owner to choose, so
+they are graded only when --check-axfr or --check-recursion is named as well.
+A name that is an alias is graded at the zone its target is in, which is where
+the checks run. It is drawn by tree, ascii, emoji, markdown and json, and
+--from draws a saved one again. The exit code is the walk's own; --expect
+check:ok fails on anything broken.
 
 --report tells a zone its chain of trust is broken, the way RFC 9567 lets a
 zone ask: when the walk comes out bogus and the broken zone named a reporting
@@ -268,8 +284,10 @@ name, which is how a renewal about to be refused is caught. spf:ok asks that
 --spf found a policy no check fails on, which is how a provider pushing the
 count past ten is caught. registered:30d asks that --rdap found the domain
 registered, not held, and with at least that long left to run, which is how a
-renewal nobody paid is caught; registered alone asks only the first two. Or else
-it takes the rdata of a record that has to be among the answers, such as an
+renewal nobody paid is caught; registered alone asks only the first two.
+check:ok asks that --check found nothing broken, and check:clean that it found
+nothing to look at either, which is how a zone is held to its health in CI.
+Or else it takes the rdata of a record that has to be among the answers, such as an
 address. Repeat it for every one that has to hold.
 Those words win where a value could be read either way, so a record whose rdata
 reads like one of them is asked for with a leading =, which expects rdata and
@@ -454,6 +472,10 @@ type Config struct {
 	Mail           bool
 	RDAP           bool
 	Propagation    bool
+
+	// Check grades the zone's health one area at a time, and turns on every
+	// check that grades one, bar the probes a zone's owner is the one to run.
+	Check bool
 
 	NSID     bool
 	Cookie   bool
@@ -671,6 +693,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.SPF, "spf", false, "draw the name's SPF policy and count the lookups it costs")
 	flags.BoolVar(&cfg.Mail, "mail", false, "check the name's MX hosts for DANE, and its mail policies")
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
+	flags.BoolVar(&cfg.Check, "check", false, "run the checks that grade a zone, and grade its health")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
@@ -820,6 +843,21 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %s is written once, at the end, so there is nothing to watch it change",
 			ErrUsage, cfg.Format)
 	}
+	// A default from the file is heeded only by the formats that draw it.
+	if cfg.Check && !propagates(cfg.Format) {
+		if !fromFile["check"] {
+			return nil, fmt.Errorf("%w: %s does not draw what --check grades; use tree, ascii, emoji, markdown or json",
+				ErrUsage, cfg.Format)
+		}
+		cfg.Check = false
+	}
+	if cfg.Check {
+		// Zone transfers and recursion are asked of strangers' servers as a
+		// stranger, which is for the zone's owner to choose, so they are only
+		// run where they are named.
+		cfg.DNSSEC, cfg.All, cfg.CheckNS, cfg.CheckDS, cfg.Serial = true, true, true, true, true
+		cfg.CheckEDNS, cfg.Cookie, cfg.CAA, cfg.SPF, cfg.Mail, cfg.RDAP = true, true, true, true, true, true
+	}
 	if cfg.CheckDS && !cfg.DNSSEC {
 		// Typed out, it is a mistake to say so. From the file it is a default
 		// for the walks that check signatures, and this one does not.
@@ -906,6 +944,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	// twenty-six included, and spends the ordinary budget before it is half way
 	// down a large zone. Only the run asks for more: the resolver's default is
 	// also what dnstree-web walks for strangers with.
+	if cfg.Check && cfg.MaxQueries == 0 {
+		cfg.MaxQueries = CheckMaxQueries
+	}
 	if cfg.All && cfg.MaxQueries == 0 {
 		cfg.MaxQueries = AllMaxQueries
 	}
@@ -986,6 +1027,10 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 
 // AllMaxQueries is the query budget of a run with --all that names none.
 const AllMaxQueries = 256
+
+// CheckMaxQueries is the query budget of a run with --check that names none:
+// --all's, and the sweeps of every nameserver the checks make on top of it.
+const CheckMaxQueries = 512
 
 // Question is one name and one type to walk.
 type Question struct {
@@ -1071,7 +1116,7 @@ func several(cfg *Config, expecting bool) error {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "rdap": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
@@ -1087,7 +1132,8 @@ func once(format string) bool {
 		format == "waterfall" || format == "waterfall-ascii" || format == "markdown"
 }
 
-// propagates reports whether a format draws what --propagation works out.
+// propagates reports whether a format draws what --propagation works out, and
+// what --check grades.
 func propagates(format string) bool {
 	switch format {
 	case "tree", "ascii", "emoji", "markdown", "json":

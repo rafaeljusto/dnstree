@@ -5,6 +5,7 @@ package tree
 
 import (
 	"bufio"
+	"cmp"
 	"fmt"
 	"io"
 	"strconv"
@@ -87,18 +88,17 @@ var (
 
 // Render writes the trace to w as a tree.
 func Render(w io.Writer, tr *trace.Trace, opts Options) error {
-	set, ok := charsets[opts.Charset]
+	charset := cmp.Or(opts.Charset, Unicode)
+	set, ok := charsets[charset]
 	if !ok {
-		if opts.Charset != "" {
-			return fmt.Errorf("tree: unknown charset %q", opts.Charset)
-		}
-		set = charsets[Unicode]
+		return fmt.Errorf("tree: unknown charset %q", opts.Charset)
 	}
 
 	renderer := &renderer{
-		glyphs: set,
-		paint:  painter(ColorEnabled(w, opts.Color)),
-		out:    bufio.NewWriter(w),
+		glyphs:  set,
+		charset: charset,
+		paint:   painter(ColorEnabled(w, opts.Color)),
+		out:     bufio.NewWriter(w),
 	}
 	if tr != nil {
 		shown := tr.Shown()
@@ -110,6 +110,7 @@ func Render(w io.Writer, tr *trace.Trace, opts Options) error {
 
 type renderer struct {
 	glyphs    glyphs
+	charset   Charset
 	paint     painter
 	highlight *trace.Step
 	out       *bufio.Writer
@@ -161,6 +162,9 @@ func (r *renderer) render(tr *trace.Trace) {
 			mark = spaced("⚠️")
 		}
 		r.write(r.paint.paint(mark+warning, yellow) + "\n")
+	}
+	for _, line := range r.check(tr.Check) {
+		r.write(line + "\n")
 	}
 }
 

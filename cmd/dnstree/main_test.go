@@ -1618,3 +1618,91 @@ _dmarc.example.test.      IN TXT  "v=DMARC1; p=reject"
 		t.Errorf("got %q drawn again, want %q", got, want)
 	}
 }
+
+// TestRunCheck grades a zone whose servers echo an EDNS flag back and whose NS
+// set lists a server the delegation does not, and holds it to --expect: both
+// are worth a look, and neither is broken.
+func TestRunCheck(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: `
+@                     IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                     IN NS   a.root-servers.net.
+a.root-servers.net.   IN A    127.0.0.1
+example.test.         IN NS   ns.example.test.
+ns.example.test.      IN A    127.0.0.1
+`})
+	child := fakens.New(t, fakens.Config{Name: "ns.example.test.", Origin: "example.test.", Zone: `
+@     IN SOA  ns hostmaster 7 7200 3600 1209600 3600
+@     IN NS   ns
+@     IN NS   ns2
+@     IN TXT  "v=spf1 -all"
+ns    IN A    127.0.0.1
+ns2   IN A    127.0.0.1
+www   IN A    192.0.2.10
+`, Behaviour: fakens.Behaviour{EchoEDNSFlags: true}})
+
+	var registry *httptest.Server
+	registry = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/dns.json":
+			fmt.Fprintf(w, `{"services":[[["test"],["%s/"]]]}`, registry.URL)
+		case "/domain/example.test":
+			fmt.Fprintf(w, `{"status":["active"],"nameservers":[{"ldhName":"ns.example.test"}],"events":[{"eventAction":"expiration","eventDate":%q}]}`,
+				time.Now().Add(400*24*time.Hour).UTC().Format(time.RFC3339))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer registry.Close()
+	rdapBootstrap, rdapHTTP = registry.URL+"/dns.json", registry.Client()
+	defer func() { rdapBootstrap, rdapHTTP = rdap.Bootstrap, nil }()
+
+	base := []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())), "--resolver", child.Addr.String(),
+		"--no-asn", "--no-compare", "--color", "never", "--format", "ascii", "--check",
+	}
+	tests := map[string]struct {
+		args []string
+		code int
+		err  string
+	}{
+		"nothing broken, which check:ok asks": {
+			args: []string{"--expect", "check:ok"},
+			code: exitAnswer,
+		},
+		"something to look at, which check:clean refuses": {
+			args: []string{"--expect", "check:clean"},
+			code: exitExpect,
+			err:  "expected check:clean, got delegation look, dnssec look, servers look and 1 more",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			args := append(slices.Clone(base), append(tt.args, "www.example.test", "A")...)
+			if code := run(t.Context(), args, &stdout, &stderr); code != tt.code {
+				t.Fatalf("got exit %d, want %d\n%s%s", code, tt.code, stdout.String(), stderr.String())
+			}
+			out := stdout.String()
+			for _, want := range []string{
+				"check example.test.",
+				"  ok answer        www.example.test. A is 192.0.2.10",
+				"  !! delegation    example.test. lists ns2.example.test., which the delegation does not carry",
+				"  ok consistency   every nameserver asked serves one copy of example.test., serial 7 (1 nameserver, 1 address)",
+				"  !! dnssec        the chain of trust at . could not be checked",
+				"  !! servers       example.test. is delegated to one nameserver",
+				"  !! edns          ns.example.test. (127.0.0.1) did not ignore an EDNS flag nobody has defined",
+				"  -- strangers     not asked; --check-axfr and --check-recursion",
+				"  ok registration  ",
+				"4 to look at | 5 passed | 1 skipped",
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("got no %q:\n%s", want, out)
+				}
+			}
+			if !strings.Contains(stderr.String(), tt.err) {
+				t.Errorf("got stderr %q, want %q", stderr.String(), tt.err)
+			}
+		})
+	}
+}

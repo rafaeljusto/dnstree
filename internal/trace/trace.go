@@ -46,6 +46,11 @@ type Trace struct {
 	// Warnings are what the resolver could not do, in the order it found out.
 	Warnings []string
 
+	// About is what each warning is about, keyed by the warning, for the ones
+	// that belong to an area. It lives only as long as the walk: what --check
+	// made of it is what is kept.
+	About map[string]Concern
+
 	// Without is what the walk was told to treat as down, as --without named
 	// it. The servers inside it were never asked, so an answer the walk found
 	// is one the rest of the DNS gives on its own.
@@ -77,6 +82,10 @@ type Trace struct {
 	// from the rest of the trace once the walk is over, never read back from a
 	// file.
 	Propagation *Propagation
+
+	// Check is the grade --check gave each area of the zone's health, nil
+	// where it did not ask.
+	Check *Check
 
 	// Report is the failure report --report sent to the agent the zone named
 	// (RFC 9567), nil where none was due or none was asked for.
