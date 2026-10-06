@@ -399,6 +399,7 @@ func ListenAndServe(ctx context.Context, addr string, h http.Handler) error {
 		Handler:           h,
 		ReadHeaderTimeout: headerDeadline,
 		IdleTimeout:       time.Minute,
+		MaxHeaderBytes:    64 << 10, // every request is a GET with a short path
 	}
 	served := make(chan error, 1)
 	go func() { served <- server.ListenAndServe() }()

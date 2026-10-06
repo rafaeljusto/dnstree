@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	errLimited = errors.New("server: the client has started enough walks for now")
-	errBusy    = errors.New("server: no room for another walk")
+	errLimited  = errors.New("server: the client has started enough walks for now")
+	errBusy     = errors.New("server: no room for another walk")
+	errPanicked = errors.New("server: the walk broke off")
 )
 
 // How much of the finished walks is kept, and the most one of them may take.
@@ -85,17 +86,25 @@ func (w *walks) get(ctx context.Context, key string, admit func() bool,
 	w.inFlight[key] = running
 	w.mu.Unlock()
 
+	// A walk that panics still lets go of its key, or everybody asking the same
+	// question after it would wait on it forever.
+	finished := false
+	defer func() {
+		if !finished {
+			running.made, running.err = nil, errPanicked
+		}
+		w.mu.Lock()
+		delete(w.inFlight, key)
+		if running.err == nil {
+			now := time.Now()
+			running.made.until = now.Add(w.keep)
+			w.store(key, running.made, now)
+		}
+		w.mu.Unlock()
+		close(running.done)
+	}()
 	running.made, running.err = w.run(ctx, walk)
-
-	w.mu.Lock()
-	delete(w.inFlight, key)
-	if running.err == nil {
-		now := time.Now()
-		running.made.until = now.Add(w.keep)
-		w.store(key, running.made, now)
-	}
-	w.mu.Unlock()
-	close(running.done)
+	finished = true
 	return running.made, running.err
 }
 

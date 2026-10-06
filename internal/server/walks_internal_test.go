@@ -100,6 +100,33 @@ func TestWalksOutliveWhoAskedFirst(t *testing.T) {
 	}
 }
 
+// TestWalksSurviveAPanic covers a walk that panics: the panic still reaches the
+// handler, and the question can be asked again rather than waiting forever on
+// a walk that will never finish.
+func TestWalksSurviveAPanic(t *testing.T) {
+	w := newWalks(1, time.Minute, time.Second)
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("got no panic, want the walk's own")
+			}
+		}()
+		_, _ = w.get(t.Context(), "q", always, func(context.Context) (*walked, error) {
+			panic("hostile zone")
+		})
+	}()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if _, err := w.get(ctx, "q", always, made(1)); err != nil {
+		t.Errorf("got %v asking again, want the walk made afresh", err)
+	}
+	if len(w.running) != 0 {
+		t.Errorf("got %d walks holding room, want none", len(w.running))
+	}
+}
+
 func TestLimiter(t *testing.T) {
 	l := newLimiter(2, time.Minute)
 	start := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
