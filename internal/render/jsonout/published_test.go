@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 )
 
 // publishedPath is the copy of the schema the pages workflow serves. That
@@ -27,7 +28,7 @@ func TestPublishedSchema(t *testing.T) {
 		t.Fatalf("WriteSchema: %v", err)
 	}
 
-	if *update {
+	if golden.Updating() {
 		if err := os.WriteFile(publishedPath, printed.Bytes(), 0o644); err != nil {
 			t.Fatalf("writing %s: %v", publishedPath, err)
 		}

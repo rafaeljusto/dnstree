@@ -191,8 +191,7 @@ func queried(step *trace.Step) bool {
 // query name twice over, and a reader can act on none of it: what they need is
 // which resolver failed them, and how.
 func reason(err error) string {
-	var failure *net.DNSError
-	if errors.As(err, &failure) && failure.Err != "" {
+	if failure, ok := errors.AsType[*net.DNSError](err); ok && failure.Err != "" {
 		return failure.Err
 	}
 	return err.Error()
@@ -217,8 +216,7 @@ func (r *Resolver) Lookup(ctx context.Context, addr netip.Addr) (*trace.ASNInfo,
 	if err != nil {
 		// An address nothing announces has no record, which is an answer
 		// rather than a failure.
-		var notFound *net.DNSError
-		if !errors.As(err, &notFound) || !notFound.IsNotFound {
+		if notFound, ok := errors.AsType[*net.DNSError](err); !ok || !notFound.IsNotFound {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 	}

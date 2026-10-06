@@ -116,7 +116,7 @@ func failed(tr *trace.Trace, answer *trace.Resolver) trace.Failure {
 		return ""
 	}
 	if validation {
-		if chain := tr.Chain(); chain != nil && chain.DNSSEC.State == trace.Bogus {
+		if tr.Broken() {
 			return trace.FailedBogus
 		}
 		return trace.FailedValidation

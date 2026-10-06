@@ -324,9 +324,18 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		return outcome(cfg, tr, stderr)
 	}
 
-	if err := render(stdout, cfg, tr); err != nil {
+	if err := draw(stdout, stderr, cfg, tr, live, reference); err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
+	}
+	return outcome(cfg, tr, stderr)
+}
+
+// draw writes a walk the way every format written here draws it: the walk,
+// the line that sums it up for a person, and the sentences the run asked for.
+func draw(stdout, stderr io.Writer, cfg *cli.Config, tr *trace.Trace, live *tree.Live, reference *history.Walk) error {
+	if err := render(stdout, cfg, tr); err != nil {
+		return err
 	}
 	if live != nil {
 		live.Summary(stdout, tr)
@@ -336,7 +345,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	if findings := readings(cfg, tr, reference, stderr); len(findings) > 0 {
 		tree.Explain(stdout, findings, treeOptions(cfg))
 	}
-	return outcome(cfg, tr, stderr)
+	return nil
 }
 
 // outcome is what the run says to whoever started it: what the walk came to,
@@ -424,12 +433,7 @@ func policy(ctx context.Context, cfg *cli.Config) <-chan *trace.SPF {
 	if !cfg.SPF {
 		return nil
 	}
-	server := transport.System()
-	if len(cfg.Resolvers) > 0 {
-		server = cfg.Resolvers[0]
-	}
-	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
-	fallback := transport.NewTCP(transport.Config{Timeout: cfg.Timeout})
+	server, carrier, fallback := recursiveServer(cfg)
 
 	checked := make(chan *trace.SPF, 1)
 	go func() {
@@ -452,16 +456,23 @@ func policy(ctx context.Context, cfg *cli.Config) <-chan *trace.SPF {
 	return checked
 }
 
+// recursiveServer is the recursive server the checks beside the walk ask, the
+// first --resolver or else the host's own, and what to ask it over. It is not
+// valid where there is neither.
+func recursiveServer(cfg *cli.Config) (server netip.AddrPort, carrier, fallback transport.Transport) {
+	server = transport.System()
+	if len(cfg.Resolvers) > 0 {
+		server = cfg.Resolvers[0]
+	}
+	return server, transport.NewUDP(transport.Config{Timeout: cfg.Timeout}),
+		transport.NewTCP(transport.Config{Timeout: cfg.Timeout})
+}
+
 // report tells the agent the broken zone named that its chain of trust is
 // broken (RFC 9567), through the recursive server the comparison asks, the way
 // a resolver that hit the failure would.
 func report(ctx context.Context, cfg *cli.Config, tr *trace.Trace) {
-	server := transport.System()
-	if len(cfg.Resolvers) > 0 {
-		server = cfg.Resolvers[0]
-	}
-	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
-	fallback := transport.NewTCP(transport.Config{Timeout: cfg.Timeout})
+	server, carrier, fallback := recursiveServer(cfg)
 	recursive.Report(tr, func(name string) (string, error) {
 		if !server.IsValid() {
 			return "", errors.New("there is no recursive server to send it through; name one with --resolver")
@@ -590,17 +601,9 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		if round == 0 {
 			// The first round is an ordinary run, --diff and all: it is the
 			// tree everything after it is read against.
-			if err := render(stdout, cfg, tr); err != nil {
+			if err := draw(stdout, stderr, cfg, tr, live, reference); err != nil {
 				fmt.Fprintln(stderr, err)
 				return exitUsage
-			}
-			if live != nil {
-				live.Summary(stdout, tr)
-			} else {
-				tree.Summary(stdout, tr, treeOptions(cfg))
-			}
-			if findings := readings(cfg, tr, reference, stderr); len(findings) > 0 {
-				tree.Explain(stdout, findings, treeOptions(cfg))
 			}
 		} else {
 			tree.Watched(stdout, history.Differences(previous, current), when, treeOptions(cfg))
@@ -1040,7 +1043,7 @@ func treeOptions(cfg *cli.Config) tree.Options {
 // verdict reads the trace the way a script would: a broken chain of trust
 // outranks an answer, and an answer outranks nothing.
 func verdict(tr *trace.Trace) int {
-	if step := tr.Chain(); step != nil && step.DNSSEC.State == trace.Bogus {
+	if tr.Broken() {
 		return exitBogus
 	}
 	if tr.Result() == nil {

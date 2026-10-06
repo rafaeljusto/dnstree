@@ -2,20 +2,16 @@ package dot_test
 
 import (
 	"bytes"
-	"flag"
 	"net/netip"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/dot"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
-
-var update = flag.Bool("update", false, "rewrite the golden files")
 
 // resolution carries one of everything the schema has to be able to say.
 func resolution() *trace.Trace {
@@ -112,7 +108,7 @@ func TestRender(t *testing.T) {
 	if err := dot.Render(&got, resolution()); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	compare(t, "resolution", got.String())
+	golden.Compare(t, "resolution", got.String())
 }
 
 // TestRenderIsGraphviz hands the output to Graphviz, which is the only real
@@ -159,26 +155,6 @@ func TestRenderIsStable(t *testing.T) {
 	}
 	if first.String() != second.String() {
 		t.Error("two renderings of the same trace differ")
-	}
-}
-
-func compare(tb testing.TB, name, got string) {
-	tb.Helper()
-
-	golden := filepath.Join("testdata", name+".golden")
-	if *update {
-		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
-			tb.Fatalf("writing %s: %v", golden, err)
-		}
-		return
-	}
-
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		tb.Fatalf("%v (run go test -update to create it)", err)
-	}
-	if got != string(want) {
-		tb.Errorf("output does not match %s, run go test -update to see the change\n--- got ---\n%s", golden, got)
 	}
 }
 

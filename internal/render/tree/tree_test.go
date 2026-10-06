@@ -2,19 +2,15 @@ package tree_test
 
 import (
 	"bytes"
-	"flag"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
-
-var update = flag.Bool("update", false, "rewrite the golden files")
 
 // resolution is the shape a real walk leaves behind: a timeout before the
 // server that answered, an unqueried sibling, and the records at the end.
@@ -196,7 +192,7 @@ func TestRender(t *testing.T) {
 			if err := tree.Render(&got, test.trace, test.options); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
-			compare(t, name, got.String())
+			golden.Compare(t, name, got.String())
 		})
 	}
 }
@@ -357,27 +353,6 @@ func server(name, addr string, asn uint32) trace.Server {
 		server.ASN = &trace.ASNInfo{Number: asn}
 	}
 	return server
-}
-
-func compare(tb testing.TB, name, got string) {
-	tb.Helper()
-
-	golden := filepath.Join("testdata", name+".golden")
-	if *update {
-		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
-			tb.Fatalf("writing %s: %v", golden, err)
-		}
-		return
-	}
-
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		tb.Fatalf("%v (run go test -update to create it)", err)
-	}
-	if got != string(want) {
-		tb.Errorf("output does not match %s, run go test -update to see the change\n--- got ---\n%s\n--- want ---\n%s",
-			golden, got, want)
-	}
 }
 
 // designating is a walk timed against resolvers that were asked, with --ddr,

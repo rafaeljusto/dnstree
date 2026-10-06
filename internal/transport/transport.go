@@ -13,6 +13,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"codeberg.org/miekg/dns"
@@ -256,8 +257,7 @@ func EchoedSubnet(resp *dns.Msg) *trace.Subnet {
 // IsTimeout reports whether err is the server staying silent, which the tree
 // shows as an unanswered hop rather than a hard failure.
 func IsTimeout(err error) bool {
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return true
 	}
 	return errors.Is(err, context.DeadlineExceeded)
@@ -327,8 +327,7 @@ func (s *shortened) Unwrap() error { return s.err }
 // IsReset reports whether a server that had taken the connection reset it,
 // rather than refusing it in the first place.
 func IsReset(err error) bool {
-	var op *net.OpError
-	if errors.As(err, &op) && op.Op == "dial" {
+	if op, ok := errors.AsType[*net.OpError](err); ok && op.Op == "dial" {
 		return false
 	}
 	return errors.Is(err, resetErrno)
@@ -376,6 +375,10 @@ func roundTrip(ctx context.Context, proto string, timeout time.Duration, tlsConf
 	return inClass(resp), nil
 }
 
+// datagrams are the buffers replies are read into. A reply has to fit the
+// largest there can be, and what is read is copied out of it.
+var datagrams = sync.Pool{New: func() any { return new([dns.MaxMsgSize]byte) }}
+
 // readDatagrams waits for the reply to req, and only that. Anyone who can
 // guess the port can send a datagram, so one that answers some other query is
 // dropped and the wait goes on: taking it as the reply would hand a spoofer
@@ -387,10 +390,11 @@ func readDatagrams(conn net.Conn, timeout time.Duration, req *dns.Msg) (*dns.Msg
 		return nil, err
 	}
 
-	buf := make([]byte, dns.MaxMsgSize)
+	buf := datagrams.Get().(*[dns.MaxMsgSize]byte)
+	defer datagrams.Put(buf)
 	var ignored error
 	for {
-		n, err := conn.Read(buf)
+		n, err := conn.Read(buf[:])
 		if err != nil {
 			if ignored != nil && IsTimeout(err) {
 				return nil, fmt.Errorf("%w, after %w", err, ignored)

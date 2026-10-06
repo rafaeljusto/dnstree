@@ -2,21 +2,17 @@ package openmetrics_test
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/openmetrics"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
-
-var update = flag.Bool("update", false, "rewrite the golden files")
 
 var started = time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 
@@ -105,7 +101,7 @@ func resolution() *trace.Trace {
 func TestRender(t *testing.T) {
 	out := render(t, resolution())
 	valid(t, out)
-	compare(t, "resolution", out)
+	golden.Compare(t, "resolution", out)
 }
 
 // TestRenderTrust covers the chain of trust read the way the exit code reads
@@ -403,29 +399,6 @@ func valid(tb testing.TB, out string) {
 		default:
 			series[match[1]+"{"+match[2]+"}"] = true
 		}
-	}
-}
-
-func compare(tb testing.TB, name, got string) {
-	tb.Helper()
-
-	golden := filepath.Join("testdata", name+".golden")
-	if *update {
-		if err := os.MkdirAll("testdata", 0o755); err != nil {
-			tb.Fatal(err)
-		}
-		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
-			tb.Fatalf("writing %s: %v", golden, err)
-		}
-		return
-	}
-
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		tb.Fatalf("%v (run go test -update to create it)", err)
-	}
-	if got != string(want) {
-		tb.Errorf("output does not match %s, run go test -update to see the change\n--- got ---\n%s", golden, got)
 	}
 }
 

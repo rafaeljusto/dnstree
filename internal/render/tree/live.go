@@ -247,14 +247,6 @@ func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 		l.opts.Charset, elapsed, l.counts())
 }
 
-// bogus reports whether the walk found a chain of trust that does not hold,
-// which outranks having an answer at all. It is the same reading main gives
-// the trace when it picks an exit code.
-func bogus(tr *trace.Trace) bool {
-	step := tr.Chain()
-	return step != nil && step.DNSSEC.State == trace.Bogus
-}
-
 // draw renders the walk and puts a whole frame on the screen.
 func (l *Live) draw(tr *trace.Trace) {
 	opts := l.opts

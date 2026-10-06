@@ -2,7 +2,6 @@ package markdown_test
 
 import (
 	"bytes"
-	"flag"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -13,10 +12,9 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/markdown"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
-
-var update = flag.Bool("update", false, "rewrite the golden files")
 
 // resolution is the walk --format json writes as its golden, asked of three
 // resolvers that each came to something different.
@@ -59,7 +57,7 @@ func TestRender(t *testing.T) {
 	if err := markdown.Render(&got, tr, explain.Findings(tr)); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	compare(t, "resolution", got.String())
+	golden.Compare(t, "resolution", got.String())
 }
 
 // TestRenderEscapes covers text the servers wrote: it may not open a link, a
@@ -100,29 +98,6 @@ func TestRenderEscapes(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("got\n%s\nwant %q in it", out, want)
 		}
-	}
-}
-
-func compare(tb testing.TB, name, got string) {
-	tb.Helper()
-
-	golden := filepath.Join("testdata", name+".golden")
-	if *update {
-		if err := os.MkdirAll("testdata", 0o755); err != nil {
-			tb.Fatal(err)
-		}
-		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
-			tb.Fatalf("writing %s: %v", golden, err)
-		}
-		return
-	}
-
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		tb.Fatalf("%v (run go test -update to create it)", err)
-	}
-	if got != string(want) {
-		tb.Errorf("output does not match %s, run go test -update to see the change\n--- got ---\n%s", golden, got)
 	}
 }
 

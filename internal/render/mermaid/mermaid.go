@@ -316,5 +316,7 @@ func quote(text string) string {
 // yaml is the title as the front matter reads it: double quoted, so that a
 // colon or a hash in a name cannot end it early.
 func yaml(text string) string {
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(text) + `"`
+	return `"` + yamlQuoted.Replace(text) + `"`
 }
+
+var yamlQuoted = strings.NewReplacer(`\`, `\\`, `"`, `\"`)

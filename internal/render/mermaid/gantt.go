@@ -134,5 +134,7 @@ func axis(span time.Duration) string {
 // comment, so each is swapped for a character that looks the part. A name
 // has none of them unless its zone put them there.
 func text(name string) string {
-	return strings.NewReplacer(":", "꞉", "#", "＃", "%", "％", ";", "；", "\n", " ").Replace(name)
+	return unquotable.Replace(name)
 }
+
+var unquotable = strings.NewReplacer(":", "꞉", "#", "＃", "%", "％", ";", "；", "\n", " ")

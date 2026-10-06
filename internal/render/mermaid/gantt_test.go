@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/mermaid"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -53,7 +54,7 @@ func TestGantt(t *testing.T) {
 	if err := mermaid.Gantt(&got, timeline()); err != nil {
 		t.Fatalf("Gantt: %v", err)
 	}
-	compare(t, "gantt", got.String())
+	golden.Compare(t, "gantt", got.String())
 }
 
 // TestGanttText covers what a gantt chart cannot quote: a colon ends a task's

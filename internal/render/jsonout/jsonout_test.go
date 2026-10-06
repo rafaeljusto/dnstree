@@ -3,19 +3,15 @@ package jsonout_test
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
-
-var update = flag.Bool("update", false, "rewrite the golden files")
 
 // resolution carries one of everything the schema has to be able to say.
 func resolution() *trace.Trace {
@@ -216,7 +212,7 @@ func TestRender(t *testing.T) {
 	if err := jsonout.Render(&got, resolution()); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	compare(t, "resolution", got.String())
+	golden.Compare(t, "resolution", got.String())
 }
 
 // TestRenderShape checks the promises the schema makes, rather than the exact
@@ -318,25 +314,5 @@ func TestRenderKeepsExtraTextWhole(t *testing.T) {
 	if children := document.Root.Children; len(children) != 1 || len(children[0].Extended) != 1 ||
 		children[0].Extended[0].Text != want {
 		t.Errorf("got %s, want text %q", got.String(), want)
-	}
-}
-
-func compare(tb testing.TB, name, got string) {
-	tb.Helper()
-
-	golden := filepath.Join("testdata", name+".golden")
-	if *update {
-		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
-			tb.Fatalf("writing %s: %v", golden, err)
-		}
-		return
-	}
-
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		tb.Fatalf("%v (run go test -update to create it)", err)
-	}
-	if got != string(want) {
-		tb.Errorf("output does not match %s, run go test -update to see the change\n--- got ---\n%s", golden, got)
 	}
 }

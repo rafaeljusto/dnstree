@@ -593,8 +593,8 @@ type unsupportedError struct{ reason string }
 func (e unsupportedError) Error() string { return e.reason }
 
 func unsupported(err error) bool {
-	var unsupported unsupportedError
-	return errors.As(err, &unsupported)
+	_, ok := errors.AsType[unsupportedError](err)
+	return ok
 }
 
 // optOutError is a denial that rests on an opt-out range: signed, but saying
@@ -606,8 +606,8 @@ func (e optOutError) Error() string {
 }
 
 func optedOut(err error) bool {
-	var optOut optOutError
-	return errors.As(err, &optOut)
+	_, ok := errors.AsType[optOutError](err)
+	return ok
 }
 
 // dsSignatures are the signatures over the DS RRset of zone, which the parent

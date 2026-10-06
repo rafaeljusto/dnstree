@@ -67,7 +67,7 @@ func Verdict(tr *trace.Trace) string {
 
 func outcome(tr *trace.Trace) (mark, verdict string, color string) {
 	switch {
-	case bogus(tr):
+	case tr.Broken():
 		return "✘", "bogus", red
 	case tr.Result() == nil && tr.Filtered() != nil:
 		// Not the same as nothing answering: something did answer, and what it

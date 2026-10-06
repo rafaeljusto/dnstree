@@ -39,6 +39,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -143,8 +144,7 @@ type runner func(args ...string) (string, error)
 func gitCommand(args ...string) (string, error) {
 	out, err := exec.Command("git", args...).Output()
 	if err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) && len(exit.Stderr) > 0 {
+		if exit, ok := errors.AsType[*exec.ExitError](err); ok && len(exit.Stderr) > 0 {
 			return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(exit.Stderr)))
 		}
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
@@ -505,7 +505,7 @@ func report(w io.Writer, previous string, next version, bump string, changes []c
 	if applied := shiftedTo(next, bump); applied != "" {
 		detail = fmt.Sprintf("%s, applied as a %s below 1.0", bump, applied)
 	}
-	fmt.Fprintf(w, "%s -> %s (%s)\n", cmpOr(previous, "nothing"), next, detail)
+	fmt.Fprintf(w, "%s -> %s (%s)\n", cmp.Or(previous, "nothing"), next, detail)
 }
 
 // shiftedTo names the level a bump was really applied at, when the pre-1.0 rule
@@ -547,7 +547,7 @@ func appendSummary(path, previous string, next version, bump string, changes []c
 
 	var summary strings.Builder
 	fmt.Fprintf(&summary, "## %s\n\n%s since %s, %s.\n\n",
-		next, plural(len(changes), "change"), cmpOr(previous, "the first commit"), release)
+		next, plural(len(changes), "change"), cmp.Or(previous, "the first commit"), release)
 
 	if unclassified > 0 {
 		fmt.Fprintf(&summary, "> [!WARNING]\n> %s carry no known prefix and counted as a patch. "+
@@ -589,11 +589,4 @@ func plural(n int, thing string) string {
 		return "1 " + thing
 	}
 	return fmt.Sprintf("%d %ss", n, thing)
-}
-
-func cmpOr(value, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
 }

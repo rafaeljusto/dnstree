@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/golden"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -71,7 +72,7 @@ func TestWaterfall(t *testing.T) {
 			if err := tree.Waterfall(&got, timeline(), options); err != nil {
 				t.Fatalf("Waterfall: %v", err)
 			}
-			compare(t, name, got.String())
+			golden.Compare(t, name, got.String())
 		})
 	}
 }

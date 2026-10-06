@@ -6,7 +6,6 @@ package openmetrics
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"slices"
 	"strconv"
@@ -66,20 +65,20 @@ func Render(w io.Writer, tr *trace.Trace) error {
 	m.family("dnstree_hop_seconds", "seconds", "how long each query on the path took, a timeout included")
 	// A series is its labels, so a hop that repeats another's is left out: the
 	// same server asked the same name twice, which only a loop cut short does.
-	seen := map[string]bool{}
+	seen := map[[4]label]bool{}
 	for step := range tr.Mainline() {
 		if !step.Queried() {
 			continue
 		}
-		hop := []label{
+		hop := [4]label{
 			{"zone", step.Zone},
 			{"server", step.Server.Name},
 			{"address", address(step.Server)},
 			{"asked", step.Asked.Name},
 		}
-		if key := fmt.Sprint(hop); !seen[key] {
-			seen[key] = true
-			m.sample("dnstree_hop_seconds", seconds(step.RTT), hop...)
+		if !seen[hop] {
+			seen[hop] = true
+			m.sample("dnstree_hop_seconds", seconds(step.RTT), hop[:]...)
 		}
 	}
 
@@ -328,8 +327,10 @@ func (m *metrics) write(text string) {
 // escape is a label value as both formats read it. The names are escaped
 // already, so a backslash here is the start of one of their \DDD.
 func escape(value string) string {
-	return strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(value)
+	return escaped.Replace(value)
 }
+
+var escaped = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
 
 // result is how the walk ended, in the words the summary under the tree uses.
 func result(tr *trace.Trace) string {

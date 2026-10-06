@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -74,30 +75,24 @@ func TestWalksBusy(t *testing.T) {
 // TestWalksOutliveWhoAskedFirst covers the first visitor leaving while the walk
 // waits for room: the others asking the same question still get it.
 func TestWalksOutliveWhoAskedFirst(t *testing.T) {
-	w := newWalks(1, time.Minute, time.Second)
-	w.running <- struct{}{} // the only room is taken, for now
+	synctest.Test(t, func(t *testing.T) {
+		w := newWalks(1, time.Minute, time.Second)
+		w.running <- struct{}{} // the only room is taken, for now
 
-	first, leave := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	go func() {
-		_, err := w.get(first, "q", always, made(1))
-		result <- err
-	}()
-	for {
-		w.mu.Lock()
-		_, waiting := w.inFlight["q"]
-		w.mu.Unlock()
-		if waiting {
-			break
+		first, leave := context.WithCancel(context.Background())
+		result := make(chan error, 1)
+		go func() {
+			_, err := w.get(first, "q", always, made(1))
+			result <- err
+		}()
+		synctest.Wait() // the walk is waiting for room
+		leave()
+		<-w.running
+
+		if err := <-result; err != nil {
+			t.Errorf("got %v, want the walk made once there was room", err)
 		}
-		time.Sleep(time.Millisecond)
-	}
-	leave()
-	<-w.running
-
-	if err := <-result; err != nil {
-		t.Errorf("got %v, want the walk made once there was room", err)
-	}
+	})
 }
 
 // TestWalksSurviveAPanic covers a walk that panics: the panic still reaches the

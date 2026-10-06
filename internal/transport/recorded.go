@@ -56,6 +56,6 @@ func (r *recorded) Exchange(ctx context.Context, req *dns.Msg, server netip.Addr
 // neverConnected reports whether err is a connection that was never made, which sent
 // nothing to record.
 func neverConnected(err error) bool {
-	var op *net.OpError
-	return errors.As(err, &op) && op.Op == "dial"
+	op, ok := errors.AsType[*net.OpError](err)
+	return ok && op.Op == "dial"
 }

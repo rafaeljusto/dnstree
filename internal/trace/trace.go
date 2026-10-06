@@ -1219,6 +1219,13 @@ func (t *Trace) Chain() *Step {
 	return t.Trust()
 }
 
+// Broken reports whether the walk found a chain of trust that does not hold,
+// which is exit code 3 and outranks having an answer at all.
+func (t *Trace) Broken() bool {
+	step := t.Chain()
+	return step != nil && step.DNSSEC.State == Bogus
+}
+
 // ReportAgent is the agent the zone whose chain of trust broke asks failures to
 // be reported to (RFC 9567), and the step that said so. It is empty where the
 // chain did not break, or nobody asked: a report is only ever about a chain the
