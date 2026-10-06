@@ -919,14 +919,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		}
 	}
 	if err != nil {
-		// An error can quote the server, a TLS one the names on its certificate.
-		step.Kind, step.Err = trace.KindError, trace.Printable(err.Error(), trace.MaxErr)
-		switch {
-		case errors.Is(err, context.Canceled):
-			step.Err = "interrupted before the server answered" // the user's doing, not the server's
-		case transport.IsTimeout(err):
-			step.Kind = trace.KindTimeout
-		}
+		failed(ctx, step, err)
 		return &hop{step: step}
 	}
 
@@ -1025,6 +1018,30 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	return &hop{step: step, resp: resp}
 }
 
+// failed says on the step why a server could not be asked. A run interrupted
+// or out of time is the run's doing, and never blamed on the server: a silence
+// cut short by it was not the server's whole answer.
+func failed(ctx context.Context, step *trace.Step, err error) {
+	// An error can quote the server, a TLS one the names on its certificate.
+	step.Kind, step.Err = trace.KindError, trace.Printable(err.Error(), trace.MaxErr)
+	switch {
+	case errors.Is(ctx.Err(), context.Canceled):
+		step.Err = "interrupted before the server answered"
+	case outOfTime(ctx):
+		step.Err = "the walk ran out of time before the server answered"
+	case transport.IsTimeout(err):
+		step.Kind = trace.KindTimeout
+	}
+}
+
+// outOfTime reports whether the run is past its deadline, or stopped. The
+// deadline is read as well as the context: a read cut short by it can return
+// before the context's own timer has marked it done.
+func outOfTime(ctx context.Context) bool {
+	deadline, ok := ctx.Deadline()
+	return ctx.Err() != nil || ok && !time.Now().Before(deadline)
+}
+
 // exchange sends one message and adds what it cost to the step. A server that
 // stays silent is asked again, since a lost datagram is not an answer.
 //
@@ -1065,7 +1082,7 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 			"zone", step.Zone, "server", server, "proto", carrier.Proto(),
 			"name", qname, "type", qtype, "rtt", rtt, "error", err)
 
-		if err == nil || attempt >= r.cfg.Retries || !transport.IsTimeout(err) {
+		if err == nil || attempt >= r.cfg.Retries || !transport.IsTimeout(err) || outOfTime(ctx) {
 			return resp, err
 		}
 		if silences < 0 {
@@ -1981,10 +1998,7 @@ func (r *run) probe(ctx context.Context, zone string, server trace.Server, carri
 	}
 	switch {
 	case err != nil:
-		step.Kind, step.Err = trace.KindError, trace.Printable(err.Error(), trace.MaxErr)
-		if transport.IsTimeout(err) {
-			step.Kind = trace.KindTimeout
-		}
+		failed(ctx, step, err)
 		// A connection taken and then reset once the AXFR was in is how some
 		// providers refuse a transfer, Route 53 among them. One never taken
 		// says nothing of what the server would have done, and stays unchecked,
@@ -2152,10 +2166,7 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 	}
 	switch {
 	case err != nil:
-		step.Kind, step.Err = trace.KindError, trace.Printable(err.Error(), trace.MaxErr)
-		if transport.IsTimeout(err) {
-			step.Kind = trace.KindTimeout
-		}
+		failed(ctx, step, err)
 		return step
 	case resp.Truncated:
 		// What a truncated reply leaves out is no fault of the server's.

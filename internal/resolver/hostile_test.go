@@ -641,3 +641,56 @@ func TestInterruptedIsNotATimeout(t *testing.T) {
 	}
 	t.Errorf("no hop says it was interrupted: %s", format(steps(tr)))
 }
+
+// TestDeadlineIsNotATimeout covers a walk given a deadline, the way
+// dnstree-web gives every walk one: once it passes, the servers left are not
+// blamed for staying silent, nor asked again for nothing.
+func TestDeadlineIsNotATimeout(t *testing.T) {
+	h, cfg := service(t, false, fakens.Behaviour{Drop: true})
+	cfg.Transport = h.carry(transport.NewUDP(transport.Config{Timeout: 5 * time.Second}))
+	cfg.Retries = 2
+
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	tr, _ := newResolver(t, h, cfg).Resolve(ctx, "www.test", "A")
+	if tr == nil {
+		t.Fatal("got no trace, want one drawn up to the deadline")
+	}
+
+	var late bool
+	for step := range tr.Steps() {
+		if step.Kind == trace.KindTimeout {
+			t.Errorf("got a timeout at %s, want the deadline named", step.Server.Name)
+		}
+		for _, note := range step.Notes {
+			if strings.HasPrefix(note, "asked again") {
+				t.Errorf("got %q at %s, want nobody asked again once the time is up", note, step.Server.Name)
+			}
+		}
+		late = late || step.Kind == trace.KindError && step.Err == "the walk ran out of time before the server answered"
+	}
+	if !late {
+		t.Errorf("no hop says the walk ran out of time: %s", format(steps(tr)))
+	}
+}
+
+// TestInterruptedCheckIsNotATimeout covers an interruption while a check is
+// asking a server, which is named the way the walk's own hops name it.
+func TestInterruptedCheckIsNotATimeout(t *testing.T) {
+	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{DropEDNSFlags: true})
+	cfg.Transport = h.carry(transport.NewUDP(transport.Config{Timeout: 30 * time.Second}))
+	cfg.CheckEDNS = true
+
+	// The walk takes milliseconds and the flag test waits out the timeout, so
+	// a second lands in the wait however loaded the machine is.
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(time.Second, cancel)
+	tr, _ := newResolver(t, h, cfg).Resolve(ctx, "www.test", "A")
+	if tr == nil {
+		t.Fatal("got no trace, want one drawn up to the interruption")
+	}
+	step := ednsTests(tr)["ns2.test. flag"]
+	if step == nil || step.Kind != trace.KindError || step.Err != "interrupted before the server answered" {
+		t.Errorf("got %+v, want the interruption named", step)
+	}
+}
