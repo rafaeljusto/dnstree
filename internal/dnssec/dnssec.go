@@ -510,10 +510,11 @@ var implemented = map[uint8]bool{
 
 // ordered is the RRset in a form the codec puts in canonical order. It sorts
 // the values that end CAA, URI and NULL records shortest first, as though each
-// carried its length, where RFC 4034 6.3 sorts the octets, so a set of more than
-// one is reassembled out of the order it was signed in. The generic form of
-// RFC 3597 is sorted by its octets, and packs to the same wire for types that
-// hold no name, which it would compress.
+// carried its length, a TXT record by how many strings it holds before what
+// they say, and text by its escaped form, where RFC 4034 6.3 sorts the octets,
+// so a set of more than one is reassembled out of the order it was signed in.
+// The generic form of RFC 3597 is sorted by its octets, and packs to the same
+// wire for types that hold no name, which it would compress.
 func ordered(rrset []dns.RR) []dns.RR {
 	if len(rrset) < 2 || !misordered(dns.RRToType(rrset[0])) {
 		return rrset
@@ -530,10 +531,12 @@ func ordered(rrset []dns.RR) []dns.RR {
 }
 
 // misordered reports whether the codec sorts a set of this type out of
-// canonical order.
+// canonical order. NAPTR and HIP compare their text the same way, but hold
+// names, which the generic form would not lowercase.
 func misordered(rrtype uint16) bool {
 	switch rrtype {
-	case dns.TypeCAA, dns.TypeURI, dns.TypeNULL:
+	case dns.TypeCAA, dns.TypeURI, dns.TypeNULL, dns.TypeTXT, dns.TypeSPF,
+		dns.TypeHINFO, dns.TypeISDN, dns.TypeX25, dns.TypeGPOS, dns.TypeUINFO, dns.TypeNINFO:
 		return true
 	}
 	return false

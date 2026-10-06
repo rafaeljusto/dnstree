@@ -212,7 +212,8 @@ func TestDenialMustBeSignedToDenyAnything(t *testing.T) {
 
 // TestOrderedByItsOctets covers the sets the codec orders wrongly: it sorts the
 // value that ends a CAA, URI or NULL record shortest first, as though it
-// carried its length, where a signer sorts the octets (RFC 4034 6.3). Each set
+// carried its length, a TXT record by how many strings it holds, and text by
+// its escaped form, where a signer sorts the octets (RFC 4034 6.3). Each set
 // holds values whose order by octets is not their order by length, so signed as
 // a real signer signs it, it is one the codec alone would call bogus.
 func TestOrderedByItsOctets(t *testing.T) {
@@ -231,6 +232,22 @@ func TestOrderedByItsOctets(t *testing.T) {
 		"opaque data that sorts before other data longer than it": {
 			rrtype: "NULL",
 			values: []string{`\# 2 ffff`, `\# 3 000000`},
+		},
+		"a record of two strings that sorts before one of a single string": {
+			rrtype: "TXT",
+			values: []string{`"google-site-verification=abc"`, `"v=spf1 " "-all"`},
+		},
+		"text whose escapes make it look longer than it is": {
+			rrtype: "TXT",
+			values: []string{`"ab"`, `"\255"`},
+		},
+		"an SPF record of two strings that sorts before one of a single string": {
+			rrtype: "SPF",
+			values: []string{`"v=spf1 -all"`, `"v=spf1 " "-all"`},
+		},
+		"a host description whose escapes make it look longer than it is": {
+			rrtype: "HINFO",
+			values: []string{`"ab" "x"`, `"\255" "x"`},
 		},
 	}
 	for name, tt := range tests {

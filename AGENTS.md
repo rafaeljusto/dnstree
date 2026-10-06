@@ -192,10 +192,13 @@ before it is drawn, but not before it is queried or checked against TLS, which
 need the octets themselves: the trace keeps the octets, and every renderer
 draws the copy `Trace.Shown` makes of it.
 
-The codec sorts the trailing value of CAA, URI and NULL records shortest first
-rather than by octet, so those sets are verified, and signed in fakens, in the
-RFC 3597 generic form; a new type with a trailing variable field needs the same
-check. Check any other belief about what the codec does with a pack and unpack
+The codec sorts the trailing value of CAA, URI and NULL records shortest first,
+TXT records by how many strings they hold, and text by its escaped form, rather
+than by octet, so those sets, and HINFO and the other types of text alone, are
+verified, and signed in fakens, in the RFC 3597 generic form. NAPTR and HIP
+compare text the same way but hold names, which that form would not lowercase,
+so they are left as they are. A new type with a trailing variable field or text
+needs the same check. Check any other belief about what the codec does with a pack and unpack
 round trip before building on it.
 
 Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,

@@ -613,3 +613,25 @@ func TestCheckDSInsecure(t *testing.T) {
 		t.Errorf("got %+v, want the request left unread", signal)
 	}
 }
+
+// TestDNSSECTXTOrder covers a signed TXT set the codec alone would put out of
+// order, the shape of most apexes: a policy split in two strings beside a
+// verification token in one, and text whose escapes stand for single octets.
+func TestDNSSECTXTOrder(t *testing.T) {
+	h, cfg := authorised(t, `txt IN TXT "google-site-verification=abc"
+txt IN TXT "v=spf1 " "-all"
+txt IN TXT "\255"`, fakens.Behaviour{}, true)
+	cfg.CAA = false
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "txt.example.com", "TXT")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	answer := tr.Result()
+	if answer == nil || len(answer.Records) != 3 {
+		t.Fatalf("got %+v, want the three records", answer)
+	}
+	if answer.DNSSEC == nil || answer.DNSSEC.State != trace.Secure {
+		t.Errorf("got %+v, want the set secure", answer.DNSSEC)
+	}
+}
