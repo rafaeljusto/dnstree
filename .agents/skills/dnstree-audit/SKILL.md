@@ -102,7 +102,9 @@ Work through them in this order unless the scope names one.
    deadlines set from `ctx`, DoH response bodies bounded (`io.LimitReader`) and
    status or content-type checked, TLS verification actually tied to the server
    name, TCP length prefix honoured, and a reply read against the query that
-   was sent.
+   was sent. `internal/rdap` the same way over HTTPS: a hostile registry or
+   bootstrap file, bodies bounded, redirects kept on HTTPS, and the domain
+   kept to letters, digits and hyphens before it goes into a URL.
 5. **output: attacker text reaching the user.** ANSI and control bytes in
    record data or NSID in the tree and live renderers (terminal injection,
    cursor movement that forges lines). HTML and JS injection in

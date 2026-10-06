@@ -153,6 +153,13 @@ cached, not a bug. Run it again.
 | spf-alone | `$D $B --expect spf:ok example.com` | exit 4, `got a walk that looked up no spf` |
 | spf-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --spf iana.org` | exit 0, `asked of 1.1.1.1` |
 | spf-formats | `$D $B --spf --format json github.com`, then `--format openmetrics`, then `--from` the JSON | `.spf.lookups` in the JSON; `dnstree_spf_lookups` and `dnstree_spf{…,result="ok"} 1`; the same SPF tree drawn back |
+| rdap | `$D $B --rdap --dnssec --explain example.com` | exit 0, `rdap: example.com. is registered until <date>, with N days left`, a `status:` line, `nameservers and DS match what com. hands out`, `the registration of example.com. runs until <date>` |
+| rdap-cctld | `$D $B --rdap bbc.co.uk` | exit 0, the registration of `bbc.co.uk.` held against `uk.`, not `co.uk.` |
+| rdap-gone | `$D $B --rdap --explain nope-e2e-zz9-not-registered.com` | `rdap: the registry holds no registration for nope-e2e-zz9-not-registered.com.` and the sentence `it has lapsed, or was never registered` |
+| rdap-none | `$D $B --rdap nic.de` | exit 0, `rdap: the registry of de. publishes no rdap service` |
+| rdap-expect | `$D $B --rdap --expect registered:30d example.com`, then `--expect registered:3650d` | exit 0, then exit 4 with `got example.com. running out in …` |
+| rdap-alone | `$D $B --expect registered example.com` | exit 4, `got a walk that asked no registry` |
+| rdap-formats | `$D $B --rdap --format json example.com`, then `--format openmetrics`, then `--from` the JSON | `.registration.expires` in the JSON; `dnstree_registration_left_seconds` and `dnstree_registration{…,state="registered"} 1`; the same `rdap:` lines drawn back |
 
 ## budget
 
