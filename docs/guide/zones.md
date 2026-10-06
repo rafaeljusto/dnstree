@@ -400,6 +400,59 @@ unless `--expect spf:ok` asks for a policy no check fails on
 `--format json` carries it as `spf`, and `--format openmetrics` as
 `dnstree_spf_lookups` and `dnstree_spf`.
 
+## Whether its registration is about to run out
+
+A domain is rented, not owned. When the registration lapses, or the registry
+puts the domain on hold, the TLD stops delegating it and the name stops
+resolving everywhere at once — and the registry knew for weeks. `--rdap` asks
+the registry over RDAP (RFC 9083), the JSON successor to WHOIS, when the
+registration runs out, which statuses it carries, and which nameservers and DS
+it holds, and holds those against the referral the TLD handed the walk:
+
+```
+$ dnstree --rdap --dnssec --explain --no-asn --no-compare example.com
+...
+rdap: example.com. is registered until 2027-08-13, with 310 days left
+rdap: status: client delete prohibited, client transfer prohibited, client update prohibited
+rdap: nameservers and DS match what com. hands out
+✔ answered in 2.1s · 6 queries · 3 servers
+...
+· the registration of example.com. runs until 2027-08-13
+```
+
+Less than 30 days left is drawn as a warning, and a registration that has run
+out, or a status that takes the domain out of its zone — `client hold`,
+`server hold`, `pending delete`, `redemption period`, `pending restore`,
+`inactive` — as a fault. Nameservers or DS that the registry and the TLD do not
+agree on mean a change is stuck between the two, or the registry's copy is
+stale. The DS are compared only with `--dnssec`, since a referral carries them
+only then.
+
+The domain asked about is the zone the walk was delegated to below the TLD,
+which is where a registration is, `example.co.uk` and `example.com.br`
+included. Where the TLD said the name does not exist — which is what a lapsed
+domain looks like from the outside — it is the TLD and one label of the name,
+and the registry says whether it holds it:
+
+```
+$ dnstree --rdap --explain --no-asn --no-compare zzzz-not-registered-4711.com
+...
+rdap: the registry holds no registration for zzzz-not-registered-4711.com.
+...
+· the registry holds no registration for zzzz-not-registered-4711.com.: it has lapsed, or was never registered
+```
+
+The registry is found in [IANA's bootstrap file](https://data.iana.org/rdap/dns.json)
+(RFC 9224), over HTTPS: these are the only requests dnstree makes that are not
+DNS, which is why it is off unless asked for. A TLD whose registry runs no RDAP
+service says so, and so does a registry that could not be reached or did not
+answer in time; either costs the check and never the walk. Each domain is
+asked about once an hour at most, so `--watch` does not hammer the registry.
+The exit code is left alone unless `--expect registered:30d` asks for that long
+left ([Asking rather than reading](scripting.md#asking-rather-than-reading)).
+`--format json` carries it as `registration`, and `--format openmetrics` as
+`dnstree_registration_left_seconds` and its neighbours.
+
 ## What a server said about its answer
 
 An rcode says what happened. The extended errors of RFC 8914 say why, and they

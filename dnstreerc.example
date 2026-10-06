@@ -57,6 +57,12 @@
 # answered with one. It costs no query of its own.
 # cookie = true
 
+# Ask the domain's registry when its registration runs out and whether it is
+# on hold, and compare the nameservers and DS it holds with the TLD's. These
+# are HTTPS requests to the registry IANA names, the only ones that are not
+# DNS, and each domain is asked about once an hour at most.
+# rdap = true
+
 # Ask each zone for no more of the name than it needs, the way resolvers do by
 # default now (RFC 9156). It finds the server that denies a name for being
 # empty, which stops such a resolver dead. A query per label below the zone.

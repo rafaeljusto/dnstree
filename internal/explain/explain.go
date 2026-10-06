@@ -8,6 +8,7 @@
 package explain
 
 import (
+	"cmp"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -27,6 +28,7 @@ const (
 	Outcome  Topic = iota // what the walk came to
 	Cache                 // how long a cache may go on serving it
 	Trust                 // the chain of trust over it
+	Registry              // what the registry holds about the domain
 	Takeover              // what somebody else could take the name over with
 	Spread                // what the nameservers of the zone have in common
 	Servers               // the servers that made the walk harder
@@ -44,6 +46,8 @@ func (t Topic) String() string {
 		return "cache"
 	case Trust:
 		return "trust"
+	case Registry:
+		return "registry"
 	case Takeover:
 		return "takeover"
 	case Spread:
@@ -109,6 +113,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, cache(tr)...)
 	findings = append(findings, trust(tr)...)
 	findings = append(findings, hashing(tr)...)
+	findings = append(findings, registration(tr)...)
 	findings = append(findings, setup(tr)...)
 	findings = append(findings, takeover(tr)...)
 	findings = append(findings, spread(tr)...)
@@ -1230,6 +1235,68 @@ func issuance(tr *trace.Trace) (Finding, bool) {
 		text += fmt.Sprintf(", and %s issue wildcards below it", issuers(caa.Wildcard))
 	}
 	return Finding{Topic: Issuance, Level: Note, Text: text}, true
+}
+
+// registration is what the registry holds about the domain, where --rdap
+// asked: the one outage a walk can see weeks ahead, and, once it has
+// happened, the reason a TLD says the name does not exist.
+func registration(tr *trace.Trace) []Finding {
+	reg := tr.Registration
+	if reg == nil {
+		return nil
+	}
+	// What the registry says is the reason only where the walk failed.
+	level := Warn
+	if result := tr.Result(); result == nil || result.Kind == trace.KindNXDomain {
+		level = Fault
+	}
+
+	switch reg.State {
+	case trace.Unregistered:
+		return []Finding{{Topic: Registry, Level: level, Text: reg.Why + ": it has lapsed, or was never registered"}}
+	case trace.Unreached:
+		return []Finding{{Topic: Registry, Level: Warn, Text: "when " + reg.Domain + " runs out could not be checked: " + reg.Why}}
+	case trace.Unpublished:
+		return []Finding{{Topic: Registry, Level: Note, Text: reg.Why}}
+	}
+
+	var findings []Finding
+	left, known := tr.Lapses(reg)
+	switch held := reg.Held(); {
+	case held != "":
+		findings = append(findings, Finding{Topic: Registry, Level: level, Text: fmt.Sprintf(
+			"the registry lists %s with status %s, which takes it out of %s", reg.Domain, held, cmp.Or(reg.Parent, "its TLD"))})
+	case known && left <= 0:
+		findings = append(findings, Finding{Topic: Registry, Level: level, Text: fmt.Sprintf(
+			"the registration of %s ran out %s ago, and the registry may let it go", reg.Domain, days(-left))})
+	case known && left < trace.RegistrationSoon:
+		findings = append(findings, Finding{Topic: Registry, Level: Warn, Text: fmt.Sprintf(
+			"the registration of %s runs out in %s; once it lapses the name stops resolving everywhere at once", reg.Domain, days(left))})
+	case known:
+		findings = append(findings, Finding{Topic: Registry, Level: Note, Text: fmt.Sprintf(
+			"the registration of %s runs until %s", reg.Domain, reg.Expires.UTC().Format(time.DateOnly))})
+	}
+	if reg.Parent != "" && !reg.Agrees() {
+		findings = append(findings, Finding{Topic: Registry, Level: Warn, Text: fmt.Sprintf(
+			"the registry holds a delegation of %s that %s does not hand out: a change is stuck between them, or the registry's copy is stale",
+			reg.Domain, reg.Parent)})
+	}
+	return findings
+}
+
+// days is how long a registration has, in whole days, or in hours where it
+// has less than one.
+func days(d time.Duration) string {
+	switch n := int(d / (24 * time.Hour)); {
+	case n == 1:
+		return "1 day"
+	case n > 1:
+		return strconv.Itoa(n) + " days"
+	}
+	if hours := int(d / time.Hour); hours != 1 {
+		return strconv.Itoa(hours) + " hours"
+	}
+	return "1 hour"
 }
 
 // sender is what a check of mail sent as the name comes to, where --spf

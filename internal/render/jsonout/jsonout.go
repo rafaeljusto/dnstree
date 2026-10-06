@@ -42,6 +42,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 		document.CAA = convertCAA(tr.CAA)
 		document.SPF = convertSPF(tr.SPF)
+		document.Registration = convertRegistration(tr.Registration)
 		if tr.Report != nil {
 			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
 				Rcode: tr.Report.Rcode, Error: tr.Report.Err}
@@ -54,18 +55,19 @@ func Render(w io.Writer, tr *trace.Trace) error {
 }
 
 type document struct {
-	SchemaVersion int         `json:"schema_version"`
-	Question      question    `json:"question"`
-	ElapsedMS     float64     `json:"elapsed_ms"`
-	Started       string      `json:"started,omitempty"`
-	Resolvers     []*resolver `json:"resolvers,omitempty"`
-	Root          *step       `json:"root,omitempty"`
-	Warnings      []string    `json:"warnings,omitempty"`
-	Without       []string    `json:"without,omitempty"`
-	CAA           *caa        `json:"caa,omitempty"`
-	SPF           *spf        `json:"spf,omitempty"`
-	Report        *report     `json:"report,omitempty"`
-	Trial         *trial      `json:"trial,omitempty"`
+	SchemaVersion int           `json:"schema_version"`
+	Question      question      `json:"question"`
+	ElapsedMS     float64       `json:"elapsed_ms"`
+	Started       string        `json:"started,omitempty"`
+	Resolvers     []*resolver   `json:"resolvers,omitempty"`
+	Root          *step         `json:"root,omitempty"`
+	Warnings      []string      `json:"warnings,omitempty"`
+	Without       []string      `json:"without,omitempty"`
+	CAA           *caa          `json:"caa,omitempty"`
+	SPF           *spf          `json:"spf,omitempty"`
+	Registration  *registration `json:"registration,omitempty"`
+	Report        *report       `json:"report,omitempty"`
+	Trial         *trial        `json:"trial,omitempty"`
 }
 
 // trial is the delegation --try-ns put in place of a zone's real one.

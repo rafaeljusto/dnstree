@@ -31,6 +31,10 @@ from that, and both are worth knowing when judging a report:
   cannot make dnstree run forever. A report showing otherwise is a
   vulnerability.
 
+`--rdap` asks a registry over HTTPS, at the address IANA's bootstrap file gives
+for the TLD. A way for a registry to lead it off HTTPS, or to make it read
+without bound, is a vulnerability.
+
 dnstree-web runs those walks for strangers. A way to make it query a private,
 loopback or link-local address, redirect off its own host, or get round its
 per-client limits is a vulnerability.

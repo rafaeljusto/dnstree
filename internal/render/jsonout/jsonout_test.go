@@ -163,6 +163,14 @@ func resolution() *trace.Trace {
 			Result:  trace.SPFUndecided,
 			Why:     "the budget ran out",
 		},
+		Registration: &trace.Registration{
+			Domain: "example.com.", Server: "https://rdap.verisign.com/com/v1/", State: trace.Registered,
+			Registered: time.Date(1995, 8, 14, 4, 0, 0, 0, time.UTC), Expires: time.Date(2026, 8, 13, 4, 0, 0, 0, time.UTC),
+			Status: []string{"client delete prohibited", "client transfer prohibited"},
+			NS:     []string{"a.iana-servers.net.", "b.iana-servers.net."}, DS: []uint16{370}, Signed: true, Parent: "com.",
+			NSOnlyRegistry: []string{"b.iana-servers.net."}, NSOnlyParent: []string{"c.iana-servers.net."},
+			DSChecked: true, DSOnlyRegistry: []uint16{370}, DSOnlyParent: []uint16{2371}, DSDiffer: false,
+		},
 	}
 }
 

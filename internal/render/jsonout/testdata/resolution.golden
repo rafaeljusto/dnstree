@@ -343,5 +343,38 @@
     "cut": true,
     "result": "undecided",
     "why": "the budget ran out"
+  },
+  "registration": {
+    "domain": "example.com.",
+    "server": "https://rdap.verisign.com/com/v1/",
+    "state": "registered",
+    "registered": "1995-08-14T04:00:00Z",
+    "expires": "2026-08-13T04:00:00Z",
+    "status": [
+      "client delete prohibited",
+      "client transfer prohibited"
+    ],
+    "ns": [
+      "a.iana-servers.net.",
+      "b.iana-servers.net."
+    ],
+    "ds": [
+      370
+    ],
+    "signed": true,
+    "parent": "com.",
+    "ns_only_registry": [
+      "b.iana-servers.net."
+    ],
+    "ns_only_parent": [
+      "c.iana-servers.net."
+    ],
+    "ds_checked": true,
+    "ds_only_registry": [
+      370
+    ],
+    "ds_only_parent": [
+      2371
+    ]
   }
 }

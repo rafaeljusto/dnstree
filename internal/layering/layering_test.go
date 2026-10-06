@@ -68,8 +68,9 @@ func TestOnlyTheWireSpeaksTheCodec(t *testing.T) {
 
 // apart are the packages that must not reach the codec through anything they
 // import either: the trace, the renderers and the readings drawn from them,
-// the AS lookups and the SPF check. A package that imports one which speaks the codec brings
-// the network into their tests all the same.
+// the AS lookups, the SPF check and the registry lookup. A package that
+// imports one which speaks the codec brings the network into their tests all
+// the same.
 var apart = []string{
 	"internal/trace",
 	"internal/render/",
@@ -79,6 +80,7 @@ var apart = []string{
 	"internal/asn",
 	"internal/capture",
 	"internal/spf",
+	"internal/rdap",
 }
 
 // TestApartFromTheWire holds the layering rule through every import, so that

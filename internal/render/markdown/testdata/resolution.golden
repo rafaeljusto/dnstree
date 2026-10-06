@@ -25,6 +25,11 @@ spf: www.example.com. takes at least 5 of 10 lookups, at least 1 of 2 finding no
 ├── -all
 └── never reached: redirect=never.example.net
 spf: undecided: the budget ran out
+rdap: example.com. expired 42 days ago, on 2026-08-13: renew it before the registry lets it go
+rdap: status: client delete prohibited, client transfer prohibited
+rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.
+rdap: DS: only the registry holds key 370; only com. hands out key 2371
+rdap: a change is stuck between the registry and the zone, or the registry's copy is stale
 warning: the delegation to example.com. lists a nameserver the zone does not
 ✔ answered in 42ms · without ns1.example.com., 192.0.2.0/24 · resolvers in 9ms-23ms (1 of 3 differ, 1 did not answer) · 5 queries · 4 servers
 ```
@@ -35,6 +40,8 @@ warning: the delegation to example.com. lists a nameserver the zone does not
 - a cache may hold this answer for 1 hour, and the delegation to example.com. for 2 days
 - 198.51.100.53 is answering this from its cache, with 1 minute left on the copy it is serving
 - the chain of trust holds from the root to example.com., signed with ECDSAP256SHA256
+- ⚠ the registration of example.com. ran out 42 days ago, and the registry may let it go
+- ⚠ the registry holds a delegation of example.com. that com. does not hand out: a change is stuck between them, or the registry's copy is stale
 - ⚠ 1 server did not answer in time: b.gtld-servers.net.
 - ⚠ 1 server answered with almost nothing left of the datagram the answer had to fit in (a.iana-servers.net. with 1187 of 1232 bytes), so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it
 - the CAA set at example.com. lets only letsencrypt.org issue for www.example.com., and no certificate authority issue wildcards below it

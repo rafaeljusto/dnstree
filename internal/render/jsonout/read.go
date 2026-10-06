@@ -83,6 +83,9 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	if tr.SPF, err = readSPF(doc.SPF); err != nil {
 		return nil, err
 	}
+	if tr.Registration, err = readRegistration(doc.Registration); err != nil {
+		return nil, err
+	}
 	return tr, nil
 }
 

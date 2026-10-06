@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"os/signal"
@@ -29,6 +30,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/expect"
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
+	"github.com/rafaeljusto/dnstree/v2/internal/rdap"
 	"github.com/rafaeljusto/dnstree/v2/internal/recursive"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
@@ -57,6 +59,18 @@ const (
 // over. They start as the walk discovers each server, so by here they have had
 // the whole resolution as a head start and this is only for the stragglers.
 const asnGrace = 2 * time.Second
+
+// rdapGrace is how long the registry may take once the walk is over. Its
+// bootstrap file is read beside the walk; the domain cannot be asked about
+// until the walk has said which it is.
+const rdapGrace = 5 * time.Second
+
+// Where --rdap finds the registries, and what it asks them with: the tests
+// point both at a registry of their own.
+var (
+	rdapBootstrap = rdap.Bootstrap
+	rdapHTTP      *http.Client
+)
 
 // version is stamped into a release build; see the dist target of the Makefile.
 var version = "dev"
@@ -107,6 +121,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if cfg.ASN && cfg.From == "" {
 		lookups = asn.New(asnLookup(cfg), log)
 	}
+	var registry *rdap.Client
+	if cfg.RDAP && cfg.From == "" {
+		registry = rdap.New(rdapHTTP, rdapBootstrap, log)
+	}
 
 	// The file to compare with is read before any server is asked, so that a
 	// walk is not made only to find there is nothing to hold it against.
@@ -126,10 +144,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	if cfg.Watch > 0 {
-		return watch(ctx, cfg, log, lookups, reference, stdout, stderr)
+		return watch(ctx, cfg, log, lookups, registry, reference, stdout, stderr)
 	}
 	if cfg.From != "" {
-		return one(ctx, cfg, log, lookups, nil, reference, stdout, stderr)
+		return one(ctx, cfg, log, lookups, registry, nil, reference, stdout, stderr)
 	}
 
 	questions, err := asked(cfg)
@@ -165,7 +183,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			// A report heads itself with its question already.
 			tree.Asked(stdout, trace.Question{Name: fqdn(question.Name), Type: question.Type}, treeOptions(cfg))
 		}
-		code := one(ctx, &walk, log, lookups, rec, reference, stdout, stderr)
+		code := one(ctx, &walk, log, lookups, registry, rec, reference, stdout, stderr)
 		if code == exitUsage {
 			return code
 		}
@@ -233,7 +251,7 @@ func worse(a, b int) int {
 // one draws one walk, made now or read back with --from, with everything the
 // run asked to be said under it.
 func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, rec *recording, reference *history.Walk, stdout, stderr io.Writer) int {
+	lookups *asn.Resolver, registry *rdap.Client, rec *recording, reference *history.Walk, stdout, stderr io.Writer) int {
 
 	var err error
 
@@ -251,7 +269,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			err = sameQuestion(reference, tr.Shown().Question, cfg.Against)
 		}
 	} else {
-		tr, err = made(ctx, cfg, log, lookups, rec, live)
+		tr, err = made(ctx, cfg, log, lookups, registry, rec, live)
 		rec.save(stderr)
 	}
 	if err != nil {
@@ -339,13 +357,16 @@ func outcome(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) int {
 // the question put to a recursive server for comparison. A run makes one of
 // these; --watch makes one after another.
 func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, rec *recording, live *tree.Live) (*trace.Trace, error) {
+	lookups *asn.Resolver, registry *rdap.Client, rec *recording, live *tree.Live) (*trace.Trace, error) {
 
 	// The comparison runs beside the walk rather than after it: a recursive
 	// server answers in the time one hop of the walk takes, so waiting for it
 	// separately would be time spent on metadata.
 	timed := compare(ctx, cfg, log)
 	checked := policy(ctx, cfg)
+	if registry != nil {
+		registry.Prepare(ctx)
+	}
 
 	tr, err := resolve(ctx, cfg, log, lookups, rec, live)
 	if err != nil {
@@ -353,6 +374,11 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	}
 	if checked != nil {
 		tr.SPF = <-checked
+	}
+	if registry != nil {
+		grace, cancel := context.WithTimeout(ctx, rdapGrace)
+		tr.Registration = registry.Check(grace, tr)
+		cancel()
 	}
 
 	if lookups != nil {
@@ -502,7 +528,7 @@ func source(path string) string {
 // It ends when it is interrupted, or when everything --expect asked for holds,
 // and it answers with whatever the last walk it made earned.
 func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, reference *history.Walk, stdout, stderr io.Writer) int {
+	lookups *asn.Resolver, registry *rdap.Client, reference *history.Walk, stdout, stderr io.Writer) int {
 
 	var (
 		previous *history.Walk
@@ -517,7 +543,7 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			live = tree.NewLive(stdout, treeOptions(cfg))
 		}
 
-		tr, err := made(ctx, cfg, log, lookups, nil, live)
+		tr, err := made(ctx, cfg, log, lookups, registry, nil, live)
 		live.Clear()
 		if err != nil {
 			fmt.Fprintln(stderr, err)

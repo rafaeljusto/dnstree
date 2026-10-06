@@ -573,3 +573,82 @@ func TestRenderSPF(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderRegistration(t *testing.T) {
+	started := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	registered := func(expires time.Time, status ...string) *trace.Registration {
+		return &trace.Registration{Domain: "example.test.", State: trace.Registered, Expires: expires, Status: status,
+			NS: []string{"ns1.example.net."}, Parent: "test."}
+	}
+	for name, tt := range map[string]struct {
+		reg  *trace.Registration
+		want []string
+	}{
+		"a registration with time to run": {
+			reg: registered(started.Add(400*24*time.Hour), "active"),
+			want: []string{
+				"rdap: example.test. is registered until 2027-11-10, with 400 days left",
+				"rdap: status: active",
+				"rdap: nameservers match what test. hands out",
+			},
+		},
+		"a registration about to run out": {
+			reg:  registered(started.Add(12*24*time.Hour + 5*time.Hour)),
+			want: []string{"rdap: example.test. runs out in 12 days, on 2026-10-18: renew it", "rdap: nameservers match what test. hands out"},
+		},
+		"a registration that has run out": {
+			reg: registered(started.Add(-3*24*time.Hour), "redemption period"),
+			want: []string{
+				"rdap: example.test. expired 3 days ago, on 2026-10-03: renew it before the registry lets it go",
+				"rdap: example.test. is in its redemption period: it lapsed, and only the registrar can still restore it",
+				"rdap: nameservers match what test. hands out",
+			},
+		},
+		"a registration that disagrees with the zone above": {
+			reg: &trace.Registration{Domain: "example.test.", State: trace.Registered, Parent: "test.", Signed: true,
+				NSOnlyParent: []string{"ns.old.net."}, DSChecked: true, DSOnlyRegistry: []uint16{7}},
+			want: []string{
+				"rdap: example.test. is registered; the registry does not say until when",
+				"rdap: nameservers: only test. hands out ns.old.net.",
+				"rdap: DS: only the registry holds key 7",
+				"rdap: a change is stuck between the registry and the zone, or the registry's copy is stale",
+			},
+		},
+		"a signed registration under an unsigned delegation": {
+			reg: &trace.Registration{Domain: "example.test.", State: trace.Registered, Parent: "test.", Signed: true,
+				DSChecked: true, DSDiffer: true},
+			want: []string{
+				"rdap: example.test. is registered; the registry does not say until when",
+				"rdap: DS: the registry holds DS and test. hands out none",
+				"rdap: a change is stuck between the registry and the zone, or the registry's copy is stale",
+			},
+		},
+		"a domain nobody registered": {
+			reg:  &trace.Registration{Domain: "example.test.", State: trace.Unregistered, Why: "the registry holds no registration for example.test."},
+			want: []string{"rdap: the registry holds no registration for example.test."},
+		},
+		"a registry that did not answer": {
+			reg:  &trace.Registration{Domain: "example.test.", State: trace.Unreached, Why: "the registry did not answer in time"},
+			want: []string{"rdap: the registry did not answer in time"},
+		},
+		"a status written to move the cursor": {
+			reg:  &trace.Registration{Domain: "example.test.", State: trace.Registered, Status: []string{"active\x1b[2J"}},
+			want: []string{"rdap: example.test. is registered; the registry does not say until when", `rdap: status: active\027[2J`},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := oneHop(&trace.Step{Kind: trace.KindAnswer, Rcode: "NOERROR"})
+			tr.Started, tr.Registration = started, tt.reg
+			out := draw(t, tr)
+			var got []string
+			for line := range strings.Lines(out) {
+				if strings.HasPrefix(line, "rdap: ") {
+					got = append(got, strings.TrimSuffix(line, "\n"))
+				}
+			}
+			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

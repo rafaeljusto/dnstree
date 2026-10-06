@@ -59,6 +59,10 @@ type Trace struct {
 	// --spf did not ask.
 	SPF *SPF
 
+	// Registration is what the registry of the domain says about it, nil where
+	// --rdap did not ask.
+	Registration *Registration
+
 	// Trial is the delegation --try-ns put in place of the real one, nil for a
 	// walk of the DNS as it is. A walk with one is a simulation of a zone
 	// moved to other nameservers, and has to read as one wherever it is drawn.

@@ -144,6 +144,11 @@ func kinds() *trace.Trace {
 			Lookups: 2,
 			Result:  trace.SPFOK,
 		},
+		Registration: &trace.Registration{
+			Domain: "example.com.", State: trace.Registered, Status: []string{"client transfer prohibited", "server hold"},
+			NS: []string{"a.iana-servers.net.", "b.iana-servers.net."}, Parent: "com.",
+			NSOnlyRegistry: []string{"b.iana-servers.net."}, NSOnlyParent: []string{"c.iana-servers.net."},
+		},
 	}
 }
 

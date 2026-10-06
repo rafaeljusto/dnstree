@@ -30,6 +30,7 @@ const (
 	fresh                  // how long the signatures have left to run
 	authority              // a certificate authority free to issue for the name
 	sender                 // a sender policy no check fails on
+	registry               // a registration with time left to run
 )
 
 // Expectation is one thing the command line asked to be true of the walk.
@@ -43,6 +44,7 @@ type Expectation struct {
 
 	// left is how long every signature the chain rests on has to have left,
 	// for an expectation about freshness. Zero asks only that none is stale.
+	// For one about the registration, it is how long that has to have left.
 	left time.Duration
 }
 
@@ -56,7 +58,10 @@ func (e Expectation) String() string { return cmp.Or(e.escaped, e.want) }
 // a secure chain none of whose signatures is late in the life it was made for,
 // or none of which runs out within the time after a colon, such as fresh:3d; or
 // caa: and the certificate authority that has to be free to issue for the
-// name; or spf:ok, a sender policy no check fails on; or else the rdata of a record that has to be among the answers.
+// name; or spf:ok, a sender policy no check fails on; or registered, a
+// domain the registry holds and does not hold back, with registered:30d asking
+// that it has that long left; or else the rdata of a record that has to be
+// among the answers.
 //
 // The words win, because they are what is nearly always meant. A zone that
 // serves a record whose rdata reads like one of them is asked for with a
@@ -91,6 +96,16 @@ func Parse(text string) (Expectation, error) {
 	}
 	if lower == "spf:ok" {
 		return Expectation{about: sender, want: lower}, nil
+	}
+	if lower == "registered" {
+		return Expectation{about: registry, want: lower}, nil
+	}
+	if within, ok := strings.CutPrefix(lower, "registered:"); ok {
+		left, err := lifetime(within)
+		if err != nil {
+			return Expectation{}, fmt.Errorf("%s: %w", text, err)
+		}
+		return Expectation{about: registry, want: lower, left: left}, nil
 	}
 	switch trace.DNSSECState(lower) {
 	case trace.Secure, trace.Insecure, trace.Bogus, trace.Indeterminate:
@@ -153,6 +168,9 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 
 	case sender:
 		return policy(tr)
+
+	case registry:
+		return e.registered(tr)
 	}
 
 	result := tr.Result()
@@ -208,7 +226,7 @@ func zoneOf(step *trace.Step) string {
 	return step.Zone
 }
 
-// lifetime reads how long fresh asks for: a Go duration, with days allowed in
+// lifetime reads how long fresh or registered asks for: a Go duration, with days allowed in
 // front of it, since days are what zones are re-signed in.
 func lifetime(text string) (time.Duration, error) {
 	var days time.Duration
@@ -228,7 +246,7 @@ func lifetime(text string) (time.Duration, error) {
 		}
 	}
 	if days+rest <= 0 {
-		return 0, errors.New("a signature has to have some time left")
+		return 0, errors.New("ask for some time left, such as 3d")
 	}
 	return days + rest, nil
 }
@@ -314,6 +332,31 @@ func policy(tr *trace.Trace) (got string, ok bool) {
 		return "ok", true
 	}
 	return string(tr.SPF.Result) + ": " + tr.SPF.Why, false
+}
+
+// registered reports whether --rdap found the domain registered and not held,
+// with as long left as was asked. A registry that could not be asked has not
+// met it: the point is to hear about a lapse before it happens.
+func (e Expectation) registered(tr *trace.Trace) (got string, ok bool) {
+	reg := tr.Registration
+	switch {
+	case reg == nil:
+		return "a walk that asked no registry", false
+	case reg.State != trace.Registered:
+		return string(reg.State) + ": " + reg.Why, false
+	case reg.Held() != "":
+		return reg.Domain + " with status " + reg.Held(), false
+	case e.left == 0:
+		return "registered", true
+	}
+	left, ok := tr.Lapses(reg)
+	if !ok {
+		return "a registration whose registry does not say when it runs out", false
+	}
+	if left <= 0 {
+		return reg.Domain + " expired " + spell(-left) + " ago", false
+	}
+	return reg.Domain + " running out in " + spell(left), left >= e.left
 }
 
 // issuer reports whether the authority after caa: may issue for the name, or,

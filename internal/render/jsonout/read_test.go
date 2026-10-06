@@ -269,6 +269,16 @@ func TestReadRefuses(t *testing.T) {
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "victory"}]}}`,
 			want: `"victory"`,
 		},
+		"a registry that said something nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"registration": {"domain": "x.", "state": "forever"}}`,
+			want: `"forever"`,
+		},
+		"a registration that runs out at no time": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"registration": {"domain": "x.", "state": "registered", "expires": "soon"}}`,
+			want: "registration",
+		},
 		"a chain of trust in a state nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "trusted"}}}`,

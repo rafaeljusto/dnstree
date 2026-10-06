@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
+	"github.com/rafaeljusto/dnstree/v2/internal/rdap"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 )
 
@@ -1469,5 +1472,59 @@ func TestRunPcap(t *testing.T) {
 	}
 	if !maps.Equal(asked, want) {
 		t.Errorf("got %v queries in the capture, want the %v the servers saw", asked, want)
+	}
+}
+
+// TestRunRDAP asks a registry of its own about the domain of the walk, and
+// holds the registration to what --expect asked of it.
+func TestRunRDAP(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone + "www.example.test. IN A 192.0.2.1\n"})
+	expires := time.Now().Add(10*24*time.Hour + time.Hour).UTC().Format(time.RFC3339)
+
+	var registry *httptest.Server
+	registry = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/dns.json":
+			fmt.Fprintf(w, `{"services":[[["test"],["%s/"]]]}`, registry.URL)
+		case "/domain/example.test":
+			fmt.Fprintf(w, `{"status":["active"],"events":[{"eventAction":"expiration","eventDate":%q}]}`, expires)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer registry.Close()
+	rdapBootstrap, rdapHTTP = registry.URL+"/dns.json", registry.Client()
+	defer func() { rdapBootstrap, rdapHTTP = rdap.Bootstrap, nil }()
+
+	tests := map[string]struct {
+		args []string
+		code int
+		err  string
+	}{
+		"a registration with the time asked for left": {
+			args: []string{"--expect", "registered:7d"},
+			code: exitAnswer,
+		},
+		"a registration that runs out sooner than asked": {
+			args: []string{"--expect", "registered:30d"},
+			code: exitExpect,
+			err:  "expected registered:30d, got example.test. running out in 10 days",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			args := append([]string{"--root", server.Addr.String(), "--no-asn", "--no-compare", "--color", "never", "--rdap"},
+				append(tt.args, "www.example.test", "A")...)
+			if code := run(t.Context(), args, &stdout, &stderr); code != tt.code {
+				t.Fatalf("got exit %d, want %d\n%s%s", code, tt.code, stdout.String(), stderr.String())
+			}
+			if want := "rdap: example.test. runs out in 10 days, on "; !strings.Contains(stdout.String(), want) {
+				t.Errorf("got\n%s\nwant a line saying %q", stdout.String(), want)
+			}
+			if !strings.Contains(stderr.String(), tt.err) {
+				t.Errorf("got stderr %q, want %q", stderr.String(), tt.err)
+			}
+		})
 	}
 }

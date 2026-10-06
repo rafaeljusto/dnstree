@@ -423,6 +423,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--spf</code> draws the policy as the tree of lookups a mail server makes, and counts them against the limit of ten. The count creeps up in a provider's record, and past ten every check is a permerror.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">expiring</span>
+          <h3>A registration about to run out</h3>
+          <p><code>--rdap</code> asks the registry when the domain expires and whether it is on hold, and compares the nameservers and DS it holds with the TLD's. A lapsed domain drops out of its TLD everywhere at once.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">disagreeing</span>
           <h3>A delegation the zone does not recognise</h3>
           <p><code>--check-ns</code> holds the zone's own NS records, and its nameservers' addresses, against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed.</p>

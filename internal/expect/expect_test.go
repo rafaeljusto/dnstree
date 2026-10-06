@@ -177,7 +177,7 @@ func TestUnmet(t *testing.T) {
 // TestParseRejects covers the values that say nothing. They are reported
 // against the flag that carried them rather than after a walk has been made.
 func TestParseRejects(t *testing.T) {
-	for _, value := range []string{"", "=", "caa:"} {
+	for _, value := range []string{"", "=", "caa:", "registered:", "registered:0d", "registered:soon"} {
 		if _, err := expect.Parse(value); err == nil {
 			t.Errorf("Parse(%q): got no error, want one", value)
 		}
@@ -367,6 +367,61 @@ func TestSPF(t *testing.T) {
 			tr := walk("A", answered("A", "192.0.2.10"))
 			tr.SPF = tt.spf
 			if got := expect.Unmet(tr, parse(t, "SPF:ok")); !slices.Equal(got, tt.unmet) {
+				t.Errorf("got %q, want %q", got, tt.unmet)
+			}
+		})
+	}
+}
+
+func TestRegistered(t *testing.T) {
+	started := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	for name, tt := range map[string]struct {
+		expect string
+		reg    *trace.Registration
+		unmet  []string
+	}{
+		"a registration with more than asked left": {
+			expect: "registered:30d",
+			reg:    &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(40 * 24 * time.Hour)},
+		},
+		"a registration running out sooner than asked": {
+			expect: "Registered:30d",
+			reg:    &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(20*24*time.Hour + 3*time.Hour)},
+			unmet:  []string{"expected registered:30d, got test. running out in 20 days 3 hours"},
+		},
+		"a registration already past its expiry": {
+			expect: "registered:1d",
+			reg:    &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(-48 * time.Hour)},
+			unmet:  []string{"expected registered:1d, got test. expired 2 days ago"},
+		},
+		"a registration held by the registry": {
+			expect: "registered",
+			reg:    &trace.Registration{Domain: "test.", State: trace.Registered, Status: []string{"active", "server hold"}},
+			unmet:  []string{"expected registered, got test. with status server hold"},
+		},
+		"a registration that says nothing of its expiry, asked only to exist": {
+			expect: "registered",
+			reg:    &trace.Registration{Domain: "test.", State: trace.Registered},
+		},
+		"a registration that says nothing of its expiry, asked for time left": {
+			expect: "registered:30d",
+			reg:    &trace.Registration{Domain: "test.", State: trace.Registered},
+			unmet:  []string{"expected registered:30d, got a registration whose registry does not say when it runs out"},
+		},
+		"a domain the registry does not hold": {
+			expect: "registered",
+			reg:    &trace.Registration{Domain: "test.", State: trace.Unregistered, Why: "the registry holds no registration for test."},
+			unmet:  []string{"expected registered, got unregistered: the registry holds no registration for test."},
+		},
+		"a walk that asked no registry": {
+			expect: "registered",
+			unmet:  []string{"expected registered, got a walk that asked no registry"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := walk("A", answered("A", "192.0.2.10"))
+			tr.Started, tr.Registration = started, tt.reg
+			if got := expect.Unmet(tr, parse(t, tt.expect)); !slices.Equal(got, tt.unmet) {
 				t.Errorf("got %q, want %q", got, tt.unmet)
 			}
 		})

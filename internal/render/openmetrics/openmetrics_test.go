@@ -437,3 +437,62 @@ func TestRenderSPF(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderRegistration(t *testing.T) {
+	started := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	for name, tt := range map[string]struct {
+		reg     *trace.Registration
+		want    []string
+		without []string
+	}{
+		"a registration with a month left": {
+			reg: &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(30 * 24 * time.Hour),
+				Parent: ".", Status: []string{"active"}},
+			want: []string{
+				`dnstree_registration{name="www.test.",type="A",domain="test.",state="registered"} 1`,
+				`dnstree_registration{name="www.test.",type="A",domain="test.",state="unreached"} 0`,
+				`dnstree_registration_left_seconds{name="www.test.",type="A",domain="test."} 2592000`,
+				`dnstree_registration_held{name="www.test.",type="A",domain="test."} 0`,
+				`dnstree_registration_agrees{name="www.test.",type="A",domain="test."} 1`,
+			},
+		},
+		"a registration that has run out and is held": {
+			reg: &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(-time.Hour),
+				Status: []string{"redemption period"}},
+			want: []string{
+				`dnstree_registration_left_seconds{name="www.test.",type="A",domain="test."} -3600`,
+				`dnstree_registration_held{name="www.test.",type="A",domain="test."} 1`,
+			},
+			without: []string{"dnstree_registration_agrees"},
+		},
+		"a registry that did not answer": {
+			reg:     &trace.Registration{Domain: "test.", State: trace.Unreached},
+			want:    []string{`dnstree_registration{name="www.test.",type="A",domain="test.",state="unreached"} 1`},
+			without: []string{"dnstree_registration_left_seconds", "dnstree_registration_held"},
+		},
+		"a walk that did not ask": {
+			without: []string{"dnstree_registration"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := &trace.Trace{
+				Question:     trace.Question{Name: "www.test.", Type: "A"},
+				Root:         &trace.Step{Zone: ".", Kind: trace.KindZone},
+				Started:      started,
+				Registration: tt.reg,
+			}
+			out := render(t, tr)
+			valid(t, out)
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("got\n%s\nwant %s", out, want)
+				}
+			}
+			for _, family := range tt.without {
+				if strings.Contains(out, family+"{") {
+					t.Errorf("got\n%s\nwant no %s", out, family)
+				}
+			}
+		})
+	}
+}

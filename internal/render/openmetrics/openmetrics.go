@@ -134,6 +134,25 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 	}
 
+	if reg := tr.Registration; reg != nil {
+		m.family("dnstree_registration", "", "what the registry said about the domain over RDAP: registered, unregistered, unpublished where the TLD runs no RDAP service, or unreached")
+		for _, value := range []trace.RegistrationState{trace.Registered, trace.Unregistered, trace.Unpublished, trace.Unreached} {
+			m.sample("dnstree_registration", flag(value == reg.State), label{"domain", reg.Domain}, label{"state", string(value)})
+		}
+		if left, ok := tr.Lapses(reg); ok {
+			m.family("dnstree_registration_left_seconds", "seconds", "how long the domain's registration had left when the walk was made, below zero once it has run out")
+			m.sample("dnstree_registration_left_seconds", seconds(left), label{"domain", reg.Domain})
+		}
+		if reg.State == trace.Registered {
+			m.family("dnstree_registration_held", "", "1 where the registry lists a status that takes the domain out of its zone, such as a hold or a pending delete")
+			m.sample("dnstree_registration_held", flag(reg.Held() != ""), label{"domain", reg.Domain})
+		}
+		if reg.Parent != "" {
+			m.family("dnstree_registration_agrees", "", "1 where the registry holds the nameservers, and with --dnssec the DS, that the zone above hands out")
+			m.sample("dnstree_registration_agrees", flag(reg.Agrees()), label{"domain", reg.Domain})
+		}
+	}
+
 	probes(m, tr)
 	ednsTests(m, tr)
 	resolvers(m, tr)

@@ -17,4 +17,8 @@
 ├── +all: it lets anyone send mail as www.example.com.
 └── never reached: mx
 📨 ok: nothing in it fails a check
+📅 example.com. is registered; the registry does not say until when
+📅 example.com. is on server hold: the registry has taken it out of the zone
+📅 nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.
+📅 a change is stuck between the registry and the zone, or the registry's copy is stale
 ⚠️  no server answered for com.

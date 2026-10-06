@@ -43,10 +43,43 @@
     },
     "caa": { "$ref": "#/$defs/caa" },
     "spf": { "$ref": "#/$defs/spf" },
+    "registration": { "$ref": "#/$defs/registration" },
     "report": { "$ref": "#/$defs/report" },
     "trial": { "$ref": "#/$defs/trial" }
   },
   "$defs": {
+    "registration": {
+      "description": "What the registry of the domain says about it over RDAP (RFC 9083), present only where --rdap asked, held against the referral the zone above the domain handed the walk. The domain is the zone the walk was delegated to below the TLD, or the TLD and one label of the name where nothing delegated it; the registry is the one IANA's bootstrap file names for the TLD (RFC 9224).",
+      "type": "object",
+      "required": ["domain", "state"],
+      "properties": {
+        "domain": { "description": "The domain the registry was asked about.", "type": "string" },
+        "server": { "description": "The base URL of the RDAP service asked.", "type": "string" },
+        "state": {
+          "description": "What the registry said: registered; unregistered, it holds no such domain; unpublished, the TLD runs no RDAP service, or the name is a TLD; unreached, the service could not be asked or did not answer in time.",
+          "type": "string",
+          "enum": ["registered", "unregistered", "unpublished", "unreached"]
+        },
+        "why": { "description": "What kept the registry from saying more, absent where it answered.", "type": "string" },
+        "registered": { "description": "When the domain was registered, in RFC 3339, absent where the registry does not say.", "type": "string" },
+        "expires": { "description": "When the registration runs out, in RFC 3339, absent where the registry does not say. The time left is read against started.", "type": "string" },
+        "status": {
+          "description": "The registry's statuses (RFC 8056), lowercase, such as client transfer prohibited or server hold.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ns": { "description": "The nameservers the registry holds.", "type": "array", "items": { "type": "string" } },
+        "ds": { "description": "The key tags of the DS records the registry holds.", "type": "array", "items": { "type": "integer" } },
+        "signed": { "description": "Whether the registry says the delegation is signed.", "type": "boolean" },
+        "parent": { "description": "The zone whose referral the registry was held against, absent where the walk was handed none.", "type": "string" },
+        "ns_only_registry": { "description": "Nameservers the registry holds and the parent did not hand out.", "type": "array", "items": { "type": "string" } },
+        "ns_only_parent": { "description": "Nameservers the parent handed out and the registry does not hold.", "type": "array", "items": { "type": "string" } },
+        "ds_checked": { "description": "Whether the parent's DS were compared, which takes --dnssec: a referral carries them only then.", "type": "boolean" },
+        "ds_only_registry": { "description": "Key tags of DS the registry holds and the parent does not publish.", "type": "array", "items": { "type": "integer" } },
+        "ds_only_parent": { "description": "Key tags of DS the parent publishes and the registry does not hold.", "type": "array", "items": { "type": "integer" } },
+        "ds_differ": { "description": "Set where one side has DS and the other none, which is compared where the key tags of both are not to hand.", "type": "boolean" }
+      }
+    },
     "trial": {
       "description": "The delegation --try-ns put in place of a zone's real one, present only where it was asked for. Such a walk is a simulation of the zone moved to these nameservers: the referral to the zone is kept as the parent gave it, DS included, and marked replaced, and the walk goes on to the servers named here instead.",
       "type": "object",

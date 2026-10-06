@@ -1303,3 +1303,73 @@ func TestSender(t *testing.T) {
 		t.Errorf("got %q, want nothing said of SPF a walk did not look up", got)
 	}
 }
+
+func TestRegistration(t *testing.T) {
+	started := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	for name, tt := range map[string]struct {
+		reg   *trace.Registration
+		steps []*trace.Step
+		level explain.Level
+		want  string
+	}{
+		"a registration with time to run": {
+			reg:   &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(400 * 24 * time.Hour)},
+			level: explain.Note,
+			want:  "the registration of test. runs until 2027-11-10",
+		},
+		"a registration about to run out": {
+			reg:   &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(5 * time.Hour)},
+			level: explain.Warn,
+			want:  "the registration of test. runs out in 5 hours; once it lapses the name stops resolving everywhere at once",
+		},
+		"a hold behind a name the TLD says does not exist": {
+			reg:   &trace.Registration{Domain: "test.", State: trace.Registered, Parent: ".", Status: []string{"active", "server hold"}},
+			steps: []*trace.Step{hop(trace.KindNXDomain, "ns.test.")},
+			level: explain.Fault,
+			want:  "the registry lists test. with status server hold, which takes it out of .",
+		},
+		"a lapsed registration behind a name that still answers": {
+			reg:   &trace.Registration{Domain: "test.", State: trace.Registered, Expires: started.Add(-50 * time.Hour)},
+			level: explain.Warn,
+			want:  "the registration of test. ran out 2 days ago, and the registry may let it go",
+		},
+		"a domain nobody holds": {
+			reg:   &trace.Registration{Domain: "test.", State: trace.Unregistered, Why: "the registry holds no registration for test."},
+			steps: []*trace.Step{hop(trace.KindNXDomain, "ns.test.")},
+			level: explain.Fault,
+			want:  "the registry holds no registration for test.: it has lapsed, or was never registered",
+		},
+		"a delegation the registry does not hold": {
+			reg: &trace.Registration{Domain: "test.", State: trace.Registered, Parent: ".",
+				NSOnlyParent: []string{"ns.old.test."}},
+			level: explain.Warn,
+			want:  "the registry holds a delegation of test. that . does not hand out",
+		},
+		"a registry that did not answer": {
+			reg:   &trace.Registration{Domain: "test.", State: trace.Unreached, Why: "the registry did not answer in time"},
+			level: explain.Warn,
+			want:  "when test. runs out could not be checked: the registry did not answer in time",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps := tt.steps
+			if steps == nil {
+				steps = []*trace.Step{answered(300)}
+			}
+			tr := walk(steps...)
+			tr.Started, tr.Registration = started, tt.reg
+			for _, finding := range explain.Findings(tr) {
+				if finding.Topic == explain.Registry && strings.Contains(finding.Text, tt.want) {
+					if finding.Level != tt.level {
+						t.Errorf("got %q at %s, want %s", finding.Text, finding.Level, tt.level)
+					}
+					return
+				}
+			}
+			t.Errorf("got %q, want it to say %q", said(tr), tt.want)
+		})
+	}
+	if got := said(walk(answered(300))); strings.Contains(got, "registr") {
+		t.Errorf("got %q, want nothing said of a registry a walk did not ask", got)
+	}
+}
