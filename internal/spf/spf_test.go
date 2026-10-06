@@ -165,6 +165,15 @@ func TestCheck(t *testing.T) {
 		},
 		result: trace.SPFPermError, lookups: 1,
 		why: `"-all is no mechanism`,
+	}, {
+		name:   "a decimal escape is the byte it names",
+		zone:   zone{"example.com. TXT": {`"v=spf1\032-all"`}},
+		result: trace.SPFOK,
+	}, {
+		name:   "a decimal escape past 255 is no byte, and quotes only its first digit",
+		zone:   zone{"example.com. TXT": {`"v=spf1 \999-all"`}},
+		result: trace.SPFPermError,
+		why:    "999-all is no mechanism",
 	}} {
 		t.Run(tt.name, func(t *testing.T) {
 			var asked int

@@ -562,13 +562,17 @@ func unquote(data string) string {
 	quoted := false
 	for i := 0; i < len(data); i++ {
 		ch := data[i]
+		var code byte
+		var isCode bool
+		if ch == '\\' && i+3 < len(data) {
+			code, isCode = decimal(data[i+1 : i+4])
+		}
 		switch {
 		case ch == '"':
 			quoted = !quoted
 		case !quoted:
-		case ch == '\\' && i+3 < len(data) && digits(data[i+1:i+4]):
-			n, _ := strconv.Atoi(data[i+1 : i+4])
-			b.WriteByte(byte(n))
+		case isCode:
+			b.WriteByte(code)
 			i += 3
 		case ch == '\\' && i+1 < len(data):
 			b.WriteByte(data[i+1])
@@ -580,8 +584,11 @@ func unquote(data string) string {
 	return b.String()
 }
 
-func digits(text string) bool {
-	return strings.Trim(text, "0123456789") == ""
+// decimal reads the digits of a \DDD escape. Past 255 it is no escape, and
+// the backslash quotes only the first digit.
+func decimal(text string) (byte, bool) {
+	n, err := strconv.ParseUint(text, 10, 8)
+	return byte(n), err == nil
 }
 
 func fqdn(name string) string {
