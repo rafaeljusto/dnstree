@@ -43,6 +43,8 @@ func askedLeaf(tb testing.TB, tr *trace.Trace) *trace.Step {
 // servers getting it wrong, and none of them may cost the walk its answer
 // except the one that turns every cookie down.
 func TestCookieIsRecorded(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		cookies  fakens.Cookies
 		want     trace.CookieState
@@ -102,6 +104,8 @@ func TestCookieIsRecorded(t *testing.T) {
 // TestCookieNotAsked covers the default: no cookie goes out, and no hop says
 // anything about one.
 func TestCookieNotAsked(t *testing.T) {
+	t.Parallel()
+
 	h, cfg, leaf := cookieService(t, fakens.CookieSupport)
 	cfg.Cookie = false
 
@@ -125,6 +129,8 @@ func TestCookieNotAsked(t *testing.T) {
 // cookie handed out on one query goes back with the next, and each server is
 // sent a client cookie of its own rather than one that follows the walk.
 func TestCookieIsSentBack(t *testing.T) {
+	t.Parallel()
+
 	h, cfg, leaf := cookieService(t, fakens.CookieSupport)
 	cfg.CheckNS = true // a second question for the leaf
 
@@ -152,6 +158,8 @@ func TestCookieIsSentBack(t *testing.T) {
 
 // TestCookieOverTCP covers the other transport a cookie means anything over.
 func TestCookieOverTCP(t *testing.T) {
+	t.Parallel()
+
 	h, cfg, _ := cookieService(t, fakens.CookieSupport)
 	cfg.Transport = h.carry(transport.NewTCP(fast))
 
@@ -168,6 +176,8 @@ func TestCookieOverTCP(t *testing.T) {
 // The question asked again without it has nowhere to carry a cookie, so the
 // hop says nothing about one rather than calling the server one without.
 func TestCookieSurvivesTheEDNSFallback(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{FormErrEDNS: true})
 	cfg.Cookie = true
 

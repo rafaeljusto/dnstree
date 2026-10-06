@@ -12,6 +12,8 @@ import (
 )
 
 func TestPublic(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		addr string
 		want bool
@@ -51,6 +53,8 @@ func TestPublic(t *testing.T) {
 }
 
 func TestGuard(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{})
 	allowed := server.Addr.Addr()
 	guarded := transport.Guard(transport.NewUDP(fastConfig), func(addr netip.Addr) bool { return addr == allowed })
@@ -70,6 +74,8 @@ func TestGuard(t *testing.T) {
 }
 
 func TestWithout(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{})
 	addr := server.Addr.Addr()
 
@@ -129,6 +135,8 @@ func TestWithout(t *testing.T) {
 }
 
 func TestWithoutMapped(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{})
 	mapped := netip.AddrPortFrom(netip.AddrFrom16(server.Addr.Addr().As16()), server.Addr.Port())
 	down := transport.Without(transport.NewUDP(fastConfig), []transport.Down{{Prefix: netip.MustParsePrefix("127.0.0.0/8")}}, nil)

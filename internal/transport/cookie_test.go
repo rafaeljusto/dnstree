@@ -14,6 +14,8 @@ import (
 // TestClientCookie covers what RFC 9018 asks of the client half: the same for
 // one server all run long, and different for every other.
 func TestClientCookie(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("0123456789abcdef")
 	one, other := netip.MustParseAddr("192.0.2.1"), netip.MustParseAddr("192.0.2.2")
 
@@ -35,6 +37,8 @@ func TestClientCookie(t *testing.T) {
 // TestWithCookie covers both halves going out, and the query that has nowhere
 // to carry an option.
 func TestWithCookie(t *testing.T) {
+	t.Parallel()
+
 	for name, tt := range map[string]struct {
 		udpSize uint16
 		server  string
@@ -71,6 +75,8 @@ func TestWithCookie(t *testing.T) {
 // TestEchoedCookie covers what a server may send back. The codec takes a
 // cookie of any length, so every length RFC 7873 rules out is ruled out here.
 func TestEchoedCookie(t *testing.T) {
+	t.Parallel()
+
 	const client = "0102030405060708"
 	for name, tt := range map[string]struct {
 		given  []dns.RR
@@ -121,6 +127,8 @@ func TestEchoedCookie(t *testing.T) {
 // TestCarriesCookie covers the transports a cookie is sent over. The encrypted
 // ones prove the address already, and an HTTPS front end may drop the option.
 func TestCarriesCookie(t *testing.T) {
+	t.Parallel()
+
 	for proto, want := range map[string]bool{
 		transport.ProtoUDP: true, transport.ProtoTCP: true,
 		transport.ProtoDoT: false, transport.ProtoDoH: false,

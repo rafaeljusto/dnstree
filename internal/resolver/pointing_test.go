@@ -13,6 +13,8 @@ import (
 // must not. They resolve through forgiving resolvers and fail through strict
 // ones, and the walk, which is strict, says why.
 func TestPointingRules(t *testing.T) {
+	t.Parallel()
+
 	const (
 		// example.com. is served by a nameserver named in co.uk., where that
 		// name is an alias.

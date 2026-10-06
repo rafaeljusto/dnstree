@@ -53,6 +53,8 @@ func everyDenial(t *testing.T, run func(*testing.T, fakens.Denial)) {
 // gap the name falls in, so an answer with nothing in it is as checkable as one
 // with records.
 func TestNXDomainIsProved(t *testing.T) {
+	t.Parallel()
+
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
 		h, cfg := signedAs(t, denial, fakens.Behaviour{})
 
@@ -83,6 +85,8 @@ func nameErrorVerdict(denial fakens.Denial) trace.DNSSECState {
 // TestNoDataIsProved covers a name that is there with nothing of the type asked
 // for, which the zone proves by naming the types it does hold.
 func TestNoDataIsProved(t *testing.T) {
+	t.Parallel()
+
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
 		h, cfg := signedAs(t, denial, fakens.Behaviour{})
 
@@ -104,6 +108,8 @@ func TestNoDataIsProved(t *testing.T) {
 // back it. An empty answer is the cheapest thing to forge, so one the zone did
 // not sign for is not an answer at all.
 func TestUnprovedNXDomain(t *testing.T) {
+	t.Parallel()
+
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
 		h, cfg := signedAs(t, denial, fakens.Behaviour{NoDenial: true})
 
@@ -126,6 +132,8 @@ func TestUnprovedNXDomain(t *testing.T) {
 
 // TestUnprovedNoData is the same for a type the zone will not account for.
 func TestUnprovedNoData(t *testing.T) {
+	t.Parallel()
+
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
 		h, cfg := signedAs(t, denial, fakens.Behaviour{NoDenial: true})
 
@@ -147,6 +155,8 @@ func TestUnprovedNoData(t *testing.T) {
 // answer and calling the name absent. The gap the zone signed does not hold a
 // name the zone holds, so the lie has nothing to stand on.
 func TestDeniedNameThatIsThere(t *testing.T) {
+	t.Parallel()
+
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
 		h, cfg := signedAs(t, denial, fakens.Behaviour{})
 		cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(req, resp *dns.Msg) {
@@ -179,6 +189,8 @@ func TestDeniedNameThatIsThere(t *testing.T) {
 // non-terminal into NXDOMAIN. The rcode is not signed, and the gap the zone
 // signed ends at a name below the one asked about, which proves it is there.
 func TestDeniedEmptyNonTerminal(t *testing.T) {
+	t.Parallel()
+
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
 		h, cfg := signedZoneAs(t, deepZone, denial, fakens.Behaviour{})
 		cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(req, resp *dns.Msg) {
@@ -211,6 +223,8 @@ func TestDeniedEmptyNonTerminal(t *testing.T) {
 // it instead, or the chain checks the child's proof against the parent's keys
 // and calls a sound zone bogus.
 func TestHiddenCutDeniesAcrossIt(t *testing.T) {
+	t.Parallel()
+
 	everyDenial(t, func(t *testing.T, denial fakens.Denial) {
 		for what, test := range map[string]struct {
 			question [2]string

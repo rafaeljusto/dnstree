@@ -11,6 +11,8 @@ import (
 // 9567). Its servers say so unasked, on every answer, and the walk keeps it on
 // the hop so that where a report would go is drawn before any is sent.
 func TestReportChannel(t *testing.T) {
+	t.Parallel()
+
 	for name, test := range map[string]struct {
 		leaf  fakens.Behaviour
 		agent string

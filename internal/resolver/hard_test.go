@@ -13,6 +13,8 @@ import (
 // TestTruncated covers the TC bit: the answer did not fit, so it has to be
 // fetched again over TCP.
 func TestTruncated(t *testing.T) {
+	t.Parallel()
+
 	newHierarchy := func(tb testing.TB) harness {
 		hierarchy := fakens.NewHierarchy(tb)
 		root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
@@ -69,6 +71,8 @@ func TestTruncated(t *testing.T) {
 
 // TestEDNSFallback covers the server that cannot parse EDNS0 at all.
 func TestEDNSFallback(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
 	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2"})
@@ -98,6 +102,8 @@ func TestEDNSFallback(t *testing.T) {
 // TestCNAME covers the alias chase: a new walk from the root for the target,
 // hanging under the answer that pointed at it.
 func TestCNAME(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @          IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @          IN NS   ns
@@ -218,6 +224,8 @@ back  IN CNAME CASED.Example.COM.
 // TestSideResolution covers a delegation to a nameserver named outside the
 // zone: its address has to be found with a walk of its own.
 func TestSideResolution(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -272,6 +280,8 @@ ns    IN A    192.0.2.8
 // TestGlueLess covers a nameserver inside the zone it serves with no glue:
 // nothing can reach it, and trying to resolve it would only loop.
 func TestGlueLess(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @       IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @       IN NS   ns
@@ -303,6 +313,8 @@ example IN NS   ns.example
 // TestSameServerForParentAndChild covers a server authoritative for both sides
 // of a zone cut: the answer arrives where a referral was expected.
 func TestSameServerForParentAndChild(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @               IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @               IN NS   ns
@@ -331,6 +343,8 @@ www.example.com. IN A   192.0.2.10
 // TestCheckNS covers the parent and the child disagreeing about who serves the
 // zone, which is only visible when both are asked.
 func TestCheckNS(t *testing.T) {
+	t.Parallel()
+
 	const strayZone = `
 @     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @     IN NS   ns
@@ -385,6 +399,8 @@ www   IN A    192.0.2.10
 // TestAll covers the fanout: every nameserver of a zone is asked, and the tree
 // keeps them in the order they were delegated.
 func TestAll(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -462,6 +478,8 @@ slow.com.           IN A    192.0.2.9
 // TestFamily covers -4 and -6: a server without an address of the right family
 // is shown as a sibling nobody asked, rather than a hop that failed.
 func TestFamily(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -523,6 +541,8 @@ www  IN A    192.0.2.10
 }
 
 func TestFamilyRejected(t *testing.T) {
+	t.Parallel()
+
 	h := internet(t)
 	if _, err := resolver.New(resolver.Config{
 		Transport: h.carry(transport.NewUDP(fast)),
@@ -536,6 +556,8 @@ func TestFamilyRejected(t *testing.T) {
 // TestSideResolutionDepth covers two zones whose nameservers are named inside
 // each other: chasing the names is bounded, so the walk still ends.
 func TestSideResolutionDepth(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -570,6 +592,8 @@ b.test.             IN NS   ns.a.test.
 // offer it, and every hop is an error where they do not, unless plain DNS is
 // allowed to pick them up.
 func TestEncryptedWalk(t *testing.T) {
+	t.Parallel()
+
 	newHierarchy := func(tb testing.TB, encrypted bool) harness {
 		hierarchy := fakens.NewHierarchy(tb)
 		root := hierarchy.Add(fakens.Config{

@@ -71,6 +71,8 @@ var caughtUp = struct {
 // walk ended in is asked which copy of it that server holds, whatever the walk
 // itself got away with asking.
 func TestSerialsAreAsked(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := replicated(t, caughtUp, caughtUp)
 	cfg.Serial = true
 
@@ -100,6 +102,8 @@ func TestSerialsAreAsked(t *testing.T) {
 // by a zone transfer answers every question correctly and answers it out of an
 // older zone, and only the serials say so.
 func TestSerialsDisagree(t *testing.T) {
+	t.Parallel()
+
 	behind := caughtUp
 	behind.serial = 1
 
@@ -138,6 +142,8 @@ func TestSerialsDisagree(t *testing.T) {
 // TestSerialsAreNotAskedByDefault covers the cost. It is a query per
 // nameserver, so it is a thing to ask for.
 func TestSerialsAreNotAskedByDefault(t *testing.T) {
+	t.Parallel()
+
 	behind := caughtUp
 	behind.serial = 1
 
@@ -159,6 +165,8 @@ func TestSerialsAreNotAskedByDefault(t *testing.T) {
 // where the walk put the question to every nameserver itself, two of them
 // answering differently is worth saying.
 func TestAnswersDisagree(t *testing.T) {
+	t.Parallel()
+
 	other := caughtUp
 	other.answer = "192.0.2.99"
 
@@ -185,6 +193,8 @@ func TestAnswersDisagree(t *testing.T) {
 // way anycast sites behind one name answer from where they are. Named by host
 // alone, the server would be on both sides of the disagreement.
 func TestAnswersDisagreeWithinOneName(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{
 		Name: "a.root-servers.net.", Origin: ".", Declared: "192.0.2.1", Zone: `
@@ -225,6 +235,8 @@ www  IN A    ` + site.answer + `
 // nameservers serving one zone answer alike, and saying so every time would
 // bury the run that does not.
 func TestAnswersAgree(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := replicated(t, caughtUp, caughtUp)
 	cfg.All = true
 
@@ -241,6 +253,8 @@ func TestAnswersAgree(t *testing.T) {
 // single answer has nothing to be held against, and a run without --all has
 // only ever got one.
 func TestOneAnswerIsNotADisagreement(t *testing.T) {
+	t.Parallel()
+
 	other := caughtUp
 	other.answer = "192.0.2.99"
 

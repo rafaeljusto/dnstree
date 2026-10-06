@@ -100,6 +100,8 @@ func hostStates(m *trace.Mail) []string {
 }
 
 func TestMailDANE(t *testing.T) {
+	t.Parallel()
+
 	for name, tt := range map[string]struct {
 		extra     string
 		behaviour fakens.Behaviour
@@ -259,6 +261,8 @@ func mailWarning(warning string) bool {
 }
 
 func TestMailPolicies(t *testing.T) {
+	t.Parallel()
+
 	for name, tt := range map[string]struct {
 		extra string
 		qname string
@@ -341,6 +345,8 @@ _mta-sts IN TXT "v=STSv1; id=2"`,
 // TestMailDMARCSubdomain covers a policy found at the organisational domain,
 // whose sp is what applies to the name below it (RFC 7489 6.3).
 func TestMailDMARCSubdomain(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, `_dmarc IN TXT "v=DMARC1; p=reject; sp=none"`, fakens.Behaviour{}, false)
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "solo.example.com", "A")
@@ -355,6 +361,8 @@ func TestMailDMARCSubdomain(t *testing.T) {
 // TestMailBogusMX covers an MX set that does not validate: a sender that
 // validates has no hosts to try, so neither has the check.
 func TestMailBogusMX(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, ``, fakens.Behaviour{BadSignature: true}, true)
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "mailhost.com", "A")
@@ -373,6 +381,8 @@ func TestMailBogusMX(t *testing.T) {
 // run's own budget is never the zone's fault, so no host fails for it and no
 // warning blames a server.
 func TestMailBudgetSigned(t *testing.T) {
+	t.Parallel()
+
 	for budget := 4; budget <= 24; budget++ {
 		h, cfg := mailed(t, `@ IN MX 10 mx.mailhost.com.`, fakens.Behaviour{}, true)
 		cfg.Budget.MaxQueries = budget
@@ -405,6 +415,8 @@ func TestMailBudgetSigned(t *testing.T) {
 // TestMailCNAMEBudget covers the alias budget the walk spent before the check,
 // which is no fault of the zone's either.
 func TestMailCNAMEBudget(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, `@ IN MX 10 mx`, fakens.Behaviour{}, false)
 	cfg.Budget.MaxCNAME = 1
 
@@ -424,6 +436,8 @@ func TestMailCNAMEBudget(t *testing.T) {
 
 // TestMailPolicyTags covers what is read out of a policy that is there.
 func TestMailPolicyTags(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, `_mta-sts IN TXT "v=STSv1; id=20240101T000000"
 _dmarc IN TXT "v=DMARC1; P=reject; rua=mailto:d@example.com"`, fakens.Behaviour{}, false)
 
@@ -442,6 +456,8 @@ _dmarc IN TXT "v=DMARC1; P=reject; rua=mailto:d@example.com"`, fakens.Behaviour{
 // TestMailUnchecked covers a check made without --dnssec, which says nothing
 // about whether a sender may rely on a TLSA set it found.
 func TestMailUnchecked(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, `@ IN MX 10 mx`, fakens.Behaviour{}, false)
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "example.com", "A")
@@ -462,6 +478,8 @@ func TestMailUnchecked(t *testing.T) {
 // TestMailBudget covers a check the budget cuts short, which says so rather
 // than leaving out what it never asked.
 func TestMailBudget(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, `@ IN MX 10 mx`, fakens.Behaviour{}, false)
 	cfg.Budget.MaxQueries = 5 // the walk takes three
 
@@ -480,6 +498,8 @@ func TestMailBudget(t *testing.T) {
 // TestMailAll covers --all, which is about the question: the lookups the mail
 // check makes ask one server of a zone, as a sender's resolver does.
 func TestMailAll(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, `@ IN MX 10 mx`, fakens.Behaviour{}, false)
 	cfg.All = true
 
@@ -494,6 +514,8 @@ func TestMailAll(t *testing.T) {
 
 // TestMailNotByDefault covers the cost: nothing is asked unless it is asked for.
 func TestMailNotByDefault(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := mailed(t, `@ IN MX 10 mx`, fakens.Behaviour{}, false)
 	cfg.Mail = false
 

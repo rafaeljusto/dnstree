@@ -39,6 +39,8 @@ func signed(tb testing.TB, root, com, example fakens.Behaviour) (harness, resolv
 // TestDNSSECSecure walks a hierarchy signed from the root down, which is the
 // only case where every link has to hold.
 func TestDNSSECSecure(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
@@ -94,6 +96,8 @@ www IN A   192.0.2.11
 // signatures, and a walk that only counts referrals is left checking them
 // against the parent's keys, which calls a perfectly good answer bogus.
 func TestDNSSECHiddenCut(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		hosted fakens.Behaviour
 		state  trace.DNSSECState
@@ -188,6 +192,8 @@ www IN A   192.0.2.12
 // what reaches the walk is the hosted zone's referral, signed with its keys,
 // and checking it against the parent's calls an honest delegation bogus.
 func TestDNSSECHiddenCutReferral(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		sub      fakens.Behaviour
 		minimise bool
@@ -269,6 +275,8 @@ func TestDNSSECHiddenCutReferral(t *testing.T) {
 // verdict: a missing DS is not a failure, a missing key set is not a forgery,
 // and a signature that does not verify is.
 func TestDNSSECBroken(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		example fakens.Behaviour
 		state   trace.DNSSECState
@@ -333,6 +341,8 @@ func TestDNSSECBroken(t *testing.T) {
 // TestDNSSECInsecureIsInherited covers an unsigned zone in the middle: nothing
 // below it can be secure again, however well signed it is.
 func TestDNSSECInsecureIsInherited(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{NoDS: true}, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
@@ -356,6 +366,8 @@ func TestDNSSECInsecureIsInherited(t *testing.T) {
 // TestDNSSECWrongAnchor covers a root whose keys match no trust anchor: the
 // chain breaks there, and nothing below may read as though its own keys failed.
 func TestDNSSECWrongAnchor(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.Anchors = slices.Clone(cfg.Anchors)
 	cfg.Anchors[0].Digest = make([]byte, len(cfg.Anchors[0].Digest))
@@ -387,6 +399,8 @@ func TestDNSSECWrongAnchor(t *testing.T) {
 // TestDNSSECUnsignedHierarchy covers the ordinary case: nothing is signed, so
 // nothing is bogus either.
 func TestDNSSECUnsignedHierarchy(t *testing.T) {
+	t.Parallel()
+
 	h := internet(t)
 	root := h.root.Nameserver()
 
@@ -409,6 +423,8 @@ func TestDNSSECUnsignedHierarchy(t *testing.T) {
 // TestDNSSECAsksForKeys covers the shape of the extra work: the key set of each
 // zone is fetched once, as an aside that never hides the answer.
 func TestDNSSECAsksForKeys(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
@@ -443,6 +459,8 @@ func TestDNSSECAsksForKeys(t *testing.T) {
 // zone whose signer has stopped looks from outside. Everything validates, and
 // the link late in its life is that one.
 func TestDNSSECExpiring(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
 		fakens.Behaviour{SignatureLeft: 48 * time.Hour})
 
@@ -474,6 +492,8 @@ func TestDNSSECExpiring(t *testing.T) {
 // TestCheckDS holds what the zone that answers asks its parent to publish, in
 // its CDS and CDNSKEY, against the DS the parent publishes for it.
 func TestCheckDS(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		example fakens.Behaviour
 		state   trace.SignalState
@@ -543,6 +563,8 @@ func TestCheckDS(t *testing.T) {
 // TestCheckDSUnsigned is a zone whose signatures do not verify. Its request of
 // the parent is nobody's, and is reported as unchecked rather than read.
 func TestCheckDSUnsigned(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
 		fakens.Behaviour{CDS: fakens.CDSNext, BadSignature: true})
 	cfg.CheckDS = true
@@ -569,6 +591,8 @@ func TestCheckDSUnsigned(t *testing.T) {
 // walk crosses into without a referral: its DS comes from the query made to
 // cross the cut, and its request is held against that.
 func TestCheckDSHiddenCut(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.CheckDS = true
 	h.hierarchy.Add(fakens.Config{
@@ -595,6 +619,8 @@ func TestCheckDSHiddenCut(t *testing.T) {
 // keys to check its request with, and it is left unread rather than skipped
 // without a word.
 func TestCheckDSInsecure(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
 		fakens.Behaviour{NoDS: true, CDS: fakens.CDSCurrent})
 	cfg.CheckDS = true
@@ -618,6 +644,8 @@ func TestCheckDSInsecure(t *testing.T) {
 // order, the shape of most apexes: a policy split in two strings beside a
 // verification token in one, and text whose escapes stand for single octets.
 func TestDNSSECTXTOrder(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := authorised(t, `txt IN TXT "google-site-verification=abc"
 txt IN TXT "v=spf1 " "-all"
 txt IN TXT "\255"`, fakens.Behaviour{}, true)

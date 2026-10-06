@@ -14,6 +14,8 @@ import (
 // from the zone's own, which nothing but asking the zone shows: the walk goes
 // where the glue says and gets an answer either way.
 func TestCheckGlue(t *testing.T) {
+	t.Parallel()
+
 	const withIPv6Glue = comZone + "ns.example IN AAAA 2001:db8::3\n"
 
 	tests := map[string]struct {

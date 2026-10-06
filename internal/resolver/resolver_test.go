@@ -55,6 +55,8 @@ www.example IN A   192.0.2.20
 )
 
 func TestResolve(t *testing.T) {
+	t.Parallel()
+
 	res := newResolver(t, internet(t), resolver.Config{})
 
 	tr, err := res.Resolve(t.Context(), "www.example.com", "A")
@@ -126,6 +128,8 @@ func TestResolve(t *testing.T) {
 // chain is sent only once the one above it has answered, and nothing ends after
 // the walk does.
 func TestResolveStarts(t *testing.T) {
+	t.Parallel()
+
 	res := newResolver(t, internet(t), resolver.Config{})
 
 	tr, err := res.Resolve(t.Context(), "www.example.com", "A")
@@ -153,6 +157,8 @@ func TestResolveStarts(t *testing.T) {
 // inside the call. Nothing here is guarded, which is the point: under -race, a
 // hop announced from anywhere else would be caught.
 func TestResolveStepped(t *testing.T) {
+	t.Parallel()
+
 	var (
 		counted []int
 		mu      sync.Mutex
@@ -196,6 +202,8 @@ func TestResolveStepped(t *testing.T) {
 // announced before it goes out and finished when it comes back, so that
 // nothing is left in flight by the end of a walk.
 func TestResolveAsking(t *testing.T) {
+	t.Parallel()
+
 	var (
 		mu     sync.Mutex
 		asked  int
@@ -236,6 +244,8 @@ func TestResolveAsking(t *testing.T) {
 // TestResolveSkippedZoneCut covers a zone cut that label counting would miss:
 // the root refers straight to co.uk., two labels down.
 func TestResolveSkippedZoneCut(t *testing.T) {
+	t.Parallel()
+
 	res := newResolver(t, internet(t), resolver.Config{})
 
 	tr, err := res.Resolve(t.Context(), "www.example.co.uk", "A")
@@ -258,6 +268,8 @@ func TestResolveSkippedZoneCut(t *testing.T) {
 // TestResolveLameThenSuccess walks past a server that refuses the zone it was
 // delegated, the most common real-world finding.
 func TestResolveLameThenSuccess(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -303,6 +315,8 @@ ns.com.             IN A    192.0.2.2
 // TestResolveReferralLoop covers a delegation whose glue points back at the
 // server that handed it out, which would otherwise be chased forever.
 func TestResolveReferralLoop(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @          IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @          IN NS   ns
@@ -339,6 +353,8 @@ ns.example IN A    192.0.2.2
 // for names at or below the zone it serves and no further, so an address it
 // volunteers for somebody else's zone is dropped and the name found elsewhere.
 func TestResolveOutOfBailiwickGlue(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @               IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @               IN NS   ns
@@ -389,6 +405,8 @@ ns.outside.net. IN A    192.0.2.3
 // entitled to hand out the addresses of the gTLD servers, and a walk that threw
 // them away would ask the root about every one of them.
 func TestResolveSiblingGlue(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -424,6 +442,8 @@ a.gtld-servers.net. IN A    192.0.2.2
 }
 
 func TestResolveKinds(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		name    string
 		qtype   string
@@ -467,6 +487,8 @@ func TestResolveKinds(t *testing.T) {
 }
 
 func TestResolveBudget(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		budget resolver.Budget
 		steps  int
@@ -502,6 +524,8 @@ func TestResolveBudget(t *testing.T) {
 }
 
 func TestResolveUnreachable(t *testing.T) {
+	t.Parallel()
+
 	// A root server nothing stands behind: the address is never mapped to a
 	// listening socket.
 	hierarchy := fakens.NewHierarchy(t)
@@ -540,6 +564,8 @@ func TestResolveUnreachable(t *testing.T) {
 // TestResolveRetriesAreCounted covers a server asked several times over: one
 // note says how often, rather than the same note once a time.
 func TestResolveRetriesAreCounted(t *testing.T) {
+	t.Parallel()
+
 	res, err := resolver.New(resolver.Config{
 		Transport: transport.NewUDP(transport.Config{Timeout: 50 * time.Millisecond}),
 		Roots:     []trace.Server{{Name: "dead.root.", IP: netip.MustParseAddr("192.0.2.99"), Port: 53}},
@@ -560,6 +586,8 @@ func TestResolveRetriesAreCounted(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
+	t.Parallel()
+
 	roots := []trace.Server{{Name: "a.root-servers.net.", IP: netip.MustParseAddr("192.0.2.1"), Port: 53}}
 	if _, err := resolver.New(resolver.Config{Roots: roots}); err == nil {
 		t.Error("got no error without a transport, want one")
@@ -570,6 +598,8 @@ func TestNew(t *testing.T) {
 }
 
 func TestResolveBadQuestion(t *testing.T) {
+	t.Parallel()
+
 	res := newResolver(t, internet(t), resolver.Config{})
 
 	if _, err := res.Resolve(t.Context(), "www.example.com", "NOPE"); err == nil {
@@ -582,6 +612,8 @@ func TestResolveBadQuestion(t *testing.T) {
 }
 
 func TestRootServers(t *testing.T) {
+	t.Parallel()
+
 	hints, err := roothints.Default()
 	if err != nil {
 		t.Fatalf("roothints.Default: %v", err)

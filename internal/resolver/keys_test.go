@@ -14,6 +14,8 @@ import (
 // checks the other's answers against it, so each has to publish both. A walk
 // asking one server never sees the difference.
 func TestCheckKeys(t *testing.T) {
+	t.Parallel()
+
 	const (
 		comZone = `
 @        IN SOA  ns hostmaster 1 7200 3600 1209600 3600

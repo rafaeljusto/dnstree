@@ -66,6 +66,8 @@ func reply(req *dns.Msg, records ...string) *dns.Msg {
 // the query: a reply with the wrong ID and one to another question arrive
 // first. Both are dropped and the real answer, arriving after them, is read.
 func TestSpoofedDatagramsAreSkipped(t *testing.T) {
+	t.Parallel()
+
 	server := datagrams(t, func(req *dns.Msg) []*dns.Msg {
 		wrongID := reply(req, "www.example.com. 60 IN A 192.0.2.66")
 		wrongID.ID++
@@ -87,6 +89,8 @@ func TestSpoofedDatagramsAreSkipped(t *testing.T) {
 // TestOnlySpoofedDatagrams covers a hop where nothing but the spoofer spoke:
 // it ends the way silence does, and says what was dropped.
 func TestOnlySpoofedDatagrams(t *testing.T) {
+	t.Parallel()
+
 	server := datagrams(t, func(req *dns.Msg) []*dns.Msg {
 		wrongID := reply(req, "www.example.com. 60 IN A 192.0.2.66")
 		wrongID.ID++
@@ -103,6 +107,8 @@ func TestOnlySpoofedDatagrams(t *testing.T) {
 // TestOtherClassesAreDropped covers records of a class nobody asked about. The
 // walk reads no class, so a CHAOS record left in would pass for an answer.
 func TestOtherClassesAreDropped(t *testing.T) {
+	t.Parallel()
+
 	server := datagrams(t, func(req *dns.Msg) []*dns.Msg {
 		return []*dns.Msg{reply(req, "www.example.com. 60 CH A 192.0.2.66")}
 	})
@@ -121,6 +127,8 @@ func TestOtherClassesAreDropped(t *testing.T) {
 // all. There is nothing in such a reply to mislead with, and the EDNS0
 // fallback depends on reading it.
 func TestBareFormErr(t *testing.T) {
+	t.Parallel()
+
 	server := datagrams(t, func(req *dns.Msg) []*dns.Msg {
 		resp := reply(req)
 		resp.Rcode, resp.Question = dns.RcodeFormatError, nil
@@ -138,6 +146,8 @@ func TestBareFormErr(t *testing.T) {
 // is cut short there and then, and says it was cancelled rather than blaming
 // the server with a timeout.
 func TestCancelInterruptsTheRead(t *testing.T) {
+	t.Parallel()
+
 	server := datagrams(t, func(*dns.Msg) []*dns.Msg { return nil })
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -159,6 +169,8 @@ func TestCancelInterruptsTheRead(t *testing.T) {
 // wrapped for TLS after the cancellation is armed, which is where the two once
 // raced.
 func TestCancelInterruptsTheHandshake(t *testing.T) {
+	t.Parallel()
+
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -193,6 +205,8 @@ func TestCancelInterruptsTheHandshake(t *testing.T) {
 // reply: a page, a redirect, or a reply to another question. The ID is zero
 // both ways over HTTPS, so none of it can be caught any other way.
 func TestDoHReplyMustBeTheReply(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]http.HandlerFunc{
 		"a page instead of a message": func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/html")

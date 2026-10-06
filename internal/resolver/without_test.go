@@ -15,6 +15,8 @@ import (
 // TestWithout covers --without: the walk treats what it names as down and
 // goes wherever it would go next, and nothing it names is ever asked.
 func TestWithout(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @               IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @               IN NS   ns
@@ -110,6 +112,8 @@ www   IN A    192.0.2.10
 // skips what is down before it asks, but a probe goes to every nameserver the
 // zone names, so the transport has to keep it from the one left out.
 func TestWithoutProbe(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @               IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @               IN NS   ns
@@ -172,6 +176,8 @@ func outage(h harness, down []transport.Down) resolver.Config {
 // nameserver sits with another provider, but its own zone is served from the
 // first one's address, so taking that address away takes both.
 func TestWithoutHiddenDependency(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.

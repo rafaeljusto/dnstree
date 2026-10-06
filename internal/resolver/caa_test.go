@@ -63,6 +63,8 @@ func climbed(caa *trace.CAA) []string {
 }
 
 func TestCAA(t *testing.T) {
+	t.Parallel()
+
 	for name, tt := range map[string]struct {
 		extra     string
 		behaviour fakens.Behaviour
@@ -198,6 +200,8 @@ func checkIssuers(tb testing.TB, what string, got *trace.Issuers, want []string)
 // counts only once its denial is proved, and every answer is checked against
 // the keys of the zone it came from, even after the walk went below it.
 func TestCAADNSSEC(t *testing.T) {
+	t.Parallel()
+
 	for name, tt := range map[string]struct {
 		extra     string
 		behaviour fakens.Behaviour
@@ -243,6 +247,8 @@ func TestCAADNSSEC(t *testing.T) {
 // TestCAAFailedSigned covers a lookup that fails in a zone with a chain of trust
 // behind it, which no authority may take as leave to issue.
 func TestCAAFailedSigned(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := authorised(t, `@ IN CAA 0 issue "letsencrypt.org"`, fakens.Behaviour{ServFailType: dns.TypeCAA}, true)
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
@@ -260,6 +266,8 @@ func TestCAAFailedSigned(t *testing.T) {
 // TestCAABudget covers a climb cut short: the budget is the run's, not an
 // authority's, so the lookup it stops leaves who may issue undecided.
 func TestCAABudget(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := authorised(t, `@ IN CAA 0 issue "letsencrypt.org"`, fakens.Behaviour{}, false)
 	cfg.Budget.MaxQueries = 4 // the walk takes three
 
@@ -279,6 +287,8 @@ func TestCAABudget(t *testing.T) {
 // TestCAABudgetSpentBefore covers a budget the walk ran out before the climb:
 // the CNAME chain used it up, so it cannot be why a later lookup failed.
 func TestCAABudgetSpentBefore(t *testing.T) {
+	t.Parallel()
+
 	var chain strings.Builder
 	for i := range resolver.DefaultMaxCNAME + 2 {
 		fmt.Fprintf(&chain, "c%d IN CNAME c%d\n", i, i+1)
@@ -298,6 +308,8 @@ func TestCAABudgetSpentBefore(t *testing.T) {
 // entered: the chain of the zone that referred says nothing of the child's,
 // so an unsigned child that never answered leaves it undecided.
 func TestCAAUnenteredZone(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{
 		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: true,
@@ -323,6 +335,8 @@ func TestCAAUnenteredZone(t *testing.T) {
 
 // TestCAANotByDefault covers the cost: nothing is asked unless it is asked for.
 func TestCAANotByDefault(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := authorised(t, `@ IN CAA 0 issue "letsencrypt.org"`, fakens.Behaviour{}, false)
 	cfg.CAA = false
 
@@ -345,6 +359,8 @@ func TestCAANotByDefault(t *testing.T) {
 // the walk only learns by crossing the cut, and checked against com.'s they
 // would all come out bogus.
 func TestCAAHiddenCut(t *testing.T) {
+	t.Parallel()
+
 	for name, tt := range map[string]struct {
 		hosted string
 		qname  string
@@ -390,6 +406,8 @@ func TestCAAHiddenCut(t *testing.T) {
 // over, neither unescaped nor escaped twice, and the authority is read from
 // before the parameters.
 func TestCAAValueRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := authorised(t, `www IN CAA 0 issue "LetsEncrypt.org; accounturi=https://x/\"q\"\\\200"`, fakens.Behaviour{}, false)
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")

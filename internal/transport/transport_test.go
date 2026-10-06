@@ -27,6 +27,8 @@ mail   IN MX   10 mx
 var fastConfig = transport.Config{Timeout: 200 * time.Millisecond}
 
 func TestExchange(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		proto string
 		newFn func(transport.Config) transport.Transport
@@ -81,6 +83,8 @@ func TestExchange(t *testing.T) {
 // TestExchangeTruncated covers TC detection and the retry the resolver will
 // make over TCP.
 func TestExchangeTruncated(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{TruncateUDP: true})
 
 	resp, _, err := transport.NewUDP(fastConfig).Exchange(t.Context(), query(t, "www.example.com.", dns.TypeA), server.Addr, "")
@@ -107,6 +111,8 @@ func TestExchangeTruncated(t *testing.T) {
 }
 
 func TestExchangeTimeout(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{Drop: true})
 
 	_, rtt, err := transport.NewUDP(fastConfig).Exchange(t.Context(), query(t, "www.example.com.", dns.TypeA), server.Addr, "")
@@ -122,6 +128,8 @@ func TestExchangeTimeout(t *testing.T) {
 }
 
 func TestExchangeRcodes(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		behaviour fakens.Behaviour
 		name      string
@@ -154,6 +162,8 @@ func TestExchangeRcodes(t *testing.T) {
 }
 
 func TestExchangeEDNS(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{})
 
 	req, err := transport.NewQuery("www.example.com.", dns.TypeA, transport.DefaultUDPSize, true)
@@ -183,6 +193,8 @@ func TestExchangeEDNS(t *testing.T) {
 // TestExchangeFormErrEDNS covers the server that cannot parse EDNS0 at all, the
 // case the resolver answers by retrying without it.
 func TestExchangeFormErrEDNS(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{FormErrEDNS: true})
 	tr := transport.NewUDP(fastConfig)
 
@@ -210,6 +222,8 @@ func TestExchangeFormErrEDNS(t *testing.T) {
 }
 
 func TestExchangeIPv6(t *testing.T) {
+	t.Parallel()
+
 	listener, err := net.Listen("tcp", "[::1]:0")
 	if err != nil {
 		t.Skipf("no IPv6 loopback on this machine: %v", err)
@@ -231,6 +245,8 @@ func TestExchangeIPv6(t *testing.T) {
 }
 
 func TestExchangeBadServer(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]netip.AddrPort{
 		"zero value": {},
 		"no port":    netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 0),
@@ -246,6 +262,8 @@ func TestExchangeBadServer(t *testing.T) {
 }
 
 func TestExchangeExpiredContext(t *testing.T) {
+	t.Parallel()
+
 	server := newServer(t, fakens.Behaviour{})
 
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
@@ -260,6 +278,8 @@ func TestExchangeExpiredContext(t *testing.T) {
 }
 
 func TestNewQuery(t *testing.T) {
+	t.Parallel()
+
 	req, err := transport.NewQuery("example.com", dns.TypeNS, transport.DefaultUDPSize, true)
 	if err != nil {
 		t.Fatalf("NewQuery: %v", err)
@@ -297,6 +317,8 @@ func query(tb testing.TB, name string, qtype uint16) *dns.Msg {
 // query is in, which is how some of them refuse a zone transfer. The error
 // says so without the socket errors around it spelling out both ends again.
 func TestReset(t *testing.T) {
+	t.Parallel()
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
@@ -326,6 +348,8 @@ func TestReset(t *testing.T) {
 // TestResetIsNotRefused covers a connection never taken. Nothing was asked, so
 // it says nothing about what the server would have done with a question.
 func TestResetIsNotRefused(t *testing.T) {
+	t.Parallel()
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %v", err)

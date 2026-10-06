@@ -43,6 +43,8 @@ func (t tamper) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPor
 // hold: a set read without looking at the owners would no longer match the
 // signature the zone made, and every cut would read bogus.
 func TestStrayKeyInTheKeySet(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(req, resp *dns.Msg) {
 		if _, qtype := dnsutil.Question(req); qtype != dns.TypeDNSKEY {
@@ -93,6 +95,8 @@ func (q quoting) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPo
 // error its failure is reported with. Every renderer draws the error as the
 // trace holds it, so it has to be plain by the time it gets there.
 func TestErrorTextIsEscaped(t *testing.T) {
+	t.Parallel()
+
 	h, _ := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg := resolver.Config{Transport: quoting{
 		inner:  h.carry(transport.NewUDP(fast)),
@@ -134,6 +138,8 @@ func (r refusing) Exchange(context.Context, *dns.Msg, netip.AddrPort, string) (*
 // reading it would turn a dropped answer section into NODATA: a statement that
 // the name has no record of that type, made out of a lost packet.
 func TestTruncatedAndTCPRefused(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
 	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2"})
@@ -197,6 +203,8 @@ func (c *counting) Exchange(ctx context.Context, req *dns.Msg, server netip.Addr
 // trust, so no DNSKEY query goes out for it — and no slot may be spent on the
 // query that was not made, or a walk gives up while it still had budget left.
 func TestBudgetCountsOnlyQueriesSent(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -272,6 +280,8 @@ www IN A   192.0.2.30
 // whatever the server chose to name, and following them sends the walk to an
 // address no delegation ever pointed at.
 func TestSideResolutionIgnoresUnownedAddresses(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -342,6 +352,8 @@ ns    IN A    192.0.2.8
 // unpacks as a record with no address in it. Taken as glue it is a server
 // nobody can reach, a query spent on it and an AS lookup of nothing.
 func TestEmptyGlueIsNoAddress(t *testing.T) {
+	t.Parallel()
+
 	h := internet(t)
 	cfg := resolver.Config{Transport: tamper{h.carry(transport.NewUDP(fast)), func(_, resp *dns.Msg) {
 		if !delegates(resp, "example.com.") {
@@ -377,6 +389,8 @@ func TestEmptyGlueIsNoAddress(t *testing.T) {
 // chain that believes the absence walks itself off the secure path and says so
 // with an exit code of nought.
 func TestStrippedDSIsNotADowngrade(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.Transport = tamper{h.carry(transport.NewUDP(fast)), func(_, resp *dns.Msg) {
 		kept := resp.Ns[:0:0]
@@ -415,6 +429,8 @@ func TestStrippedDSIsNotADowngrade(t *testing.T) {
 // and has to stay that way: this is the common case on the real internet, and
 // turning it into a failure would make --dnssec useless.
 func TestProvenInsecureDelegation(t *testing.T) {
+	t.Parallel()
+
 	for name, denial := range map[string]fakens.Denial{
 		"opt-out NSEC3, the way com. does it": fakens.DenialNSEC3OptOut,
 		"an NSEC3 naming the delegation":      fakens.DenialNSEC3,
@@ -455,6 +471,8 @@ func TestProvenInsecureDelegation(t *testing.T) {
 // a DS nor the proof that it has none. That is what a stripped referral looks
 // like from below, and it cannot be told apart from one, so it is not insecure.
 func TestUnprovenInsecureDelegation(t *testing.T) {
+	t.Parallel()
+
 	// The claim is the parent's to make, so it is the root that withholds it:
 	// nobody vouches for com., and the root will not sign saying so.
 	h, cfg := signed(t, fakens.Behaviour{NoDenial: true}, fakens.Behaviour{NoDS: true}, fakens.Behaviour{})
@@ -478,6 +496,8 @@ func TestUnprovenInsecureDelegation(t *testing.T) {
 // is genuinely denied, so a walk that let the signer pick the cut would verify
 // the forgery as insecure and exit nought.
 func TestForgedSignerCannotChooseTheCut(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{
 		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: true})
@@ -515,6 +535,8 @@ func TestForgedSignerCannotChooseTheCut(t *testing.T) {
 // between the one asked and the one delegated can be a cut the referral came
 // across, so any other name is refused and the missing DS stays unproven.
 func TestForgedSignerCannotChooseTheReferralCut(t *testing.T) {
+	t.Parallel()
+
 	for name, signer := range map[string]string{
 		"a zone outside the delegation": "unsigned.com.",
 		"the delegation itself":         "example.com.",
@@ -560,6 +582,8 @@ func TestForgedSignerCannotChooseTheReferralCut(t *testing.T) {
 // NSEC3 nothing here can hash. Unknown hashes are ignored, not trusted (RFC
 // 5155 section 8.1), so what is left is a parent that proved nothing.
 func TestUnusableNSEC3IsNotAnExcuse(t *testing.T) {
+	t.Parallel()
+
 	for name, text := range map[string]string{
 		"an unknown hash algorithm":        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.com. 3600 IN NSEC3 2 0 0 - BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB NS",
 		"more iterations than worth doing": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.com. 3600 IN NSEC3 1 0 101 - BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB NS",
@@ -621,6 +645,8 @@ func mustRR(tb testing.TB, text string) dns.RR {
 // The hop is cut short and says so, instead of waiting out the timeout and
 // then blaming the server for it.
 func TestInterruptedIsNotATimeout(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{Drop: true})
 	cfg.Transport = h.carry(transport.NewUDP(transport.Config{Timeout: 5 * time.Second}))
 
@@ -646,6 +672,8 @@ func TestInterruptedIsNotATimeout(t *testing.T) {
 // dnstree-web gives every walk one: once it passes, the servers left are not
 // blamed for staying silent, nor asked again for nothing.
 func TestDeadlineIsNotATimeout(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{Drop: true})
 	cfg.Transport = h.carry(transport.NewUDP(transport.Config{Timeout: 5 * time.Second}))
 	cfg.Retries = 2
@@ -677,6 +705,8 @@ func TestDeadlineIsNotATimeout(t *testing.T) {
 // TestInterruptedCheckIsNotATimeout covers an interruption while a check is
 // asking a server, which is named the way the walk's own hops name it.
 func TestInterruptedCheckIsNotATimeout(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{DropEDNSFlags: true})
 	cfg.Transport = h.carry(transport.NewUDP(transport.Config{Timeout: 30 * time.Second}))
 	cfg.CheckEDNS = true

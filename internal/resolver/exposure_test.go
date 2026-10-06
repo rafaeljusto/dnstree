@@ -45,6 +45,8 @@ func probes(tr *trace.Trace) map[string]*trace.Step {
 }
 
 func TestExposure(t *testing.T) {
+	t.Parallel()
+
 	for name, tt := range map[string]struct {
 		first, second fakens.Behaviour
 		want          map[string]trace.ProbeState
@@ -113,6 +115,8 @@ func TestExposure(t *testing.T) {
 // TestExposureNotByDefault covers the cost, and the log line a transfer leaves
 // on somebody else's server: neither is asked unless it is asked for.
 func TestExposureNotByDefault(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{OpenTransfer: true}, fakens.Behaviour{OpenRecursion: true})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -127,6 +131,8 @@ func TestExposureNotByDefault(t *testing.T) {
 // TestExposureSilent covers a server that could not be asked. It said nothing
 // either way, so it is unchecked rather than closed.
 func TestExposureSilent(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{Drop: true})
 	cfg.CheckRecursion = true
 
@@ -143,6 +149,8 @@ func TestExposureSilent(t *testing.T) {
 // TestExposureWithoutTCP covers a walk with no way to carry a transfer. It
 // says so once rather than drawing every server as unchecked.
 func TestExposureWithoutTCP(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.TCP = nil
 	cfg.CheckTransfer = true
@@ -162,6 +170,8 @@ func TestExposureWithoutTCP(t *testing.T) {
 // TestExposureSpendsTheBudget covers the rule every sweep keeps: it cannot
 // spend more than the walk was given, and says where it stopped.
 func TestExposureSpendsTheBudget(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.CheckTransfer, cfg.CheckRecursion = true, true
 	cfg.Budget.MaxQueries = 3 // the walk takes two
@@ -181,6 +191,8 @@ func TestExposureSpendsTheBudget(t *testing.T) {
 // TestExposureReset makes sure a reset is what the closed transfer rests on,
 // and that the hop still says what the socket did.
 func TestExposureReset(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{ResetTransfer: true}, fakens.Behaviour{})
 	cfg.CheckTransfer = true
 
@@ -201,6 +213,8 @@ func TestExposureReset(t *testing.T) {
 // speak, picked up by --fallback. The lookup goes the way the walk's own
 // questions went, rather than being left unchecked on every server.
 func TestExposureFallback(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{OpenRecursion: true}, fakens.Behaviour{})
 	cfg.Transport = h.carry(transport.NewDoT(fast))
 	cfg.Fallback = h.carry(transport.NewUDP(fast))

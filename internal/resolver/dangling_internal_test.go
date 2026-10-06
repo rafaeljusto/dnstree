@@ -9,6 +9,8 @@ import (
 )
 
 func TestUnowned(t *testing.T) {
+	t.Parallel()
+
 	denial := func(soa string, answer ...string) *dns.Msg {
 		msg := dns.NewMsg("x.", dns.TypeA)
 		msg.Rcode = dns.RcodeNameError

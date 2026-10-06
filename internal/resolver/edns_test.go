@@ -20,6 +20,8 @@ func ednsTests(tr *trace.Trace) map[string]*trace.Step {
 }
 
 func TestEDNS(t *testing.T) {
+	t.Parallel()
+
 	type verdict struct {
 		state trace.EDNSState
 		fault trace.EDNSFault
@@ -120,6 +122,8 @@ func TestEDNS(t *testing.T) {
 // TestEDNSTruncated covers a reply that did not fit and could not be fetched
 // whole. What it left out is no fault of the server's, so it is unchecked.
 func TestEDNSTruncated(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{TruncateUDP: true})
 	cfg.TCP = nil
 	cfg.CheckEDNS = true
@@ -137,6 +141,8 @@ func TestEDNSTruncated(t *testing.T) {
 // TestEDNSNotByDefault covers the cost: four queries a nameserver are asked
 // only when they are asked for.
 func TestEDNSNotByDefault(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{EchoEDNSFlags: true})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -152,6 +158,8 @@ func TestEDNSNotByDefault(t *testing.T) {
 // a new version says nothing about EDNS, so it is unchecked, and is not asked
 // the rest.
 func TestEDNSSilent(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{Drop: true})
 	cfg.CheckEDNS = true
 
@@ -178,6 +186,8 @@ func TestEDNSSilent(t *testing.T) {
 // asked the baseline first, and the rest go whole to the servers there is
 // room for.
 func TestEDNSSpendsTheBudget(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.CheckEDNS = true
 	cfg.Budget.MaxQueries = 7 // the walk takes two, the baselines two more

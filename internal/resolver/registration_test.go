@@ -10,6 +10,8 @@ import (
 // TestDelegated covers where --rdap asks a registry: the zones a real walk
 // was referred to below the TLD, which is what a registration is a record of.
 func TestDelegated(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		name   string
 		zones  []string

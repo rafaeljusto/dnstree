@@ -18,6 +18,8 @@ import (
 // line of its own. The reason phrase is free text that ends up drawn as the
 // hop's error, so only the code is kept.
 func TestDoHStatusIsNotTheServersWords(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		conn, buf, err := w.(http.Hijacker).Hijack()
 		if err != nil {

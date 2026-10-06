@@ -48,6 +48,8 @@ func asked(server *fakens.Server) []string {
 }
 
 func TestMinimise(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		behaviour fakens.Behaviour
 		name      string
@@ -113,6 +115,8 @@ func TestMinimise(t *testing.T) {
 // TestMinimiseAbove covers the zones above the one that answers, which are
 // asked for one label more than they are: the root never sees the name.
 func TestMinimiseAbove(t *testing.T) {
+	t.Parallel()
+
 	h, _ := deep(t, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, resolver.Config{Minimise: true}).Resolve(t.Context(), "www.example.com", "AAAA")
@@ -140,6 +144,8 @@ func TestMinimiseAbove(t *testing.T) {
 // TestMinimiseCheckNS makes sure the parent/child comparison still finds the
 // referral once minimised hops stand between it and the answer.
 func TestMinimiseCheckNS(t *testing.T) {
+	t.Parallel()
+
 	h, _ := deep(t, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, resolver.Config{Minimise: true, CheckNS: true}).
@@ -163,6 +169,8 @@ func TestMinimiseCheckNS(t *testing.T) {
 // TestMinimiseDNSSEC walks a signed hierarchy minimising, which asks the zone
 // more than once and must fetch its keys only the first time.
 func TestMinimiseDNSSEC(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.Minimise = true
 
@@ -189,6 +197,8 @@ func TestMinimiseDNSSEC(t *testing.T) {
 // TestMinimiseBudget is a name far below its zone, where every label is a
 // question of its own: the budget ends the walk rather than the name.
 func TestMinimiseBudget(t *testing.T) {
+	t.Parallel()
+
 	labels := strings.TrimSuffix(strings.Repeat("x.", 40), ".")
 	h, _ := deepWith(t, deepZone+labels+" IN A 192.0.2.40\n", fakens.Behaviour{})
 
@@ -210,6 +220,8 @@ func TestMinimiseBudget(t *testing.T) {
 // reading the whole trace at each hop, the way a live drawing does. Under
 // -race, a minimised hop attached from anywhere but the walk would be caught.
 func TestMinimiseAll(t *testing.T) {
+	t.Parallel()
+
 	h, _ := deep(t, fakens.Behaviour{})
 
 	hops := 0
@@ -231,6 +243,8 @@ func TestMinimiseAll(t *testing.T) {
 // TestCheckNSZoneTTL covers the TTL the zone gives its own NS set, which the
 // parent's referral does not carry and only --check-ns asks for.
 func TestCheckNSZoneTTL(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
 	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Declared: "192.0.2.2",

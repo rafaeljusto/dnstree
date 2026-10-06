@@ -23,6 +23,8 @@ www   IN A    192.0.2.99
 // to the servers named, before the registry is told. The referral stays as the
 // parent gave it, and the walk goes on to the new servers.
 func TestTrial(t *testing.T) {
+	t.Parallel()
+
 	const coUKZone = `
 @          IN SOA ns hostmaster 1 7200 3600 1209600 3600
 @          IN NS  ns
@@ -100,6 +102,8 @@ ns1.new    IN A   192.0.2.9
 // the parent still vouches for the old ones. On the day, every resolver that
 // validates fails the zone, and the trial says so first.
 func TestTrialKeepsTheParentsDS(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: true})
 	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2", DNSSEC: true})

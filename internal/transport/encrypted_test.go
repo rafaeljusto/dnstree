@@ -17,6 +17,8 @@ import (
 // TestEncrypted covers DoT and DoH against a server offering both. They differ
 // in everything but the message they carry, so they are asked the same things.
 func TestEncrypted(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: zone, TLS: true, DoH: true})
 	config := transport.Config{Timeout: fastConfig.Timeout, TLS: server.ClientTLS()}
 
@@ -62,6 +64,8 @@ func TestEncrypted(t *testing.T) {
 // TestEncryptedRejectsUnknownCertificate covers the point of the encrypted
 // transports: a server that cannot prove who it is does not get the question.
 func TestEncryptedRejectsUnknownCertificate(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: zone, TLS: true, DoH: true})
 	config := transport.Config{Timeout: fastConfig.Timeout, TLS: &tls.Config{}}
 
@@ -88,6 +92,8 @@ func TestEncryptedRejectsUnknownCertificate(t *testing.T) {
 // ADDR gives it: its certificate is checked against the address, rather than
 // the handshake refusing to start.
 func TestEncryptedWithoutName(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: zone, TLS: true, DoH: true})
 
 	tests := map[string]struct {
@@ -124,6 +130,8 @@ func TestEncryptedWithoutName(t *testing.T) {
 // TestEncryptedAgainstPlainServer covers what a walk over DoT or DoH usually
 // meets: a nameserver that only speaks DNS.
 func TestEncryptedAgainstPlainServer(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "example.com.", Zone: zone})
 	config := transport.Config{Timeout: fastConfig.Timeout, TLS: server.ClientTLS()}
 
@@ -142,6 +150,8 @@ func TestEncryptedAgainstPlainServer(t *testing.T) {
 }
 
 func TestEncryptedBadServer(t *testing.T) {
+	t.Parallel()
+
 	config := transport.Config{Timeout: fastConfig.Timeout}
 
 	for name, carrier := range map[string]transport.Transport{

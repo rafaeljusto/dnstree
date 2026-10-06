@@ -68,6 +68,8 @@ func outside(tb testing.TB) harness {
 // zone and goes on as soon as it has an address, so the sweep has to look up
 // the rest itself, or it quietly checks one server of two.
 func TestProbesReachNameserversNotLookedUp(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]resolver.Config{
 		"the serial sweep asks both":    {Serial: true},
 		"the recursion probe asks both": {CheckRecursion: true},
@@ -106,6 +108,8 @@ func TestProbesReachNameserversNotLookedUp(t *testing.T) {
 // zone above it spent a budget of 256 queries before a zone hosted on seven
 // providers' nameservers was asked at all.
 func TestAllLooksNameserversUpOnce(t *testing.T) {
+	t.Parallel()
+
 	tr, err := newResolver(t, outside(t), resolver.Config{All: true}).Resolve(t.Context(), "www.test", "A")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -140,6 +144,8 @@ func TestAllLooksNameserversUpOnce(t *testing.T) {
 // asked, and saying none of them answered sends somebody after servers that
 // would have.
 func TestSpentBudgetBlamesNoServer(t *testing.T) {
+	t.Parallel()
+
 	// The walk takes five: the root, then the root, net. and host.net. for
 	// the address of ns1.host.net., then test. Every budget short of that runs
 	// out somewhere along it.
@@ -165,6 +171,8 @@ func TestSpentBudgetBlamesNoServer(t *testing.T) {
 // up. Once the budget is spent the walks ask nothing, and one saying it gave
 // up is all the tree needs: the rest are lines a hostile zone chose to add.
 func TestSweepStopsAtTheBudget(t *testing.T) {
+	t.Parallel()
+
 	var root, test strings.Builder
 	root.WriteString(strings.Replace(outsideRootZone, "test.               IN NS   ns2.host.net.\n", "", 1))
 	test.WriteString(outsideTestZone)

@@ -13,6 +13,8 @@ import (
 )
 
 func TestWithSubnet(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name    string
 		prefix  netip.Prefix
@@ -72,6 +74,8 @@ func TestWithSubnet(t *testing.T) {
 // A query without EDNS0 is what a server that could not parse it is asked
 // again with, and smuggling the option back in would fail it a second time.
 func TestWithSubnetNeedsEDNS(t *testing.T) {
+	t.Parallel()
+
 	req, err := transport.NewQuery("www.test.", dns.TypeA, 0, false)
 	if err != nil {
 		t.Fatalf("NewQuery: %v", err)
@@ -85,6 +89,8 @@ func TestWithSubnetNeedsEDNS(t *testing.T) {
 
 // TestWithSubnetUnset covers the ordinary walk, which tells nobody where it is.
 func TestWithSubnetUnset(t *testing.T) {
+	t.Parallel()
+
 	req, err := transport.NewQuery("www.test.", dns.TypeA, transport.DefaultUDPSize, false)
 	if err != nil {
 		t.Fatalf("NewQuery: %v", err)
@@ -97,6 +103,8 @@ func TestWithSubnetUnset(t *testing.T) {
 }
 
 func TestExtended(t *testing.T) {
+	t.Parallel()
+
 	resp := new(dns.Msg)
 	resp.Pseudo = []dns.RR{
 		&dns.EDE{InfoCode: 15, ExtraText: "on the list"},
@@ -120,6 +128,8 @@ func TestExtended(t *testing.T) {
 }
 
 func TestExtendedUnregisteredCode(t *testing.T) {
+	t.Parallel()
+
 	resp := new(dns.Msg)
 	resp.Pseudo = []dns.RR{&dns.EDE{InfoCode: 64000, ExtraText: "something local"}}
 
@@ -138,6 +148,8 @@ func TestExtendedUnregisteredCode(t *testing.T) {
 }
 
 func TestEchoedSubnet(t *testing.T) {
+	t.Parallel()
+
 	resp := new(dns.Msg)
 	resp.Pseudo = []dns.RR{&dns.SUBNET{
 		Family: 1, Netmask: 24, Scope: 20, Address: netip.MustParseAddr("203.0.113.0"),
@@ -158,6 +170,8 @@ func TestEchoedSubnet(t *testing.T) {
 // TestEchoedSubnetAbsent covers the server that ignored the option, which is
 // most of them: nothing came back, so nothing was tailored.
 func TestEchoedSubnetAbsent(t *testing.T) {
+	t.Parallel()
+
 	if subnet := transport.EchoedSubnet(new(dns.Msg)); subnet != nil {
 		t.Errorf("got %+v, want nothing", subnet)
 	}
@@ -169,6 +183,8 @@ func TestEchoedSubnetAbsent(t *testing.T) {
 // TestWithNSID covers the question a query asks about the server itself: an
 // empty option, since only the answer carries an identifier.
 func TestWithNSID(t *testing.T) {
+	t.Parallel()
+
 	req, err := transport.NewQuery("www.test.", dns.TypeA, transport.DefaultUDPSize, false)
 	if err != nil {
 		t.Fatalf("NewQuery: %v", err)
@@ -190,6 +206,8 @@ func TestWithNSID(t *testing.T) {
 // TestWithNSIDNeedsEDNS covers the query that has nowhere to carry an option,
 // which is what a server that could not parse EDNS0 is asked again with.
 func TestWithNSIDNeedsEDNS(t *testing.T) {
+	t.Parallel()
+
 	req, err := transport.NewQuery("www.test.", dns.TypeA, 0, false)
 	if err != nil {
 		t.Fatalf("NewQuery: %v", err)
@@ -205,6 +223,8 @@ func TestWithNSIDNeedsEDNS(t *testing.T) {
 // reply whose bytes it alone chooses. It is drawn on a line of a tree, and
 // --format ascii promises that line stays printable.
 func TestEchoedNSID(t *testing.T) {
+	t.Parallel()
+
 	long := strings.Repeat("a", transport.MaxNSID+8)
 
 	for _, tt := range []struct {
@@ -247,6 +267,8 @@ func TestEchoedNSID(t *testing.T) {
 // that carried no option at all, and one that echoed the empty option a query
 // asks with.
 func TestEchoedNSIDAbsent(t *testing.T) {
+	t.Parallel()
+
 	empty := new(dns.Msg)
 	empty.Pseudo = []dns.RR{&dns.NSID{}}
 
@@ -261,6 +283,8 @@ func TestEchoedNSIDAbsent(t *testing.T) {
 // option is written out by hand, as fakens writes it: the library's own type
 // counts the agent in characters rather than octets, and packs it short.
 func TestReportChannel(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name string
 		wire string // the option's data, hex
@@ -297,6 +321,8 @@ func TestReportChannel(t *testing.T) {
 }
 
 func TestReportName(t *testing.T) {
+	t.Parallel()
+
 	question := trace.Question{Name: "broken.test", Type: "A"}
 	name, ok := transport.ReportName(question, 7, "a01.agent-domain.example")
 	// The example of RFC 9567 section 6.1.1, to the letter.

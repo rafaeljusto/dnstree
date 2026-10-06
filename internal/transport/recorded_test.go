@@ -15,6 +15,8 @@ import (
 )
 
 func TestRecorded(t *testing.T) {
+	t.Parallel()
+
 	udp := func(c transport.Config) transport.Transport { return transport.NewUDP(c) }
 	tcp := func(c transport.Config) transport.Transport { return transport.NewTCP(c) }
 
@@ -96,6 +98,8 @@ func TestRecorded(t *testing.T) {
 // TestRecordedLeavesOutWhatNeverLeft covers a connection that could not be
 // made: nothing was sent, so a capture holding the query would be a lie.
 func TestRecordedLeavesOutWhatNeverLeft(t *testing.T) {
+	t.Parallel()
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
@@ -117,6 +121,8 @@ func TestRecordedLeavesOutWhatNeverLeft(t *testing.T) {
 // resets the connection, the way some refuse a zone transfer: the query went
 // out, so the capture holds it, with nothing back.
 func TestRecordedKeepsWhatWasRefusedLate(t *testing.T) {
+	t.Parallel()
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %v", err)

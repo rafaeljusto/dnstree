@@ -12,6 +12,8 @@ import (
 // nameserver whose name does not exist, an alias whose target does not, and a
 // zone every server of which answers without authority for it.
 func TestDangling(t *testing.T) {
+	t.Parallel()
+
 	const rootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
 @                   IN NS   a.root-servers.net.
@@ -203,6 +205,8 @@ ns2.example IN AAAA 2001:db8::30
 // marked: on the referral that pointed at them, since it is the delegation that
 // was left behind, after every one of them was asked.
 func TestDanglingLameMarksTheReferral(t *testing.T) {
+	t.Parallel()
+
 	const comZone = `
 @       IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @       IN NS   ns
@@ -244,6 +248,8 @@ ns2.example IN A 192.0.2.4
 // TestDanglingForged covers a denial the chain of trust found forged: it is
 // nobody's word, so nothing is read off it as missing.
 func TestDanglingForged(t *testing.T) {
+	t.Parallel()
+
 	const exampleZone = `
 @     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @     IN NS   ns

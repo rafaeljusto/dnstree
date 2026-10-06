@@ -13,6 +13,8 @@ import (
 // that is not there comes back NOERROR, with a signed record at the name whose
 // types say NXNAME. Read as a NODATA it would be a name that exists.
 func TestCompactDenial(t *testing.T) {
+	t.Parallel()
+
 	for name, test := range map[string]struct {
 		zone     string
 		leaf     fakens.Behaviour
@@ -74,6 +76,8 @@ func TestCompactDenial(t *testing.T) {
 // TestCompactDenialUnsigned covers the same zone asked without signatures. It
 // owes such a client the NXDOMAIN, there being no record it could read instead.
 func TestCompactDenialUnsigned(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := signedZoneAs(t, exampleZone, fakens.DenialCompact, fakens.Behaviour{})
 	cfg.DNSSEC = false
 

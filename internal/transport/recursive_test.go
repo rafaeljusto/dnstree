@@ -24,6 +24,8 @@ www   IN A    192.0.2.10
 `
 
 func TestAsk(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "test.", Zone: recursiveZone})
 	carrier := transport.NewUDP(transport.Config{})
 
@@ -50,6 +52,8 @@ func TestAsk(t *testing.T) {
 // TestAskSilent covers the resolver being the thing that is broken, which says
 // nothing about the walk and so is reported rather than returned as an error.
 func TestAskSilent(t *testing.T) {
+	t.Parallel()
+
 	carrier := transport.NewUDP(transport.Config{Timeout: 200 * time.Millisecond})
 
 	// Port 1 is reserved and nothing answers there.
@@ -66,6 +70,8 @@ func TestAskSilent(t *testing.T) {
 // TestRecheck covers asking again with checking disabled, which is what tells
 // a resolver that failed validation from one that could not get an answer.
 func TestRecheck(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "test.", Zone: recursiveZone,
 		Behaviour: fakens.Behaviour{ServFailUnlessCD: true}})
 	carrier := transport.NewUDP(transport.Config{})
@@ -94,6 +100,8 @@ func TestRecheck(t *testing.T) {
 }
 
 func TestAskUnknownType(t *testing.T) {
+	t.Parallel()
+
 	carrier := transport.NewUDP(transport.Config{})
 	if _, err := transport.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:53"),
 		trace.Question{Name: "www.test", Type: "NONSENSE", Class: "IN"}, false, netip.Prefix{}); err == nil {
@@ -102,6 +110,8 @@ func TestAskUnknownType(t *testing.T) {
 }
 
 func TestSystemFrom(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		file string
 		want netip.AddrPort
@@ -151,6 +161,8 @@ _dns  IN SVCB 6 dns.test. port=853
 `
 
 func TestDiscover(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "resolver.arpa.", Zone: ddrZone})
 	carrier := transport.NewUDP(transport.Config{})
 
@@ -186,6 +198,8 @@ func TestDiscover(t *testing.T) {
 // TestDiscoverNothing covers a resolver that answers and designates nothing,
 // which is the common case and is not a failure.
 func TestDiscoverNothing(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "test.", Zone: recursiveZone})
 	carrier := transport.NewUDP(transport.Config{})
 
@@ -196,6 +210,8 @@ func TestDiscoverNothing(t *testing.T) {
 }
 
 func TestDiscoverSilent(t *testing.T) {
+	t.Parallel()
+
 	carrier := transport.NewUDP(transport.Config{Timeout: 200 * time.Millisecond})
 	if found := transport.Discover(t.Context(), carrier, nil, netip.MustParseAddrPort("127.0.0.1:1")); found.Err == "" {
 		t.Errorf("got %+v, want the silence carried in the result", found)
@@ -206,6 +222,8 @@ func TestDiscoverSilent(t *testing.T) {
 // came, the offers that did not fit would be offers never made, so it is asked
 // again over TCP, and without TCP it says it could not tell.
 func TestDiscoverTruncated(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "resolver.arpa.", Zone: ddrZone,
 		Behaviour: fakens.Behaviour{TruncateUDP: true}})
 	carrier := transport.NewUDP(transport.Config{})
@@ -224,6 +242,8 @@ func TestDiscoverTruncated(t *testing.T) {
 // TestLookupTruncated covers a policy too long for a datagram, which is asked
 // again over TCP rather than read short.
 func TestLookupTruncated(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "example.test.", Zone: `
 @     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @     IN NS   ns
@@ -255,6 +275,8 @@ func (s *silent) Exchange(context.Context, *dns.Msg, netip.AddrPort, string) (*d
 // TestLookupSilent covers a resolver whose answer never arrives over UDP: it is
 // asked again as many times as retries allows, and then over TCP.
 func TestLookupSilent(t *testing.T) {
+	t.Parallel()
+
 	server := fakens.New(t, fakens.Config{Origin: "example.test.", Zone: `
 @     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
 @     IN NS   ns

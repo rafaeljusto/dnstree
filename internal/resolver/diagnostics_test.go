@@ -62,6 +62,8 @@ func service(tb testing.TB, dnssec bool, leaf fakens.Behaviour) (harness, resolv
 // A code that does not claim the answer was withheld changes nothing about how
 // the hop is read; it is only carried, for whoever is reading.
 func TestExtendedErrorIsCarried(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{
 		Extended: &fakens.ExtendedError{Code: 3, Text: "answer from the shelf"},
 	})
@@ -92,6 +94,8 @@ func TestExtendedErrorIsCarried(t *testing.T) {
 // REFUSED with a code saying the answer was withheld is somebody standing
 // between the question and the zone, and the two are not the same finding.
 func TestWithheldAnswerIsNotLame(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{
 		Refuse:   true,
 		Extended: &fakens.ExtendedError{Code: 18, Text: "not from here"},
@@ -126,6 +130,8 @@ func TestWithheldAnswerIsNotLame(t *testing.T) {
 // TestRefusedWithoutExtendedIsStillLame guards the other side of it: nothing
 // changes for a server that refuses and says nothing about why.
 func TestRefusedWithoutExtendedIsStillLame(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{Refuse: true})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -148,6 +154,8 @@ func TestRefusedWithoutExtendedIsStillLame(t *testing.T) {
 // TestClientSubnetIsEchoed covers a server that tailors its answer by network:
 // what comes back says how much of the prefix it actually used.
 func TestClientSubnetIsEchoed(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{EchoSubnet: true, SubnetScope: 24})
 	cfg.Subnet = netip.MustParsePrefix("203.0.113.0/24")
 
@@ -180,6 +188,8 @@ func TestClientSubnetIsEchoed(t *testing.T) {
 // server that echoes nothing tailored nothing, so what came back is what it
 // tells everybody, and the reason for asking went unanswered.
 func TestClientSubnetIgnored(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 	cfg.Subnet = netip.MustParsePrefix("203.0.113.0/24")
 
@@ -204,6 +214,8 @@ func TestClientSubnetIgnored(t *testing.T) {
 // which network the question came from is a thing to ask for, never a thing to
 // get by accident.
 func TestNoSubnetIsSent(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{EchoSubnet: true, SubnetScope: 24})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -218,6 +230,8 @@ func TestNoSubnetIsSent(t *testing.T) {
 // TestServiceParametersAreDecoded covers reading an HTTPS record for what it
 // offers rather than only printing it.
 func TestServiceParametersAreDecoded(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "svc.test", "HTTPS")
@@ -247,6 +261,8 @@ func TestServiceParametersAreDecoded(t *testing.T) {
 // TestServiceWithoutECH covers the record that publishes none, which must not
 // be reported as publishing one.
 func TestServiceWithoutECH(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "bare.test", "HTTPS")
@@ -270,6 +286,8 @@ func TestServiceWithoutECH(t *testing.T) {
 // this answer; whatever can rewrite the answer can take it out again, and the
 // client then asks in the clear without knowing anything went missing.
 func TestUnsignedECHIsWarnedAbout(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "svc.test", "HTTPS")
@@ -284,6 +302,8 @@ func TestUnsignedECHIsWarnedAbout(t *testing.T) {
 // TestSignedECHIsNotWarnedAbout covers the case the warning exists for the sake
 // of: a signed answer, where stripping the configuration would have shown.
 func TestSignedECHIsNotWarnedAbout(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, true, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "svc.test", "HTTPS")
@@ -302,6 +322,8 @@ func TestSignedECHIsNotWarnedAbout(t *testing.T) {
 // TestBogusECHIsWarnedAbout covers a signed zone whose answer does not verify,
 // which is exactly when a reader must not take the configuration on trust.
 func TestBogusECHIsWarnedAbout(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, true, fakens.Behaviour{BadSignature: true})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "svc.test", "HTTPS")
@@ -317,6 +339,8 @@ func TestBogusECHIsWarnedAbout(t *testing.T) {
 // all. The subnet rides in an EDNS0 option, so the query that goes out without
 // EDNS0 has to go out without the option too, rather than failing twice.
 func TestSubnetSurvivesTheEDNSFallback(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{FormErrEDNS: true})
 	cfg.Subnet = netip.MustParsePrefix("203.0.113.0/24")
 	cfg.Transport = h.carry(transport.NewUDP(fast))
@@ -345,6 +369,8 @@ func warned(tr *trace.Trace, text string) bool {
 // behind an anycast address apart. Two hops to the same address are the same
 // server as far as everything else in a trace can see.
 func TestNSIDIsRecorded(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{NSID: "fra2"})
 	cfg.NSID = true
 
@@ -365,6 +391,8 @@ func TestNSIDIsRecorded(t *testing.T) {
 // TestNSIDNotAsked covers the default. A server answers with an identifier
 // because it was asked for one, and a walk that did not ask gets none.
 func TestNSIDNotAsked(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{NSID: "fra2"})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -380,6 +408,8 @@ func TestNSIDNotAsked(t *testing.T) {
 // them below the root. The hop reads as it would without the flag, rather than
 // as a hop that went wrong.
 func TestNSIDUnpublished(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 	cfg.NSID = true
 
@@ -401,6 +431,8 @@ func TestNSIDUnpublished(t *testing.T) {
 // The bytes are the server's own choice, and they end up on a line of a tree
 // that has a charset to keep, so what is not printable stays hex.
 func TestNSIDIsNotTakenAtItsWord(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{NSID: "\x00\x1b[2Jfra2"})
 	cfg.NSID = true
 
@@ -423,6 +455,8 @@ func TestNSIDIsNotTakenAtItsWord(t *testing.T) {
 // nothing below it can shorten that: the answer's own TTL says when a record
 // change is everywhere, and this says when a nameserver change is.
 func TestDelegationCarriesItsLifetime(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -448,6 +482,8 @@ func TestDelegationCarriesItsLifetime(t *testing.T) {
 // answer says on the records themselves how long it may be cached; a name that
 // is not there has none to say it on, and the zone's SOA says it instead.
 func TestDenialCarriesTheZonesSOA(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 
 	for name, question := range map[string]struct{ name, qtype string }{
@@ -479,6 +515,8 @@ func TestDenialCarriesTheZonesSOA(t *testing.T) {
 // TestAnswerCarriesNoSOA covers the other half: an answer carries its lifetime
 // on the records, so reading a denial's SOA onto it would be inventing one.
 func TestAnswerCarriesNoSOA(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -496,6 +534,8 @@ func TestAnswerCarriesNoSOA(t *testing.T) {
 // itself, the serial every one of its servers is on — and a reader that is not
 // a person has to be able to tell which hop was which.
 func TestEveryHopSaysWhatItAsked(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, true, fakens.Behaviour{})
 	cfg.CheckNS, cfg.Serial = true, true
 
@@ -538,6 +578,8 @@ func TestEveryHopSaysWhatItAsked(t *testing.T) {
 // to arrive in. Bytes alone say nothing; bytes against the buffer the query
 // advertised say whether a server is one record away from truncating.
 func TestHopsCarryWhatArrived(t *testing.T) {
+	t.Parallel()
+
 	h, cfg := service(t, false, fakens.Behaviour{})
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
@@ -583,6 +625,8 @@ func TestHopsCarryWhatArrived(t *testing.T) {
 // datagram to fit in, whatever the one that failed before it advertised, and
 // reporting the buffer there would call every large answer tight.
 func TestAnswerOverTCPIsBoundedByNothing(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{
 		Name: "a.root-servers.net.", Origin: ".", Zone: serviceRootZone, Declared: "192.0.2.1",
@@ -618,6 +662,8 @@ func TestAnswerOverTCPIsBoundedByNothing(t *testing.T) {
 // answer that arrived whole and had almost no room left. Nothing is wrong with
 // it today, and one more record makes it a second round trip for everybody.
 func TestAnswerThatBarelyFitsReadsAsTight(t *testing.T) {
+	t.Parallel()
+
 	hierarchy := fakens.NewHierarchy(t)
 	root := hierarchy.Add(fakens.Config{
 		Name: "a.root-servers.net.", Origin: ".", Zone: serviceRootZone, Declared: "192.0.2.1",
