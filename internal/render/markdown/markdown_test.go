@@ -149,3 +149,27 @@ func TestRenderEmptyRecord(t *testing.T) {
 		t.Errorf("got\n%s\nwant %q in it", got.String(), want)
 	}
 }
+
+// TestRenderFailure covers a resolver that answered SERVFAIL where the walk
+// did not: the cell says what it most likely came of.
+func TestRenderFailure(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "example.", Type: "A"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: ".", Kind: trace.KindAnswer, Rcode: "NOERROR", Server: trace.Server{IP: netip.MustParseAddr("192.0.2.1")},
+			Records: []trace.RR{{Name: "example.", Type: "A", Data: "192.0.2.10"}},
+		}}},
+		Resolvers: []*trace.Resolver{{
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53")}, Rcode: "SERVFAIL",
+			Unchecked: &trace.Resolver{Rcode: "NOERROR"}, Failed: trace.FailedValidation,
+		}},
+	}
+
+	var got bytes.Buffer
+	if err := markdown.Render(&got, tr, nil); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if want := "| 192.0.2.53 | answered SERVFAIL: fails validation |"; !strings.Contains(got.String(), want) {
+		t.Errorf("got\n%s\nwant %q in it", got.String(), want)
+	}
+}

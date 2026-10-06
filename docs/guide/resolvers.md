@@ -3,6 +3,7 @@
 Holding the walk against the recursive resolvers people actually use.
 
 - [Against your resolver](#against-your-resolver)
+- [When a resolver answers SERVFAIL](#when-a-resolver-answers-servfail)
 - [Asking from several places at once](#asking-from-several-places-at-once)
 - [Keeping an answer longer than the zone allows](#keeping-an-answer-longer-than-the-zone-allows)
 - [Asking from somewhere else](#asking-from-somewhere-else)
@@ -32,6 +33,56 @@ differs: 192.168.1.1 answers 10.4.2.9, the walk found 203.0.113.80
 Agreement is worth no room and gets none. `--no-compare` turns the whole thing
 off, which is also the only way to keep the name being resolved from reaching a
 resolver at all.
+
+## When a resolver answers SERVFAIL
+
+A SERVFAIL says something went wrong and nothing about what. When a resolver
+answers one where the walk found an answer, it is asked once more, straight
+away, with checking disabled
+([RFC 4035](https://www.rfc-editor.org/rfc/rfc4035)), and the line under the
+tree says what the failure most likely came of:
+
+```
+$ dnstree --resolver 1.1.1.1 --explain dnssec-failed.org A
+...
+servfail: 1.1.1.1 answers SERVFAIL where the walk found 96.99.227.255: with checking disabled it answers, so it fails validation; --dnssec checks the chain the walk took (it says: DNSKEY Missing (9): no SEP matching the DS found for dnssec-failed.org.)
+✔ answered in 1.4s · resolver in 488ms (SERVFAIL) · 6 queries · 5 servers
+
+· dnssec-failed.org. A is 96.99.227.255, answered by dns105.comcast.net. for dnssec-failed.org.
+· a cache may hold this answer for 5 minutes, and the delegation to dnssec-failed.org. for 1 hour
+· 1.1.1.1 answers SERVFAIL, and answers once asked with checking disabled, so it fails validation; the walk did not check the chain, which --dnssec does (it says: DNSKEY Missing (9): no SEP matching the DS found for dnssec-failed.org.)
+```
+
+With `--dnssec` the walk checks the chain too, and the line says whose problem
+it is:
+
+```
+$ dnstree --resolver 1.1.1.1 --dnssec dnssec-failed.org A
+...
+servfail: 1.1.1.1 answers SERVFAIL where the walk found 96.99.227.255: it fails validation as the walk does, so the zone's chain of trust is what to fix (it says: DNSKEY Missing (9): no SEP matching the DS found for dnssec-failed.org.)
+✘ bogus in 4.5s · resolver in 232ms (SERVFAIL) · 12 queries · 5 servers
+```
+
+| The line says | When |
+| --- | --- |
+| fails validation as the walk does | it answers with checking disabled, and the walk found the chain broken: the zone is what to fix |
+| fails validation | it answers with checking disabled, or its extended error says validation failed, where the walk found the chain intact: look at the resolver's clock, its trust anchor, or an algorithm it does not know |
+| serving a failure it cached | it still fails, and its extended error says the failure is cached (code 13) |
+| could not get an answer the walk got | it still fails with checking disabled and says nothing of DNSSEC: a firewall, a nameserver it cannot reach, one that answers only some networks |
+
+> [!NOTE]
+> Every reading is a suggestion. A cached failure and a failing network look
+> much alike from outside, and the second question can land on a fresh cache
+> or another machine behind the same address. A resolver that ignores checking
+> disabled fails twice; its extended error is then all that tells validation
+> apart, and the line says it ignored the bit.
+
+With several `--resolver`s each one gets its own line, which shows quickly
+whether one resolver fails or all of them do. `--format json` carries the second
+answer as `unchecked` and the reading as `failed`, and `--format openmetrics`
+as `dnstree_resolver_failed`. A resolver that answers while the walk finds the
+chain broken is the other way round — it does not validate — and is not read
+here.
 
 ## Asking from several places at once
 

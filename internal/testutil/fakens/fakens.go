@@ -127,6 +127,11 @@ type Behaviour struct {
 	// server whose software or backend cannot serve a newer type does. Zero
 	// answers every type.
 	ServFailType uint16
+
+	// ServFailUnlessCD answers SERVFAIL to a query without checking disabled,
+	// the way a validating resolver answers a name whose chain it finds
+	// broken. With CD set it answers as it would have.
+	ServFailUnlessCD bool
 }
 
 // Cookies is how a server answers a DNS cookie.
@@ -204,6 +209,7 @@ type Query struct {
 	Proto   string // udp or tcp
 	UDPSize uint16 // zero when the query carried no EDNS0
 	DO      bool
+	CD      bool
 	Cookie  string // the cookie the query carried, hex encoded
 }
 
@@ -415,6 +421,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		Proto:   dnsutil.Network(w),
 		UDPSize: req.UDPSize,
 		DO:      req.Security,
+		CD:      req.CheckingDisabled,
 		Cookie:  sentCookie(req),
 	})
 	s.mu.Unlock()
@@ -461,6 +468,8 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	case s.behaviour.Refuse:
 		reply.Rcode = dns.RcodeRefused
 	case s.behaviour.ServFailType != 0 && qtype == s.behaviour.ServFailType:
+		reply.Rcode = dns.RcodeServerFailure
+	case s.behaviour.ServFailUnlessCD && !req.CheckingDisabled:
 		reply.Rcode = dns.RcodeServerFailure
 	case s.behaviour.Lame:
 		// NOERROR, no AA, nothing to follow: the server is not serving this zone.

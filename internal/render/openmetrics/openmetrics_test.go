@@ -286,6 +286,32 @@ func TestRenderCAA(t *testing.T) {
 	}
 }
 
+// TestRenderFailed covers what a resolver's SERVFAIL came of, as the state
+// set a monitor alerts on, and nothing for one that answered.
+func TestRenderFailed(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A"},
+		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+		Resolvers: []*trace.Resolver{{
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53")}, Rcode: "SERVFAIL", Failed: trace.FailedValidation,
+		}, {
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.54")}, Rcode: "NOERROR",
+		}},
+	}
+	out := render(t, tr)
+	valid(t, out)
+	for _, reason := range []string{"bogus", "validation", "cached", "unreachable"} {
+		want := fmt.Sprintf(`dnstree_resolver_failed{name="www.test.",type="A",resolver="192.0.2.53",reason=%q} %s`,
+			reason, map[bool]string{true: "1", false: "0"}[reason == "validation"])
+		if !strings.Contains(out, want) {
+			t.Errorf("got\n%s\nwant %s", out, want)
+		}
+	}
+	if strings.Contains(out, `dnstree_resolver_failed{name="www.test.",type="A",resolver="192.0.2.54"`) {
+		t.Errorf("got\n%s\nwant nothing for the resolver that answered", out)
+	}
+}
+
 // TestRenderEscapes covers names the servers wrote, which must not be able to
 // end a label value early or start a line of their own.
 func TestRenderEscapes(t *testing.T) {

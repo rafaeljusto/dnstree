@@ -188,6 +188,109 @@ func TestCompareJudgesEachOnItsOwn(t *testing.T) {
 	}
 }
 
+func TestCompareFailed(t *testing.T) {
+	// failing is a resolver that answered SERVFAIL, saying ede, and then
+	// again as it answered with checking disabled.
+	failing := func(again *trace.Resolver, ede ...uint16) *trace.Resolver {
+		answer := answerOf("SERVFAIL")
+		for _, code := range ede {
+			answer.Extended = append(answer.Extended, trace.ExtendedError{Code: code})
+		}
+		answer.Unchecked = again
+		return answer
+	}
+	// chained is the walk with its answer at a chain of trust in state.
+	chained := func(state trace.DNSSECState, answer *trace.Resolver) *trace.Trace {
+		tr := traceOf("NOERROR", []string{"192.0.2.10"}, answer)
+		tr.Root.Children[0].DNSSEC = &trace.DNSSECStatus{State: state}
+		return tr
+	}
+
+	for _, tt := range []struct {
+		name string
+		tr   *trace.Trace
+		want trace.Failure
+	}{{
+		name: "it answers with checking disabled, where the walk found the chain secure",
+		tr:   chained(trace.Secure, failing(answerOf("NOERROR", "192.0.2.10"))),
+		want: trace.FailedValidation,
+	}, {
+		name: "it answers with checking disabled, where the walk did not check",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, failing(answerOf("NOERROR", "192.0.2.10"))),
+		want: trace.FailedValidation,
+	}, {
+		name: "it answers with checking disabled, where the walk found the chain broken",
+		tr:   chained(trace.Bogus, failing(answerOf("NOERROR", "192.0.2.10"))),
+		want: trace.FailedBogus,
+	}, {
+		// A resolver that ignores CD fails again, but its extended error
+		// still says it was validation.
+		name: "it ignores checking disabled, and says the signature expired",
+		tr:   chained(trace.Secure, failing(answerOf("SERVFAIL"), 7)),
+		want: trace.FailedValidation,
+	}, {
+		name: "it still fails, and says it is a failure it cached",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, failing(answerOf("SERVFAIL"), 13)),
+		want: trace.FailedCached,
+	}, {
+		name: "it still fails, and says nothing of why",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, failing(answerOf("SERVFAIL"))),
+		want: trace.FailedUnreachable,
+	}, {
+		name: "it still fails, and says no authority could be reached",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, failing(answerOf("SERVFAIL"), 22)),
+		want: trace.FailedUnreachable,
+	}, {
+		name: "it went silent when asked again",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, failing(&trace.Resolver{Err: "i/o timeout"})),
+		want: "",
+	}, {
+		name: "it refused when asked again",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, failing(answerOf("REFUSED"))),
+		want: "",
+	}, {
+		// Its own word is evidence enough, whatever the second answer was.
+		name: "it went silent when asked again, having said the signature expired",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, failing(&trace.Resolver{Err: "i/o timeout"}, 7)),
+		want: trace.FailedValidation,
+	}, {
+		name: "it was never asked again",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, answerOf("SERVFAIL")),
+		want: "",
+	}, {
+		name: "it answered the first time",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, answerOf("NOERROR", "192.0.2.10")),
+		want: "",
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			recursive.Compare(tt.tr)
+			if got := tt.tr.Resolvers[0].Failed; got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+			if got := tt.tr.Resolvers[0].Match; tt.tr.Resolvers[0].Rcode == "SERVFAIL" && got != "" {
+				t.Errorf("got match %q, want a failure never read as a difference", got)
+			}
+		})
+	}
+}
+
+// TestCompareFailedWithoutResult covers a walk that failed too: a resolver
+// failing alike is no surprise, and there is nothing to read it against.
+func TestCompareFailedWithoutResult(t *testing.T) {
+	answer := answerOf("SERVFAIL")
+	answer.Unchecked = answerOf("NOERROR", "192.0.2.10")
+	tr := &trace.Trace{
+		Question:  trace.Question{Name: "www.test.", Type: "A", Class: "IN"},
+		Root:      &trace.Step{Zone: ".", Kind: trace.KindZone},
+		Resolvers: []*trace.Resolver{answer},
+	}
+
+	recursive.Compare(tr)
+	if tr.Resolvers[0].Failed != "" {
+		t.Errorf("got %q, want no reading", tr.Resolvers[0].Failed)
+	}
+}
+
 // withTTL is the same records, every one of them kept for ttl seconds.
 func withTTL(records []trace.RR, ttl uint32) []trace.RR {
 	for i := range records {

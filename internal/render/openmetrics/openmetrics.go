@@ -245,7 +245,7 @@ func resolvers(m *metrics, tr *trace.Trace) {
 		m.sample("dnstree_answer_ttl_seconds", strconv.FormatUint(uint64(zone), 10))
 	}
 
-	var timed, compared, kept []*trace.Resolver
+	var timed, compared, kept, failed []*trace.Resolver
 	for _, answer := range tr.Resolvers {
 		if answer == nil || !answer.Server.IP.IsValid() || answer.Err != "" {
 			continue
@@ -253,6 +253,9 @@ func resolvers(m *metrics, tr *trace.Trace) {
 		timed = append(timed, answer)
 		if answer.Match != "" {
 			compared = append(compared, answer)
+		}
+		if answer.Failed != "" {
+			failed = append(failed, answer)
 		}
 		if trace.TTL(answer.Records, tr.Question.Type) > 0 {
 			kept = append(kept, answer)
@@ -276,6 +279,17 @@ func resolvers(m *metrics, tr *trace.Trace) {
 		for _, answer := range kept {
 			m.sample("dnstree_resolver_ttl_seconds", strconv.FormatUint(uint64(trace.TTL(answer.Records, tr.Question.Type)), 10),
 				label{"resolver", answer.Server.IP.String()})
+		}
+	}
+	if len(failed) > 0 {
+		m.family("dnstree_resolver_failed", "", "what a recursive server's SERVFAIL most likely came of, where the walk found an answer")
+		for _, answer := range failed {
+			for _, value := range []trace.Failure{
+				trace.FailedBogus, trace.FailedValidation, trace.FailedCached, trace.FailedUnreachable,
+			} {
+				m.sample("dnstree_resolver_failed", flag(value == answer.Failed),
+					label{"resolver", answer.Server.IP.String()}, label{"reason", string(value)})
+			}
 		}
 	}
 }

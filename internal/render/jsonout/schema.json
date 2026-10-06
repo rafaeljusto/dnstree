@@ -411,6 +411,15 @@
           "type": "string",
           "enum": ["longer", "stale"]
         },
+        "unchecked": {
+          "description": "The same question asked again with checking disabled (RFC 4035), present only where it answered SERVFAIL. A resolver that answers then is one whose validation failed.",
+          "$ref": "#/$defs/resolver"
+        },
+        "failed": {
+          "description": "What its SERVFAIL most likely came of, read against the walk, absent where it did not fail or the walk found no answer: bogus, validation failed on a chain the walk found broken too; validation, it failed validation where the walk did not; cached, a failure it says it is serving from its cache; unreachable, it still failed with checking disabled and said nothing of DNSSEC. A suggestion, not a proof.",
+          "type": "string",
+          "enum": ["bogus", "validation", "cached", "unreachable"]
+        },
         "ddr": { "$ref": "#/$defs/discovery" }
       }
     },

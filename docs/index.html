@@ -527,7 +527,8 @@ footer a:hover{color:var(--ink)}
       <p class="section-lede">
         <code>--explain</code> writes the walk out in sentences under the tree: what it came
         to, how long it stays cached, whether the chain of trust held, whether a name
-        points at something nobody holds, and whether a resolver agreed.
+        points at something nobody holds, and whether a resolver agreed — or, where it
+        answered SERVFAIL, why.
       </p>
 
       <div class="term">
@@ -537,11 +538,13 @@ footer a:hover{color:var(--ink)}
         </div>
         <div class="term-body">
 <pre><span class="dim">...</span>
-<span class="bad">&#10008;</span> <span class="dim">bogus in 4.5s · resolver in 453ms (SERVFAIL) · 12 queries · 5 servers</span>
+<span class="warn">servfail: 8.8.8.8 answers SERVFAIL where the walk found 96.99.227.255: it fails validation as the walk does, so the zone's chain of trust is what to fix (it says: DNSKEY Missing (9): No DNSKEY matches DS RRs of dnssec-failed.org)</span>
+<span class="bad">&#10008;</span> <span class="dim">bogus in 4.5s · resolver in 422ms (SERVFAIL) · 12 queries · 5 servers</span>
 
 <span class="dim">·</span> dnssec-failed.org. A is 96.99.227.255, answered by dns101.comcast.net. for dnssec-failed.org.
 <span class="dim">·</span> a cache may hold this answer for 5 minutes, and the delegation to dnssec-failed.org. for 1 hour
-<span class="dim">·</span> <span class="bad">the chain of trust breaks at dnssec-failed.org.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name</span></pre>
+<span class="dim">·</span> <span class="bad">the chain of trust breaks at dnssec-failed.org.: no DNSKEY of the zone matches the DS its parent published, so a resolver that validates answers SERVFAIL for this name</span>
+<span class="dim">·</span> 8.8.8.8 answers SERVFAIL because it fails validation, as the walk does: it is doing its job, and the broken chain is what to fix (it says: DNSKEY Missing (9): No DNSKEY matches DS RRs of dnssec-failed.org)</pre>
         </div>
       </div>
 

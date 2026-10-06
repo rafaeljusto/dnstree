@@ -229,6 +229,15 @@ type Resolver struct {
 	// long the zone allows, empty where the TTLs say nothing either way.
 	Kept Kept
 
+	// Unchecked is the same question asked again with checking disabled (RFC
+	// 4035), nil unless the resolver answered SERVFAIL. A resolver that answers
+	// once told not to validate is one whose validation failed.
+	Unchecked *Resolver
+
+	// Failed is what its SERVFAIL most likely came of, read against the walk,
+	// empty where it did not fail or the walk has nothing to read it against.
+	Failed Failure
+
 	// DDR is what the server said of its encrypted selves, nil where --ddr did
 	// not ask.
 	DDR *Discovery
@@ -296,6 +305,31 @@ const (
 	KeptStale Kept = "stale"
 )
 
+// Failure is what a resolver's SERVFAIL most likely came of, read from asking
+// again with checking disabled, what it said of its own answer and what the
+// walk found. From outside, a cached failure and a failing network look much
+// alike, so it suggests a cause and proves none.
+type Failure string
+
+// What a SERVFAIL came to.
+const (
+	// FailedBogus is a resolver failing validation on a chain the walk found
+	// broken too: the resolver is right, and the zone is what to fix.
+	FailedBogus Failure = "bogus"
+
+	// FailedValidation is a resolver failing validation where the walk did
+	// not: its clock, its trust anchor or an algorithm it does not know.
+	FailedValidation Failure = "validation"
+
+	// FailedCached is a resolver still serving a failure it had earlier, by
+	// its own account (RFC 8914 code 13).
+	FailedCached Failure = "cached"
+
+	// FailedUnreachable is a resolver failing with checking disabled too, and
+	// saying nothing of DNSSEC: it could not get an answer the walk got.
+	FailedUnreachable Failure = "unreachable"
+)
+
 // ExtendedError is what a server said about its own answer, in the codes of
 // RFC 8914. An rcode says what happened; this says why, and it is the only
 // thing in a reply that tells an answer withheld apart from an answer that is
@@ -323,6 +357,17 @@ const MaxExtraText = 64
 func (e ExtendedError) Withheld() bool {
 	switch e.Code {
 	case 4, 15, 16, 17, 18: // forged, blocked, censored, filtered, prohibited
+		return true
+	}
+	return false
+}
+
+// Validation reports whether the code says the answer failed DNSSEC
+// validation, which is how a resolver that ignores checking disabled still
+// says why it failed.
+func (e ExtendedError) Validation() bool {
+	switch e.Code {
+	case 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 25, 27:
 		return true
 	}
 	return false

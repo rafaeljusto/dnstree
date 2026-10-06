@@ -119,6 +119,13 @@ func TestSchemaEnums(t *testing.T) {
 			def: "resolver", property: "kept",
 			want: []string{string(trace.KeptLonger), string(trace.KeptStale)},
 		},
+		"what a resolver's failure came of": {
+			def: "resolver", property: "failed",
+			want: []string{
+				string(trace.FailedBogus), string(trace.FailedValidation),
+				string(trace.FailedCached), string(trace.FailedUnreachable),
+			},
+		},
 		"the shapes --check-edns asks in": {
 			def: "edns", property: "kind",
 			want: []string{

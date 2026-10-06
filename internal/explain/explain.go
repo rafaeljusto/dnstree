@@ -131,6 +131,7 @@ func Findings(tr *trace.Trace) []Finding {
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
 	}
+	findings = append(findings, failures(tr)...)
 	findings = append(findings, designations(tr)...)
 	return findings
 }
@@ -1026,6 +1027,60 @@ func comparison(tr *trace.Trace) (Finding, bool) {
 	return Finding{Topic: Resolver, Level: Warn,
 		Text: list(differing) + " answered this question differently, " +
 			"which a name whose answer is tailored to where it is asked from does honestly, and nothing else should"}, true
+}
+
+// failures say why each resolver that answered SERVFAIL, where the walk did
+// not, most likely did. They suggest a cause and claim none: from outside, a
+// cached failure and a failing network look much alike.
+func failures(tr *trace.Trace) []Finding {
+	var findings []Finding
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Failed == "" {
+			continue
+		}
+		who := at2(answer.Server)
+		var finding Finding
+		switch answer.Failed {
+		case trace.FailedBogus:
+			finding = Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s answers SERVFAIL because it fails validation, as the walk does: it is doing its job, and the broken chain is what to fix",
+				who)}
+		case trace.FailedValidation:
+			text := fmt.Sprintf("%s answers SERVFAIL, and answers once asked with checking disabled, so it fails validation", who)
+			switch again := answer.Unchecked; {
+			case again == nil || again.Err != "":
+				text = fmt.Sprintf("%s answers SERVFAIL and says it failed validation", who)
+			case again.Rcode == "SERVFAIL":
+				text = fmt.Sprintf("%s answers SERVFAIL and says it failed validation, even asked with checking disabled, which it ignores", who)
+			}
+			switch chain := tr.Chain(); {
+			case chain == nil:
+				text += "; the walk did not check the chain, which --dnssec does"
+			case chain.DNSSEC.State == trace.Indeterminate:
+				text += "; the walk could not check the chain either"
+			case chain.DNSSEC.State == trace.Insecure:
+				text += "; the walk found the chain insecure, so the resolver may hold a DS or a trust anchor the walk did not"
+			default:
+				text += fmt.Sprintf("; the walk found the chain %s, so the resolver's clock, its trust anchor or an algorithm it does not know is the likely cause",
+					chain.DNSSEC.State)
+			}
+			finding = Finding{Topic: Resolver, Level: Warn, Text: text}
+		case trace.FailedCached:
+			finding = Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+				"%s answers SERVFAIL out of a failure it cached, by its own account, so it goes on failing until that runs out, whatever the zone does now",
+				who)}
+		case trace.FailedUnreachable:
+			finding = Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+				"%s answers SERVFAIL even asked with checking disabled, so it could not get an answer the walk got; "+
+					"a firewall, a nameserver reachable over only one address family or one that answers only some networks would do this",
+				who)}
+		}
+		if len(answer.Extended) > 0 {
+			finding.Text += fmt.Sprintf(" (it says: %s)", answer.Extended[0])
+		}
+		findings = append(findings, finding)
+	}
+	return findings
 }
 
 // designations are what --ddr learned of each resolver. An offer is only a

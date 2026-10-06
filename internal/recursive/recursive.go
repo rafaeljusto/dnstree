@@ -41,11 +41,14 @@ func compare(tr *trace.Trace, result *trace.Step, answer *trace.Resolver) {
 	}
 
 	// A resolver that answered REFUSED or SERVFAIL did not resolve anything,
-	// so there is no answer of its own to hold against the walk's. The rcode
-	// is already on the summary line and says the whole of it; calling that a
-	// difference would be reading a broken resolver as a disagreeing one.
+	// so there is no answer of its own to hold against the walk's. Calling
+	// that a difference would be reading a broken resolver as a disagreeing
+	// one; a SERVFAIL is read for why it failed instead.
 	switch answer.Rcode {
 	case "NOERROR", "NXDOMAIN":
+	case "SERVFAIL":
+		answer.Failed = failed(tr, answer)
+		return
 	default:
 		return
 	}
@@ -86,6 +89,47 @@ func compare(tr *trace.Trace, result *trace.Step, answer *trace.Resolver) {
 		answer.Kept = trace.KeptStale
 	}
 }
+
+// failed is what a SERVFAIL most likely came of, where the walk found an
+// answer. Asked again with checking disabled, a resolver that answers is one
+// whose validation failed; one that still fails could not get an answer,
+// unless it says otherwise in an extended error, which is also how one that
+// ignores the CD bit still gives the reason away.
+func failed(tr *trace.Trace, answer *trace.Resolver) trace.Failure {
+	again := answer.Unchecked
+	if again == nil {
+		return "" // never asked again: a saved walk from before it was
+	}
+
+	var extended []trace.ExtendedError
+	extended = append(extended, answer.Extended...)
+	if again.Err == "" {
+		extended = append(extended, again.Extended...)
+	}
+
+	validation := slices.ContainsFunc(extended, trace.ExtendedError.Validation)
+	switch {
+	case again.Err == "" && (again.Rcode == "NOERROR" || again.Rcode == "NXDOMAIN"):
+		validation = true
+	case !validation && (again.Err != "" || again.Rcode != "SERVFAIL"):
+		// Silence, or a refusal, says nothing of why the first one failed.
+		return ""
+	}
+	if validation {
+		if chain := tr.Chain(); chain != nil && chain.DNSSEC.State == trace.Bogus {
+			return trace.FailedBogus
+		}
+		return trace.FailedValidation
+	}
+	if slices.ContainsFunc(extended, func(e trace.ExtendedError) bool { return e.Code == cachedError }) {
+		return trace.FailedCached
+	}
+	return trace.FailedUnreachable
+}
+
+// cachedError is the extended error a resolver gives for a failure it is
+// answering out of its cache (RFC 8914 section 5.14).
+const cachedError = 13
 
 // staleTTL is the TTL RFC 8767 suggests a stale answer goes out with. It is a
 // suggestion and not a rule, which is why an answer carrying it only looks

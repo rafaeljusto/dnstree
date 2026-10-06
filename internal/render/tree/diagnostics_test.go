@@ -223,6 +223,72 @@ func TestRenderKept(t *testing.T) {
 	}
 }
 
+func TestRenderFailures(t *testing.T) {
+	// failing is the walk with the resolver's SERVFAIL read as failed, its
+	// chain of trust in state where state is not empty.
+	failing := func(failed trace.Failure, state trace.DNSSECState, again string, ede ...trace.ExtendedError) *trace.Trace {
+		tr := differing([]string{"192.0.2.10"}, nil, "SERVFAIL")
+		tr.Resolvers[0].Match, tr.Resolvers[0].Failed, tr.Resolvers[0].Extended = "", failed, ede
+		tr.Resolvers[0].Unchecked = &trace.Resolver{Rcode: again}
+		if state != "" {
+			tr.Root.Children[0].DNSSEC = &trace.DNSSECStatus{State: state}
+		}
+		return tr
+	}
+	expired := trace.ExtendedError{Code: 7, Reason: "Signature Expired", Text: "test./dnskey"}
+
+	for _, tt := range []struct {
+		name string
+		tr   *trace.Trace
+		want string
+	}{{
+		name: "validation fails at the resolver on a chain the walk found secure",
+		tr:   failing(trace.FailedValidation, trace.Secure, "NOERROR", expired),
+		want: "servfail: 192.168.1.1 answers SERVFAIL where the walk found 192.0.2.10: " +
+			"with checking disabled it answers, so it fails validation; " +
+			"the walk found the chain secure, so look at its clock and trust anchor " +
+			"(it says: Signature Expired (7): test./dnskey)",
+	}, {
+		name: "validation fails at a resolver that ignores checking disabled",
+		tr:   failing(trace.FailedValidation, trace.Secure, "SERVFAIL", expired),
+		want: "it says it fails validation, and ignores checking disabled",
+	}, {
+		name: "validation fails where the walk did not check the chain",
+		tr:   failing(trace.FailedValidation, "", "NOERROR"),
+		want: "so it fails validation; --dnssec checks the chain the walk took",
+	}, {
+		name: "validation fails on a chain the walk found broken too",
+		tr:   failing(trace.FailedBogus, trace.Bogus, "NOERROR"),
+		want: "it fails validation as the walk does, so the zone's chain of trust is what to fix",
+	}, {
+		name: "a failure the resolver cached",
+		tr:   failing(trace.FailedCached, "", "SERVFAIL", trace.ExtendedError{Code: 13, Reason: "Cached Error"}),
+		want: "it says it is serving a failure it cached",
+	}, {
+		name: "a resolver that cannot get an answer",
+		tr:   failing(trace.FailedUnreachable, "", "SERVFAIL"),
+		want: "it fails with checking disabled too, so it could not get an answer the walk got",
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			if out := draw(t, tt.tr); !strings.Contains(out, tt.want) {
+				t.Errorf("got %q, want it to carry %q", out, tt.want)
+			}
+		})
+	}
+}
+
+// TestRenderFailureUnread covers a SERVFAIL nothing read, such as one in a
+// walk saved before the resolver was asked again: the summary's rcode says
+// all there is.
+func TestRenderFailureUnread(t *testing.T) {
+	tr := differing([]string{"192.0.2.10"}, nil, "SERVFAIL")
+	tr.Resolvers[0].Match = ""
+
+	if out := draw(t, tr); strings.Contains(out, "servfail:") {
+		t.Errorf("got %q, want nothing said of a failure nothing read", out)
+	}
+}
+
 // TestRenderDifferenceIsShortened covers a round robin big enough to push the
 // tree off the screen. The first few and a count say everything the reader
 // needs; the rest is in --format json.
@@ -284,6 +350,9 @@ func TestASCIIStaysASCII(t *testing.T) {
 	tr.Root.Children = append(tr.Root.Children, &trace.Step{Zone: forged, Kind: trace.KindReferral,
 		Server: trace.Server{Name: forged}, Delegation: &trace.Delegation{Zone: forged, NS: []string{forged}}})
 	tr.Warnings = append(tr.Warnings, "example. delegates to "+forged+" inside the zone, with no glue to reach them")
+	tr.Resolvers = append(tr.Resolvers, &trace.Resolver{Rcode: "SERVFAIL", Failed: trace.FailedValidation,
+		Unchecked: &trace.Resolver{Rcode: "NOERROR"},
+		Extended:  []trace.ExtendedError{{Code: 7, Text: "café\x1b[2K\r\n`-- ns.evil. [secure]"}}})
 
 	var out bytes.Buffer
 	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorNever}); err != nil {

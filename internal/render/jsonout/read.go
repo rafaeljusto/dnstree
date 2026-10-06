@@ -259,6 +259,12 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 	default:
 		return nil, fmt.Errorf("jsonout: %q is not what a resolver's TTL can say", from.Kept)
 	}
+	failed := trace.Failure(from.Failed)
+	switch failed {
+	case "", trace.FailedBogus, trace.FailedValidation, trace.FailedCached, trace.FailedUnreachable:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not what a resolver's failure can come of", from.Failed)
+	}
 
 	to := &trace.Resolver{
 		Rcode:    from.Rcode,
@@ -267,6 +273,7 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 		Extended: readExtended(from.Extended),
 		Match:    match,
 		Kept:     kept,
+		Failed:   failed,
 	}
 	var err error
 	if to.Elapsed, err = duration("elapsed_ms", from.ElapsedMS); err != nil {
@@ -280,6 +287,11 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 	}
 	if to.DDR, err = readDiscovery(from.DDR); err != nil {
 		return nil, err
+	}
+	if from.Unchecked != nil {
+		if to.Unchecked, err = readResolver(from.Unchecked); err != nil {
+			return nil, err
+		}
 	}
 	return to, nil
 }

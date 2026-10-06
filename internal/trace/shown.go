@@ -54,23 +54,28 @@ func (t *Trace) Shown() *Trace {
 	}
 	shown.Resolvers = nil
 	for _, resolver := range t.Resolvers {
-		if resolver == nil {
-			shown.Resolvers = append(shown.Resolvers, nil)
-			continue
-		}
-		r := *resolver
-		r.Server = r.Server.Shown()
-		r.Rcode, r.Err = Shown(r.Rcode), Shown(r.Err)
-		r.Records = shownRecords(r.Records)
-		r.Extended = shownExtended(r.Extended)
-		r.DDR = resolver.DDR.Shown()
-		shown.Resolvers = append(shown.Resolvers, &r)
+		shown.Resolvers = append(shown.Resolvers, resolver.Shown())
 	}
 	shown.CAA = t.CAA.Shown()
 	shown.SPF = t.SPF.Shown()
 	shown.Mail = t.Mail.Shown()
 	shown.Registration = t.Registration.Shown()
 	shown.Propagation = t.Propagation.Shown()
+	return &shown
+}
+
+// Shown is the resolver's answer with every name and text it sent escaped.
+func (r *Resolver) Shown() *Resolver {
+	if r == nil {
+		return nil
+	}
+	shown := *r
+	shown.Server = r.Server.Shown()
+	shown.Rcode, shown.Err = Shown(r.Rcode), Shown(r.Err)
+	shown.Records = shownRecords(r.Records)
+	shown.Extended = shownExtended(r.Extended)
+	shown.Unchecked = r.Unchecked.Shown()
+	shown.DDR = r.DDR.Shown()
 	return &shown
 }
 

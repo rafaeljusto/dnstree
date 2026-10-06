@@ -690,6 +690,37 @@ func TestRunCompare(t *testing.T) {
 	}
 }
 
+// TestRunServFail covers a resolver that fails validation where the walk does
+// not: asked again with checking disabled, it answers, and the line under the
+// tree says so.
+func TestRunServFail(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone})
+	resolver := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone,
+		Behaviour: fakens.Behaviour{ServFailUnlessCD: true}})
+
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), []string{
+		"--root", server.Addr.String(), "--resolver", resolver.Addr.String(),
+		"--no-asn", "--color", "never", "--format", "ascii", ".", "NS",
+	}, &stdout, &stderr)
+
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d: a resolver failing is not the walk failing\n%s%s",
+			code, exitAnswer, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if want := "servfail: 127.0.0.1 answers SERVFAIL where the walk found"; !strings.Contains(out, want) {
+		t.Errorf("got no %q:\n%s", want, out)
+	}
+	if want := "with checking disabled it answers, so it fails validation"; !strings.Contains(out, want) {
+		t.Errorf("got no %q:\n%s", want, out)
+	}
+	queries := resolver.Queries()
+	if len(queries) != 2 || queries[0].CD || !queries[1].CD {
+		t.Errorf("got %+v, want the resolver asked once plainly and once with checking disabled", queries)
+	}
+}
+
 // TestRunDDR asks the resolver the walk is timed against which encrypted
 // resolvers stand for it, and draws what it offers under the tree.
 func TestRunDDR(t *testing.T) {

@@ -933,6 +933,11 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 					log.Debug("asked a resolver the same question",
 						"server", server, "took", answer.Elapsed, "rcode", answer.Rcode, "error", answer.Err)
 				}
+				// Asked straight away, so that it lands on the state the
+				// failure came from rather than one the resolver moved on to.
+				if answer.Rcode == "SERVFAIL" {
+					answer.Unchecked, _ = transport.Recheck(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
+				}
 				answers[i] = answer
 			})
 		}

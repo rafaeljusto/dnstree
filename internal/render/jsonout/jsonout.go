@@ -181,6 +181,14 @@ type resolver struct {
 	// "stale", or absent where it says nothing either way.
 	Kept string `json:"kept,omitempty"`
 
+	// Unchecked is the same question asked again with checking disabled,
+	// present only after a SERVFAIL.
+	Unchecked *resolver `json:"unchecked,omitempty"`
+
+	// Failed is what a SERVFAIL most likely came of: "bogus", "validation",
+	// "cached", "unreachable", or absent where there is nothing to read.
+	Failed string `json:"failed,omitempty"`
+
 	DDR *discovery `json:"ddr,omitempty"`
 }
 
@@ -479,6 +487,8 @@ func convertResolver(from *trace.Resolver) *resolver {
 		Subnet:    convertSubnet(from.Subnet),
 		Match:     string(from.Match),
 		Kept:      string(from.Kept),
+		Unchecked: convertResolver(from.Unchecked),
+		Failed:    string(from.Failed),
 		DDR:       convertDiscovery(from.DDR),
 	}
 }

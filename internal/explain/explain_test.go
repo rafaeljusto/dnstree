@@ -966,6 +966,53 @@ func TestSeveralResolvers(t *testing.T) {
 	}
 }
 
+func TestFailures(t *testing.T) {
+	failing := func(failed trace.Failure, again string, ede ...trace.ExtendedError) *trace.Trace {
+		tr := walk(answered(300))
+		tr.Resolvers = []*trace.Resolver{{
+			Server:    trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+			Rcode:     "SERVFAIL",
+			Extended:  ede,
+			Unchecked: &trace.Resolver{Rcode: again},
+			Failed:    failed,
+		}}
+		return tr
+	}
+
+	for _, tt := range []struct {
+		name string
+		tr   *trace.Trace
+		want string
+	}{{
+		name: "it answers with checking disabled",
+		tr:   failing(trace.FailedValidation, "NOERROR", trace.ExtendedError{Code: 7, Reason: "Signature Expired"}),
+		want: "192.0.2.53 answers SERVFAIL, and answers once asked with checking disabled, so it fails validation; " +
+			"the walk did not check the chain, which --dnssec does (it says: Signature Expired (7))",
+	}, {
+		name: "it ignores checking disabled",
+		tr:   failing(trace.FailedValidation, "SERVFAIL", trace.ExtendedError{Code: 6, Reason: "DNSSEC Bogus"}),
+		want: "says it failed validation, even asked with checking disabled, which it ignores",
+	}, {
+		name: "the chain is broken for the walk too",
+		tr:   failing(trace.FailedBogus, "NOERROR"),
+		want: "as the walk does: it is doing its job",
+	}, {
+		name: "it serves a failure it cached",
+		tr:   failing(trace.FailedCached, "SERVFAIL", trace.ExtendedError{Code: 13, Reason: "Cached Error"}),
+		want: "out of a failure it cached, by its own account",
+	}, {
+		name: "it cannot get an answer",
+		tr:   failing(trace.FailedUnreachable, "SERVFAIL"),
+		want: "so it could not get an answer the walk got",
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := said(tt.tr); !strings.Contains(got, tt.want) {
+				t.Errorf("got %q, want it to say %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestDesignations covers what --ddr learned of each resolver. An offer is
 // said as the claim it is, since nothing connected to check its certificate,
 // and a resolver that could not be asked is left to the line under the tree.

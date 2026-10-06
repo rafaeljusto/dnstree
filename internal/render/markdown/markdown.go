@@ -100,6 +100,8 @@ func said(tr *trace.Trace, answer *trace.Resolver) string {
 		return "did not answer"
 	case answer.Match == trace.MatchSame:
 		return "agrees"
+	case answer.Failed != "":
+		return "answered SERVFAIL: " + failure(answer.Failed)
 	}
 
 	result := tr.Result()
@@ -117,6 +119,21 @@ func said(tr *trace.Trace, answer *trace.Resolver) string {
 		answers[i] = data(text)
 	}
 	return "differs: " + tree.List(answers)
+}
+
+// failure is what a SERVFAIL most likely came of, in the few words a table
+// cell has room for. The finding above the table says the rest.
+func failure(failed trace.Failure) string {
+	switch failed {
+	case trace.FailedBogus:
+		return "fails validation, as the walk does"
+	case trace.FailedValidation:
+		return "fails validation"
+	case trace.FailedCached:
+		return "a failure it cached"
+	default:
+		return "cannot get an answer"
+	}
 }
 
 // data is record data as a table cell holds it. Escaping is not enough here:

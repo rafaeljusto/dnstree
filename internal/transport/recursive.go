@@ -57,7 +57,15 @@ func SystemFrom(path string) netip.AddrPort {
 // not be asked at all.
 func Ask(ctx context.Context, carrier Transport, server netip.AddrPort,
 	question trace.Question, dnssec bool, subnet netip.Prefix) (*trace.Resolver, error) {
-	return ask(ctx, carrier, nil, server, question, dnssec, subnet, 0)
+	return ask(ctx, carrier, nil, server, question, dnssec, subnet, 0, false)
+}
+
+// Recheck is Ask with checking disabled (RFC 4035): the resolver hands back
+// what it found without validating it. Asked after a SERVFAIL, it tells a
+// failed validation from a failure to get an answer at all.
+func Recheck(ctx context.Context, carrier Transport, server netip.AddrPort,
+	question trace.Question, dnssec bool, subnet netip.Prefix) (*trace.Resolver, error) {
+	return ask(ctx, carrier, nil, server, question, dnssec, subnet, 0, true)
 }
 
 // Lookup is Ask for a question of the run's own, read whole: an answer too big
@@ -67,11 +75,11 @@ func Ask(ctx context.Context, carrier Transport, server netip.AddrPort,
 // then over fallback.
 func Lookup(ctx context.Context, carrier, fallback Transport, server netip.AddrPort,
 	name, qtype string, retries int) (*trace.Resolver, error) {
-	return ask(ctx, carrier, fallback, server, trace.Question{Name: name, Type: qtype, Class: "IN"}, false, netip.Prefix{}, retries)
+	return ask(ctx, carrier, fallback, server, trace.Question{Name: name, Type: qtype, Class: "IN"}, false, netip.Prefix{}, retries, false)
 }
 
 func ask(ctx context.Context, carrier, fallback Transport, server netip.AddrPort,
-	question trace.Question, dnssec bool, subnet netip.Prefix, retries int) (*trace.Resolver, error) {
+	question trace.Question, dnssec bool, subnet netip.Prefix, retries int, unchecked bool) (*trace.Resolver, error) {
 
 	qtype, ok := dns.StringToType[strings.ToUpper(question.Type)]
 	if !ok {
@@ -85,6 +93,7 @@ func ask(ctx context.Context, carrier, fallback Transport, server netip.AddrPort
 
 	// The whole point: the server is asked to do the walking this time.
 	req.RecursionDesired = true
+	req.CheckingDisabled = unchecked
 
 	resp, rtt, err := carrier.Exchange(ctx, req, server, "")
 	for attempt := 0; attempt < retries && err != nil && IsTimeout(err); attempt++ {

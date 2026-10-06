@@ -132,6 +132,21 @@ func TestReadRoundTrip(t *testing.T) {
 				Records: []trace.RR{{Name: "example.", TTL: 30, Type: "A", Data: "198.51.100.1"}},
 			}},
 		},
+		"a resolver that failed, asked again with checking disabled": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server:   trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+				Rcode:    "SERVFAIL",
+				Extended: []trace.ExtendedError{{Code: 7, Reason: "Signature Expired", Text: "example./dnskey"}},
+				Unchecked: &trace.Resolver{
+					Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+					Rcode:   "NOERROR",
+					Records: []trace.RR{{Name: "example.", TTL: 300, Type: "A", Data: "192.0.2.10"}},
+				},
+				Failed: trace.FailedValidation,
+			}},
+		},
 		"a walk that kept when each query went out": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Timed:    true,
@@ -375,6 +390,16 @@ func TestReadRefuses(t *testing.T) {
 		"a resolver's TTL saying something nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "rcode": "NOERROR", "kept": "forever"}]}`,
+			want: `"forever"`,
+		},
+		"a resolver's failure coming of something nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "rcode": "SERVFAIL", "failed": "gremlins"}]}`,
+			want: `"gremlins"`,
+		},
+		"a resolver asked again whose second answer says nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "rcode": "SERVFAIL", "unchecked": {"elapsed_ms": 1, "kept": "forever"}}]}`,
 			want: `"forever"`,
 		},
 		"an address that is not one": {

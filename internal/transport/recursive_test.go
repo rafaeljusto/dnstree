@@ -63,6 +63,36 @@ func TestAskSilent(t *testing.T) {
 	}
 }
 
+// TestRecheck covers asking again with checking disabled, which is what tells
+// a resolver that failed validation from one that could not get an answer.
+func TestRecheck(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: "test.", Zone: recursiveZone,
+		Behaviour: fakens.Behaviour{ServFailUnlessCD: true}})
+	carrier := transport.NewUDP(transport.Config{})
+	question := trace.Question{Name: "www.test", Type: "A", Class: "IN"}
+
+	first, err := transport.Ask(t.Context(), carrier, server.Addr, question, true, netip.Prefix{})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if first.Rcode != "SERVFAIL" {
+		t.Fatalf("got %s, want SERVFAIL from a resolver that fails validation", first.Rcode)
+	}
+
+	again, err := transport.Recheck(t.Context(), carrier, server.Addr, question, true, netip.Prefix{})
+	if err != nil {
+		t.Fatalf("Recheck: %v", err)
+	}
+	if again.Rcode != "NOERROR" || len(again.Records) == 0 {
+		t.Errorf("got %s with %v, want the answer it held back", again.Rcode, again.Records)
+	}
+
+	queries := server.Queries()
+	if len(queries) != 2 || queries[0].CD || !queries[1].CD {
+		t.Errorf("got %+v, want checking disabled on the second query alone", queries)
+	}
+}
+
 func TestAskUnknownType(t *testing.T) {
 	carrier := transport.NewUDP(transport.Config{})
 	if _, err := transport.Ask(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:53"),

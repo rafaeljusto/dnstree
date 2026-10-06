@@ -128,6 +128,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, line := range r.differences(tr) {
 		r.write(line + "\n")
 	}
+	for _, line := range r.failures(tr) {
+		r.write(line + "\n")
+	}
 	for _, line := range r.kept(tr) {
 		r.write(line + "\n")
 	}
@@ -910,6 +913,83 @@ func (r *renderer) difference(result *trace.Step, answer *trace.Resolver, qtype 
 		mark = spaced("🔀")
 	}
 	return r.paint.paint(mark+text, yellow)
+}
+
+// failures say why each resolver that answered SERVFAIL most likely did, one
+// line each, and only where the walk found an answer to read it against. The
+// line suggests a cause rather than claiming one: a cached failure and a
+// failing network look much alike from outside.
+func (r *renderer) failures(tr *trace.Trace) []string {
+	result := tr.Result()
+	if result == nil {
+		return nil
+	}
+
+	var lines []string
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Failed == "" {
+			continue
+		}
+		who := "the resolver"
+		if answer.Server.IP.IsValid() {
+			who = answer.Server.IP.String()
+		}
+		text := fmt.Sprintf("%s answers SERVFAIL where the walk found %s: ", who, found(result, tr.Question.Type))
+
+		again := answer.Unchecked
+		answered := again != nil && again.Err == "" && again.Rcode != "SERVFAIL"
+		ignored := again != nil && again.Err == "" && again.Rcode == "SERVFAIL"
+		switch answer.Failed {
+		case trace.FailedBogus:
+			text += "it fails validation as the walk does, so the zone's chain of trust is what to fix"
+		case trace.FailedValidation:
+			switch {
+			case answered:
+				text += "with checking disabled it answers, so it fails validation"
+			case ignored:
+				text += "it says it fails validation, and ignores checking disabled"
+			default:
+				text += "it says it fails validation"
+			}
+			switch chain := tr.Chain(); {
+			case chain == nil:
+				text += "; --dnssec checks the chain the walk took"
+			case chain.DNSSEC.State == trace.Indeterminate:
+				text += "; the walk could not check the chain either"
+			case chain.DNSSEC.State == trace.Insecure:
+				text += "; the walk found the chain insecure, so it may hold a DS or a trust anchor the walk did not"
+			default:
+				text += fmt.Sprintf("; the walk found the chain %s, so look at its clock and trust anchor", chain.DNSSEC.State)
+			}
+		case trace.FailedCached:
+			text += "it says it is serving a failure it cached, which lasts until that runs out"
+		case trace.FailedUnreachable:
+			text += "it fails with checking disabled too, so it could not get an answer the walk got"
+		}
+		if len(answer.Extended) > 0 {
+			text += fmt.Sprintf(" (it says: %s)", answer.Extended[0])
+		}
+
+		mark := "servfail: "
+		if r.glyphs.icons {
+			mark = spaced("🛑")
+		}
+		lines = append(lines, r.paint.paint(mark+text, yellow))
+	}
+	return lines
+}
+
+// found is what the walk came to, the way a line about a resolver sets it
+// against what the resolver said: the records that answer the question, or the
+// rcode where there are none.
+func found(result *trace.Step, qtype string) string {
+	if answers := trace.Answers(result.Records, qtype); len(answers) > 0 {
+		return List(answers)
+	}
+	if result.Kind == trace.KindNoData {
+		return "no " + qtype
+	}
+	return result.Rcode
 }
 
 // List is a set of rdata as a reader wants it, kept short: a round robin of a
