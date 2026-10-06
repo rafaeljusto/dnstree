@@ -144,6 +144,17 @@ func kinds() *trace.Trace {
 			Lookups: 2,
 			Result:  trace.SPFOK,
 		},
+		Mail: &trace.Mail{
+			Name: "alias.example.com.", MX: trace.MailLookup{Name: "alias.example.com.", DNSSEC: &trace.DNSSECStatus{State: trace.Insecure}},
+			Hosts: []trace.MailHost{
+				{Name: "mx.example.com.", Preference: 10, DANE: trace.DANEVerified, Why: "a sender has to see a certificate that matches",
+					Records: []trace.TLSARecord{{Usage: 3, Selector: 1, Matching: 1, Data: "e41cc763", Usable: true}}},
+				{Name: "mx.example.net.", Preference: 20, DANE: trace.DANEFailed, Why: "the TLSA lookup failed: SERVFAIL"},
+			},
+			MTASTS: &trace.MailPolicy{Found: trace.PolicyNone},
+			TLSRPT: &trace.MailPolicy{Found: trace.PolicyInvalid},
+			DMARC:  &trace.MailPolicy{Name: "_dmarc.alias.example.com.", Found: trace.PolicyPublished, Tags: []trace.PolicyTag{{Name: "p", Value: "reject"}}},
+		},
 		Registration: &trace.Registration{
 			Domain: "example.com.", State: trace.Registered, Status: []string{"client transfer prohibited", "server hold"},
 			NS: []string{"a.iana-servers.net.", "b.iana-servers.net."}, Parent: "com.",

@@ -173,6 +173,12 @@ type Config struct {
 	// the zone the walk found it in.
 	CAA bool
 
+	// Mail looks up the MX hosts of the name and the TLSA set of each, the
+	// way a sending server that checks DANE does (RFC 7672), and the MTA-STS,
+	// TLS-RPT and DMARC policies beside them. Each lookup is a walk of its own
+	// from the deepest zone the run has entered that the name sits in.
+	Mail bool
+
 	// Down says why a server is to be treated as unreachable, empty for one
 	// that is not. A server it names is drawn among its zone's but never
 	// asked, the way one of the wrong family is, and the walk goes wherever
@@ -296,6 +302,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	if r.cfg.CAA {
 		run.climb(ctx, cmp.Or(end, run.trace.Root))
 	}
+	if r.cfg.Mail {
+		run.mail(ctx, cmp.Or(end, run.trace.Root))
+	}
 	run.trace.Elapsed = time.Since(run.trace.Started)
 	return run.trace, nil
 }
@@ -326,10 +335,16 @@ type run struct {
 	secret  []byte
 	cookies map[netip.Addr]string
 
-	// cuts are the zones the walk for the question entered, which the CAA
-	// lookups are asked of, and climbing is set while they are being made.
+	// cuts are the zones the walk for the question entered, which the CAA and
+	// mail lookups are asked of, and climbing is set while the CAA ones are
+	// being made.
 	cuts     []cut
 	climbing bool
+
+	// mailing is set while the mail lookups are being made, whose walks keep
+	// the zones they enter for the ones after them, and mailStopped once a
+	// budget of the run has cut one of them short.
+	mailing, mailStopped bool
 
 	// tried is whether the walk came to the delegation --try-ns replaces.
 	tried bool
@@ -344,11 +359,18 @@ type run struct {
 // parent. side is how deep this walk is nested inside the resolution of a
 // nameserver's name.
 func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trace.Step, side int) *trace.Step {
+	return r.walkFrom(ctx, nil, qname, qtype, parent, side)
+}
+
+// walkFrom is walk starting from a zone the run has already entered, with the
+// servers and the chain of trust it had there, or from the root for nil.
+func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint16, parent *trace.Step, side int) *trace.Step {
 	zone, servers := ".", r.cfg.Roots
 
 	// Every walk starts again from the anchors: a walk for an alias or for a
 	// nameserver's name is its own resolution, and must not borrow the keys of
-	// the one that needed it.
+	// the one that needed it. One started from a zone the run entered keeps
+	// the chain it had there on purpose: those keys are that zone's own.
 	var chain *dnssec.Chain
 	if r.cfg.DNSSEC {
 		chain = dnssec.New(r.cfg.Anchors)
@@ -360,11 +382,17 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 	// whether the chain has checked this zone yet: minimising asks one zone
 	// several questions, and its keys are fetched once.
 	reach, entered := r.reach(zone, qname), false
+	if from != nil {
+		zone, servers, chain = from.zone, from.servers, from.chain.Clone()
+		reach, entered = r.reach(zone, qname), true
+	}
 
-	// top is the walk for the question itself, whose zones the CAA lookups go
-	// to, and recorded whether this zone has been kept for them.
-	top := r.cfg.CAA && side == 0 && !r.climbing && dns.EqualName(qname, r.trace.Question.Name)
-	recorded := false
+	// top is a walk whose zones the CAA and mail lookups go to: the one for
+	// the question, and those the mail lookups make. recorded is whether this
+	// zone has been kept for them.
+	top := side == 0 && (r.mailing ||
+		(r.cfg.CAA || r.cfg.Mail) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
+	recorded := from != nil
 
 	// referred is the step that pointed the walk into this zone, which the
 	// minimised hops inside it hang below rather than replace.
@@ -464,7 +492,7 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 			}
 			r.compact(chain, hop, qname)
 			r.denial(hop, zone, qname)
-			if side == 0 && !r.climbing {
+			if side == 0 && !r.climbing && !r.mailing {
 				r.checkECH(step)
 				r.checkSubnet(step)
 				r.checkNS(ctx, step, referred)
@@ -514,9 +542,10 @@ func (r *run) walk(ctx context.Context, qname string, qtype uint16, parent *trac
 // every reports whether a walk asks every nameserver of a zone. All is about
 // the question itself: under it, the lookup of a nameserver's address fanning
 // out to every server of every zone above it would spend the budget long
-// before the zone the question is about was asked at all.
+// before the zone the question is about was asked at all. Nor does it reach
+// the lookups the mail check makes, which a sender's resolver asks of one.
 func (r *run) every(side int) bool {
-	return r.cfg.All && side == 0
+	return r.cfg.All && side == 0 && !r.mailing
 }
 
 // reach is how many labels of qname the first question put to zone asks for:

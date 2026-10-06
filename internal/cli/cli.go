@@ -53,6 +53,7 @@ one after another, each from the root servers down.
   --check-edns            ask each nameserver of the zone the RFC 8906 edns tests
   --caa                   say which certificate authorities may issue for NAME
   --spf                   draw NAME's SPF policy and count the lookups it costs
+  --mail                  check NAME's MX hosts for DANE, and its mail policies
   --rdap                  ask the registry when the domain expires, and compare
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
@@ -175,7 +176,8 @@ own. With --from, a walk saved during an incident becomes a report afterwards.
 it ended, what it and each hop on the path took, the chain of trust, the time
 left on the signatures, what --check-ds found, which nameservers the
 --check-axfr and --check-recursion probes found open, which --check-edns tests
-passed, who --caa found free to issue, how many lookups --spf counted, how long
+passed, who --caa found free to issue, how many lookups --spf counted, how many
+MX hosts --mail found DANE covering and which mail policies it found, how long
 --rdap found the registration has left and what the resolvers answered, each
 labelled with the question. Run from cron into the
 directory of node_exporter's textfile collector, it is what Prometheus alerts
@@ -328,6 +330,19 @@ to all is followed, the way a sender that matches none of them is checked. A
 term with a macro in it, and ptr, depend on the sender too, and are counted
 without being asked. It spends a budget of --max-queries apart from the walk's.
 
+--mail looks up NAME's mail path the way a sending server that checks DANE
+does (RFC 7672): the MX hosts by preference, the addresses of each, and the
+TLSA set at _25._tcp of each whose addresses are signed, then the MTA-STS,
+TLS-RPT and DMARC records beside them, DMARC falling back to the
+organisational domain. Each lookup is a walk of its own, from the deepest zone
+the run has entered, drawn in the tree as an aside. A host is covered by DANE
+only where --dnssec proves its addresses and a TLSA set a sender can use; a
+host whose addresses do not validate, or whose TLSA set fails to look up or
+validate, makes every sender that checks DANE hold the mail, which is said in a warning, and so is an
+MX host left uncovered while others are covered. Nothing connects to a mail
+server, and the MTA-STS policy file is not fetched. The lookups spend the
+walk's budget.
+
 --rdap asks the registry of the domain over RDAP (RFC 9083) when its
 registration runs out, which statuses it carries, and which nameservers and DS
 it holds, and says so when they are not what the TLD hands out: a change stuck
@@ -427,6 +442,7 @@ type Config struct {
 	CheckEDNS      bool
 	CAA            bool
 	SPF            bool
+	Mail           bool
 	RDAP           bool
 
 	NSID     bool
@@ -643,6 +659,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.CheckEDNS, "check-edns", false, "ask every nameserver of the zone the RFC 8906 edns tests")
 	flags.BoolVar(&cfg.CAA, "caa", false, "say which certificate authorities may issue for the name")
 	flags.BoolVar(&cfg.SPF, "spf", false, "draw the name's SPF policy and count the lookups it costs")
+	flags.BoolVar(&cfg.Mail, "mail", false, "check the name's MX hosts for DANE, and its mail policies")
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
@@ -1035,7 +1052,7 @@ func several(cfg *Config, expecting bool) error {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "rdap": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "rdap": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

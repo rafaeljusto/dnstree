@@ -17,6 +17,11 @@ spf: www.example.com. takes 2 of 10 lookups, asked of 192.0.2.53
 |-- +all: it lets anyone send mail as www.example.com.
 `-- never reached: mx
 spf: ok: nothing in it fails a check
+mail: 2 MX hosts for alias.example.com. [insecure]
+mail:   10 mx.example.com. dane (1 TLSA record): a sender has to see a certificate that matches
+mail:   20 mx.example.net. failed: the TLSA lookup failed: SERVFAIL
+mail: no mta-sts; tls-rpt invalid; dmarc p=reject
+mail: dane covers 1 of 2 MX hosts, but the MX set is not signed, so it protects each host and not which hosts get the mail
 rdap: example.com. is registered; the registry does not say until when
 rdap: example.com. is on server hold: the registry has taken it out of the zone
 rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.

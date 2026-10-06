@@ -665,6 +665,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		CheckRecursion: cfg.CheckRecursion,
 		CheckEDNS:      cfg.CheckEDNS,
 		CAA:            cfg.CAA,
+		Mail:           cfg.Mail,
 
 		NSID:     cfg.NSID,
 		Cookie:   cfg.Cookie,

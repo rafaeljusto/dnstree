@@ -344,6 +344,93 @@
     "result": "undecided",
     "why": "the budget ran out"
   },
+  "mail": {
+    "name": "www.example.com.",
+    "mx": {
+      "name": "www.example.com.",
+      "alias": "example.com.",
+      "dnssec": {
+        "state": "secure",
+        "zone": "example.com.",
+        "algorithm": "ECDSAP256SHA256"
+      }
+    },
+    "hosts": [
+      {
+        "name": "mx.example.com.",
+        "preference": 10,
+        "address": {
+          "name": "mx.example.com.",
+          "dnssec": {
+            "state": "secure",
+            "zone": "example.com."
+          }
+        },
+        "tlsa": {
+          "name": "_25._tcp.mx.example.com.",
+          "dnssec": {
+            "state": "secure",
+            "zone": "example.com."
+          }
+        },
+        "records": [
+          {
+            "usage": 3,
+            "selector": 1,
+            "matching": 1,
+            "data": "e41cc763",
+            "usable": true
+          }
+        ],
+        "dane": "dane",
+        "why": "a sender has to see a certificate that matches"
+      },
+      {
+        "name": "backup.example.net.",
+        "preference": 20,
+        "address": {
+          "name": "backup.example.net.",
+          "error": "SERVFAIL"
+        },
+        "dane": "unreachable",
+        "why": "its addresses could not be looked up: SERVFAIL"
+      }
+    ],
+    "mta_sts": {
+      "name": "_mta-sts.www.example.com.",
+      "lookup": {
+        "name": "_mta-sts.www.example.com."
+      },
+      "found": "published",
+      "record": "v=STSv1; id=20240101",
+      "tags": [
+        {
+          "name": "v",
+          "value": "STSv1"
+        },
+        {
+          "name": "id",
+          "value": "20240101"
+        }
+      ]
+    },
+    "tls_rpt": {
+      "name": "_smtp._tls.www.example.com.",
+      "lookup": {
+        "name": "_smtp._tls.www.example.com."
+      },
+      "found": "none"
+    },
+    "dmarc": {
+      "name": "_dmarc.example.com.",
+      "lookup": {
+        "name": "_dmarc.example.com."
+      },
+      "found": "invalid",
+      "why": "2 records begin v=DMARC1, and a sender reads that as none"
+    },
+    "stopped": "the budget ran out before every lookup was made"
+  },
   "registration": {
     "domain": "example.com.",
     "server": "https://rdap.verisign.com/com/v1/",

@@ -127,6 +127,7 @@ func Findings(tr *trace.Trace) []Finding {
 	if finding, ok := sender(tr); ok {
 		findings = append(findings, finding)
 	}
+	findings = append(findings, delivery(tr)...)
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
 	}

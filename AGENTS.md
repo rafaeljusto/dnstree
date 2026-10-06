@@ -70,9 +70,10 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   check or the registry lookup reaching it through another package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
-  terminal size, and `golang.org/x/net/idna` for names typed in any script,
-  which the codec leaves to its callers. Adding a fourth needs an
-  argument.
+  terminal size, and `golang.org/x/net` for names typed in any script
+  (`idna`), which the codec leaves to its callers, and for the organisational
+  domain DMARC falls back to (`publicsuffix`, whose list is as old as the
+  pinned version). Adding a fourth needs an argument.
 
 ## Invariants
 

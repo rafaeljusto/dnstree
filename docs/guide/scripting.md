@@ -324,7 +324,8 @@ on the path took, how many queries failed, the chain of trust, the time left on
 the first signature to run out, what `--check-ds` found, which nameservers
 `--check-axfr` and `--check-recursion` found open, which `--check-edns` tests
 passed, who `--caa` found free to
-issue, how many lookups `--spf` counted and what a check comes to, how long
+issue, how many lookups `--spf` counted and what a check comes to, how many MX hosts
+`--mail` found DANE covering and which mail policies it found, how long
 `--rdap` found the registration has left and whether it is held, the TTL the zone gives the answer, and how long each resolver took,
 whether it agreed and the TTL it handed out. Only gauges are used, so the older
 Prometheus text format reads it too. A family the walk has nothing to say about

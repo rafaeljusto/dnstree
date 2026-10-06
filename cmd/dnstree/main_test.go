@@ -1528,3 +1528,54 @@ func TestRunRDAP(t *testing.T) {
 		})
 	}
 }
+
+// TestRunMail checks the mail path of a name, and draws it again from the walk
+// --format json saved.
+func TestRunMail(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone + `
+example.test.             IN MX   10 mx.example.test.
+mx.example.test.          IN A    192.0.2.25
+_25._tcp.mx.example.test. IN TLSA 3 1 1 e41cc7633029afdba53744d7e5fc31ef507e592de9dfb33557bf3b9a79239446
+_dmarc.example.test.      IN TXT  "v=DMARC1; p=reject"
+`})
+	base := []string{"--root", server.Addr.String(), "--no-asn", "--no-compare", "--color", "never"}
+	want := []string{
+		"mail: 1 MX host for example.test.",
+		"mail:   10 mx.example.test. unchecked (1 TLSA record): nothing was checked without --dnssec",
+		"mail: no mta-sts; no tls-rpt; dmarc p=reject",
+		"mail: dane not checked: add --dnssec",
+	}
+	drawn := func(out string) []string {
+		var lines []string
+		for line := range strings.Lines(out) {
+			if strings.HasPrefix(line, "mail: ") {
+				lines = append(lines, strings.TrimSuffix(line, "\n"))
+			}
+		}
+		return lines
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), append(base, "--mail", "example.test", "A"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	stdout.Reset()
+	if code := run(t.Context(), append(base, "--mail", "--format", "json", "example.test", "A"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	path := filepath.Join(t.TempDir(), "walk.json")
+	if err := os.WriteFile(path, stdout.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if code := run(t.Context(), []string{"--from", path, "--color", "never"}, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q drawn again, want %q", got, want)
+	}
+}

@@ -289,6 +289,26 @@ func TestReadRefuses(t *testing.T) {
 				"caa": {"asked": [{"name": "x.", "found": "maybe"}]}}`,
 			want: `"maybe"`,
 		},
+		"a mail host in a DANE state nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "hosts": [{"name": "mx.x.", "preference": 10, "dane": "trusted"}]}}`,
+			want: `"trusted"`,
+		},
+		"a mail path with no MX set and no host": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "implicit": true}}`,
+			want: "no MX set",
+		},
+		"a mail path with a null MX and hosts": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "null": true, "hosts": [{"name": "mx.x.", "preference": 0, "dane": "none"}]}}`,
+			want: "null MX",
+		},
+		"a mail policy that came to something nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "dmarc": {"name": "_dmarc.x.", "lookup": {"name": "_dmarc.x."}, "found": "maybe"}}}`,
+			want: `"maybe"`,
+		},
 		"a CAA verdict in a state nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"caa": {"asked": [], "dnssec": {"state": "trusted"}}}`,

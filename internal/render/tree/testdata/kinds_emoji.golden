@@ -17,6 +17,11 @@
 ├── +all: it lets anyone send mail as www.example.com.
 └── never reached: mx
 📨 ok: nothing in it fails a check
+✉️  2 MX hosts for alias.example.com. 🔓 [insecure]
+✉️    10 mx.example.com. dane (1 TLSA record): a sender has to see a certificate that matches
+✉️    20 mx.example.net. failed: the TLSA lookup failed: SERVFAIL
+✉️  no mta-sts; tls-rpt invalid; dmarc p=reject
+✉️  dane covers 1 of 2 MX hosts, but the MX set is not signed, so it protects each host and not which hosts get the mail
 📅 example.com. is registered; the registry does not say until when
 📅 example.com. is on server hold: the registry has taken it out of the zone
 📅 nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.

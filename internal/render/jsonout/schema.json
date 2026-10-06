@@ -43,6 +43,7 @@
     },
     "caa": { "$ref": "#/$defs/caa" },
     "spf": { "$ref": "#/$defs/spf" },
+    "mail": { "$ref": "#/$defs/mail" },
     "registration": { "$ref": "#/$defs/registration" },
     "report": { "$ref": "#/$defs/report" },
     "trial": { "$ref": "#/$defs/trial" }
@@ -179,6 +180,100 @@
           "enum": ["ok", "none", "permerror", "temperror", "undecided"]
         },
         "why": { "description": "What made the result, absent for ok: the first term a check fails at, and why.", "type": "string" }
+      }
+    },
+    "mail": {
+      "description": "How mail to the name is delivered, present only where --mail asked, as a sending server that checks DANE finds out (RFC 7672): its MX hosts by preference, the addresses of each, and the TLSA set of each whose addresses are signed, then the MTA-STS, TLS-RPT and DMARC policies beside them. Nothing connects to a mail server, and the MTA-STS policy file is not fetched. Every lookup is a walk of its own, in the tree as an aside.",
+      "type": "object",
+      "required": ["name", "mx"],
+      "properties": {
+        "name": { "description": "The name mail is sent to.", "type": "string" },
+        "mx": { "description": "The lookup of the MX set.", "$ref": "#/$defs/mail_lookup" },
+        "null": { "description": "Present where the name says it takes no mail, with a null MX (RFC 7505).", "type": "boolean" },
+        "implicit": { "description": "Present where the name has no MX set, which makes it its own only host (RFC 5321 5.1).", "type": "boolean" },
+        "hosts": {
+          "description": "The MX hosts by preference, best first, and those of one preference by name.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/mail_host" }
+        },
+        "mta_sts": { "description": "The MTA-STS record at _mta-sts (RFC 8461). Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
+        "tls_rpt": { "description": "The TLS-RPT record at _smtp._tls (RFC 8460). Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
+        "dmarc": { "description": "The DMARC record at _dmarc of the name, or of its organisational domain where the name has none (RFC 7489 6.6.3), in which case its sp tag, where it has one, is what applies to the name. Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
+        "stopped": { "description": "Why the check made fewer lookups than it set out to: the MX lookup failed or did not validate, the name does not exist, or a budget ran out. The policies are still looked up unless it was the budget.", "type": "string" },
+        "cut": { "description": "Present where a budget cut the lookups of the hosts short, which leaves how much DANE covers unknown.", "type": "boolean" }
+      }
+    },
+    "mail_lookup": {
+      "description": "One name the mail check looked up.",
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "alias": { "description": "The name the answer came from, where name is an alias.", "type": "string" },
+        "error": { "description": "Why the lookup failed. Absent where it was answered, even with nothing.", "type": "string" },
+        "dnssec": { "description": "The first verdict on the way that is not secure, the aliases included, or else the answer's. Absent without --dnssec.", "$ref": "#/$defs/dnssec" }
+      }
+    },
+    "mail_host": {
+      "description": "One MX host, and what DANE does for mail to it.",
+      "type": "object",
+      "required": ["name", "preference", "dane"],
+      "properties": {
+        "name": { "type": "string" },
+        "preference": { "type": "integer" },
+        "address": { "description": "The lookup of its addresses: A, or AAAA where it has none or the run asked IPv6 alone.", "$ref": "#/$defs/mail_lookup" },
+        "tlsa": { "description": "The lookup of its TLSA set at _25._tcp, absent where it was not asked.", "$ref": "#/$defs/mail_lookup" },
+        "records": {
+          "description": "The TLSA set it found.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/tlsa_record" }
+        },
+        "dane": {
+          "description": "dane, a signed TLSA set a sender can use, so the server's certificate has to match it; unusable, a signed set with no record a sender may use, which still makes it insist on TLS; none, a signed proof there is no set; insecure, addresses or a set nothing signed, which DANE does not apply to; failed, a TLSA lookup that failed or did not validate, which makes a sender that checks DANE treat the host as unreachable; unreachable, no address to deliver to; literal, an address where a host name belongs; unchecked, a set looked up without --dnssec; indeterminate, addresses or a set that could not be checked, for an algorithm or a denial this build cannot check, which a validator reads as unsigned, or for a budget dnstree ran out of.",
+          "enum": ["dane", "unusable", "none", "insecure", "failed", "unreachable", "literal", "unchecked", "indeterminate"]
+        },
+        "why": { "description": "What made it so, in a few words.", "type": "string" }
+      }
+    },
+    "tlsa_record": {
+      "description": "One record of a TLSA set (RFC 6698).",
+      "type": "object",
+      "required": ["usage", "selector", "matching", "data"],
+      "properties": {
+        "usage": { "type": "integer" },
+        "selector": { "type": "integer" },
+        "matching": { "type": "integer" },
+        "data": { "description": "The certificate association data, in lowercase hex.", "type": "string" },
+        "usable": { "description": "Present where a mail sender may authenticate with it: a trust anchor or end entity record (usage 2 or 3) under a selector and matching type it knows (RFC 7672 3.1).", "type": "boolean" }
+      }
+    },
+    "mail_policy": {
+      "description": "One TXT policy published for mail to the name.",
+      "type": "object",
+      "required": ["name", "lookup", "found"],
+      "properties": {
+        "name": { "description": "Where it was asked.", "type": "string" },
+        "lookup": { "$ref": "#/$defs/mail_lookup" },
+        "found": {
+          "description": "published, one record of its version; none, no record of its version; invalid, more than one, or one that does not parse, which a sender reads as none; failed, the lookup did not come back with an answer.",
+          "enum": ["published", "none", "invalid", "failed"]
+        },
+        "record": { "description": "The record, its strings joined.", "type": "string" },
+        "tags": {
+          "description": "Its tags in order, the names lowercased.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/policy_tag" }
+        },
+        "why": { "description": "What made it invalid or failed, or a reading of it a receiver makes.", "type": "string" }
+      }
+    },
+    "policy_tag": {
+      "description": "One tag=value pair of a policy.",
+      "type": "object",
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "type": "string" },
+        "value": { "type": "string" }
       }
     },
     "spf_term": {

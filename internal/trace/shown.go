@@ -68,6 +68,7 @@ func (t *Trace) Shown() *Trace {
 	}
 	shown.CAA = t.CAA.Shown()
 	shown.SPF = t.SPF.Shown()
+	shown.Mail = t.Mail.Shown()
 	shown.Registration = t.Registration.Shown()
 	return &shown
 }

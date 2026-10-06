@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -131,6 +132,30 @@ func Render(w io.Writer, tr *trace.Trace) error {
 			trace.SPFOK, trace.SPFNone, trace.SPFPermError, trace.SPFTempError, trace.SPFUndecided,
 		} {
 			m.sample("dnstree_spf", flag(value == spf.Result), label{"result", string(value)})
+		}
+	}
+
+	if mail := tr.Mail; mail != nil {
+		dane, hosts := mail.Covered()
+		m.family("dnstree_mail_hosts", "", "the MX hosts mail to the name can be delivered to")
+		m.sample("dnstree_mail_hosts", strconv.Itoa(hosts))
+		// Without --dnssec, or past the budget, nothing was checked, and a
+		// count of none would say it had been.
+		if !mail.Cut && !slices.ContainsFunc(mail.Hosts, func(h trace.MailHost) bool { return h.DANE == trace.DANEUnchecked }) {
+			m.family("dnstree_mail_dane_hosts", "", "the MX hosts a sender that checks DANE authenticates, by a signed TLSA set it can use")
+			m.sample("dnstree_mail_dane_hosts", strconv.Itoa(dane))
+		}
+		m.family("dnstree_mail_policy", "", "what the lookup of each mail policy came to: published, none, invalid where a sender reads it as none, or failed")
+		for _, p := range []struct {
+			name   string
+			policy *trace.MailPolicy
+		}{{"mta-sts", mail.MTASTS}, {"tls-rpt", mail.TLSRPT}, {"dmarc", mail.DMARC}} {
+			if p.policy == nil {
+				continue
+			}
+			for _, value := range []trace.PolicyFound{trace.PolicyPublished, trace.PolicyNone, trace.PolicyInvalid, trace.PolicyFailed} {
+				m.sample("dnstree_mail_policy", flag(value == p.policy.Found), label{"policy", p.name}, label{"found", string(value)})
+			}
 		}
 	}
 

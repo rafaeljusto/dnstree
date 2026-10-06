@@ -10,6 +10,8 @@ server says about its own answer.
 - [How they handle EDNS](#how-they-handle-edns)
 - [Who may issue certificates for it](#who-may-issue-certificates-for-it)
 - [What a check of its mail costs](#what-a-check-of-its-mail-costs)
+- [Whether its mail can be sent verified](#whether-its-mail-can-be-sent-verified)
+- [Whether its registration is about to run out](#whether-its-registration-is-about-to-run-out)
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
 - [Which machine answered](#which-machine-answered)
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
@@ -399,6 +401,70 @@ unless `--expect spf:ok` asks for a policy no check fails on
 ([Asking rather than reading](scripting.md#asking-rather-than-reading)).
 `--format json` carries it as `spf`, and `--format openmetrics` as
 `dnstree_spf_lookups` and `dnstree_spf`.
+
+## Whether its mail can be sent verified
+
+When a server sends mail to a domain, it looks up the domain's MX hosts and
+switches to TLS with whichever it reaches, but by default that encryption is
+optional and nobody checks the certificate: anyone in the way can strip it off.
+DANE (RFC 7672) closes the gap with a TLSA record under `_25._tcp` of each MX
+host, which a sender honours only where DNSSEC proves it. `--mail` looks the
+path up the way such a sender does: the MX hosts by preference, the addresses of
+each, and the TLSA set of each whose addresses are signed, then the MTA-STS,
+TLS-RPT and DMARC records beside them:
+
+```
+$ dnstree --mail --dnssec --explain --no-asn --no-compare freebsd.org
+...
+│   │   │   ├── freebsd.org.  (TLSA of _25._tcp.mx1.freebsd.org. for mail)
+│   │   │   │   ├── ns1.freebsd.org. 163.237.210.11  547ms  NOERROR  AA DO  [secure RSASHA256]
+│   │   │   │   │   └── _25._tcp.mx1.freebsd.org. 3600 TLSA 3 1 1 0a7e2f469913ea64ca98af1f31bbbcaf51920d8df90d2972a9dc02bf7c37f404
+...
+│   │   │   ├── freebsd.org.  (TLSA of _25._tcp.mx66.freebsd.org. for mail)
+│   │   │   │   ├── ns1.freebsd.org. 163.237.210.11  1.65s  NXDOMAIN  AA DO  [secure]  (truncated over udp)
+...
+mail: 2 MX hosts for freebsd.org. [secure RSASHA256]
+mail:   10 mx1.freebsd.org. dane (1 TLSA record): a sender has to see a certificate that matches
+mail:   30 mx66.freebsd.org. none: its zone proves there is no TLSA set
+mail: no mta-sts; no tls-rpt; dmarc p=none
+mail: dane covers 1 of 2 MX hosts
+warning: DANE covers 1 of the 2 MX hosts of freebsd.org., so a sender may deliver to mx66.freebsd.org. unverified; publish TLSA for it
+✔ answered in 10.6s · 14 queries · 3 servers
+...
+· DANE covers 1 of the 2 MX hosts of freebsd.org., so a sender may deliver to the others unverified
+· the DMARC policy at _dmarc.freebsd.org. asks receivers to do nothing different with mail sent as freebsd.org. that neither SPF nor DKIM vouches for
+```
+
+Every lookup is a walk of its own, drawn in the tree as an aside, starting
+from the deepest zone the run has already entered, so a provider's zone is
+walked down to once. A host is `dane` where the zone signs a TLSA set with a
+record a mail sender may use, a trust anchor or end entity one; `unusable`
+where it signs only PKIX ones, which still makes a sender insist on TLS;
+`none` where the zone proves there is no set; and `insecure` where its
+addresses or its set are not signed, which DANE ignores. A host whose
+addresses do not validate, or whose TLSA set fails to look up or validate, is
+`failed`: every sender
+that checks DANE treats the host as unreachable and holds the mail, which is an
+outage rather than a weakness, and is said in a warning. So is an MX host left
+uncovered while others are covered, and a TLSA set nothing signed. A host with
+no address is `unreachable`, and is left out of the count; one written as an
+address is `literal`. One whose addresses or set this build cannot check, for
+an algorithm or a denial it does not know, is `indeterminate`, and so is one
+the budget ran out before, which leaves the coverage line undecided; nothing is
+claimed of either. Without `--dnssec` every set is listed as `unchecked`, and
+nothing is claimed of it. An MX set that does not validate stops the check with
+a warning, since a sender that validates holds all the mail.
+
+A null MX (RFC 7505) says the domain takes no mail, and a domain with no MX set
+is its own only host. An MX set that is not signed leaves DANE protecting each
+host and not which hosts get the mail, and the coverage line says so. The
+MTA-STS and TLS-RPT records count only where exactly one begins with their
+version, as the RFCs say, and DMARC falls back to the organisational domain
+where the name has none. Nothing connects to a mail server, and the MTA-STS
+policy file is not fetched. The lookups spend the walk's budget, and a check
+cut short says so. The exit code is left alone. `--format json` carries it as
+`mail`, and `--format openmetrics` as `dnstree_mail_hosts`,
+`dnstree_mail_dane_hosts` and `dnstree_mail_policy`.
 
 ## Whether its registration is about to run out
 

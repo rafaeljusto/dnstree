@@ -59,6 +59,10 @@ type Trace struct {
 	// --spf did not ask.
 	SPF *SPF
 
+	// Mail is how mail to the name is delivered, nil where --mail did not
+	// ask.
+	Mail *Mail
+
 	// Registration is what the registry of the domain says about it, nil where
 	// --rdap did not ask.
 	Registration *Registration

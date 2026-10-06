@@ -42,6 +42,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 		document.CAA = convertCAA(tr.CAA)
 		document.SPF = convertSPF(tr.SPF)
+		document.Mail = convertMail(tr.Mail)
 		document.Registration = convertRegistration(tr.Registration)
 		if tr.Report != nil {
 			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
@@ -65,6 +66,7 @@ type document struct {
 	Without       []string      `json:"without,omitempty"`
 	CAA           *caa          `json:"caa,omitempty"`
 	SPF           *spf          `json:"spf,omitempty"`
+	Mail          *mail         `json:"mail,omitempty"`
 	Registration  *registration `json:"registration,omitempty"`
 	Report        *report       `json:"report,omitempty"`
 	Trial         *trial        `json:"trial,omitempty"`
