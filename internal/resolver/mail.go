@@ -3,6 +3,8 @@ package resolver
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"crypto/sha512"
 	"slices"
 	"strconv"
 	"strings"
@@ -228,7 +230,8 @@ func (r *run) tlsa(ctx context.Context, under *trace.Step, host *trace.MailHost,
 
 // tlsaRecords are the TLSA records owner owns. A sender may use a trust anchor
 // or end entity record, never a PKIX one (RFC 7672 3.1.3), and only under a
-// selector and matching type it knows (RFC 6698 4.1).
+// selector and matching type it knows (RFC 6698 4.1), and with data a
+// certificate could match: a digest of the wrong length matches none.
 func tlsaRecords(records []trace.RR, owner string) []trace.TLSARecord {
 	var found []trace.TLSARecord
 	for _, record := range records {
@@ -243,10 +246,25 @@ func tlsaRecords(records []trace.RR, owner string) []trace.TLSARecord {
 		found = append(found, trace.TLSARecord{
 			Usage: parsed.Usage, Selector: parsed.Selector, Matching: parsed.MatchingType,
 			Data:   strings.ToLower(parsed.Certificate),
-			Usable: (parsed.Usage == 2 || parsed.Usage == 3) && parsed.Selector <= 1 && parsed.MatchingType <= 2,
+			Usable: (parsed.Usage == 2 || parsed.Usage == 3) && parsed.Selector <= 1 && matches(parsed),
 		})
 	}
 	return found
+}
+
+// matches reports whether a certificate could match the record: its data is
+// as long as its matching type makes it, the hex of a whole certificate or key
+// for 0.
+func matches(tlsa *dns.TLSA) bool {
+	switch tlsa.MatchingType {
+	case 0:
+		return tlsa.Certificate != ""
+	case 1:
+		return len(tlsa.Certificate) == 2*sha256.Size
+	case 2:
+		return len(tlsa.Certificate) == 2*sha512.Size
+	}
+	return false
 }
 
 // policy looks up a TXT policy that has to be the only record at name to begin

@@ -143,6 +143,10 @@ func TestMailDANE(t *testing.T) {
 			extra: `@ IN MX 10 pkix.mailhost.com.`,
 			qname: "example.com", hosts: []string{"pkix.mailhost.com. unusable"},
 		},
+		"a digest shorter than its matching type makes it matches no certificate": {
+			extra: "@ IN MX 10 short\nshort IN A 192.0.2.33\n_25._tcp.short IN TLSA 3 1 1 e41cc763\n",
+			qname: "example.com", hosts: []string{"short.example.com. unusable"},
+		},
 		"a signed zone that proves there is no TLSA set leaves DANE out": {
 			extra: `@ IN MX 10 bare.mailhost.com.`,
 			qname: "example.com", hosts: []string{"bare.mailhost.com. none"},
