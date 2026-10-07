@@ -19,6 +19,7 @@ for years:
 | `cloudflare.com` | publishes CDS matching its DS |
 | `one.one.one.one@1.1.1.1` | speaks DoT and DoH, answers DDR |
 | `münchen.de` | a name outside ASCII |
+| `freebsd.org` | signed, two MX hosts: one with a TLSA set, one with a signed proof of none |
 
 When a target drifts, replace it and update this table. Don't loosen the
 expectation.
@@ -165,9 +166,15 @@ cached, not a bug. Run it again.
 | propagation-hints | `$D $B --propagation www.wikipedia.org` | exit 0, the zone the alias ends in named in the first line, and `--serial`, `--check-ns` and `--dnssec` each named under the waits |
 | svcb | `$D $B --svcb --dnssec --explain facebook.com HTTPS` | exit 0, a `svcb:` line per record, best priority first, the first with its verdict, then a `svcb:   <target> <addresses>` line per target, and the sentence `a client that reads the HTTPS records of facebook.com. connects to …` |
 | svcb-aside | `$D $B --svcb cloudflare.com` | exit 0, the HTTPS set looked up as an aside (`HTTPS of cloudflare.com. for svcb`), and no hint said to be stray |
-| svcb-none | `$D $B --svcb pinterest.com` | exit 0, `svcb: no HTTPS records at pinterest.com.` and `so a client connects to pinterest.com. by its addresses alone` |
+| svcb-none | `$D $B --svcb pinterest.com` | exit 0, `svcb: no HTTPS records at pinterest.com.` and `svcb: so a client connects as it would without them` |
 | svcb-formats | `$D $B --svcb --format json cloudflare.com HTTPS`, then `--format openmetrics`, then `--from` the JSON | `.service_path.targets` in the JSON; `dnstree_svcb_targets` and `dnstree_svcb_stray_hints … 0`; the same `svcb:` lines drawn back |
 | propagation-formats | `$D $B --propagation --format json example.com`, then `--format dot`, then `--from` the JSON without and with `--propagation` | `.propagation.waits` in the JSON; exit 1 for dot; nothing drawn back without the flag, the same lines with it |
+| mail | `$D $B --mail --dnssec --explain freebsd.org` | exit 0, `mail: 2 MX hosts for freebsd.org. [secure …]`, mx1 `dane (1 TLSA record)`, mx66 `none: its zone proves there is no TLSA set`, `mail: dane covers 1 of 2 MX hosts`, and a warning ending `publish TLSA for it` |
+| mail-unchecked | `$D $B --mail freebsd.org` | exit 0, every host `unchecked`, and `mail: dane not checked: add --dnssec` |
+| check | `$D --no-compare --color never --check --expect check:ok example.com` | exit 0, a `check example.com.` block with a line per area, then `N to look at · N passed · N skipped` |
+| check-clean | the same with `--expect check:clean` | exit 4, `expected check:clean, got servers look`: both of example.com.'s nameservers are in one AS |
+| check-alone | `$D $B --expect check:ok example.com` | exit 4, `got a walk that --check did not grade` |
+| check-formats | `--check --format json`, then `--from` the JSON | `.check.areas` in the JSON; the same grades drawn back |
 
 ## budget
 
