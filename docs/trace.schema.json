@@ -627,6 +627,10 @@
           "description": "Set on work that answers a different question: the address of a nameserver, or the NS set of a zone. The resolution's own answer is never inside one. Following an alias is not an aside: the target is what the question meant all along.",
           "type": "boolean"
         },
+        "apart": {
+          "description": "Set on the root of a lookup a check made on a walk of its own (--mail, --svcb, the bootstrap signals of --check-ds). The zones under it are somebody else's: what their chains of trust came to is that check's, and never the run's verdict or its exit code.",
+          "type": "boolean"
+        },
         "minimised": {
           "description": "Set on a hop that asked for less of the name than the walk was after, to find where the next zone cut is (RFC 9156, --qmin). asked says what it put instead, and what it came back with is about that shorter name, so it is never the walk's answer.",
           "type": "boolean"

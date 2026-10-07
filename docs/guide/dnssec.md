@@ -209,8 +209,10 @@ kind cannot bootstrap at all, and is told so. A signal whose name would pass
 own CDS is asked of the server that answered. Whether its parent bootstraps at
 all is not something a walk can see, and `--explain` says so. It costs two
 lookups for each nameserver, spent from the same budget as the walk, and one
-that runs out says the signals were not all checked. `--format json` carries it
-as the signal's `bootstrap`, and `--format openmetrics` as `dnstree_bootstrap`.
+that runs out says the signals were not all checked. The exit code is left
+alone: the signal zones are the operator's, and one that does not validate is a
+warning. `--format json` carries it as the signal's `bootstrap`, and
+`--format openmetrics` as `dnstree_bootstrap`.
 
 ## Telling the zone it is broken
 

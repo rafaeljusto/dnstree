@@ -571,6 +571,11 @@ type Step struct {
 	// question meant all along.
 	Aside bool
 
+	// Apart marks the root of a lookup a check made on its own walk (--mail,
+	// --svcb, the bootstrap signals). The zones under it are somebody else's,
+	// so the run's chain of trust, and its exit code, never read them.
+	Apart bool
+
 	// Delegation is set on a referral.
 	Delegation *Delegation
 
@@ -1031,13 +1036,13 @@ func (t *Trace) Expiring(status *DNSSECStatus) (time.Duration, bool) {
 // Soonest is the step whose signatures run out first, nil where none were
 // checked. A chain is as good as its weakest link, and every link of it is
 // re-signed on its own schedule. The asides are read too, since a cut crossed
-// without a referral is checked on one.
+// without a referral is checked on one, but not a lookup apart from the walk.
 func (t *Trace) Soonest() *Step {
 	var (
 		soonest *Step
 		first   time.Duration
 	)
-	for step := range t.Steps() {
+	for step := range t.judged() {
 		left, ok := t.Left(step.DNSSEC)
 		if ok && (soonest == nil || left < first) {
 			soonest, first = step, left
@@ -1053,7 +1058,7 @@ func (t *Trace) Stale() *Step {
 		stalest *Step
 		first   time.Duration
 	)
-	for step := range t.Steps() {
+	for step := range t.judged() {
 		left, ok := t.Expiring(step.DNSSEC)
 		if ok && (stalest == nil || left < first) {
 			stalest, first = step, left
@@ -1219,7 +1224,7 @@ func (t *Trace) Trust() *Step {
 // checked no signatures.
 func (t *Trace) Chain() *Step {
 	var unchecked *Step
-	for step := range t.Steps() {
+	for step := range t.judged() {
 		if step.DNSSEC == nil {
 			continue
 		}
@@ -1236,6 +1241,31 @@ func (t *Trace) Chain() *Step {
 		return unchecked
 	}
 	return t.Trust()
+}
+
+// judged walks the steps whose verdicts are the run's: all of them but those
+// under a lookup apart from it.
+func (t *Trace) judged() iter.Seq[*Step] {
+	return func(yield func(*Step) bool) {
+		if t.Root != nil {
+			judge(t.Root, yield)
+		}
+	}
+}
+
+func judge(step *Step, yield func(*Step) bool) bool {
+	if step.Apart {
+		return true
+	}
+	if !yield(step) {
+		return false
+	}
+	for _, child := range step.Children {
+		if !judge(child, yield) {
+			return false
+		}
+	}
+	return true
 }
 
 // Broken reports whether the walk found a chain of trust that does not hold,

@@ -406,3 +406,43 @@ func queriesBefore(tr *trace.Trace, purpose string) int {
 	}
 	return n
 }
+
+// TestBootstrapLeavesTheChain is a signal under a nameserver whose operator's
+// zone does not validate: the signal is unproven, but the zone is the
+// operator's, so the run's chain of trust and its exit code stay the name's own.
+func TestBootstrapLeavesTheChain(t *testing.T) {
+	t.Parallel()
+
+	ns1 := "_dsboot.example.com._signal.ns1.provider.net."
+	ns2 := "_dsboot.example.com._signal.ns2.provider.net."
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: bootRootZone, Declared: "192.0.2.1", DNSSEC: true})
+	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: bootComZone, Declared: "192.0.2.2", DNSSEC: true})
+	hierarchy.Add(fakens.Config{Name: "ns.net.", Origin: "net.", Zone: bootNetZone, Declared: "192.0.2.5", DNSSEC: true})
+	example := hierarchy.Add(fakens.Config{
+		Name: "ns1.provider.net.", Origin: "example.com.", Zone: bootExampleZone, Declared: "192.0.2.31",
+		DNSSEC: true, Behaviour: fakens.Behaviour{NoDS: true, CDS: fakens.CDSCurrent},
+	})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.provider.net.", Origin: "provider.net.", Declared: "192.0.2.30", DNSSEC: true, Denial: fakens.DenialNSEC,
+		Zone: bootProviderZone + "_signal.ns2 IN NS ns.sig\nns.sig IN A 192.0.2.40\n" + example.Request(t, ns1),
+	})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.sig.provider.net.", Origin: "_signal.ns2.provider.net.", Declared: "192.0.2.40", DNSSEC: true, Denial: fakens.DenialNSEC,
+		Zone:      "@ IN SOA ns.sig.provider.net. h 1 7200 3600 1209600 3600\n@ IN NS ns.sig.provider.net.\n" + example.Request(t, ns2),
+		Behaviour: fakens.Behaviour{BadSignature: true},
+	})
+
+	cfg := resolver.Config{DNSSEC: true, Anchors: root.Anchors(t), CheckDS: true}
+	tr, err := newResolver(t, harness{hierarchy, root}, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	signal := signalOf(tr)
+	if signal == nil || signal.Bootstrap == nil || signal.Bootstrap.State != trace.BootstrapRefused {
+		t.Fatalf("got %+v, want the request refused", signal)
+	}
+	if chain := tr.Chain(); tr.Broken() || chain == nil || chain.DNSSEC.State != trace.Insecure {
+		t.Errorf("got the chain at %+v, want the insecure answer's: %s", chain, format(steps(tr)))
+	}
+}

@@ -34,7 +34,7 @@ func (r *run) look(ctx context.Context, under *trace.Step, name string, qtype ui
 	r.chased = map[string]bool{dnsutil.Canonical(name): true}
 	defer func() { r.chased = saved }()
 
-	root := &trace.Step{Zone: zone, Kind: trace.KindZone, Aside: true,
+	root := &trace.Step{Zone: zone, Kind: trace.KindZone, Aside: true, Apart: true,
 		Notes: []string{dnsutil.TypeToString(qtype) + " of " + name + " for " + purpose}}
 	r.attach(under, root)
 	result := r.walkFrom(ctx, from, name, qtype, root, 0)

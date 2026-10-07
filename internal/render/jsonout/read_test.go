@@ -72,6 +72,20 @@ func TestReadRoundTrip(t *testing.T) {
 				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "example."},
 			}}},
 		},
+		"a lookup apart from the walk whose zone does not validate": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindAnswer, Rcode: "NOERROR",
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "example."},
+				Children: []*trace.Step{{
+					Zone: ".", Kind: trace.KindZone, Aside: true, Apart: true,
+					Children: []*trace.Step{{
+						Zone: "mail.", Kind: trace.KindAnswer, Aside: true, Rcode: "NOERROR",
+						DNSSEC: &trace.DNSSECStatus{State: trace.Bogus, Zone: "mail.", Reason: "no key"},
+					}},
+				}},
+			}}},
+		},
 		"nameservers asked for what they should keep from strangers": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
@@ -187,6 +201,10 @@ func TestReadRoundTrip(t *testing.T) {
 			var again bytes.Buffer
 			if err := jsonout.Render(&again, read); err != nil {
 				t.Fatalf("Render: %v", err)
+			}
+
+			if read.Broken() != tr.Broken() {
+				t.Errorf("got the chain broken %v, want %v", read.Broken(), tr.Broken())
 			}
 
 			// What --propagation worked out is worked out again from the rest,
@@ -486,6 +504,11 @@ func TestReadRefuses(t *testing.T) {
 				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."},
 					"records": [{"name": "x.\u001b[2J", "ttl": 1, "type": "HTTPS", "data": "1 .", "service": {"priority": 1, "target": "x.", "hints": ["nope"]}}]}]}}`,
 			want: "nope",
+		},
+		"a step apart from the walk that is not an aside": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "apart": true}}`,
+			want: "apart",
 		},
 		"something after the trace": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} {"more": 1}`,

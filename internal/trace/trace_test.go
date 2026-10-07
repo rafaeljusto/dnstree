@@ -304,6 +304,31 @@ func walk(v reflect.Value, path string, see func(path, value string)) {
 	}
 }
 
+// TestApartLeavesTheRun is a lookup a check made on its own walk, into a zone
+// that is broken and about to run out: neither is the run's.
+func TestApartLeavesTheRun(t *testing.T) {
+	started := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	life := func(left time.Duration) []trace.Lifetime {
+		return []trace.Lifetime{{Inception: started.Add(-30 * 24 * time.Hour), Expiration: started.Add(left)}}
+	}
+	answer := &trace.Step{Zone: "example.", Kind: trace.KindAnswer,
+		DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "example.", Signatures: life(20 * 24 * time.Hour)}}
+	answer.Children = []*trace.Step{{Zone: ".", Kind: trace.KindZone, Aside: true, Apart: true,
+		Children: []*trace.Step{{Zone: "mail.", Kind: trace.KindAnswer, Aside: true,
+			DNSSEC: &trace.DNSSECStatus{State: trace.Bogus, Zone: "mail.", Signatures: life(time.Hour)}}}}}
+	tr := &trace.Trace{Started: started, Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{answer}}}
+
+	if tr.Broken() || tr.Chain() != answer {
+		t.Errorf("got the chain at %+v, want the answer's", tr.Chain())
+	}
+	if tr.Soonest() != answer {
+		t.Errorf("got the soonest signature at %+v, want the answer's", tr.Soonest())
+	}
+	if stale := tr.Stale(); stale != nil {
+		t.Errorf("got a stale signature at %+v, want none", stale)
+	}
+}
+
 // TestExpiringLongLife covers a signature made to last longer than five times
 // what a Duration holds a fifth of. RRSIG times reach 68 years either side of
 // now, and one an hour into sixty years of life is nowhere near its end.

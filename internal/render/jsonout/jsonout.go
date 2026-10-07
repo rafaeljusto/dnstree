@@ -266,6 +266,7 @@ type step struct {
 	Cookie     string          `json:"cookie,omitempty"`
 	ReportTo   string          `json:"report_to,omitempty"`
 	Aside      bool            `json:"aside,omitempty"`
+	Apart      bool            `json:"apart,omitempty"`
 	Minimised  bool            `json:"minimised,omitempty"`
 	Compact    bool            `json:"compact,omitempty"`
 	Delegation *delegation     `json:"delegation,omitempty"`
@@ -461,6 +462,7 @@ func convert(from *trace.Step, timed bool) *step {
 		Cookie:     string(from.Cookie),
 		ReportTo:   from.ReportTo,
 		Aside:      from.Aside,
+		Apart:      from.Apart,
 		Minimised:  from.Minimised,
 		Compact:    from.Compact,
 		Delegation: convertDelegation(from.Delegation),

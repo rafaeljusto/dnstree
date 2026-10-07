@@ -532,3 +532,19 @@ func TestMailNotByDefault(t *testing.T) {
 		}
 	}
 }
+
+// TestMailLeavesTheChain is an MX host in a zone that does not validate: the
+// zone is the host's operator's, so the run's chain of trust and its exit code
+// stay the name's own.
+func TestMailLeavesTheChain(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := mailed(t, `@ IN MX 10 mx.mailhost.com.`, fakens.Behaviour{BadSignature: true}, true)
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if chain := tr.Chain(); tr.Broken() || chain == nil || chain.DNSSEC.State != trace.Secure {
+		t.Errorf("got the chain at %+v, want the secure answer's: %s", chain, format(steps(tr)))
+	}
+}

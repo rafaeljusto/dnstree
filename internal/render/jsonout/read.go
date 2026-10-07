@@ -154,6 +154,12 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		return nil, fmt.Errorf("jsonout: steps nested deeper than %d, which no walk goes", maxNesting)
 	}
 
+	// Apart takes the steps below out of the run's verdict, so only the root
+	// of a lookup the walk set aside can be one.
+	if from.Apart && !from.Aside {
+		return nil, fmt.Errorf("jsonout: a step apart from the walk has to be an aside")
+	}
+
 	kind := trace.StepKind(from.Kind)
 	switch kind {
 	case trace.KindZone, trace.KindReferral, trace.KindAnswer, trace.KindCNAME, trace.KindNoData,
@@ -180,6 +186,7 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		Cookie:    trace.CookieState(from.Cookie),
 		ReportTo:  from.ReportTo,
 		Aside:     from.Aside,
+		Apart:     from.Apart,
 		Minimised: from.Minimised,
 		Compact:   from.Compact,
 		Err:       from.Error,

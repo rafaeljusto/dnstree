@@ -371,3 +371,19 @@ func TestServicePathOutOfBudget(t *testing.T) {
 		t.Errorf("no budget warning in %q", tr.Warnings)
 	}
 }
+
+// TestServiceLeavesTheChain is a service target in a zone that does not
+// validate: the zone is the provider's, so the run's chain of trust and its
+// exit code stay the name's own.
+func TestServiceLeavesTheChain(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := served(t, true, fakens.Behaviour{BadSignature: true})
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if chain := tr.Chain(); tr.Broken() || chain == nil || chain.DNSSEC.State != trace.Secure {
+		t.Errorf("got the chain at %+v, want the secure answer's: %s", chain, format(steps(tr)))
+	}
+}
