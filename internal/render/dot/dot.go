@@ -5,10 +5,9 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
-	"time"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/render/diagram"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -23,30 +22,10 @@ func Render(w io.Writer, tr *trace.Trace) error {
 
 type graph struct {
 	out *bufio.Writer
-
-	// zones keeps the clusters in the order they were first reached, so that
-	// the same trace always comes out the same way.
-	zones []string
-	nodes map[string][]node
-	edges []edge
-	next  int
-}
-
-type node struct {
-	id   string
-	step *trace.Step
-}
-
-type edge struct {
-	from, to string
-	step     *trace.Step
 }
 
 func (g *graph) render(tr *trace.Trace) {
-	g.nodes = map[string][]node{}
-	if tr != nil && tr.Root != nil {
-		g.collect(tr.Root, "")
-	}
+	layout := diagram.Layout(tr)
 
 	g.write("digraph dnstree {\n")
 	g.write("\trankdir=LR;\n")
@@ -57,22 +36,22 @@ func (g *graph) render(tr *trace.Trace) {
 		g.write("\tlabelloc=t;\n")
 	}
 
-	for i, zone := range g.zones {
+	for i, zone := range layout.Zones {
 		g.writef("\n\tsubgraph cluster_%d {\n", i)
 		g.write("\t\tlabel=" + quote(zone) + ";\n")
 		g.write("\t\tstyle=dashed;\n")
 		g.write("\t\tcolor=gray60;\n")
-		for _, node := range g.nodes[zone] {
-			g.writef("\t\t%s [label=%s%s];\n", node.id, quote(label(node.step)), attributes(node.step))
+		for _, node := range layout.Nodes[zone] {
+			g.writef("\t\t%s [label=%s%s];\n", node.ID, quote(label(node.Step)), attributes[node.Step.Outcome()])
 		}
 		g.write("\t}\n")
 	}
 
-	if len(g.edges) > 0 {
+	if len(layout.Edges) > 0 {
 		g.write("\n")
 	}
-	for _, edge := range g.edges {
-		g.writef("\t%s -> %s%s;\n", edge.from, edge.to, edgeAttributes(edge.step))
+	for _, edge := range layout.Edges {
+		g.writef("\t%s -> %s%s;\n", edge.From, edge.To, edgeAttributes(edge.Step))
 	}
 	g.write("}\n")
 }
@@ -86,24 +65,6 @@ func (g *graph) write(text string) {
 
 func (g *graph) writef(format string, args ...any) {
 	_, _ = fmt.Fprintf(g.out, format, args...)
-}
-
-// collect walks the trace, giving every step a node and every parent an edge to
-// its children.
-func (g *graph) collect(step *trace.Step, parent string) {
-	id := "n" + strconv.Itoa(g.next)
-	g.next++
-	if _, seen := g.nodes[step.Zone]; !seen {
-		g.zones = append(g.zones, step.Zone)
-	}
-	g.nodes[step.Zone] = append(g.nodes[step.Zone], node{id: id, step: step})
-
-	if parent != "" {
-		g.edges = append(g.edges, edge{from: parent, to: id, step: step})
-	}
-	for _, child := range step.Children {
-		g.collect(child, id)
-	}
 }
 
 // label is what a node says: who was asked, how it went, and what came back.
@@ -131,70 +92,25 @@ func label(step *trace.Step) string {
 		lines = append(lines, line)
 	}
 
-	if step.DNSSEC != nil {
-		lines = append(lines, "["+string(step.DNSSEC.State)+"]")
-		if step.DNSSEC.Signal != nil {
-			lines = append(lines, "cds "+string(step.DNSSEC.Signal.State))
-			if boot := step.DNSSEC.Signal.Bootstrap; boot != nil {
-				lines = append(lines, "bootstrap "+string(boot.State))
-			}
-		}
-	}
-	if step.Delegation != nil && step.Delegation.CSYNC != nil && step.Delegation.CSYNC.State != trace.CSYNCNone {
-		lines = append(lines, "csync "+string(step.Delegation.CSYNC.State))
-	}
-	for _, ede := range step.Extended {
-		lines = append(lines, "ede "+ede.String())
-	}
-	if step.Subnet != nil {
-		lines = append(lines, fmt.Sprintf("ecs scope /%d", step.Subnet.Scope))
-	}
-	if step.NSID != "" {
-		lines = append(lines, "@"+step.NSID)
-	}
-	if step.Cookie != "" {
-		lines = append(lines, "cookie "+string(step.Cookie))
-	}
-	for _, record := range step.Records {
-		lines = append(lines, record.Name+" "+record.Type+" "+record.Data)
-	}
-	if step.Err != "" {
-		lines = append(lines, step.Err)
-	}
-	for _, note := range step.Notes {
-		lines = append(lines, "("+note+")")
-	}
+	lines = append(lines, diagram.Details(step)...)
 	return strings.Join(lines, "\n")
 }
 
 // attributes colour a node by how the hop went, following the same legend the
 // tree does.
-func attributes(step *trace.Step) string {
-	// An answer about a shorter name than the question is only a way down.
-	if step.Minimised && (step.Kind == trace.KindAnswer || step.Kind == trace.KindNoData) {
-		return ""
-	}
-	switch step.Kind {
-	case trace.KindAnswer, trace.KindCNAME:
-		return ", color=darkgreen"
-	case trace.KindNoData, trace.KindNXDomain, trace.KindLame:
-		return ", color=darkgoldenrod"
-	case trace.KindFiltered:
-		return ", color=darkorange, style=\"rounded,bold\""
-	case trace.KindTimeout, trace.KindError:
-		return ", color=firebrick"
-	case trace.KindSkipped:
-		return ", color=gray60, fontcolor=gray40, style=\"rounded,dashed\""
-	case trace.KindZone:
-		return ", shape=oval, color=gray40"
-	}
-	return ""
+var attributes = map[trace.Outcome]string{
+	trace.OutcomeAnswer:   ", color=darkgreen",
+	trace.OutcomeDenial:   ", color=darkgoldenrod",
+	trace.OutcomeFiltered: ", color=darkorange, style=\"rounded,bold\"",
+	trace.OutcomeFailed:   ", color=firebrick",
+	trace.OutcomeSkipped:  ", color=gray60, fontcolor=gray40, style=\"rounded,dashed\"",
+	trace.OutcomeZone:     ", shape=oval, color=gray40",
 }
 
 func edgeAttributes(step *trace.Step) string {
 	var attributes []string
 	if step.RTT > 0 {
-		attributes = append(attributes, "label="+quote(duration(step.RTT)))
+		attributes = append(attributes, "label="+quote(diagram.Duration(step.RTT)))
 	}
 	if step.Kind == trace.KindSkipped || step.Aside {
 		attributes = append(attributes, "style=dashed", "color=gray60")
@@ -214,7 +130,7 @@ func caption(tr *trace.Trace) string {
 		caption.WriteString(" " + question)
 	}
 	for _, answer := range tr.Resolvers {
-		if line := resolver(answer); line != "" {
+		if line := diagram.Resolver(answer); line != "" {
 			caption.WriteString("\n" + line)
 		}
 	}
@@ -222,41 +138,6 @@ func caption(tr *trace.Trace) string {
 		caption.WriteString("\nwarning: " + warning)
 	}
 	return caption.String()
-}
-
-// resolver is what a recursive server made of the same question, for the
-// caption to carry beside what the walk cost.
-func resolver(answer *trace.Resolver) string {
-	if answer == nil {
-		return ""
-	}
-	who := "a resolver"
-	if answer.Server.IP.IsValid() {
-		who = answer.Server.IP.String()
-	}
-	if answer.Err != "" {
-		return who + " did not answer"
-	}
-	line := who + " answered in " + duration(answer.Elapsed)
-	if answer.Match == trace.MatchDiffers {
-		line += ", and not what the walk found"
-	}
-	return line
-
-}
-
-// duration keeps an edge label short: a graph is read at a glance.
-func duration(d time.Duration) string {
-	switch {
-	case d >= time.Second:
-		return d.Round(10 * time.Millisecond).String()
-	case d >= 10*time.Millisecond:
-		return d.Round(time.Millisecond).String()
-	case d >= time.Millisecond:
-		return d.Round(100 * time.Microsecond).String()
-	default:
-		return d.Round(10 * time.Microsecond).String()
-	}
 }
 
 // quote writes a DOT string literal. Only the quote and the backslash need

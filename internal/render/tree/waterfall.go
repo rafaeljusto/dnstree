@@ -135,7 +135,7 @@ func (f *waterfall) line(row trace.Span) string {
 		if row.Aside {
 			glyph = f.glyphs[1]
 		}
-		bar = strings.Repeat(" ", from) + f.paint.paint(strings.Repeat(glyph, to-from), tone(row)) +
+		bar = strings.Repeat(" ", from) + f.paint.paint(strings.Repeat(glyph, to-from), tones[row.Step.Outcome()]) +
 			strings.Repeat(" ", f.cells-to)
 	}
 
@@ -246,7 +246,7 @@ func (f *waterfall) what(row trace.Span) string {
 		said = string(step.Kind)
 	}
 
-	fields := []string{f.paint.paint(said, tone(row))}
+	fields := []string{f.paint.paint(said, tones[row.Step.Outcome()])}
 	if f.trace.Asks(step) {
 		fields = append(fields, f.paint.dim(step.Asked.Type+" "+step.Asked.Name))
 	}
@@ -264,23 +264,13 @@ func (f *waterfall) warnings() []string {
 	return lines
 }
 
-// tone colours a bar by how the query went, following the tree: an answer is
-// green, a denial a warning, a failure a failure. An answer about a shorter
-// name than the question is only a way down, and is not coloured as one.
-func tone(row trace.Span) string {
-	step := row.Step
-	if step.Minimised && (step.Kind == trace.KindAnswer || step.Kind == trace.KindNoData) {
-		return ""
-	}
-	switch step.Kind {
-	case trace.KindAnswer, trace.KindCNAME:
-		return green
-	case trace.KindNoData, trace.KindNXDomain, trace.KindLame:
-		return yellow
-	case trace.KindFiltered, trace.KindTimeout, trace.KindError:
-		return red
-	}
-	return ""
+// tones colour a bar by how the query went, following the tree: an answer is
+// green, a denial a warning, a failure a failure.
+var tones = map[trace.Outcome]string{
+	trace.OutcomeAnswer:   green,
+	trace.OutcomeDenial:   yellow,
+	trace.OutcomeFiltered: red,
+	trace.OutcomeFailed:   red,
 }
 
 // cells is how many columns text takes on screen.

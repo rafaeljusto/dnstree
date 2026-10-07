@@ -96,7 +96,7 @@ func (t task) name(tr *trace.Trace) string {
 func (t task) data(result *trace.Step) string {
 	var tags []string
 	switch {
-	case t.Step.Kind == trace.KindTimeout, t.Step.Kind == trace.KindError, t.Step.Kind == trace.KindFiltered:
+	case t.Step.Outcome() == trace.OutcomeFailed, t.Step.Outcome() == trace.OutcomeFiltered:
 		tags = append(tags, "crit")
 	case t.Step == result:
 		tags = append(tags, "active")

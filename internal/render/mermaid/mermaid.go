@@ -6,10 +6,9 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
-	"time"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/render/diagram"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -17,36 +16,17 @@ import (
 // per zone, and what each hop cost on the edge that reaches it. It is the same
 // picture --format dot draws, for the places that draw Mermaid and not Graphviz.
 func Render(w io.Writer, tr *trace.Trace) error {
-	chart := &chart{out: bufio.NewWriter(w), nodes: map[string][]node{}}
+	chart := &chart{out: bufio.NewWriter(w)}
 	chart.render(tr.Shown())
 	return chart.out.Flush()
 }
 
 type chart struct {
 	out *bufio.Writer
-
-	// zones keeps the subgraphs in the order they were first reached, so that
-	// the same trace always comes out the same way.
-	zones []string
-	nodes map[string][]node
-	edges []edge
-	next  int
-}
-
-type node struct {
-	id   string
-	step *trace.Step
-}
-
-type edge struct {
-	from, to string
-	step     *trace.Step
 }
 
 func (c *chart) render(tr *trace.Trace) {
-	if tr != nil && tr.Root != nil {
-		c.collect(tr.Root, "")
-	}
+	layout := diagram.Layout(tr)
 
 	if tr != nil {
 		c.write("---\n")
@@ -55,15 +35,15 @@ func (c *chart) render(tr *trace.Trace) {
 	}
 	c.write("flowchart LR\n")
 
-	for i, zone := range c.zones {
+	for i, zone := range layout.Zones {
 		c.writef("    subgraph z%d [%s]\n", i, quote(zone))
-		for _, node := range c.nodes[zone] {
-			c.writef("        %s%s\n", node.id, shape(node.step))
+		for _, node := range layout.Nodes[zone] {
+			c.writef("        %s%s\n", node.ID, shape(node.Step))
 		}
 		c.write("    end\n")
 	}
-	for _, edge := range c.edges {
-		c.writef("    %s %s %s\n", edge.from, arrow(edge.step), edge.to)
+	for _, edge := range layout.Edges {
+		c.writef("    %s %s %s\n", edge.From, arrow(edge.Step), edge.To)
 	}
 	if tr != nil {
 		if lines := margin(tr); len(lines) > 0 {
@@ -79,10 +59,10 @@ func (c *chart) render(tr *trace.Trace) {
 	c.write("    classDef failed stroke:#b22222,stroke-width:2px\n")
 	c.write("    classDef skipped stroke:#999999,stroke-dasharray:4 3,color:#666666\n")
 	c.write("    classDef note stroke:#b8860b,stroke-dasharray:2 2\n")
-	for _, zone := range c.zones {
-		for _, node := range c.nodes[zone] {
-			if class := class(node.step); class != "" {
-				c.writef("    class %s %s\n", node.id, class)
+	for _, zone := range layout.Zones {
+		for _, node := range layout.Nodes[zone] {
+			if class := classes[node.Step.Outcome()]; class != "" {
+				c.writef("    class %s %s\n", node.ID, class)
 			}
 		}
 	}
@@ -96,24 +76,6 @@ func (c *chart) write(text string) {
 
 func (c *chart) writef(format string, args ...any) {
 	_, _ = fmt.Fprintf(c.out, format, args...)
-}
-
-// collect walks the trace, giving every step a node and every parent an edge to
-// its children.
-func (c *chart) collect(step *trace.Step, parent string) {
-	id := "n" + strconv.Itoa(c.next)
-	c.next++
-	if _, seen := c.nodes[step.Zone]; !seen {
-		c.zones = append(c.zones, step.Zone)
-	}
-	c.nodes[step.Zone] = append(c.nodes[step.Zone], node{id: id, step: step})
-
-	if parent != "" {
-		c.edges = append(c.edges, edge{from: parent, to: id, step: step})
-	}
-	for _, child := range step.Children {
-		c.collect(child, id)
-	}
 }
 
 // shape is a node as Mermaid declares it: the zone a walk starts from in a
@@ -159,64 +121,19 @@ func label(step *trace.Step) string {
 		lines = append(lines, strings.TrimSpace(step.Rcode+" "+verdict))
 	}
 
-	if step.DNSSEC != nil {
-		lines = append(lines, "["+string(step.DNSSEC.State)+"]")
-		if step.DNSSEC.Signal != nil {
-			lines = append(lines, "cds "+string(step.DNSSEC.Signal.State))
-			if boot := step.DNSSEC.Signal.Bootstrap; boot != nil {
-				lines = append(lines, "bootstrap "+string(boot.State))
-			}
-		}
-	}
-	if step.Delegation != nil && step.Delegation.CSYNC != nil && step.Delegation.CSYNC.State != trace.CSYNCNone {
-		lines = append(lines, "csync "+string(step.Delegation.CSYNC.State))
-	}
-	for _, ede := range step.Extended {
-		lines = append(lines, "ede "+ede.String())
-	}
-	if step.Subnet != nil {
-		lines = append(lines, fmt.Sprintf("ecs scope /%d", step.Subnet.Scope))
-	}
-	if step.NSID != "" {
-		lines = append(lines, "@"+step.NSID)
-	}
-	if step.Cookie != "" {
-		lines = append(lines, "cookie "+string(step.Cookie))
-	}
-	for _, record := range step.Records {
-		lines = append(lines, record.Name+" "+record.Type+" "+record.Data)
-	}
-	if step.Err != "" {
-		lines = append(lines, step.Err)
-	}
-	for _, note := range step.Notes {
-		lines = append(lines, "("+note+")")
-	}
+	lines = append(lines, diagram.Details(step)...)
 	return strings.Join(lines, "\n")
 }
 
-// class colours a node by how the hop went, following the legend the tree and
+// classes colour a node by how the hop went, following the legend the tree and
 // the DOT graph use.
-func class(step *trace.Step) string {
-	// An answer about a shorter name than the question is only a way down.
-	if step.Minimised && (step.Kind == trace.KindAnswer || step.Kind == trace.KindNoData) {
-		return ""
-	}
-	switch step.Kind {
-	case trace.KindAnswer, trace.KindCNAME:
-		return "answer"
-	case trace.KindNoData, trace.KindNXDomain, trace.KindLame:
-		return "denial"
-	case trace.KindFiltered:
-		return "filtered"
-	case trace.KindTimeout, trace.KindError:
-		return "failed"
-	case trace.KindSkipped:
-		return "skipped"
-	case trace.KindZone:
-		return "zone"
-	}
-	return ""
+var classes = map[trace.Outcome]string{
+	trace.OutcomeAnswer:   "answer",
+	trace.OutcomeDenial:   "denial",
+	trace.OutcomeFiltered: "filtered",
+	trace.OutcomeFailed:   "failed",
+	trace.OutcomeSkipped:  "skipped",
+	trace.OutcomeZone:     "zone",
 }
 
 // arrow is the edge into a step, dashed where the step was never asked or asked
@@ -227,7 +144,7 @@ func arrow(step *trace.Step) string {
 		line = "-.->"
 	}
 	if step.RTT > 0 {
-		line += "|" + quote(duration(step.RTT)) + "|"
+		line += "|" + quote(diagram.Duration(step.RTT)) + "|"
 	}
 	return line
 }
@@ -246,7 +163,7 @@ func title(tr *trace.Trace) string {
 func margin(tr *trace.Trace) []string {
 	var lines []string
 	for _, answer := range tr.Resolvers {
-		if line := resolver(answer); line != "" {
+		if line := diagram.Resolver(answer); line != "" {
 			lines = append(lines, line)
 		}
 	}
@@ -254,38 +171,6 @@ func margin(tr *trace.Trace) []string {
 		lines = append(lines, "warning: "+warning)
 	}
 	return lines
-}
-
-func resolver(answer *trace.Resolver) string {
-	if answer == nil {
-		return ""
-	}
-	who := "a resolver"
-	if answer.Server.IP.IsValid() {
-		who = answer.Server.IP.String()
-	}
-	if answer.Err != "" {
-		return who + " did not answer"
-	}
-	line := who + " answered in " + duration(answer.Elapsed)
-	if answer.Match == trace.MatchDiffers {
-		line += ", and not what the walk found"
-	}
-	return line
-}
-
-// duration keeps an edge label short: a chart is read at a glance.
-func duration(d time.Duration) string {
-	switch {
-	case d >= time.Second:
-		return d.Round(10 * time.Millisecond).String()
-	case d >= 10*time.Millisecond:
-		return d.Round(time.Millisecond).String()
-	case d >= time.Millisecond:
-		return d.Round(100 * time.Microsecond).String()
-	default:
-		return d.Round(10 * time.Microsecond).String()
-	}
 }
 
 // quote writes a Mermaid string. Inside one, Mermaid reads #name; as an entity
