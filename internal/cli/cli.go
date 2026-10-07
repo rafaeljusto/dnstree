@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -790,6 +791,10 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The flags typed out, in order, to tell them from the file's defaults.
+	var typed []string
+	scan(flags, args, func(name, _ string) { typed = append(typed, name) })
+
 	// A value checked after the parse is blamed on the file when only the file
 	// set it: the command line has nothing to point at.
 	fromFile := make(map[string]bool)
@@ -799,7 +804,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			return nil, fmt.Errorf("%w: %s: %w", ErrUsage, file.path, plain(flags, err))
 		}
 		flags.Visit(func(f *flag.Flag) { fromFile[f.Name] = true })
-		scan(flags, args, func(name, _ string) { delete(fromFile, name) })
+		for _, name := range typed {
+			delete(fromFile, name)
+		}
 	}
 	inFile := func(name string) string {
 		if fromFile[name] {
@@ -901,9 +908,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.CheckDS && !cfg.DNSSEC {
 		// Typed out, it is a mistake to say so. From the file it is a default
 		// for the walks that check signatures, and this one does not.
-		named := false
-		scan(flags, args, func(name, _ string) { named = named || name == "check-ds" })
-		if named {
+		if slices.Contains(typed, "check-ds") {
 			return nil, fmt.Errorf("%w: --check-ds weighs a signed request, and only --dnssec checks signatures", ErrUsage)
 		}
 		cfg.CheckDS = false
@@ -913,11 +918,11 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		// though the saved one had been made with it. The file's are about the
 		// walks it makes, and are left alone.
 		var walking []string
-		scan(flags, args, func(name, _ string) {
+		for _, name := range typed {
 			if walkFlags[name] {
 				walking = append(walking, "--"+name)
 			}
-		})
+		}
 		if len(walking) > 0 {
 			return nil, fmt.Errorf("%w: --from draws a walk already made, which %s cannot change",
 				ErrUsage, strings.Join(walking, " and "))
@@ -1002,9 +1007,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	cfg.Browser = !noBrowser
 
 	if Serves(cfg.Format) {
-		if cfg.WebAddr == "" {
-			cfg.WebAddr = web.DefaultAddr
-		}
+		cfg.WebAddr = cmp.Or(cfg.WebAddr, web.DefaultAddr)
 		// Checked here so that a typo costs nothing, rather than the walk the
 		// page was going to show.
 		_, port, err := net.SplitHostPort(cfg.WebAddr)
@@ -1027,9 +1030,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.DDR && !cfg.Compare {
 		// As with --check-ds, a default from the file is heeded only by the runs
 		// it applies to, and typed out the contradiction is a mistake.
-		named := false
-		scan(flags, args, func(name, _ string) { named = named || name == "ddr" })
-		if named {
+		if slices.Contains(typed, "ddr") {
 			return nil, fmt.Errorf("%w: --ddr asks the resolvers --no-compare leaves unasked", ErrUsage)
 		}
 		cfg.DDR = false
@@ -1560,8 +1561,5 @@ func proto(udp, tcp, dot, doh bool) (string, error) {
 		}
 		chosen = carrier.name
 	}
-	if chosen == "" {
-		chosen = "udp"
-	}
-	return chosen, nil
+	return cmp.Or(chosen, "udp"), nil
 }
