@@ -249,6 +249,26 @@ func TestOrderedByItsOctets(t *testing.T) {
 			rrtype: "HINFO",
 			values: []string{`"ab" "x"`, `"\255" "x"`},
 		},
+		"resolver information of two strings that sorts before one of a single string": {
+			rrtype: "RESINFO",
+			values: []string{`"qnamemin"`, `"a" "b"`},
+		},
+		"application visibility of two strings that sorts before one of a single string": {
+			rrtype: "AVC",
+			values: []string{`"app-name:zz"`, `"a" "b"`},
+		},
+		"a wallet whose escapes make it look longer than it is": {
+			rrtype: "WALLET",
+			values: []string{`"ab"`, `"\255"`},
+		},
+		"a CLA of two strings that sorts before one of a single string": {
+			rrtype: "CLA",
+			values: []string{`"zz"`, `"a" "b"`},
+		},
+		"bitmaps whose octets sort the other way from the types they list": {
+			rrtype: "CSYNC",
+			values: []string{`1 0 A`, `1 0 NS`},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

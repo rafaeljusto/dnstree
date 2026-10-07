@@ -158,13 +158,15 @@ func (s *signer) sign(rrset []dns.RR, key *dns.DNSKEY, private crypto.Signer, sp
 	for i, rr := range rrset {
 		copies[i] = rr.Clone()
 		// The codec sorts the values that end CAA, URI and NULL records
-		// shortest first, TXT by how many strings it holds, and text by its
-		// escaped form, rather than by their octets (RFC 4034 6.3); the
+		// shortest first, TXT by how many strings it holds, text by its
+		// escaped form and CSYNC by the types it lists, rather than by their
+		// octets (RFC 4034 6.3); the
 		// generic form is sorted the way a real signer sorts them, and packs
 		// to the same wire for types that hold no name.
 		switch dns.RRToType(rr) {
 		case dns.TypeCAA, dns.TypeURI, dns.TypeNULL, dns.TypeTXT, dns.TypeSPF,
-			dns.TypeHINFO, dns.TypeISDN, dns.TypeX25, dns.TypeGPOS, dns.TypeUINFO, dns.TypeNINFO:
+			dns.TypeHINFO, dns.TypeISDN, dns.TypeX25, dns.TypeGPOS, dns.TypeUINFO, dns.TypeNINFO,
+			dns.TypeAVC, dns.TypeRESINFO, dns.TypeWALLET, dns.TypeCLA, dns.TypeCSYNC:
 			raw := new(dns.RFC3597)
 			if err := raw.ToRFC3597(rr); err == nil {
 				copies[i] = raw

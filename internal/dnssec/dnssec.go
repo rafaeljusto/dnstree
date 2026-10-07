@@ -555,7 +555,8 @@ func ordered(rrset []dns.RR) []dns.RR {
 func misordered(rrtype uint16) bool {
 	switch rrtype {
 	case dns.TypeCAA, dns.TypeURI, dns.TypeNULL, dns.TypeTXT, dns.TypeSPF,
-		dns.TypeHINFO, dns.TypeISDN, dns.TypeX25, dns.TypeGPOS, dns.TypeUINFO, dns.TypeNINFO:
+		dns.TypeHINFO, dns.TypeISDN, dns.TypeX25, dns.TypeGPOS, dns.TypeUINFO, dns.TypeNINFO,
+		dns.TypeAVC, dns.TypeRESINFO, dns.TypeWALLET, dns.TypeCLA, dns.TypeCSYNC:
 		return true
 	}
 	return false
