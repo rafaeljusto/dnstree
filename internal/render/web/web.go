@@ -5,6 +5,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"errors"
@@ -79,10 +80,7 @@ func Serve(ctx context.Context, out io.Writer, tr *trace.Trace, findings []expla
 		return err
 	}
 
-	addr := opts.Addr
-	if addr == "" {
-		addr = DefaultAddr
-	}
+	addr := cmp.Or(opts.Addr, DefaultAddr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		if opErr, ok := errors.AsType[*net.OpError](err); ok {

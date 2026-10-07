@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"net/netip"
+	"slices"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
@@ -26,21 +27,11 @@ func classify(resp *dns.Msg, zone, qname string, qtype uint16, extended []trace.
 	// attached to it.
 	switch kind {
 	case trace.KindLame, trace.KindNXDomain, trace.KindNoData, trace.KindError:
-		if withheld(extended) {
+		if slices.ContainsFunc(extended, trace.ExtendedError.Withheld) {
 			return trace.KindFiltered, nil
 		}
 	}
 	return kind, delegation
-}
-
-// withheld reports whether any of the codes says somebody decided the answer.
-func withheld(extended []trace.ExtendedError) bool {
-	for _, ede := range extended {
-		if ede.Withheld() {
-			return true
-		}
-	}
-	return false
 }
 
 // outcome is what the message says on its own, before the server's own account

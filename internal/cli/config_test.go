@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"cmp"
 	"errors"
 	"io"
 	"net/netip"
@@ -534,27 +535,13 @@ func parse(t *testing.T, args ...string) *cli.Config {
 // complete fills in the defaults a case does not set, so that a table only says
 // what it is about.
 func complete(want cli.Config) cli.Config {
-	if want.Name == "" {
-		want.Name = "example.com"
-	}
-	if want.Type == "" {
-		want.Type = "A"
-	}
-	if want.Proto == "" {
-		want.Proto = "udp"
-	}
-	if want.Format == "" {
-		want.Format = "tree"
-	}
-	if want.Color == "" {
-		want.Color = tree.ColorAuto
-	}
-	if want.Timeout == 0 {
-		want.Timeout = 2 * time.Second
-	}
-	if want.Retries == 0 {
-		want.Retries = 1
-	}
+	want.Name = cmp.Or(want.Name, "example.com")
+	want.Type = cmp.Or(want.Type, "A")
+	want.Proto = cmp.Or(want.Proto, "udp")
+	want.Format = cmp.Or(want.Format, "tree")
+	want.Color = cmp.Or(want.Color, tree.ColorAuto)
+	want.Timeout = cmp.Or(want.Timeout, 2*time.Second)
+	want.Retries = cmp.Or(want.Retries, 1)
 	want.Compare = true
 	want.Browser = true
 	return want

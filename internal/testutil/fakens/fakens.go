@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -635,12 +636,10 @@ func sentCookie(req *dns.Msg) string {
 // asks reports whether the query carried an EDNS0 option of this type. A server
 // answers with an identifier because it was asked for one, never unprompted.
 func asks[T dns.RR](req *dns.Msg) bool {
-	for _, rr := range req.Pseudo {
-		if _, ok := rr.(T); ok {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(req.Pseudo, func(rr dns.RR) bool {
+		_, ok := rr.(T)
+		return ok
+	})
 }
 
 // respond fills in the reply the way an authoritative server would: an answer,

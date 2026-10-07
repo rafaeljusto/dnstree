@@ -1,6 +1,7 @@
 package trace
 
 import (
+	"cmp"
 	"net/netip"
 	"slices"
 )
@@ -90,9 +91,7 @@ func (t ServiceTarget) Failed() string {
 		if lookup.Err == "" {
 			return ""
 		}
-		if why == "" {
-			why = lookup.Err
-		}
+		why = cmp.Or(why, lookup.Err)
 	}
 	return why
 }

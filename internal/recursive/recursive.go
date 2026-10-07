@@ -161,10 +161,5 @@ func stale(tr *trace.Trace, answer *trace.Resolver, theirs []string) bool {
 			served[data] = true
 		}
 	}
-	for _, data := range theirs {
-		if served[data] {
-			return false
-		}
-	}
-	return true
+	return !slices.ContainsFunc(theirs, func(data string) bool { return served[data] })
 }

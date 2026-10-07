@@ -126,39 +126,17 @@ func (r *renderer) render(tr *trace.Trace) {
 		r.write(r.label(tr.Root) + "\n")
 		r.children(tr.Root, "")
 	}
-	for _, line := range r.differences(tr) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.failures(tr) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.kept(tr) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.designations(tr) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.authorities(tr.CAA) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.policy(tr.SPF) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.mailPath(tr.Mail) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.servicePath(tr.ServicePath) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.requests(tr) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.registration(tr.Registration) {
-		r.write(line + "\n")
-	}
-	for _, line := range r.propagation(tr.Propagation) {
-		r.write(line + "\n")
-	}
+	r.writeLines(r.differences(tr))
+	r.writeLines(r.failures(tr))
+	r.writeLines(r.kept(tr))
+	r.writeLines(r.designations(tr))
+	r.writeLines(r.authorities(tr.CAA))
+	r.writeLines(r.policy(tr.SPF))
+	r.writeLines(r.mailPath(tr.Mail))
+	r.writeLines(r.servicePath(tr.ServicePath))
+	r.writeLines(r.requests(tr))
+	r.writeLines(r.registration(tr.Registration))
+	r.writeLines(r.propagation(tr.Propagation))
 	if line := r.reported(tr.Report); line != "" {
 		r.write(line + "\n")
 	}
@@ -169,9 +147,7 @@ func (r *renderer) render(tr *trace.Trace) {
 		}
 		r.write(r.paint.paint(mark+warning, yellow) + "\n")
 	}
-	for _, line := range r.check(tr.Check) {
-		r.write(line + "\n")
-	}
+	r.writeLines(r.check(tr.Check))
 }
 
 // step draws one hop and everything it led to.
@@ -201,6 +177,12 @@ func (r *renderer) children(step *trace.Step, prefix string) {
 // checking of its own.
 func (r *renderer) write(text string) {
 	_, _ = r.out.WriteString(text)
+}
+
+func (r *renderer) writeLines(lines []string) {
+	for _, line := range lines {
+		r.write(line + "\n")
+	}
 }
 
 func (r *renderer) branch(last, marked bool) string {
@@ -543,10 +525,7 @@ func (r *renderer) recordLabel(record trace.RR) string {
 		return label
 	}
 
-	icon := recordIcons[record.Type]
-	if icon == "" {
-		icon = "📄"
-	}
+	icon := cmp.Or(recordIcons[record.Type], "📄")
 	return spaced(icon) + label
 }
 

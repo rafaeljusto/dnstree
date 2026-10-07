@@ -1,6 +1,7 @@
 package fakens
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -238,7 +239,8 @@ func (s *Server) owners(withEmptyNonTerminals bool) ([]string, map[string][]uint
 	}
 
 	if withEmptyNonTerminals {
-		for _, name := range keysOf(types) {
+		// The keys are taken first, since the loop adds to types.
+		for _, name := range slices.Collect(maps.Keys(types)) {
 			for n := dnsutil.Labels(name) - 1; n > dnsutil.Labels(s.origin); n-- {
 				if ancestor := ancestorOf(name, n); types[ancestor] == nil {
 					types[ancestor] = []uint16{}
@@ -247,12 +249,7 @@ func (s *Server) owners(withEmptyNonTerminals bool) ([]string, map[string][]uint
 		}
 	}
 
-	names := make([]string, 0, len(types))
-	for name := range types {
-		names = append(names, name)
-	}
-	slices.SortFunc(names, dns.CompareName)
-	return names, types
+	return slices.SortedFunc(maps.Keys(types), dns.CompareName), types
 }
 
 // unsignedDelegation reports whether name is a cut this zone hands out without
@@ -331,13 +328,4 @@ func ancestorOf(name string, n int) string {
 		return dnsutil.Fqdn(name)
 	}
 	return dnsutil.Fqdn(strings.Join(labels[len(labels)-n:], "."))
-}
-
-// keysOf is the keys of m, taken before it is written to.
-func keysOf[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	return keys
 }

@@ -2,6 +2,7 @@ package tree
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"io"
 	"maps"
@@ -239,12 +240,8 @@ func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	elapsed := tr.Elapsed
-	if elapsed == 0 {
-		elapsed = time.Since(l.start)
-	}
 	writeSummary(w, tr.Shown(), painter(l.opts.Color == ColorAlways), l.sep,
-		l.opts.Charset, elapsed, l.counts())
+		l.opts.Charset, cmp.Or(tr.Elapsed, time.Since(l.start)), l.counts())
 }
 
 // draw renders the walk and puts a whole frame on the screen.

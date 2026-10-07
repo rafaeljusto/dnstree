@@ -492,10 +492,7 @@ func unreported(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) {
 	if chain == nil || chain.DNSSEC.State != trace.Bogus {
 		return
 	}
-	zone := chain.DNSSEC.Zone
-	if zone == "" {
-		zone = "the zone"
-	}
+	zone := cmp.Or(chain.DNSSEC.Zone, "the zone")
 	fmt.Fprintf(stderr, "report: not sent: %s names no agent to report to (RFC 9567)\n", zone)
 }
 

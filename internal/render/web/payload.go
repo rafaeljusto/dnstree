@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -60,10 +61,7 @@ func build(tr *trace.Trace, findings []explain.Finding, opts Options) (page, tra
 	if when.IsZero() {
 		when = time.Now()
 	}
-	version := opts.Version
-	if version == "" {
-		version = "dev"
-	}
+	version := cmp.Or(opts.Version, "dev")
 
 	// The encoder ends its document with a newline, which has no business in
 	// the middle of another one.
