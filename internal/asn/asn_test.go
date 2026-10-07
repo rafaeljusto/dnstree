@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/asn"
@@ -289,21 +290,23 @@ func TestAnnotateLeavesUnqueriedServersAlone(t *testing.T) {
 // running when the grace runs out leave no AS numbers, and a reader is owed a
 // reason for that just as much as for a refusal.
 func TestAnnotateSaysWhenItGaveUp(t *testing.T) {
-	never := func(ctx context.Context, _ string) ([]string, error) {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}
+	synctest.Test(t, func(t *testing.T) {
+		never := func(ctx context.Context, _ string) ([]string, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
 
-	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone,
-		Children: []*trace.Step{step("1.2.3.4")}}}
+		tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone,
+			Children: []*trace.Step{step("1.2.3.4")}}}
 
-	grace, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
-	asn.New(never, nil).Annotate(grace, tr)
+		grace, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		defer cancel()
+		asn.New(never, nil).Annotate(grace, tr)
 
-	if len(tr.Warnings) != 1 || !strings.Contains(tr.Warnings[0], "in time") {
-		t.Fatalf("got warnings %q, want one saying they did not answer in time", tr.Warnings)
-	}
+		if len(tr.Warnings) != 1 || !strings.Contains(tr.Warnings[0], "in time") {
+			t.Fatalf("got warnings %q, want one saying they did not answer in time", tr.Warnings)
+		}
+	})
 }
 
 // TestRoundsDoNotShareAWait covers --watch, where one resolver serves every

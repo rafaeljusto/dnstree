@@ -54,22 +54,24 @@ func TestWalksLetGoOfTheExpired(t *testing.T) {
 }
 
 func TestWalksBusy(t *testing.T) {
-	w := newWalks(1, time.Minute, 20*time.Millisecond)
-	release := make(chan struct{})
-	started := make(chan struct{})
-	go func() {
-		_, _ = w.get(context.Background(), "slow", always, func(context.Context) (*walked, error) {
-			close(started)
-			<-release
-			return &walked{}, nil
-		})
-	}()
-	<-started
-	defer close(release)
+	synctest.Test(t, func(t *testing.T) {
+		w := newWalks(1, time.Minute, 20*time.Millisecond)
+		release := make(chan struct{})
+		started := make(chan struct{})
+		go func() {
+			_, _ = w.get(t.Context(), "slow", always, func(context.Context) (*walked, error) {
+				close(started)
+				<-release
+				return &walked{}, nil
+			})
+		}()
+		<-started
+		defer close(release)
 
-	if _, err := w.get(t.Context(), "other", always, made(1)); !errors.Is(err, errBusy) {
-		t.Errorf("got %v, want %v while the only room is taken", err, errBusy)
-	}
+		if _, err := w.get(t.Context(), "other", always, made(1)); !errors.Is(err, errBusy) {
+			t.Errorf("got %v, want %v while the only room is taken", err, errBusy)
+		}
+	})
 }
 
 // TestWalksOutliveWhoAskedFirst covers the first visitor leaving while the walk

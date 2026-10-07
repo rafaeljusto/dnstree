@@ -15,7 +15,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/rdap"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/output"
 )
 
 // rootZone is a whole synthetic internet in one zone, so that the command can
@@ -170,7 +170,7 @@ func TestRunWeb(t *testing.T) {
 			ctx, stop := context.WithCancel(t.Context())
 			defer stop()
 
-			out := new(served)
+			out := new(output.Buffer)
 			done := make(chan int, 1)
 			go func() {
 				done <- run(ctx, []string{
@@ -180,7 +180,7 @@ func TestRunWeb(t *testing.T) {
 				}, out, io.Discard)
 			}()
 
-			base := out.address(t)
+			base := out.Await(t, output.Address)
 			index, err := http.Get(base)
 			if err != nil {
 				t.Fatalf("reading the page: %v", err)
@@ -228,39 +228,6 @@ func TestRunWeb(t *testing.T) {
 			}
 		})
 	}
-}
-
-// served is what the command writes while it is still running, which is where
-// the address of the page appears.
-type served struct {
-	mutex sync.Mutex
-	buf   bytes.Buffer
-}
-
-func (s *served) Write(p []byte) (int, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.buf.Write(p)
-}
-
-func (s *served) String() string {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.buf.String()
-}
-
-func (s *served) address(tb testing.TB) string {
-	tb.Helper()
-
-	found := regexp.MustCompile(`http://[^\s]+/`)
-	for range 400 {
-		if at := found.FindString(s.String()); at != "" {
-			return at
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	tb.Fatalf("got %q, want the address of the page in it", s.String())
-	return ""
 }
 
 // TestRunLiveNowhere covers --live where there is no one to watch: a pipe, a
@@ -927,12 +894,11 @@ www.test.           IN A    ` + address + "\n"
 }
 
 // watching starts a run in the background and hands back the buffers it writes
-// to and the code it ends with. Nothing reads the buffers until the code has
-// arrived, which is what makes reading them safe.
-func watching(ctx context.Context, tb testing.TB, args ...string) (code <-chan int, out, errs *bytes.Buffer) {
+// to and the code it ends with.
+func watching(ctx context.Context, tb testing.TB, args ...string) (code <-chan int, out, errs *output.Buffer) {
 	tb.Helper()
 
-	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	stdout, stderr := new(output.Buffer), new(output.Buffer)
 	done := make(chan int, 1)
 	go func() { done <- run(ctx, args, stdout, stderr) }()
 	return done, stdout, stderr
@@ -966,7 +932,7 @@ func TestRunWatch(t *testing.T) {
 		"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
 		"--no-asn", "--no-compare", "--color", "never", "--watch", "1s", "www.test", "A")
 
-	time.Sleep(400 * time.Millisecond)
+	stdout.Await(t, `\(root\)`)
 	server.Replace(t, watchZone("192.0.2.2"))
 	time.Sleep(2500 * time.Millisecond)
 	cancel()
@@ -997,12 +963,12 @@ func TestRunWatchWaitsForWhatIsExpected(t *testing.T) {
 	server := fakens.New(t, fakens.Config{Origin: ".", Zone: watchZone("192.0.2.1")})
 	hints := rootHintsFile(t)
 
-	code, _, stderr := watching(t.Context(), t,
+	code, stdout, stderr := watching(t.Context(), t,
 		"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
 		"--no-asn", "--no-compare", "--color", "never", "--watch", "1s",
 		"--expect", "192.0.2.2", "www.test", "A")
 
-	time.Sleep(1500 * time.Millisecond)
+	stdout.Await(t, `\(root\)`)
 	server.Replace(t, watchZone("192.0.2.2"))
 
 	if got := ended(t, code); got != exitAnswer {
@@ -1019,12 +985,12 @@ func TestRunWatchInterrupted(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	code, _, stderr := watching(ctx, t,
+	code, stdout, stderr := watching(ctx, t,
 		"--root-hints", hints, "--port", strconv.Itoa(int(server.Addr.Port())),
 		"--no-asn", "--no-compare", "--color", "never", "--watch", "1s",
 		"--expect", "192.0.2.2", "www.test", "A")
 
-	time.Sleep(1500 * time.Millisecond)
+	stdout.Await(t, `\(root\)`)
 	cancel()
 
 	if got := ended(t, code); got != exitExpect {

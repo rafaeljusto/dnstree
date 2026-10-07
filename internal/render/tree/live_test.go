@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -95,25 +96,27 @@ func TestLiveDrawTall(t *testing.T) {
 }
 
 func TestLiveDrawThrottle(t *testing.T) {
-	var buf bytes.Buffer
-	live := newLive(&buf, Options{Color: ColorNever})
+	synctest.Test(t, func(t *testing.T) {
+		var buf bytes.Buffer
+		live := newLive(&buf, Options{Color: ColorNever})
 
-	live.Draw(walk(1))
-	if buf.Len() == 0 {
-		t.Fatal("got nothing drawn, want the first frame")
-	}
+		live.Draw(walk(1))
+		if buf.Len() == 0 {
+			t.Fatal("got nothing drawn, want the first frame")
+		}
 
-	buf.Reset()
-	live.Draw(walk(2))
-	if buf.Len() != 0 {
-		t.Errorf("got %q, want nothing so soon after the frame before", buf.String())
-	}
+		buf.Reset()
+		live.Draw(walk(2))
+		if buf.Len() != 0 {
+			t.Errorf("got %q, want nothing so soon after the frame before", buf.String())
+		}
 
-	live.last = time.Now().Add(-redrawEvery)
-	live.Draw(walk(2))
-	if buf.Len() == 0 {
-		t.Error("got nothing drawn, want the frame once the moment has passed")
-	}
+		time.Sleep(redrawEvery)
+		live.Draw(walk(2))
+		if buf.Len() == 0 {
+			t.Error("got nothing drawn, want the frame once the moment has passed")
+		}
+	})
 }
 
 // TestLiveNowhere covers the writer nobody is watching, which is every writer a

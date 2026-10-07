@@ -1,25 +1,23 @@
 package web_test
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/output"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // TestServe walks the whole way round: a trace goes in, an address comes out,
 // and what is at that address is the page and the walk behind it.
 func TestServe(t *testing.T) {
-	out := new(watched)
+	out := new(output.Buffer)
 	ctx, stop := context.WithCancel(t.Context())
 	defer stop()
 
@@ -28,7 +26,7 @@ func TestServe(t *testing.T) {
 		done <- web.Serve(ctx, out, resolution(), nil, web.Options{Addr: "127.0.0.1:0", Version: "v0.1.0"})
 	}()
 
-	base := out.address(t)
+	base := out.Await(t, output.Address)
 	for _, path := range []string{"", "app.css", "app.js", "page.json", "trace.json"} {
 		answer, err := http.Get(base + path)
 		if err != nil {
@@ -82,12 +80,12 @@ func TestServeSaysWhereItIs(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			out := new(watched)
+			out := new(output.Buffer)
 			ctx, stop := context.WithCancel(t.Context())
 
 			done := make(chan error, 1)
 			go func() { done <- web.Serve(ctx, out, resolution(), nil, web.Options{Addr: test.addr}) }()
-			out.address(t)
+			out.Await(t, output.Address)
 			stop()
 			<-done
 
@@ -116,7 +114,7 @@ func TestServeAnnounces(t *testing.T) {
 			tr := resolution()
 			tr.Question.Name = "evil\x1b[2J.example."
 
-			out := new(watched)
+			out := new(output.Buffer)
 			ctx, stop := context.WithCancel(t.Context())
 			done := make(chan error, 1)
 			go func() {
@@ -124,7 +122,7 @@ func TestServeAnnounces(t *testing.T) {
 					Addr: "127.0.0.1:0", Scene: test.scene, Color: tree.ColorAlways,
 				})
 			}()
-			out.until(t, "served until ctrl-c")
+			out.Await(t, "served until ctrl-c")
 			stop()
 			<-done
 
@@ -147,7 +145,7 @@ func TestServeInterrupted(t *testing.T) {
 	ctx, stop := context.WithCancel(t.Context())
 	stop()
 
-	out := new(watched)
+	out := new(output.Buffer)
 	if err := web.Serve(ctx, out, resolution(), nil, web.Options{Browser: true}); err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
@@ -165,52 +163,4 @@ func resolution() *trace.Trace {
 		Elapsed:  30 * time.Millisecond,
 		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
 	}
-}
-
-// watched is what the command writes, read from another goroutine as it is
-// written: the address is only known once the server is up.
-type watched struct {
-	mutex sync.Mutex
-	buf   bytes.Buffer
-}
-
-func (w *watched) Write(p []byte) (int, error) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-	return w.buf.Write(p)
-}
-
-func (w *watched) String() string {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-	return w.buf.String()
-}
-
-// until waits for a line the command writes once the server is up.
-func (w *watched) until(tb testing.TB, want string) {
-	tb.Helper()
-
-	for range 200 {
-		if strings.Contains(w.String(), want) {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	tb.Fatalf("got %q, want %q in it", w.String(), want)
-}
-
-var addressRE = regexp.MustCompile(`http://[^\s]+/`)
-
-// address waits for the line that says where the page is.
-func (w *watched) address(tb testing.TB) string {
-	tb.Helper()
-
-	for range 200 {
-		if found := addressRE.FindString(w.String()); found != "" {
-			return found
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	tb.Fatalf("got %q, want an address in it", w.String())
-	return ""
 }
