@@ -30,6 +30,10 @@ regression however nice it reads.
 - No churn. A change has to earn its diff: less code, a clearer seam, a
   measured gain, or an idiom the rest of the tree already uses. Renaming for
   taste, reordering, and abstractions with one caller are not changes.
+- Leave the code under an open finding in the audit ledger
+  (`../dnstree-audit/coverage.md`) alone. Refactoring it either fixes the
+  finding, which is a `fix:` with its own test, or moves it out from under
+  the ledger's link. Name the finding in the report if it got in the way.
 - Read [`decisions.md`](decisions.md) before proposing anything. What it
   records as declined stays declined unless the code under it has changed.
 
@@ -160,7 +164,9 @@ showed up on the second run. Don't run `make live`.
 
 ## 6. Review
 
-Invoke the `dnstree-review` skill on the working tree. Then:
+Invoke the `dnstree-review` skill on the working tree, and tell it step 5 has
+run there: its separate worktree starts from HEAD and would test none of
+these changes. Then:
 
 - Fix every **blocking** and **should** finding, or drop the change it is
   about. Fix a **nit** when it is a line; leave it in the report otherwise.
