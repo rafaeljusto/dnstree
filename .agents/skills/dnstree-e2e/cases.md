@@ -135,7 +135,7 @@ cached, not a bug. Run it again.
 
 | id | run | expect |
 | --- | --- | --- |
-| check-ns | `$D $B --check-ns example.com` | exit 0, a `(parent/child NS check)` hop |
+| check-ns | `$D $B --check-ns example.com` | exit 0, a `(parent/child NS check)` hop with a `(CSYNC of example.com.)` hop under it, and no `csync:` line, since example.com. publishes none |
 | serial | `$D $B --serial example.com` | exit 0, a `(SOA of example.com.: N)` per nameserver |
 | serial-glueless | `$D $B --serial zonetransfer.me SOA` | exit 0, a serial from both `nsztm1` and `nsztm2` |
 | try-ns | `$D $B --try-ns example.com=hera.ns.cloudflare.com@108.162.192.162 example.com` | exit 0, the referral marked `(replaced by --try-ns)`, the summary `as though delegated to hera.ns.cloudflare.com.` |
