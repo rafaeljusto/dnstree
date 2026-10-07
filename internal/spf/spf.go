@@ -48,7 +48,7 @@ func Check(ctx context.Context, name string, lookup Lookup, budget int) *trace.S
 		c.spf.Result = trace.SPFUndecided
 		c.spf.Why = "the check was interrupted before the policy was followed to its end"
 		if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
-			c.spf.Why = "the check ran out of time before the policy was followed to its end"
+			c.spf.Why = "the check ran out of time before the policy was followed to its end; ask another resolver with --resolver"
 		}
 	case c.spf.Cut && c.spf.Result == trace.SPFOK:
 		c.spf.Result = trace.SPFUndecided

@@ -308,10 +308,10 @@ func TestOutOfTime(t *testing.T) {
 		why   string
 	}{
 		"time up, a lookup that could not be made": {
-			cause: context.DeadlineExceeded, why: "ran out of time",
+			cause: context.DeadlineExceeded, why: "ran out of time before the policy was followed to its end; ask another resolver with --resolver",
 		},
 		"time up, a lookup that came back with an error": {
-			cause: context.DeadlineExceeded, late: &trace.Resolver{Err: "context canceled"}, why: "ran out of time",
+			cause: context.DeadlineExceeded, late: &trace.Resolver{Err: "context canceled"}, why: "ran out of time before the policy was followed to its end; ask another resolver with --resolver",
 		},
 		"interrupted, a lookup that came back with an error": {
 			cause: context.Canceled, late: &trace.Resolver{Err: "context canceled"}, why: "interrupted",
