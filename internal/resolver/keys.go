@@ -29,6 +29,12 @@ func (r *run) checkDS(ctx context.Context, chain *dnssec.Chain, answer *trace.St
 		return
 	}
 	zone, verdict := last.zone, last.step.DNSSEC
+	// A zone its parent proves it holds no DS for can still ask for its first
+	// one, through the operators of its nameservers.
+	if chain.InsecureAt(zone) && verdict.State == trace.Insecure {
+		r.requestFirst(ctx, answer, last)
+		return
+	}
 	// Only a zone the chain entered secure has keys to check the request with.
 	// Anywhere else the verdict already says why, and the request is left.
 	if verdict.State != trace.Secure || chain.State() != trace.Secure || !dns.EqualName(chain.Zone(), zone) {
@@ -69,16 +75,10 @@ func (r *run) checkDS(ctx context.Context, chain *dnssec.Chain, answer *trace.St
 // verify. A zone that proves it has none of them hands back nothing.
 func (r *run) fetchSigned(ctx context.Context, chain *dnssec.Chain, answer *trace.Step, zone string, qtype uint16) ([]dns.RR, string) {
 	name := dnsutil.TypeToString(qtype)
-	if err := r.counters.query(); err != nil {
+	hop := r.fetchApex(ctx, answer, answer.Server, zone, qtype)
+	if hop == nil {
 		return nil, "the budget ran out before the " + name + " could be fetched"
 	}
-
-	hop := r.query(ctx, zone, answer.Server, zone, qtype)
-	hop.step.Aside = true
-	hop.step.Records = nil // the comparison is the point, and it is on the verdict
-	hop.step.Notes = append(hop.step.Notes, name+" of "+zone)
-	r.attach(answer, hop.step)
-
 	if hop.resp == nil || (hop.step.Kind != trace.KindAnswer && hop.step.Kind != trace.KindNoData) {
 		return nil, "the " + name + " could not be fetched"
 	}

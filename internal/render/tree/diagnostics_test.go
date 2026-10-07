@@ -465,6 +465,9 @@ func TestRenderSignal(t *testing.T) {
 		"a rollover waiting on the parent": {
 			signal: trace.Signal{State: trace.SignalPending, Requested: []uint16{7, 9}, Held: []uint16{7}},
 			want:   "cds asks for keys 7 and 9, the ds is for key 7"},
+		"a zone asking for its first DS": {
+			signal: trace.Signal{State: trace.SignalPending, Requested: []uint16{9}},
+			want:   "cds asks for a first ds, for key 9"},
 		"a zone asking to be made insecure": {
 			signal: trace.Signal{State: trace.SignalDelete}, want: "cds asks for no ds"},
 		"a request that could not be read": {

@@ -9,13 +9,14 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // checkNS asks the zone that answered for its own NS RRset and warns when it
 // disagrees with what the parent delegated. Only the parent's view is visible
 // from above, so the two drift apart unnoticed.
-func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Step) {
+func (r *run) checkNS(ctx context.Context, chain *dnssec.Chain, answer *trace.Step, parent *trace.Step) {
 	if !r.cfg.CheckNS || parent.Delegation == nil {
 		return
 	}
@@ -53,6 +54,7 @@ func (r *run) checkNS(ctx context.Context, answer *trace.Step, parent *trace.Ste
 		}
 	}
 	r.checkGlue(ctx, step, answer.Server, parent.Zone, delegated)
+	r.checkCSYNC(ctx, chain, step, answer.Server, delegated, child)
 }
 
 // checkGlue asks the zone for the addresses of the nameservers named inside

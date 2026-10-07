@@ -44,7 +44,7 @@ check example.com.
   ✔ mail          the SPF policy of example.com. takes 0 of the 10 lookups a check is allowed
   ✔ registration  the registration of example.com. runs until 2027-08-13
 1 to look at · 8 passed · 1 skipped
-✔ answered in 10s · 160 queries · 64 servers
+✔ answered in 9.2s · 161 queries · 64 servers
 expected check:clean, got servers look
 ```
 
@@ -85,12 +85,13 @@ the two lists against each other:
 ```
 $ dnstree --check-ns --no-asn www.example.com A
 ...
-│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  222ms  NOERROR  AA
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  214ms  NOERROR  AA
 │   │   │   ├── www.example.com. 300 A 172.66.147.243
 │   │   │   ├── www.example.com. 300 A 104.20.23.154
-│   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  224ms  NOERROR  AA  (parent/child NS check)
+│   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  217ms  NOERROR  AA  (parent/child NS check)
+│   │   │       └── hera.ns.cloudflare.com. 108.162.192.162  212ms  NOERROR  AA  no data  (CSYNC of example.com.)
 ...
-✔ answered in 936ms · resolver in 245ms · 4 queries · 3 servers
+✔ answered in 1.1s · resolver in 229ms · 5 queries · 3 servers
 ```
 
 The check rides in as a hop of its own, marked for what it is, so the query it
@@ -108,8 +109,8 @@ answers the question with no NS records of its own is reported too, since a zone
 that cannot name its own nameservers is a stranger thing than a list that has
 drifted.
 
-It costs one query, asked of the server that answered the question, and it is
-off unless asked for.
+It costs two queries, the NS set and the CSYNC below, asked of the server that
+answered the question, and it is off unless asked for.
 
 A nameserver named inside the zone it serves can only be reached through the
 addresses its parent hands out with the referral, the glue. Glue is a copy of
@@ -121,15 +122,16 @@ for the A and AAAA of each such nameserver too, together, under the NS check:
 ```
 $ dnstree --check-ns --no-asn www.isc.org A
 ...
-│   │   │   └── ns3.isc.org. 51.75.79.143  226ms  NOERROR  AA  (parent/child NS check)
-│   │   │       ├── ns3.isc.org. 51.75.79.143  232ms  NOERROR  AA  (glue check: A of ns3.isc.org.)
-│   │   │       ├── ns3.isc.org. 51.75.79.143  223ms  NOERROR  AA  (glue check: AAAA of ns3.isc.org.)
-│   │   │       ├── ns3.isc.org. 51.75.79.143  233ms  NOERROR  AA  (glue check: A of ns1.isc.org.)
-│   │   │       ├── ns3.isc.org. 51.75.79.143  232ms  NOERROR  AA  (glue check: AAAA of ns1.isc.org.)
-│   │   │       ├── ns3.isc.org. 51.75.79.143  221ms  NOERROR  AA  (glue check: A of ns2.isc.org.)
-│   │   │       └── ns3.isc.org. 51.75.79.143  230ms  NOERROR  AA  (glue check: AAAA of ns2.isc.org.)
+│   │   │   └── ns1.isc.org. 149.20.2.26  358ms  NOERROR  AA  (parent/child NS check)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  372ms  NOERROR  AA  (glue check: A of ns1.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  366ms  NOERROR  AA  (glue check: AAAA of ns1.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  366ms  NOERROR  AA  (glue check: A of ns2.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  360ms  NOERROR  AA  (glue check: AAAA of ns2.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  360ms  NOERROR  AA  (glue check: A of ns3.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  374ms  NOERROR  AA  (glue check: AAAA of ns3.isc.org.)
+│   │   │       └── ns1.isc.org. 149.20.2.26  350ms  NOERROR  AA  no data  (CSYNC of isc.org.)
 ...
-✔ answered in 1.2s · resolver in 169ms · 10 queries · 3 servers
+✔ answered in 2.2s · resolver in 237ms · 11 queries · 3 servers
 ```
 
 The addresses are compared a family at a time, as sets, and agreeing costs no
@@ -155,11 +157,36 @@ the longer of the two to reach everybody. `--explain` says so where they differ:
 ```
 $ dnstree --check-ns --explain --no-asn www.example.com A
 ...
-✔ answered in 384ms · resolver in 21ms · 4 queries · 3 servers
+✔ answered in 1.1s · resolver in 228ms · 5 queries · 3 servers
 
 ...
 · the parent hands out the nameservers of example.com. for 2 days and the zone gives its own for 1 day, so a change of nameservers takes up to 2 days to reach every resolver
 ```
+
+### What the zone asks its parent to copy
+
+The zone can ask for the change itself. A CSYNC record at its apex (RFC 7477)
+names what its parent should copy from it, the NS set, the A and AAAA of the
+nameservers named inside it, or both, and registries that support it poll for
+one. `--check-ns` asks for it beside the NS set, the line `(CSYNC of …)` under
+the NS check above, and where the zone has one it says what a parent acting
+on it would change in the delegation the walk was handed: a `csync:` line
+with the record and whether a parent would act on it, then one line for each
+nameserver or address it would add or remove. Few zones publish one yet, and
+the example.com. above does not, so it draws nothing more than its `no data`.
+
+A parent copies only a CSYNC the zone's keys signed, so it reads as unproven
+unless the chain of trust reached the zone secure, and as unchecked without
+`--dnssec`, with what it would change still listed. One that leaves the
+`immediate` flag clear waits for whoever runs the parent to approve it; one
+with `soaminimum` waits until the zone's serial reaches its own, which costs
+one more query to compare. A warning says when a signed CSYNC cannot do its
+job: its serial is ahead of the zone's, it asks for the addresses of a
+nameserver the zone gives none for, or it names a type other than NS, A and
+AAAA, which no parent copies. Whether this parent polls for a CSYNC at all is
+not something a walk can see, and `--explain` says so. `--format json` carries
+it as the delegation's `csync`, and `--format openmetrics` as `dnstree_csync`
+and `dnstree_csync_changes`.
 
 ## Records that point where they may not
 
@@ -649,7 +676,7 @@ propagation:   create a missing record  30m  SOA 1800, minimum 1800 at example.c
 propagation:   move the nameservers     2d   NS 172800 at com., 86400 at example.com.
 propagation:   change the DS            1d   DS 86400 at com.
 propagation:   change the keys          1h   DNSKEY 3600 at example.com.
-✔ answered in 2.9s · 19 queries · 14 servers
+✔ answered in 2.7s · 20 queries · 14 servers
 ```
 
 Each line is the worst case, for a cache filled just before the change; most

@@ -1,6 +1,6 @@
 🌍  . (root)
 ├── 🦥  a.root-servers.net. 198.41.0.4  ⚡ 5ms  REFUSED  lame  ❓ [indeterminate: digest type 5 is not supported here]
-└── 🛰️  b.root-servers.net. 170.247.170.2  ⚡ 6ms  NOERROR  referral → com.  🔓 [insecure ECDSAP256SHA256/SHA256]
+└── 🛰️  b.root-servers.net. 170.247.170.2  ⚡ 6ms  NOERROR  referral → com.  🔓 [insecure ECDSAP256SHA256/SHA256]  cds asks for a first ds, for key 2371
     ├── 💥  ns1.com. 192.0.2.2  ⚡ 4ms  SERVFAIL  error  (retried without EDNS0; truncated over udp)
     ├── 👻  ns2.com. 192.0.2.3  ⚡ 4ms  NXDOMAIN  AA
     ├── 🕳️  ns3.com. 192.0.2.4  ⚡ 1.3ms  1200 of 1232 bytes  NOERROR  AA  no data
@@ -25,6 +25,14 @@
 🧭 www.example.com. HTTPS 0 cdn.example.net.  🔒 [secure]
 🧭 cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  🔓 [insecure]
 🧭   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
+🔄 com. CSYNC 2024091501 immediate soaminimum A NS AAAA  a parent that polls copies it
+🔄   adds NS ns3.com.
+🔄   removes NS ns4.com.
+🔄   adds A 192.0.2.6 for ns3.com.
+🌱 com. asks for its first ds, for key 2371  refused: no signal under ns2.provider.net.
+🌱   ns1.provider.net. matched  🔒 [secure]
+🌱   ns2.provider.net. missing: the operator's zone proves there is none  🔒 [secure]
+🌱   ns.com. unasked: it is named inside the zone, which is not secure yet
 📅 example.com. is registered; the registry does not say until when
 📅 example.com. is on server hold: the registry has taken it out of the zone
 📅 nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.

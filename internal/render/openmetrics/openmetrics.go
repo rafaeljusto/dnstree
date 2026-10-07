@@ -6,6 +6,7 @@ package openmetrics
 
 import (
 	"bufio"
+	"cmp"
 	"io"
 	"slices"
 	"strconv"
@@ -105,6 +106,28 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		} {
 			m.sample("dnstree_cds", flag(value == signal.State), label{"state", string(value)})
 		}
+		// A pending request from a zone with no DS is a first one, not a
+		// rollover, and whether a parent would take it is a series of its own.
+		if boot := signal.Bootstrap; boot != nil {
+			m.family("dnstree_bootstrap", "", "whether a parent that bootstraps (RFC 9615) would add the first DS the zone asks for")
+			for _, value := range []trace.BootstrapState{trace.BootstrapReady, trace.BootstrapRefused, trace.BootstrapUnchecked} {
+				m.sample("dnstree_bootstrap", flag(value == boot.State), label{"state", string(value)})
+			}
+		}
+	}
+
+	// --check-ns asks only the zone the walk ended in, the last to ask.
+	var csync *trace.CSYNC
+	for _, request := range tr.Requests() {
+		csync = cmp.Or(request.CSYNC, csync)
+	}
+	if csync != nil {
+		m.family("dnstree_csync", "", "what the zone's CSYNC (RFC 7477) comes to, held against the delegation")
+		for _, value := range []trace.CSYNCState{trace.CSYNCReady, trace.CSYNCManual, trace.CSYNCWaiting, trace.CSYNCUnproven, trace.CSYNCUnchecked} {
+			m.sample("dnstree_csync", flag(value == csync.State), label{"state", string(value)})
+		}
+		m.family("dnstree_csync_changes", "", "how many records of the delegation a parent acting on the CSYNC would add or remove")
+		m.sample("dnstree_csync_changes", strconv.Itoa(len(csync.Changes)))
 	}
 
 	if caa := tr.CAA; caa != nil {

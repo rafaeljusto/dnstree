@@ -74,6 +74,12 @@ func (c *Chain) State() trace.DNSSECState { return c.state }
 // referral can have moved on from the one the walk was pointed at.
 func (c *Chain) Zone() string { return c.zone }
 
+// InsecureAt reports whether the chain left secure at zone's own cut: its
+// parent was secure, and proved it holds no DS for it.
+func (c *Chain) InsecureAt(zone string) bool {
+	return c.state == trace.Insecure && dns.EqualName(c.settled, zone)
+}
+
 // Enter validates the keys of a zone against the DS records its parent handed
 // out, and makes them the keys the chain verifies with from here on. authority
 // is the authority section of the parent's referral, and dnskeys the child's

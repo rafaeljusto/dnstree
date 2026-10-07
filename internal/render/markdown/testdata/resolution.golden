@@ -4,7 +4,7 @@ walked on 2026-09-24 12:00 UTC
 
 ```
 . (root)
-└── a.root-servers.net. 198.41.0.4  @fra2  12ms  NOERROR  referral → com.  cookie  [insecure]
+└── a.root-servers.net. 198.41.0.4  @fra2  12ms  NOERROR  referral → com.  cookie  [insecure]  cds asks for a first ds, for key 2371
     ├── b.gtld-servers.net. 192.33.14.30  2s  timeout
     └── a.gtld-servers.net. 192.5.6.30  18ms  NOERROR  referral → example.com.  [secure ECDSAP256SHA256/SHA256]  (truncated over udp)
         ├── a.iana-servers.net. 199.43.135.53  AS10745  9.4ms  1187 of 1232 bytes  NOERROR  AA DO  [secure ECDSAP256SHA256]
@@ -34,6 +34,14 @@ mail: dane covers 1 of 1 MX host, not counting 1 that cannot be reached
 svcb: www.example.com. HTTPS 0 cdn.example.net.  [secure]
 svcb: cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  [insecure]
 svcb:   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
+csync: com. CSYNC 2024091501 immediate soaminimum A NS AAAA  a parent that polls copies it
+csync:   adds NS ns3.com.
+csync:   removes NS ns4.com.
+csync:   adds A 192.0.2.6 for ns3.com.
+bootstrap: com. asks for its first ds, for key 2371  refused: no signal under ns2.provider.net.
+bootstrap:   ns1.provider.net. matched  [secure]
+bootstrap:   ns2.provider.net. missing: the operator's zone proves there is none  [secure]
+bootstrap:   ns.com. unasked: it is named inside the zone, which is not secure yet
 rdap: example.com. expired 42 days ago, on 2026-08-13: renew it before the registry lets it go
 rdap: status: client delete prohibited, client transfer prohibited
 rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.
@@ -57,6 +65,8 @@ check example.com.
 - the chain of trust holds from the root to example.com., signed with ECDSAP256SHA256
 - ⚠ the registration of example.com. ran out 42 days ago, and the registry may let it go
 - ⚠ the registry holds a delegation of example.com. that com. does not hand out: a change is stuck between them, or the registry's copy is stale
+- com. asks its parent in a signed CSYNC to copy its A, NS, AAAA, and a parent acting on it would add NS ns3.com., remove NS ns4.com., add A 192.0.2.6 for ns3.com.; whether its parent polls for one is not something a walk can see
+- ⚠ com. asks for its first DS, for key 2371, but a parent that bootstraps would add none: no signal under ns2.provider.net.
 - ⚠ 1 server did not answer in time: b.gtld-servers.net.
 - ⚠ 1 server answered with almost nothing left of the datagram the answer had to fit in (a.iana-servers.net. with 1187 of 1232 bytes), so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it
 - the CAA set at example.com. lets only letsencrypt.org issue for www.example.com., and no certificate authority issue wildcards below it

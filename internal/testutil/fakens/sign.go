@@ -95,25 +95,25 @@ func (s *signer) signals(tb testing.TB, which CDS) string {
 	}
 	switch which {
 	case CDSCurrent:
-		return cds(s.ksk) + cdnskey(s.ksk)
+		return cds("@", s.ksk) + cdnskey("@", s.ksk)
 	case CDSNext:
 		key := next()
-		return cds(key) + cdnskey(key)
+		return cds("@", key) + cdnskey("@", key)
 	case CDSDelete:
 		return "@ IN CDS 0 0 0 00\n@ IN CDNSKEY 0 3 0 AA==\n"
 	case CDSMismatched:
-		return cds(s.ksk) + cdnskey(next())
+		return cds("@", s.ksk) + cdnskey("@", next())
 	}
 	return ""
 }
 
-func cds(key *dns.DNSKEY) string {
+func cds(owner string, key *dns.DNSKEY) string {
 	ds := key.ToDS(dns.SHA256)
-	return fmt.Sprintf("@ IN CDS %d %d %d %s\n", ds.KeyTag, ds.Algorithm, ds.DigestType, ds.Digest)
+	return fmt.Sprintf("%s IN CDS %d %d %d %s\n", owner, ds.KeyTag, ds.Algorithm, ds.DigestType, ds.Digest)
 }
 
-func cdnskey(key *dns.DNSKEY) string {
-	return fmt.Sprintf("@ IN CDNSKEY %d %d %d %s\n", key.Flags, key.Protocol, key.Algorithm, key.PublicKey)
+func cdnskey(owner string, key *dns.DNSKEY) string {
+	return fmt.Sprintf("%s IN CDNSKEY %d %d %d %s\n", owner, key.Flags, key.Protocol, key.Algorithm, key.PublicKey)
 }
 
 // ds is what the parent publishes to vouch for this zone.

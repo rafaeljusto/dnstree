@@ -103,14 +103,27 @@ func kinds() *trace.Trace {
 		{Zone: "com.", Kind: trace.KindError, Err: "gave up after 4 queries"},
 	}
 	referral := &trace.Step{
-		Zone:       ".",
-		Server:     trace.Server{Name: "b.root-servers.net.", IP: netip.MustParseAddr("170.247.170.2"), Port: 53},
-		Rcode:      "NOERROR",
-		RTT:        6 * time.Millisecond,
-		Kind:       trace.KindReferral,
-		Delegation: &trace.Delegation{Zone: "com."},
-		DNSSEC:     &trace.DNSSECStatus{State: trace.Insecure, Algorithm: "ECDSAP256SHA256", Digest: "SHA256"},
-		Children:   children,
+		Zone:   ".",
+		Server: trace.Server{Name: "b.root-servers.net.", IP: netip.MustParseAddr("170.247.170.2"), Port: 53},
+		Rcode:  "NOERROR",
+		RTT:    6 * time.Millisecond,
+		Kind:   trace.KindReferral,
+		Delegation: &trace.Delegation{Zone: "com.", CSYNC: &trace.CSYNC{State: trace.CSYNCReady, Serial: 2024091501, Immediate: true, SOAMinimum: true,
+			Types: []string{"A", "NS", "AAAA"}, ZoneSerial: 2024091502, Changes: []trace.DelegationChange{
+				{Add: true, Type: "NS", Name: "ns3.com."},
+				{Type: "NS", Name: "ns4.com."},
+				{Add: true, Type: "A", Name: "ns3.com.", Data: "192.0.2.6"},
+			}}},
+		DNSSEC: &trace.DNSSECStatus{State: trace.Insecure, Algorithm: "ECDSAP256SHA256", Digest: "SHA256", Signal: &trace.Signal{State: trace.SignalPending, Reason: "the zone asks for key 2371 and the parent holds no key",
+			Requested: []uint16{2371}, Bootstrap: &trace.Bootstrap{State: trace.BootstrapRefused, Reason: "no signal under ns2.provider.net.",
+				Signals: []trace.BootstrapSignal{
+					{NS: "ns1.provider.net.", Name: "_dsboot.com._signal.ns1.provider.net.", State: trace.SignalingMatched, Requested: []uint16{2371},
+						Lookup: &trace.Lookup{Name: "_dsboot.com._signal.ns1.provider.net.", DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "provider.net."}}},
+					{NS: "ns2.provider.net.", Name: "_dsboot.com._signal.ns2.provider.net.", State: trace.SignalingMissing, Reason: "the operator's zone proves there is none",
+						Lookup: &trace.Lookup{Name: "_dsboot.com._signal.ns2.provider.net.", DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "provider.net."}}},
+					{NS: "ns.com.", State: trace.SignalingUnasked, Reason: "it is named inside the zone, which is not secure yet"},
+				}}}},
+		Children: children,
 	}
 	lame := &trace.Step{
 		Zone:   ".",

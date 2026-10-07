@@ -46,11 +46,87 @@
           "ns": [
             "a.gtld-servers.net."
           ],
-          "ds_present": true
+          "ds_present": true,
+          "csync": {
+            "state": "ready",
+            "serial": 2024091501,
+            "immediate": true,
+            "soaminimum": true,
+            "types": [
+              "A",
+              "NS",
+              "AAAA"
+            ],
+            "zone_serial": 2024091502,
+            "changes": [
+              {
+                "add": true,
+                "type": "NS",
+                "name": "ns3.com."
+              },
+              {
+                "add": false,
+                "type": "NS",
+                "name": "ns4.com."
+              },
+              {
+                "add": true,
+                "type": "A",
+                "name": "ns3.com.",
+                "data": "192.0.2.6"
+              }
+            ]
+          }
         },
         "dnssec": {
           "state": "insecure",
-          "reason": "the parent published no DS"
+          "reason": "the parent published no DS",
+          "signal": {
+            "state": "pending",
+            "reason": "the zone asks for key 2371 and the parent holds no key",
+            "requested": [
+              2371
+            ],
+            "bootstrap": {
+              "state": "refused",
+              "reason": "no signal under ns2.provider.net.",
+              "signals": [
+                {
+                  "ns": "ns1.provider.net.",
+                  "name": "_dsboot.com._signal.ns1.provider.net.",
+                  "state": "matched",
+                  "requested": [
+                    2371
+                  ],
+                  "lookup": {
+                    "name": "_dsboot.com._signal.ns1.provider.net.",
+                    "dnssec": {
+                      "state": "secure",
+                      "zone": "provider.net."
+                    }
+                  }
+                },
+                {
+                  "ns": "ns2.provider.net.",
+                  "name": "_dsboot.com._signal.ns2.provider.net.",
+                  "state": "missing",
+                  "reason": "the operator's zone proves there is none",
+                  "lookup": {
+                    "name": "_dsboot.com._signal.ns2.provider.net.",
+                    "dnssec": {
+                      "state": "secure",
+                      "zone": "provider.net."
+                    }
+                  }
+                },
+                {
+                  "ns": "ns.com.",
+                  "state": "unasked",
+                  "reason": "it is named inside the zone, which is not secure yet"
+                }
+              ]
+            }
+          }
         },
         "children": [
           {

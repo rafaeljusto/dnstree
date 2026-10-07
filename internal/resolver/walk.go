@@ -154,7 +154,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 			if side == 0 && !r.climbing && !r.aside {
 				r.checkECH(step)
 				r.checkSubnet(step)
-				r.checkNS(ctx, step, referred)
+				r.checkNS(ctx, chain, step, referred)
 				r.checkDS(ctx, chain, step, last)
 				if len(pending) > 0 && (r.cfg.Serial || r.cfg.CheckTransfer || r.cfg.CheckRecursion || r.cfg.CheckEDNS) {
 					// The probes are about every nameserver, not the one the

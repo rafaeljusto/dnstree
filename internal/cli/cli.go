@@ -45,7 +45,7 @@ one after another, each from the root servers down.
   --fallback              let plain DNS pick up a hop the transport could not
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
-  --check-ns              ask the zone for its NS set and glue, and compare
+  --check-ns              ask the zone for its NS set, glue and CSYNC; compare
   --check-ds              ask the zone for its CDS and CDNSKEY and compare
   --serial                ask every nameserver of the zone which copy it serves
   --check-axfr            ask each nameserver of the zone to hand over all of it
@@ -136,6 +136,13 @@ asked as 1.2.0.192.in-addr.arpa. and an IPv6 address under ip6.arpa. It takes
 the place of NAME and TYPE. The reverse tree is delegated like any other, and
 a delegation below a /24 (RFC 2317) arrives as an alias, which is followed.
 
+--check-ns asks the zone that answered for its own NS set, and the addresses of
+the nameservers named inside it, and holds them against the delegation and its
+glue. It asks for the zone's CSYNC too (RFC 7477), which is how a zone asks its
+parent to copy its NS set and glue, and says what a parent acting on it would
+change. A parent copies only a CSYNC the zone's keys signed, so without --dnssec
+it is reported unchecked.
+
 --check-ds asks the zone the walk ends in for the CDS and CDNSKEY records it
 publishes (RFC 7344, RFC 8078), which is how a zone asks its parent to change
 the DS that vouches for it, and holds them against the DS the parent holds. A
@@ -143,7 +150,12 @@ zone asking for a key the parent has not published is a rollover waiting on
 the parent; a zone asking for no DS at all is asking to be made insecure. The
 request counts only once it is signed by the keys the chain of trust reached,
 so it needs --dnssec; a file of defaults that sets it is heeded only by the
-runs that check signatures. It costs two queries.
+runs that check signatures. It costs two queries. A zone that is signed but
+whose parent holds no DS for it can still ask for its first one (RFC 9615):
+the operator of each nameserver publishes the same request under
+_dsboot.ZONE._signal.NAMESERVER, in a zone of its own that validates, and each
+is looked up after the walk. A parent that bootstraps adds the DS only when
+every one of them is there and says what the zone does.
 
 --propagation reads the TTLs the walk saw and says how long each kind of
 change to the zone it ended in takes to reach every cache: the answer, a

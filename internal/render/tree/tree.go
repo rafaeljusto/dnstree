@@ -150,6 +150,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, line := range r.servicePath(tr.ServicePath) {
 		r.write(line + "\n")
 	}
+	for _, line := range r.requests(tr) {
+		r.write(line + "\n")
+	}
 	for _, line := range r.registration(tr.Registration) {
 		r.write(line + "\n")
 	}
@@ -499,6 +502,9 @@ func (r *renderer) signal(signal *trace.Signal) string {
 	case trace.SignalMatch:
 		return r.paint.dim("cds matches the ds")
 	case trace.SignalPending:
+		if len(signal.Held) == 0 {
+			return r.paint.paint("cds asks for a first ds, for "+tags(signal.Requested), yellow)
+		}
 		return r.paint.paint("cds asks for "+tags(signal.Requested)+", the ds is for "+tags(signal.Held), yellow)
 	case trace.SignalDelete:
 		return r.paint.paint("cds asks for no ds", yellow)

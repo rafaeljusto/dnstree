@@ -615,14 +615,14 @@ func TestCheckDSHiddenCut(t *testing.T) {
 	}
 }
 
-// TestCheckDSInsecure is a zone the chain did not reach secure. There are no
-// keys to check its request with, and it is left unread rather than skipped
-// without a word.
+// TestCheckDSInsecure is a zone below where the chain left secure. Its parent
+// has no keys anyone vouches for either, so nothing can bootstrap it, and its
+// request is left unread rather than skipped without a word.
 func TestCheckDSInsecure(t *testing.T) {
 	t.Parallel()
 
-	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
-		fakens.Behaviour{NoDS: true, CDS: fakens.CDSCurrent})
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{NoDS: true},
+		fakens.Behaviour{CDS: fakens.CDSCurrent})
 	cfg.CheckDS = true
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")

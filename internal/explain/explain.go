@@ -124,6 +124,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, setup(tr)...)
 	findings = append(findings, takeover(tr)...)
 	findings = append(findings, spread(tr)...)
+	findings = append(findings, requests(tr)...)
 	findings = append(findings, servers(tr)...)
 	findings = append(findings, cookies(tr)...)
 	findings = append(findings, exposure(tr)...)

@@ -316,6 +316,21 @@ func (s *Server) Nameserver() trace.Server {
 	return trace.Server{Name: s.name, IP: s.Addr.Addr(), Port: s.Addr.Port()}
 }
 
+// Request is the CDS and CDNSKEY that ask for the key signing key of this
+// server's zone, owned by owner, in presentation format: what the operator of
+// a nameserver publishes for a zone to bootstrap its first DS (RFC 9615). The
+// zone has to be signed.
+func (s *Server) Request(tb testing.TB, owner string) string {
+	tb.Helper()
+
+	if s.signer == nil {
+		tb.Fatalf("fakens: %s is not signed, and asks for no key", s.origin)
+	}
+	s.signer.mu.Lock()
+	defer s.signer.mu.Unlock()
+	return cds(owner, s.signer.ksk) + cdnskey(owner, s.signer.ksk)
+}
+
 // parse reads a zone in presentation format, against the origin it belongs to.
 func parse(tb testing.TB, origin, zone string) []dns.RR {
 	tb.Helper()

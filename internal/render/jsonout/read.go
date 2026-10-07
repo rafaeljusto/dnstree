@@ -493,6 +493,9 @@ func readDelegation(from *delegation) (*trace.Delegation, error) {
 	if to.ZoneAddrs, err = readAddrs("zone_addrs", from.ZoneAddrs); err != nil {
 		return nil, err
 	}
+	if to.CSYNC, err = readCSYNC(from.CSYNC); err != nil {
+		return nil, err
+	}
 	return to, nil
 }
 
@@ -543,8 +546,12 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 		default:
 			return nil, fmt.Errorf("jsonout: %q is not what a zone's request of its parent can come to", from.Signal.State)
 		}
+		boot, err := readBootstrap(from.Signal.Bootstrap)
+		if err != nil {
+			return nil, err
+		}
 		to.Signal = &trace.Signal{State: state, Reason: from.Signal.Reason,
-			Requested: from.Signal.Requested, Held: from.Signal.Held}
+			Requested: from.Signal.Requested, Held: from.Signal.Held, Bootstrap: boot}
 	}
 	if from.NSEC3 != nil {
 		to.NSEC3 = &trace.NSEC3{Zone: from.NSEC3.Zone, Iterations: from.NSEC3.Iterations, Salt: from.NSEC3.Salt}

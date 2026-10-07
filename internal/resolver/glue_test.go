@@ -84,8 +84,9 @@ func TestCheckGlue(t *testing.T) {
 			}
 
 			check := tr.Result().Children[len(tr.Result().Children)-1]
-			if len(check.Children) != 2 || check.Children[0].Asked.Type != "A" || check.Children[1].Asked.Type != "AAAA" {
-				t.Errorf("got %+v under the NS check, want the A and AAAA of the nameserver", check.Children)
+			if len(check.Children) != 3 || check.Children[0].Asked.Type != "A" || check.Children[1].Asked.Type != "AAAA" ||
+				check.Children[2].Asked.Type != "CSYNC" {
+				t.Errorf("got %+v under the NS check, want the A and AAAA of the nameserver, then the CSYNC", check.Children)
 			}
 		})
 	}

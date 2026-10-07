@@ -136,6 +136,7 @@ func (s *DNSSECStatus) shown() *DNSSECStatus {
 	if d.Signal != nil {
 		signal := *d.Signal
 		signal.Reason = Shown(signal.Reason)
+		signal.Bootstrap = signal.Bootstrap.shown()
 		d.Signal = &signal
 	}
 	if d.NSEC3 != nil {
@@ -186,6 +187,7 @@ func (s *Step) Shown() *Step {
 		d.OutOfBailiwick = shownAll(d.OutOfBailiwick)
 		d.Glue = shownAddrs(s.Delegation.Glue)
 		d.ZoneAddrs = shownAddrs(s.Delegation.ZoneAddrs)
+		d.CSYNC = d.CSYNC.shown()
 		shown.Delegation = &d
 	}
 	shown.DNSSEC = s.DNSSEC.shown()

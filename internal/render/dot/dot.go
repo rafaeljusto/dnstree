@@ -135,7 +135,13 @@ func label(step *trace.Step) string {
 		lines = append(lines, "["+string(step.DNSSEC.State)+"]")
 		if step.DNSSEC.Signal != nil {
 			lines = append(lines, "cds "+string(step.DNSSEC.Signal.State))
+			if boot := step.DNSSEC.Signal.Bootstrap; boot != nil {
+				lines = append(lines, "bootstrap "+string(boot.State))
+			}
 		}
+	}
+	if step.Delegation != nil && step.Delegation.CSYNC != nil && step.Delegation.CSYNC.State != trace.CSYNCNone {
+		lines = append(lines, "csync "+string(step.Delegation.CSYNC.State))
 	}
 	for _, ede := range step.Extended {
 		lines = append(lines, "ede "+ede.String())

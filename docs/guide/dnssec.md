@@ -186,6 +186,32 @@ a zone the chain did not reach secure reads `cds unchecked`. A zone that crosses
 the same machines, with no referral, is checked against the DS fetched to cross
 it. It costs two queries, asked of the server that answered.
 
+### Asking for a first DS
+
+A zone that is signed but has no DS at its parent cannot sign its way to one:
+nothing vouches for its keys yet, so its CDS is anyone's. RFC 9615 lets the
+operator of its nameservers vouch instead, by publishing the same CDS and
+CDNSKEY under `_dsboot.ZONE._signal.NAMESERVER`, in a zone of its own that
+validates. Where the parent proves it holds no DS for the zone and the zone
+asks for a key, `--check-ds` reads the request as served, says
+`cds asks for a first ds` beside the verdict, and looks up the signal under
+every nameserver once the walk is over, a walk of its own each, drawn where it
+was made. A `bootstrap:` line then says whether a parent that bootstraps would
+add the DS, and one line under it for each nameserver: `matched`, or why not.
+
+A parent adds it only when every nameserver named outside the zone carries a
+signal that validates and says what the zone does, type by type, so one
+missing, different or unsigned signal is a warning naming the nameserver. A
+nameserver named inside the zone cannot carry one, since its signal would sit
+in the zone that is not secure yet, and is left unasked; a zone with no other
+kind cannot bootstrap at all, and is told so. A signal whose name would pass
+255 octets cannot be asked for, and says that rather than failing. The zone's
+own CDS is asked of the server that answered. Whether its parent bootstraps at
+all is not something a walk can see, and `--explain` says so. It costs two
+lookups for each nameserver, spent from the same budget as the walk, and one
+that runs out says the signals were not all checked. `--format json` carries it
+as the signal's `bootstrap`, and `--format openmetrics` as `dnstree_bootstrap`.
+
 ## Telling the zone it is broken
 
 When a zone's chain of trust breaks, the first to know are the resolvers that

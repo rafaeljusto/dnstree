@@ -314,6 +314,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	if r.cfg.SVCB {
 		run.svcb(ctx, cmp.Or(end, run.trace.Root), end)
 	}
+	run.bootstrap(ctx)
 	run.trace.Elapsed = time.Since(run.trace.Started)
 	return run.trace, nil
 }
@@ -357,6 +358,10 @@ type run struct {
 
 	// tried is whether the walk came to the delegation --try-ns replaces.
 	tried bool
+
+	// boot is the request for a first DS that --check-ds found, whose signals
+	// are looked up once the walk is over.
+	boot *bootstrapping
 
 	// mu guards the warnings and the cookies, which the fanout writes to from
 	// several goroutines.

@@ -732,6 +732,10 @@ type Delegation struct {
 
 	// DSPresent reports whether the parent signed the delegation.
 	DSPresent bool
+
+	// CSYNC is what the zone asks its parent to copy from it, set only where
+	// --check-ns asked.
+	CSYNC *CSYNC
 }
 
 // Dangling is a name left pointing at something that is not there, which
@@ -941,6 +945,11 @@ type Signal struct {
 	// parent's DS names, each sorted.
 	Requested []uint16
 	Held      []uint16
+
+	// Bootstrap is whether a parent would take the request from a zone it
+	// holds no DS for, set only where the zone is signed but not yet secure
+	// and asks for a key.
+	Bootstrap *Bootstrap
 }
 
 // NSEC3 is the hashing a zone's denials use (RFC 5155). RFC 9276 asks for no

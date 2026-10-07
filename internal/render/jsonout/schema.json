@@ -795,6 +795,7 @@
             "items": { "type": "string" }
           }
         },
+        "csync": { "$ref": "#/$defs/csync" },
         "glueless": {
           "description": "Nameservers inside the delegated zone that came with no glue. Nothing can resolve them, so the delegation is broken.",
           "type": "array",
@@ -1000,7 +1001,7 @@
       "required": ["state"],
       "properties": {
         "state": {
-          "description": "none is a zone that proved it asks for nothing; match asks for the keys the parent holds; pending asks for another key than the parent holds, which is a rollover waiting on the parent; delete asks for no DS at all; inconsistent is a CDS and a CDNSKEY describing different keys, which a parent acts on neither of; unchecked is a request that could not be fetched, or was not signed by the zone's keys.",
+          "description": "none is a zone that proved it asks for nothing; match asks for the keys the parent holds; pending asks for another key than the parent holds: a rollover waiting on the parent, or, from a zone the parent holds no DS for, its first DS, which bootstrap says whether a parent would add; delete asks for no DS at all; inconsistent is a CDS and a CDNSKEY describing different keys, which a parent acts on neither of; unchecked is a request that could not be fetched, or was not signed by the zone's keys.",
           "type": "string",
           "enum": ["none", "match", "pending", "delete", "inconsistent", "unchecked"]
         },
@@ -1014,7 +1015,85 @@
           "description": "The key tags the parent's DS names.",
           "type": "array",
           "items": { "type": "integer", "minimum": 0 }
+        },
+        "bootstrap": { "$ref": "#/$defs/bootstrap" }
+      }
+    },
+    "csync": {
+      "description": "What the zone asks its parent to copy from it, in its CSYNC record (RFC 7477): its NS set, the addresses of the nameservers named inside it, or both. Present where --check-ns asked.",
+      "type": "object",
+      "required": ["state", "serial"],
+      "properties": {
+        "state": {
+          "description": "none is a zone with no CSYNC; ready is a signed one a parent that polls acts on; manual is signed but waits for whoever runs the parent to approve it; waiting is signed but waits for the zone's serial to reach its own; unproven is not signed, or its signature did not hold, and no parent acts on it; unchecked could not be fetched, or its signature was not checked without --dnssec.",
+          "type": "string",
+          "enum": ["none", "ready", "manual", "waiting", "unproven", "unchecked"]
+        },
+        "reason": { "type": "string" },
+        "serial": { "type": "integer", "minimum": 0 },
+        "immediate": { "description": "Whether a parent may act on it without asking anyone.", "type": "boolean" },
+        "soaminimum": { "description": "Whether it waits for the zone's serial to reach serial.", "type": "boolean" },
+        "types": {
+          "description": "The types it asks to be copied, as the record names them.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "zone_serial": { "description": "The serial of the SOA the zone served beside it, where soaminimum made it matter.", "type": "integer", "minimum": 0 },
+        "changes": {
+          "description": "What a parent acting on it would add to or remove from the delegation the walk was handed, whether or not one would act on it.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/delegation_change" }
         }
+      }
+    },
+    "bootstrap": {
+      "description": "Whether a parent would add the first DS of a zone that is signed but not yet secure (RFC 9615): the operator of each nameserver named outside the zone has to publish the zone's CDS and CDNSKEY under _dsboot.<zone>._signal.<nameserver>, in a zone of its own that validates. Present on the signal of a zone its parent holds no DS for that asks for a key.",
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "state": {
+          "description": "ready is every signal validating and saying what the zone does; refused is a parent that bootstraps adding no DS; unchecked is a signal that could not be looked up.",
+          "type": "string",
+          "enum": ["ready", "refused", "unchecked"]
+        },
+        "reason": { "type": "string" },
+        "signals": {
+          "description": "One per nameserver the parent delegates to, in its order.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/bootstrap_signal" }
+        }
+      }
+    },
+    "delegation_change": {
+      "description": "One record of a delegation a parent would add or remove.",
+      "type": "object",
+      "required": ["add", "type", "name"],
+      "properties": {
+        "add": { "description": "true for a record added, false for one removed.", "type": "boolean" },
+        "type": { "type": "string", "enum": ["NS", "A", "AAAA"] },
+        "name": { "description": "The nameserver.", "type": "string" },
+        "data": { "description": "The address, absent for an NS.", "type": "string" }
+      }
+    },
+    "bootstrap_signal": {
+      "description": "The bootstrap signal under one nameserver.",
+      "type": "object",
+      "required": ["ns", "state"],
+      "properties": {
+        "ns": { "type": "string" },
+        "name": { "description": "Where the signal was looked for, absent where no name could be made.", "type": "string" },
+        "state": {
+          "description": "matched validates and says what the zone does; differs validates and asks for something else; missing is a signal the operator's zone proves is not there; unproven did not validate; failed is a lookup that failed or was cut short; unasked is a nameserver named inside the zone, which a parent does not ask, or one whose signal would need a name longer than 255 octets.",
+          "type": "string",
+          "enum": ["matched", "differs", "missing", "unproven", "failed", "unasked"]
+        },
+        "reason": { "type": "string" },
+        "requested": {
+          "description": "The key tags the signal asks for.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "lookup": { "$ref": "#/$defs/lookup" }
       }
     },
     "signature": {
