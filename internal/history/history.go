@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -169,12 +170,22 @@ const maxFile = 1 << 20
 // cache that has gone bad costs one run its comparison and nothing more.
 func Load(dir string, question trace.Question) *Walk {
 	// Opened within the cache, so that a link planted there cannot point the
-	// read anywhere else, and read no further than any walk comes to.
-	f, err := os.OpenInRoot(dir, file(question.Name, question.Type))
+	// read anywhere else, and read no further than any walk comes to. A FIFO
+	// planted there would hold the open forever, so it does not wait, and
+	// only a plain file is read.
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil
+	}
+	defer root.Close()
+	f, err := root.OpenFile(file(question.Name, question.Type), os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil
 	}
 	defer f.Close()
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() {
+		return nil
+	}
 	data, err := io.ReadAll(io.LimitReader(f, maxFile+1))
 	if err != nil || len(data) > maxFile {
 		return nil
