@@ -382,7 +382,8 @@ func TestRunNamesTheFlagOfAMissingFile(t *testing.T) {
 
 // TestRunRefusesAQuestionLikeAnyCommandLine covers a name or type nothing can
 // ask, which is the user's typing and said like the rest of it, with the list it
-// came from where it came from one.
+// came from where it came from one. The line is the mistake alone: the error
+// that marks it as the command line's is for the code, not the user.
 func TestRunRefusesAQuestionLikeAnyCommandLine(t *testing.T) {
 	list := filepath.Join(t.TempDir(), "names")
 	if err := os.WriteFile(list, []byte("bad..name\n"), 0o644); err != nil {
@@ -393,8 +394,9 @@ func TestRunRefusesAQuestionLikeAnyCommandLine(t *testing.T) {
 		args []string
 		want string
 	}{
-		"a name":            {args: []string{"bad..name"}, want: `cannot be read: "bad..name" is not a domain name`},
-		"a type":            {args: []string{"example.com", "nonsense"}, want: `cannot be read: "NONSENSE" is not a query type`},
+		"a flag":            {args: []string{"--bogus", "example.com"}, want: "--bogus is not a flag; --help lists them"},
+		"a name":            {args: []string{"bad..name"}, want: `"bad..name" is not a domain name`},
+		"a type":            {args: []string{"example.com", "nonsense"}, want: `"NONSENSE" is not a query type`},
 		"a name in --names": {args: []string{"--names", list}, want: "--names " + list + `: "bad..name" is not a domain name`},
 	}
 	for name, test := range tests {
@@ -403,8 +405,8 @@ func TestRunRefusesAQuestionLikeAnyCommandLine(t *testing.T) {
 			if got := run(t.Context(), append([]string{"--no-config"}, test.args...), &stdout, &stderr); got != exitUsage {
 				t.Errorf("got exit %d, want %d: %s", got, exitUsage, stderr.String())
 			}
-			if !strings.Contains(stderr.String(), test.want) {
-				t.Errorf("got %q, want it to say %q", stderr.String(), test.want)
+			if got := stderr.String(); got != test.want+"\n" {
+				t.Errorf("got %q, want %q", got, test.want+"\n")
 			}
 		})
 	}

@@ -98,7 +98,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	cfg, err := cli.Parse(args, stderr)
 	if err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintln(stderr, cli.Message(err))
 		}
 		return exitUsage
 	}
@@ -160,7 +160,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	questions, err := asked(cfg)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, cli.Message(err))
 		return exitUsage
 	}
 

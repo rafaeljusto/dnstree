@@ -675,6 +675,12 @@ var testHookFlags = func(*flag.FlagSet) {}
 // for help.
 var ErrUsage = errors.New("cli: the command line cannot be read")
 
+// Message is err as the user reads it: the mistake alone, without the
+// ErrUsage that marks it as one of the command line's.
+func Message(err error) string {
+	return strings.TrimPrefix(err.Error(), ErrUsage.Error()+": ")
+}
+
 // Parse reads the arguments. Anything it writes, including the usage, goes to
 // output.
 func Parse(args []string, output io.Writer) (*Config, error) {
