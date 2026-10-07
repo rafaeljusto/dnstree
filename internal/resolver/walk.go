@@ -385,7 +385,7 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 		// reachable over one protocol only is worth seeing.
 		if r.cfg.Family != 0 && family(server.IP) != r.cfg.Family {
 			skipped := skipped(zone, server)
-			skipped.Notes = []string{fmt.Sprintf("no IPv%d address", r.cfg.Family)}
+			skipped.Notes = []string{fmt.Sprintf("left out by -%d", r.cfg.Family)}
 			r.attach(parent, skipped)
 			continue
 		}

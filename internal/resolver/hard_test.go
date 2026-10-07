@@ -529,7 +529,7 @@ www  IN A    192.0.2.10
 	if skipped == nil || skipped.Server.Name != "four.com." {
 		t.Fatalf("got %+v skipped, want the IPv4-only server: %s", skipped, format(steps(tr)))
 	}
-	if len(skipped.Notes) != 1 || skipped.Notes[0] != "no IPv6 address" {
+	if len(skipped.Notes) != 1 || skipped.Notes[0] != "left out by -6" {
 		t.Errorf("got notes %q, want the reason it was passed over", skipped.Notes)
 	}
 	if asked == nil || asked.Server.Name != "six.com." {
