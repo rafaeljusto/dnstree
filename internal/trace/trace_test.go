@@ -220,14 +220,23 @@ func TestTraceShownEveryField(t *testing.T) {
 // they are drawn.
 var drawnElsewhere = map[string]bool{"ExtendedError.Text": true}
 
-// fill sets every plain string reachable from v to text, one element deep in
+// readChecked are the enums left as they are: a walk only writes their
+// constants, and jsonout.Read refuses any other value. A new one belongs here
+// only once its reader does the same.
+var readChecked = map[string]bool{
+	"Area": true, "CSYNCState": true, "CookieState": true, "DNSSECState": true,
+	"DanglingKind": true, "EDNSFault": true, "EDNSKind": true, "EDNSState": true,
+	"Failure": true, "Grade": true, "Kept": true, "Match": true,
+	"ProbeKind": true, "ProbeState": true, "RegistrationState": true,
+	"SPFResult": true, "SignalState": true, "StepKind": true,
+}
+
+// fill sets every string reachable from v to text, one element deep in
 // slices and maps, and depth pointers down, since a step holds steps.
 func fill(v reflect.Value, text string, depth int) {
 	switch v.Kind() {
 	case reflect.String:
-		if v.Type() == reflect.TypeFor[string]() {
-			v.SetString(text)
-		}
+		v.SetString(text)
 	case reflect.Pointer:
 		if v.Type().Elem().Kind() == reflect.Struct && v.Type().Elem().PkgPath() == reflect.TypeFor[trace.Trace]().PkgPath() {
 			if depth == 0 {
@@ -275,11 +284,12 @@ func nests(t reflect.Type) bool {
 	return false
 }
 
-// walk calls see with every plain string reachable from v and where it is.
+// walk calls see with every string reachable from v that is not a checked
+// enum, and where it is.
 func walk(v reflect.Value, path string, see func(path, value string)) {
 	switch v.Kind() {
 	case reflect.String:
-		if v.Type() == reflect.TypeFor[string]() {
+		if !readChecked[v.Type().Name()] {
 			see(path, v.String())
 		}
 	case reflect.Pointer:
