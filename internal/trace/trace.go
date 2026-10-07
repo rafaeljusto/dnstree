@@ -68,6 +68,10 @@ type Trace struct {
 	// ask.
 	Mail *Mail
 
+	// ServicePath is where a client that reads the name's HTTPS or SVCB
+	// records connects, nil where --svcb did not ask.
+	ServicePath *ServicePath
+
 	// Registration is what the registry of the domain says about it, nil where
 	// --rdap did not ask.
 	Registration *Registration
@@ -668,13 +672,19 @@ type RR struct {
 }
 
 // Service is the parameters of an HTTPS or SVCB record. Data carries them as
-// text already; this is the part worth acting on, which is ECH: a client that
-// finds a configuration here encrypts the name it is about to ask for, and
-// that is worth something only if the record reached it unforged.
+// text already; this is the part worth acting on: ECH, which a client uses to
+// encrypt the name it is about to ask for, and is worth something only if the
+// record reached it unforged, and the target, port and address hints --svcb
+// follows.
 type Service struct {
 	Priority uint16
 	Target   string
 	ALPN     []string
+	Port     uint16
+
+	// Hints are the ipv4hint and ipv6hint addresses, which a client may
+	// connect to before it has looked the target's own up.
+	Hints []netip.Addr
 
 	// ECH reports whether the record publishes an encrypted client hello
 	// configuration.

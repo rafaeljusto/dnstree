@@ -433,6 +433,88 @@
     },
     "stopped": "the budget ran out before every lookup was made"
   },
+  "service_path": {
+    "name": "www.example.com.",
+    "type": "HTTPS",
+    "chain": [
+      {
+        "lookup": {
+          "name": "www.example.com.",
+          "dnssec": {
+            "state": "secure",
+            "zone": "example.com."
+          }
+        },
+        "records": [
+          {
+            "name": "www.example.com.",
+            "ttl": 300,
+            "type": "HTTPS",
+            "data": "0 cdn.example.net.",
+            "service": {
+              "priority": 0,
+              "target": "cdn.example.net."
+            }
+          }
+        ]
+      },
+      {
+        "lookup": {
+          "name": "cdn.example.net.",
+          "dnssec": {
+            "state": "insecure",
+            "zone": "example.net."
+          }
+        },
+        "records": [
+          {
+            "name": "cdn.example.net.",
+            "ttl": 300,
+            "type": "HTTPS",
+            "data": "1 edge.example.net. alpn=\"h3\" port=\"8443\" ipv4hint=\"192.0.2.1\" ech=\"AEX+DQBBAAA=\"",
+            "service": {
+              "priority": 1,
+              "target": "edge.example.net.",
+              "alpn": [
+                "h3"
+              ],
+              "port": 8443,
+              "hints": [
+                "192.0.2.1"
+              ],
+              "ech": true
+            }
+          }
+        ]
+      }
+    ],
+    "targets": [
+      {
+        "name": "edge.example.net.",
+        "priority": 1,
+        "ipv4": {
+          "name": "edge.example.net.",
+          "dnssec": {
+            "state": "insecure",
+            "zone": "example.net."
+          }
+        },
+        "ipv6": {
+          "name": "edge.example.net.",
+          "error": "SERVFAIL"
+        },
+        "addrs": [
+          "203.0.113.7"
+        ],
+        "hints": [
+          "192.0.2.1"
+        ],
+        "stray": [
+          "192.0.2.1"
+        ]
+      }
+    ]
+  },
   "registration": {
     "domain": "example.com.",
     "server": "https://rdap.verisign.com/com/v1/",

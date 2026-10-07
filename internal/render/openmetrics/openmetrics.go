@@ -158,6 +158,24 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 	}
 
+	if path := tr.ServicePath; path != nil {
+		reachable, stray := 0, 0
+		for _, target := range path.Targets {
+			if len(target.Addrs) > 0 {
+				reachable++
+			}
+			stray += len(target.Stray)
+		}
+		m.family("dnstree_svcb_targets", "", "the servers the name's HTTPS or SVCB records lead a client to that have an address")
+		m.sample("dnstree_svcb_targets", strconv.Itoa(reachable))
+		// Past the budget the hints were not all judged, and a count of none
+		// would say they had been.
+		if !path.Cut {
+			m.family("dnstree_svcb_stray_hints", "", "the address hints in the name's HTTPS or SVCB records that are none of their target's addresses")
+			m.sample("dnstree_svcb_stray_hints", strconv.Itoa(stray))
+		}
+	}
+
 	if reg := tr.Registration; reg != nil {
 		m.family("dnstree_registration", "", "what the registry said about the domain over RDAP: registered, unregistered, unpublished where the TLD runs no RDAP service, or unreached")
 		for _, value := range []trace.RegistrationState{trace.Registered, trace.Unregistered, trace.Unpublished, trace.Unreached} {

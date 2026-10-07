@@ -1619,6 +1619,58 @@ _dmarc.example.test.      IN TXT  "v=DMARC1; p=reject"
 	}
 }
 
+// TestRunSVCB follows a name's HTTPS records to the server they name, and
+// draws the path again from the walk --format json saved.
+func TestRunSVCB(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone + `
+example.test.      IN HTTPS 0 cdn.example.test.
+cdn.example.test.  IN HTTPS 1 edge.example.test. alpn="h3" ipv4hint="192.0.2.1"
+edge.example.test. IN A     192.0.2.7
+`})
+	base := []string{"--root", server.Addr.String(), "--no-asn", "--no-compare", "--color", "never", "-4"}
+	want := []string{
+		"svcb: example.test. HTTPS 0 cdn.example.test.",
+		`svcb: cdn.example.test. HTTPS 1 edge.example.test. alpn="h3" ipv4hint="192.0.2.1"`,
+		"svcb:   edge.example.test. 192.0.2.7; hint 192.0.2.1 is not among them",
+	}
+	drawn := func(out string) []string {
+		var lines []string
+		for line := range strings.Lines(out) {
+			if strings.HasPrefix(line, "svcb: ") {
+				lines = append(lines, strings.TrimSuffix(line, "\n"))
+			}
+		}
+		return lines
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), append(base, "--svcb", "example.test"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if !strings.Contains(stdout.String(), "hint at 192.0.2.1, which is not among its addresses") {
+		t.Errorf("got\n%s\nwant the stray hint warned about", stdout.String())
+	}
+
+	stdout.Reset()
+	if code := run(t.Context(), append(base, "--svcb", "--format", "json", "example.test", "HTTPS"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	path := filepath.Join(t.TempDir(), "walk.json")
+	if err := os.WriteFile(path, stdout.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if code := run(t.Context(), []string{"--from", path, "--color", "never"}, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q drawn again, want %q", got, want)
+	}
+}
+
 // TestRunCheck grades a zone whose servers echo an EDNS flag back and whose NS
 // set lists a server the delegation does not, and holds it to --expect: both
 // are worth a look, and neither is broken.

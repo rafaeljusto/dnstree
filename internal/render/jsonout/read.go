@@ -86,6 +86,9 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	if tr.Mail, err = readMail(doc.Mail); err != nil {
 		return nil, err
 	}
+	if tr.ServicePath, err = readServicePath(doc.ServicePath); err != nil {
+		return nil, err
+	}
 	if tr.Registration, err = readRegistration(doc.Registration); err != nil {
 		return nil, err
 	}
@@ -159,14 +162,18 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		return nil, fmt.Errorf("jsonout: %q is not a kind of step", from.Kind)
 	}
 
+	records, err := readRecords(from.Records)
+	if err != nil {
+		return nil, err
+	}
 	to := &trace.Step{
+		Records:   records,
 		Zone:      from.Zone,
 		Proto:     from.Proto,
 		Size:      from.SizeBytes,
 		Limit:     from.LimitBytes,
 		Rcode:     from.Rcode,
 		Kind:      kind,
-		Records:   readRecords(from.Records),
 		Notes:     from.Notes,
 		Extended:  readExtended(from.Extended),
 		NSID:      from.NSID,
@@ -177,7 +184,6 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		Compact:   from.Compact,
 		Err:       from.Error,
 	}
-	var err error
 	if to.RTT, err = duration("rtt_ms", from.RTTMS); err != nil {
 		return nil, err
 	}
@@ -269,16 +275,19 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 		return nil, fmt.Errorf("jsonout: %q is not what a resolver's failure can come of", from.Failed)
 	}
 
+	records, err := readRecords(from.Records)
+	if err != nil {
+		return nil, err
+	}
 	to := &trace.Resolver{
+		Records:  records,
 		Rcode:    from.Rcode,
 		Err:      from.Error,
-		Records:  readRecords(from.Records),
 		Extended: readExtended(from.Extended),
 		Match:    match,
 		Kept:     kept,
 		Failed:   failed,
 	}
-	var err error
 	if to.Elapsed, err = duration("elapsed_ms", from.ElapsedMS); err != nil {
 		return nil, err
 	}
@@ -357,21 +366,40 @@ func readSubnet(from *subnet) (*trace.Subnet, error) {
 	return &trace.Subnet{Prefix: prefix, Scope: from.Scope}, nil
 }
 
-func readRecords(from []record) []trace.RR {
+func readRecords(from []record) ([]trace.RR, error) {
 	var records []trace.RR
 	for _, rr := range from {
 		read := trace.RR{Name: rr.Name, TTL: rr.TTL, Type: rr.Type, Data: rr.Data}
 		if rr.Service != nil {
+			hints, err := parseAddrs("the hints of "+rr.Name, rr.Service.Hints)
+			if err != nil {
+				return nil, err
+			}
 			read.Service = &trace.Service{
 				Priority: rr.Service.Priority,
 				Target:   rr.Service.Target,
 				ALPN:     rr.Service.ALPN,
+				Port:     rr.Service.Port,
+				Hints:    hints,
 				ECH:      rr.Service.ECH,
 			}
 		}
 		records = append(records, read)
 	}
-	return records
+	return records, nil
+}
+
+// parseAddrs reads a list of addresses, nil where it is empty.
+func parseAddrs(field string, from []string) ([]netip.Addr, error) {
+	var to []netip.Addr
+	for _, addr := range from {
+		ip, err := netip.ParseAddr(addr)
+		if err != nil {
+			return nil, fmt.Errorf("jsonout: %s: %w", field, err)
+		}
+		to = append(to, ip)
+	}
+	return to, nil
 }
 
 // readExtended takes the escaping off EXTRA-TEXT: it is kept as the server sent

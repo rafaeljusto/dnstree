@@ -31,6 +31,9 @@ mail:   20 backup.example.net. unreachable: its addresses could not be looked up
 mail: stopped: the budget ran out before every lookup was made
 mail: mta-sts id=20240101; no tls-rpt; dmarc invalid
 mail: dane covers 1 of 1 MX host, not counting 1 that cannot be reached
+svcb: www.example.com. HTTPS 0 cdn.example.net.  [secure]
+svcb: cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  [insecure]
+svcb:   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
 rdap: example.com. expired 42 days ago, on 2026-08-13: renew it before the registry lets it go
 rdap: status: client delete prohibited, client transfer prohibited
 rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.
@@ -59,6 +62,7 @@ check example.com.
 - the CAA set at example.com. lets only letsencrypt.org issue for www.example.com., and no certificate authority issue wildcards below it
 - ⚠ the SPF policy of www.example.com. could not be followed to its end: the budget ran out
 - DANE covers every MX host of www.example.com. that can be reached, so a sender that checks it delivers only over TLS, to a server whose certificate matches
+- ⚠ the HTTPS records of www.example.com. hint at addresses edge.example.net. does not have, so a client that connects on the hints may reach another server
 - ⚠ 198.51.100.53 answered this question differently, which a name whose answer is tailored to where it is asked from does honestly, and nothing else should
 
 **resolvers**

@@ -22,6 +22,9 @@
 ✉️    20 mx.example.net. failed: the TLSA lookup failed: SERVFAIL
 ✉️  no mta-sts; tls-rpt invalid; dmarc p=reject
 ✉️  dane covers 1 of 2 MX hosts, but the MX set is not signed, so it protects each host and not which hosts get the mail
+🧭 www.example.com. HTTPS 0 cdn.example.net.  🔒 [secure]
+🧭 cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  🔓 [insecure]
+🧭   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
 📅 example.com. is registered; the registry does not say until when
 📅 example.com. is on server hold: the registry has taken it out of the zone
 📅 nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.

@@ -54,6 +54,7 @@ one after another, each from the root servers down.
   --caa                   say which certificate authorities may issue for NAME
   --spf                   draw NAME's SPF policy and count the lookups it costs
   --mail                  check NAME's MX hosts for DANE, and its mail policies
+  --svcb                  follow NAME's HTTPS or SVCB records to their servers
   --rdap                  ask the registry when the domain expires, and compare
   --propagation           say how long a change takes to reach every cache
   --check                 run the checks that grade a zone, and grade its health
@@ -202,7 +203,9 @@ it ended, what it and each hop on the path took, the chain of trust, the time
 left on the signatures, what --check-ds found, which nameservers the
 --check-axfr and --check-recursion probes found open, which --check-edns tests
 passed, who --caa found free to issue, how many lookups --spf counted, how many
-MX hosts --mail found DANE covering and which mail policies it found, how long
+MX hosts --mail found DANE covering and which mail policies it found, how many
+of the targets --svcb found have an address and how many of their hints are
+stray, how long
 --rdap found the registration has left and what the resolvers answered, each
 labelled with the question. Run from cron into the
 directory of node_exporter's textfile collector, it is what Prometheus alerts
@@ -370,6 +373,21 @@ MX host left uncovered while others are covered. Nothing connects to a mail
 server, and the MTA-STS policy file is not fetched. The lookups spend the
 walk's budget.
 
+--svcb follows NAME's HTTPS records (RFC 9460), or its SVCB records where TYPE
+is SVCB, to the servers a client would connect to: down the aliases a record
+in alias mode makes, each to the next name's own records, then to the A and
+AAAA of every target the last set names, a target of . being the record's own
+name. The addresses found are held against the ipv4hint and ipv6hint the
+records carry, and a hint that is none of them is said in a warning, since a
+client may connect on the hint before it looks. So is a target with no
+address or whose addresses could not be looked up, a loop, an alias set that
+mixes in service mode records, and an ECH key in a set that is not signed all
+the way down, aliases included. Every record is followed,
+not the one a client would pick, and --max-cname bounds the aliases. Each
+lookup is a walk of its own, drawn in the tree as an aside, and spends the
+walk's budget; a TYPE of HTTPS or SVCB is the first set itself. A NAME with a
+port is asked as written, such as _8443._https.example.com.
+
 --rdap asks the registry of the domain over RDAP (RFC 9083) when its
 registration runs out, which statuses it carries, and which nameservers and DS
 it holds, and says so when they are not what the TLD hands out: a change stuck
@@ -470,6 +488,7 @@ type Config struct {
 	CAA            bool
 	SPF            bool
 	Mail           bool
+	SVCB           bool
 	RDAP           bool
 	Propagation    bool
 
@@ -696,6 +715,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.CAA, "caa", false, "say which certificate authorities may issue for the name")
 	flags.BoolVar(&cfg.SPF, "spf", false, "draw the name's SPF policy and count the lookups it costs")
 	flags.BoolVar(&cfg.Mail, "mail", false, "check the name's MX hosts for DANE, and its mail policies")
+	flags.BoolVar(&cfg.SVCB, "svcb", false, "follow the name's HTTPS or SVCB records to their servers")
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
 	flags.BoolVar(&cfg.Check, "check", false, "run the checks that grade a zone, and grade its health")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
@@ -1118,7 +1138,7 @@ func several(cfg *Config, expecting bool) error {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "svcb": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

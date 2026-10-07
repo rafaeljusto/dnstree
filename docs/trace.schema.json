@@ -44,6 +44,7 @@
     "caa": { "$ref": "#/$defs/caa" },
     "spf": { "$ref": "#/$defs/spf" },
     "mail": { "$ref": "#/$defs/mail" },
+    "service_path": { "$ref": "#/$defs/service_path" },
     "registration": { "$ref": "#/$defs/registration" },
     "propagation": { "$ref": "#/$defs/propagation" },
     "check": { "$ref": "#/$defs/check" },
@@ -265,6 +266,56 @@
         "dmarc": { "description": "The DMARC record at _dmarc of the name, or of its organisational domain where the name has none (RFC 7489 6.6.3), in which case its sp tag, where it has one, is what applies to the name. Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
         "stopped": { "description": "Why the check made fewer lookups than it set out to: the MX lookup failed or did not validate, the name does not exist, or a budget ran out. The policies are still looked up unless it was the budget.", "type": "string" },
         "cut": { "description": "Present where a budget cut the lookups of the hosts short, which leaves how much DANE covers unknown.", "type": "boolean" }
+      }
+    },
+    "service_path": {
+      "description": "Where a client that reads the name's HTTPS records, or its SVCB records where the question was for those, connects (RFC 9460), present only where --svcb asked: down the alias chain, then to the A and AAAA of every server the last set names. Every lookup other than the walk's own answer is a walk of its own, in the tree as an aside.",
+      "type": "object",
+      "required": ["name", "type", "chain"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["HTTPS", "SVCB"] },
+        "chain": {
+          "description": "Each set looked up: the name's own first, then the target of each alias mode record followed.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/service_set" }
+        },
+        "targets": {
+          "description": "The servers the service mode records of the last set name, each once, best priority first. Where aliases led to a name with no records, that name alone, and fallback is present.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/service_target" }
+        },
+        "fallback": { "description": "Present where the chain ended on no records, which leaves a client connecting by addresses alone (RFC 9460 3).", "type": "boolean" },
+        "none": { "description": "Present where an alias to . says the service does not exist (RFC 9460 2.5.1).", "type": "boolean" },
+        "stopped": { "description": "Why the chain was left before its end: a lookup failed or did not validate, the aliases looped or went on past --max-cname, or a budget ran out.", "type": "string" },
+        "cut": { "description": "Present where a budget cut the address lookups short, which leaves the hints unjudged.", "type": "boolean" }
+      }
+    },
+    "service_set": {
+      "description": "The HTTPS or SVCB set at one name of the chain.",
+      "type": "object",
+      "required": ["lookup"],
+      "properties": {
+        "lookup": { "$ref": "#/$defs/lookup" },
+        "records": {
+          "description": "The records of the set, each with its parameters decoded.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/record" }
+        }
+      }
+    },
+    "service_target": {
+      "description": "One server the records name, and what its addresses are.",
+      "type": "object",
+      "required": ["name", "priority"],
+      "properties": {
+        "name": { "description": "The target, the owner of the record where it names .", "type": "string" },
+        "priority": { "description": "The best priority of the records that name it, 0 for the name a chain of aliases fell back to.", "type": "integer", "minimum": 0 },
+        "ipv4": { "description": "The lookup of its A set, absent where -6 left it unasked or a budget ran out.", "$ref": "#/$defs/lookup" },
+        "ipv6": { "description": "The lookup of its AAAA set, absent where -4 left it unasked or a budget ran out.", "$ref": "#/$defs/lookup" },
+        "addrs": { "description": "The addresses found.", "type": "array", "items": { "type": "string" } },
+        "hints": { "description": "The addresses the records naming it hint at.", "type": "array", "items": { "type": "string" } },
+        "stray": { "description": "The hints that are none of its addresses, judged only for a family whose lookup was answered.", "type": "array", "items": { "type": "string" } }
       }
     },
     "lookup": {
@@ -661,6 +712,12 @@
         "priority": { "type": "integer", "minimum": 0 },
         "target": { "type": "string" },
         "alpn": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "port": { "description": "The port the record says the service is on, absent where it says none.", "type": "integer", "minimum": 1 },
+        "hints": {
+          "description": "The ipv4hint and ipv6hint addresses, which a client may connect to before it has looked the target's own up.",
           "type": "array",
           "items": { "type": "string" }
         },

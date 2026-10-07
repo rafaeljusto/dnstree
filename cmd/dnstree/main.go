@@ -690,6 +690,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		CheckEDNS:      cfg.CheckEDNS,
 		CAA:            cfg.CAA,
 		Mail:           cfg.Mail,
+		SVCB:           cfg.SVCB,
 
 		NSID:     cfg.NSID,
 		Cookie:   cfg.Cookie,

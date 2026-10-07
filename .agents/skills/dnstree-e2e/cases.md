@@ -163,6 +163,10 @@ cached, not a bug. Run it again.
 | rdap-formats | `$D $B --rdap --format json example.com`, then `--format openmetrics`, then `--from` the JSON | `.registration.expires` in the JSON; `dnstree_registration_left_seconds` and `dnstree_registration{…,state="registered"} 1`; the same `rdap:` lines drawn back |
 | propagation | `$D $B --propagation --dnssec --check-ns --serial example.com` | exit 0, `propagation:` lines for the answer, a missing record, the nameservers (`NS 172800 at com., … at example.com.`), the DS and the keys, and no flag named under them |
 | propagation-hints | `$D $B --propagation www.wikipedia.org` | exit 0, the zone the alias ends in named in the first line, and `--serial`, `--check-ns` and `--dnssec` each named under the waits |
+| svcb | `$D $B --svcb --dnssec --explain facebook.com HTTPS` | exit 0, a `svcb:` line per record, best priority first, the first with its verdict, then a `svcb:   <target> <addresses>` line per target, and the sentence `a client that reads the HTTPS records of facebook.com. connects to …` |
+| svcb-aside | `$D $B --svcb cloudflare.com` | exit 0, the HTTPS set looked up as an aside (`HTTPS of cloudflare.com. for svcb`), and no hint said to be stray |
+| svcb-none | `$D $B --svcb pinterest.com` | exit 0, `svcb: no HTTPS records at pinterest.com.` and `so a client connects to pinterest.com. by its addresses alone` |
+| svcb-formats | `$D $B --svcb --format json cloudflare.com HTTPS`, then `--format openmetrics`, then `--from` the JSON | `.service_path.targets` in the JSON; `dnstree_svcb_targets` and `dnstree_svcb_stray_hints … 0`; the same `svcb:` lines drawn back |
 | propagation-formats | `$D $B --propagation --format json example.com`, then `--format dot`, then `--from` the JSON without and with `--propagation` | `.propagation.waits` in the JSON; exit 1 for dot; nothing drawn back without the flag, the same lines with it |
 
 ## budget

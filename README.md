@@ -126,6 +126,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--caa`](docs/guide/zones.md#who-may-issue-certificates-for-it) | say which certificate authorities may issue for the name, and which CAA set decides it (RFC 8659) |
 | [`--spf`](docs/guide/zones.md#what-a-check-of-its-mail-costs) | draw the name's SPF policy as the tree of lookups a mail server makes, and count them against the limit of ten (RFC 7208) |
 | [`--mail`](docs/guide/zones.md#whether-its-mail-can-be-sent-verified) | check the name's MX hosts the way a sender that checks DANE does, and its MTA-STS, TLS-RPT and DMARC records (RFC 7672) |
+| [`--svcb`](docs/guide/zones.md#where-a-browser-connects) | follow the name's HTTPS or SVCB records to the servers they name, and hold their address hints against what the servers resolve to (RFC 9460) |
 | [`--rdap`](docs/guide/zones.md#whether-its-registration-is-about-to-run-out) | ask the domain's registry when the registration runs out and whether it is held, and compare its nameservers and DS with the TLD's (RFC 9083) |
 | [`--propagation`](docs/guide/zones.md#how-long-a-change-takes-to-reach-everyone) | say how long each kind of change to the zone takes to reach every cache, from the TTLs the walk saw |
 | [`--check`](docs/guide/zones.md#all-of-it-at-once) | run the checks that grade a zone together, and grade its health one area at a time: passed, worth a look, broken or skipped |
@@ -255,9 +256,9 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
   what DNSSEC is worth to ECH.
 - [Checking a zone](docs/guide/zones.md): parent and child NS sets, serials, zone
   transfers and open recursion, how they handle EDNS, aliases where they may not
-  be, who may issue certificates, what a check of its mail costs, how long a
-  change takes to reach every cache, extended errors, NSID, cookies, `--qmin`,
-  `--without`, `--try-ns` and answer sizes.
+  be, who may issue certificates, what a check of its mail costs, which servers
+  a browser connects to, how long a change takes to reach every cache, extended
+  errors, NSID, cookies, `--qmin`, `--without`, `--try-ns` and answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, from here or from another subnet, and whether they offer
   encryption.

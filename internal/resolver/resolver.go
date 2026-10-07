@@ -178,6 +178,13 @@ type Config struct {
 	// from the deepest zone the run has entered that the name sits in.
 	Mail bool
 
+	// SVCB follows the name's HTTPS records, or its SVCB records where those
+	// are the question, to the servers a client would connect to (RFC 9460):
+	// down the aliases, then to the addresses of every target, which are held
+	// against the hints the records carry. Each lookup is a walk of its own,
+	// like the mail check's.
+	SVCB bool
+
 	// Down says why a server is to be treated as unreachable, empty for one
 	// that is not. A server it names is drawn among its zone's but never
 	// asked, the way one of the wrong family is, and the walk goes wherever
@@ -303,6 +310,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 	if r.cfg.Mail {
 		run.mail(ctx, cmp.Or(end, run.trace.Root))
+	}
+	if r.cfg.SVCB {
+		run.svcb(ctx, cmp.Or(end, run.trace.Root), end)
 	}
 	run.trace.Elapsed = time.Since(run.trace.Started)
 	return run.trace, nil
@@ -522,6 +532,12 @@ func service(rr dns.RR) *trace.Service {
 			decoded.ALPN = pair.Alpn
 		case *svcb.ECHCONFIG:
 			decoded.ECH = len(pair.ECH) > 0
+		case *svcb.PORT:
+			decoded.Port = pair.Port
+		case *svcb.IPV4HINT:
+			decoded.Hints = append(decoded.Hints, pair.Hint...)
+		case *svcb.IPV6HINT:
+			decoded.Hints = append(decoded.Hints, pair.Hint...)
 		}
 	}
 	return decoded

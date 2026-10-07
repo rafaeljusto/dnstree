@@ -12,6 +12,7 @@ server says about its own answer.
 - [Who may issue certificates for it](#who-may-issue-certificates-for-it)
 - [What a check of its mail costs](#what-a-check-of-its-mail-costs)
 - [Whether its mail can be sent verified](#whether-its-mail-can-be-sent-verified)
+- [Where a browser connects](#where-a-browser-connects)
 - [Whether its registration is about to run out](#whether-its-registration-is-about-to-run-out)
 - [How long a change takes to reach everyone](#how-long-a-change-takes-to-reach-everyone)
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
@@ -517,6 +518,66 @@ policy file is not fetched. The lookups spend the walk's budget, and a check
 cut short says so. The exit code is left alone. `--format json` carries it as
 `mail`, and `--format openmetrics` as `dnstree_mail_hosts`,
 `dnstree_mail_dane_hosts` and `dnstree_mail_policy`.
+
+## Where a browser connects
+
+An HTTPS record (RFC 9460) tells a browser how to reach a site before it
+connects: which protocols it speaks, on which port, at which server, and the
+key for encrypted client hello. The record often points somewhere else: one in
+alias mode, priority 0, says to look at another name instead, and one in
+service mode can name another server and carry `ipv4hint` and `ipv6hint`
+addresses a browser may connect to before it has looked that server up.
+`--svcb` follows the records the way a client does, down the aliases and on to
+the addresses of every server the last set names:
+
+```
+$ dnstree --svcb --dnssec --explain --no-asn --no-compare facebook.com HTTPS
+...
+│   │   ├── a.ns.facebook.com. 129.134.30.12  238ms  NOERROR  AA DO  [insecure]
+│   │   │   ├── facebook.com. 7200 HTTPS 2 star-mini.fallback.c10r.facebook.com. alpn="h2,h3"
+│   │   │   ├── facebook.com. 7200 HTTPS 1 . alpn="h2,h3"
+...
+│   │   │   ├── facebook.com.  (A of star-mini.fallback.c10r.facebook.com. for svcb)
+│   │   │   │   ├── a.ns.facebook.com. 129.134.30.12  241ms  NOERROR  AA DO  [insecure]
+│   │   │   │   │   └── star-mini.fallback.c10r.facebook.com. 60 A 57.144.222.1
+...
+svcb: facebook.com. HTTPS 1 . alpn="h2,h3"  [insecure]
+svcb: facebook.com. HTTPS 2 star-mini.fallback.c10r.facebook.com. alpn="h2,h3"
+svcb:   facebook.com. 163.70.151.35, 2a03:2880:f189:184:face:b00c:0:25de
+svcb:   star-mini.fallback.c10r.facebook.com. 57.144.222.1, 2a03:2880:f36f:1:face:b00c:0:25de
+✔ answered in 2.8s · 10 queries · 3 servers
+...
+· a client that reads the HTTPS records of facebook.com. connects to facebook.com., then star-mini.fallback.c10r.facebook.com.
+```
+
+Each set of the chain is drawn with its verdict, the first on the way that is
+not secure, so an alias that leaves a signed zone for one that is not reads as
+the unsigned one it lands in. Every record is followed, best priority first,
+rather than the one a client would pick, and a target of `.` is the record's
+own name. Each server's line lists the addresses its A and AAAA sets came to,
+as far as `-4` or `-6` allows. A hint that is none of them is said on that
+line and in a warning: a client may connect on the hint before it looks, and
+reach a server that no longer serves the site. A family whose lookup failed is
+not judged, so a hint is never called stray for want of an answer.
+
+An alias to `.` says the service does not exist. A chain that ends on a name
+with no records leaves a client connecting to that name by its addresses
+alone, and a name with no records at all leaves it connecting as it would
+without them. A warning says when the aliases loop, go on past `--max-cname`,
+or share a set with records in service mode, which a client ignores; when a
+set has more than one alias, which a client picks among at random, and the
+walk follows the first by name; when a target has no address, or its addresses
+cannot be looked up; when a set fails to look up or does not validate; and when
+a set with an ECH key is not signed all the way down, the aliases that led to
+it included. A TYPE of HTTPS or SVCB makes the walk's own answer the first
+set; any other TYPE looks up the HTTPS set as an aside, and SVCB records are
+followed only where SVCB is the TYPE. A name with a port, such as
+`_8443._https.example.com`, is asked as written, and the aliases it leads to
+are asked without the port, as RFC 9460 says. Nothing connects to the servers. The lookups
+spend the walk's budget, and a check cut short says so and leaves the hints of
+the targets it did not reach unjudged. The exit code is left alone. `--format json` carries it as
+`service_path`, and `--format openmetrics` as `dnstree_svcb_targets` and
+`dnstree_svcb_stray_hints`.
 
 ## Whether its registration is about to run out
 

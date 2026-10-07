@@ -147,6 +147,9 @@ func (r *renderer) render(tr *trace.Trace) {
 	for _, line := range r.mailPath(tr.Mail) {
 		r.write(line + "\n")
 	}
+	for _, line := range r.servicePath(tr.ServicePath) {
+		r.write(line + "\n")
+	}
 	for _, line := range r.registration(tr.Registration) {
 		r.write(line + "\n")
 	}

@@ -39,28 +39,30 @@ func (r *run) look(ctx context.Context, under *trace.Step, name string, qtype ui
 	r.attach(under, root)
 	result := r.walkFrom(ctx, from, name, qtype, root, 0)
 
-	lookup.DNSSEC = verdictOn(root, result)
-	answered := result != nil &&
-		(result.Kind == trace.KindAnswer || result.Kind == trace.KindNoData || result.Kind == trace.KindNXDomain)
 	// A budget that ran out on the way may also have left the chain of trust
 	// short of the keys it needed, so even an answer is not one to judge by.
 	if r.counters.spentSince(cnames) {
 		r.asideStopped = true
+		lookup.DNSSEC = verdictOn(root, result)
 		lookup.Err = "the budget ran out before it was answered"
 		return result, lookup, true
 	}
+	return result, ended(name, root, result), false
+}
+
+// ended is the lookup of name that a walk from root ended on result: Err is
+// set unless it was answered, if only with a denial.
+func ended(name string, root, result *trace.Step) trace.Lookup {
+	lookup := trace.Lookup{Name: name, DNSSEC: verdictOn(root, result)}
 	switch {
 	case result == nil:
 		lookup.Err = "no server answered"
-		return nil, lookup, false
-	case !answered:
+	case result.Kind != trace.KindAnswer && result.Kind != trace.KindNoData && result.Kind != trace.KindNXDomain:
 		lookup.Err = why(result)
-		return result, lookup, false
-	}
-	if !dns.EqualName(result.Asked.Name, name) {
+	case !dns.EqualName(result.Asked.Name, name):
 		lookup.Alias = result.Asked.Name
 	}
-	return result, lookup, false
+	return lookup
 }
 
 // verdictOn is the first verdict that is not secure among the answers on the

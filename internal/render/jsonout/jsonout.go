@@ -43,6 +43,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.CAA = convertCAA(tr.CAA)
 		document.SPF = convertSPF(tr.SPF)
 		document.Mail = convertMail(tr.Mail)
+		document.ServicePath = convertServicePath(tr.ServicePath)
 		document.Registration = convertRegistration(tr.Registration)
 		document.Propagation = convertPropagation(tr.Propagation)
 		document.Check = convertCheck(tr.Check)
@@ -69,6 +70,7 @@ type document struct {
 	CAA           *caa          `json:"caa,omitempty"`
 	SPF           *spf          `json:"spf,omitempty"`
 	Mail          *mail         `json:"mail,omitempty"`
+	ServicePath   *servicePath  `json:"service_path,omitempty"`
 	Registration  *registration `json:"registration,omitempty"`
 	Propagation   *propagation  `json:"propagation,omitempty"`
 	Check         *check        `json:"check,omitempty"`
@@ -314,6 +316,8 @@ type service struct {
 	Priority uint16   `json:"priority"`
 	Target   string   `json:"target,omitempty"`
 	ALPN     []string `json:"alpn,omitempty"`
+	Port     uint16   `json:"port,omitempty"`
+	Hints    []string `json:"hints,omitempty"`
 	ECH      bool     `json:"ech,omitempty"`
 }
 
@@ -552,6 +556,8 @@ func convertRecords(from []trace.RR) []record {
 				Priority: rr.Service.Priority,
 				Target:   rr.Service.Target,
 				ALPN:     rr.Service.ALPN,
+				Port:     rr.Service.Port,
+				Hints:    texts(rr.Service.Hints),
 				ECH:      rr.Service.ECH,
 			}
 		}
@@ -641,6 +647,15 @@ func convertDelegation(from *trace.Delegation) *delegation {
 	}
 	to.Glue = addrStrings(from.Glue)
 	to.ZoneAddrs = addrStrings(from.ZoneAddrs)
+	return to
+}
+
+// texts is a list of addresses as text.
+func texts(from []netip.Addr) []string {
+	var to []string
+	for _, addr := range from {
+		to = append(to, addr.String())
+	}
 	return to
 }
 

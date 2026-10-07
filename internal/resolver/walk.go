@@ -50,7 +50,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 	// for the question, and those the asides make. recorded is whether this
 	// zone has been kept for them.
 	top := side == 0 && (r.aside ||
-		(r.cfg.CAA || r.cfg.Mail) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
+		(r.cfg.CAA || r.cfg.Mail || r.cfg.SVCB) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
 	recorded := from != nil
 
 	// referred is the step that pointed the walk into this zone, which the
@@ -698,25 +698,25 @@ func (r *run) compact(chain *dnssec.Chain, hop *hop, qname string) {
 // client that finds none falls back to sending the name in the clear. Only a
 // signature says that did not happen on the way.
 func (r *run) checkECH(step *trace.Step) {
-	name := ""
 	for _, record := range step.Records {
 		if record.Service != nil && record.Service.ECH {
-			name = record.Name
-			break
+			r.warnECH(record.Name, step.DNSSEC)
+			return
 		}
 	}
-	if name == "" {
-		return
-	}
+}
 
+// warnECH says that name publishes an ECH configuration status does not vouch
+// for.
+func (r *run) warnECH(name string, status *trace.DNSSECStatus) {
 	switch {
 	case !r.cfg.DNSSEC:
 		r.warnf(trace.AreaDNSSEC, "%s publishes an ECH configuration, and without --dnssec nothing here checked that it arrived as the zone wrote it", name)
-	case step.DNSSEC == nil:
+	case status == nil:
 		r.warnf(trace.AreaDNSSEC, "%s publishes an ECH configuration in an answer whose signatures were never checked", name)
-	case step.DNSSEC.State != trace.Secure:
+	case status.State != trace.Secure:
 		r.warnf(trace.AreaDNSSEC, "%s publishes an ECH configuration in an answer that is %s, so a client cannot tell whether it was stripped on the way",
-			name, step.DNSSEC.State)
+			name, status.State)
 	}
 }
 

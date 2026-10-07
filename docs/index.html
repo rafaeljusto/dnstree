@@ -428,6 +428,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--mail</code> looks up each MX host the way a sender that checks DANE does, and says which ones a signed TLSA set covers. A TLSA lookup that fails holds the mail; a backup left out lets it go unverified.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">stale</span>
+          <h3>A hint that points at an old server</h3>
+          <p><code>--svcb</code> follows a name's HTTPS records down their aliases to the servers they name, and holds the <code>ipv4hint</code> and <code>ipv6hint</code> a browser may connect on against where those servers really are.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">expiring</span>
           <h3>A registration about to run out</h3>
           <p><code>--rdap</code> asks the registry when the domain expires and whether it is on hold, and compares the nameservers and DS it holds with the TLD's. A lapsed domain drops out of its TLD everywhere at once.</p>

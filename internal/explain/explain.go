@@ -34,6 +34,7 @@ const (
 	Servers               // the servers that made the walk harder
 	Issuance              // who may issue certificates for the name
 	Mail                  // what a check of mail sent as the name comes to
+	Service               // where a client that reads the name's HTTPS records connects
 	Resolver              // what an ordinary resolution made of the same question
 	Change                // what is not what it was when this walk was last made
 )
@@ -58,6 +59,8 @@ func (t Topic) String() string {
 		return "issuance"
 	case Mail:
 		return "mail"
+	case Service:
+		return "service"
 	case Resolver:
 		return "resolver"
 	case Change:
@@ -132,6 +135,9 @@ func Findings(tr *trace.Trace) []Finding {
 		findings = append(findings, finding)
 	}
 	findings = append(findings, delivery(tr)...)
+	if finding, ok := service(tr); ok {
+		findings = append(findings, finding)
+	}
 	if finding, ok := comparison(tr); ok {
 		findings = append(findings, finding)
 	}

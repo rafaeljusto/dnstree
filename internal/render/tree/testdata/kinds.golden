@@ -22,6 +22,9 @@ mail:   10 mx.example.com. dane (1 TLSA record): a sender has to see a certifica
 mail:   20 mx.example.net. failed: the TLSA lookup failed: SERVFAIL
 mail: no mta-sts; tls-rpt invalid; dmarc p=reject
 mail: dane covers 1 of 2 MX hosts, but the MX set is not signed, so it protects each host and not which hosts get the mail
+svcb: www.example.com. HTTPS 0 cdn.example.net.  [secure]
+svcb: cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  [insecure]
+svcb:   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
 rdap: example.com. is registered; the registry does not say until when
 rdap: example.com. is on server hold: the registry has taken it out of the zone
 rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.

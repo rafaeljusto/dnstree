@@ -346,6 +346,28 @@ func TestReadRefuses(t *testing.T) {
 				"mail": {"name": "x.", "mx": {"name": "x."}, "dmarc": {"name": "_dmarc.x.", "lookup": {"name": "_dmarc.x."}, "found": "maybe"}}}`,
 			want: `"maybe"`,
 		},
+		"a service path of a type that has no service mode": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"service_path": {"name": "x.", "type": "MX", "chain": [{"lookup": {"name": "x."}}]}}`,
+			want: `"MX"`,
+		},
+		"a service path with no set": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"service_path": {"name": "x.", "type": "HTTPS", "chain": [], "none": true}}`,
+			want: "has none",
+		},
+		"a record of a service path without its parameters": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."},
+					"records": [{"name": "x.", "ttl": 1, "type": "HTTPS", "data": "1 ."}]}]}}`,
+			want: "not decoded",
+		},
+		"a hint that is no address": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."}}],
+					"targets": [{"name": "x.", "priority": 1, "stray": ["nowhere"]}]}}`,
+			want: "stray hints",
+		},
 		"a CAA verdict in a state nothing here knows": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"caa": {"asked": [], "dnssec": {"state": "trusted"}}}`,
