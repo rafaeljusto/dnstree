@@ -18,22 +18,22 @@ func TestDelivery(t *testing.T) {
 		want string
 	}{
 		"every host covered under a signed MX set": {
-			mail: &trace.Mail{Name: "test.", MX: trace.MailLookup{DNSSEC: secure},
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{DNSSEC: secure},
 				Hosts: []trace.MailHost{host("mx.test.", trace.DANEVerified)}},
 			want: "DANE covers every MX host of test., so a sender that checks it delivers only over TLS",
 		},
 		"every host covered under an unsigned MX set": {
-			mail: &trace.Mail{Name: "test.", MX: trace.MailLookup{DNSSEC: insecure},
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{DNSSEC: insecure},
 				Hosts: []trace.MailHost{host("mx.test.", trace.DANEVerified)}},
 			want: "but its MX set is not signed, so a forged one can send the mail elsewhere",
 		},
 		"one host of two covered": {
-			mail: &trace.Mail{Name: "test.", MX: trace.MailLookup{DNSSEC: secure},
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{DNSSEC: secure},
 				Hosts: []trace.MailHost{host("mx.test.", trace.DANEVerified), host("backup.test.", trace.DANEInsecure)}},
 			want: "DANE covers 1 of the 2 MX hosts of test., so a sender may deliver to the others unverified",
 		},
 		"a host whose TLSA lookup failed": {
-			mail: &trace.Mail{Name: "test.", MX: trace.MailLookup{DNSSEC: secure},
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{DNSSEC: secure},
 				Hosts: []trace.MailHost{host("mx.test.", trace.DANEFailed)}},
 			want: "a sender that checks DANE holds mail for test. rather than deliver it to mx.test.",
 		},
@@ -47,7 +47,7 @@ func TestDelivery(t *testing.T) {
 			want: "whether DANE protects mail to test. takes --dnssec to say",
 		},
 		"a check the budget cut short": {
-			mail: &trace.Mail{Name: "test.", Cut: true, MX: trace.MailLookup{DNSSEC: secure},
+			mail: &trace.Mail{Name: "test.", Cut: true, MX: trace.Lookup{DNSSEC: secure},
 				Hosts: []trace.MailHost{host("mx.test.", trace.DANEVerified), host("mx2.test.", trace.DANEIndeterminate)}},
 			want: "so how much DANE covers is not known",
 		},

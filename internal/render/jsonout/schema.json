@@ -252,7 +252,7 @@
       "required": ["name", "mx"],
       "properties": {
         "name": { "description": "The name mail is sent to.", "type": "string" },
-        "mx": { "description": "The lookup of the MX set.", "$ref": "#/$defs/mail_lookup" },
+        "mx": { "description": "The lookup of the MX set.", "$ref": "#/$defs/lookup" },
         "null": { "description": "Present where the name says it takes no mail, with a null MX (RFC 7505).", "type": "boolean" },
         "implicit": { "description": "Present where the name has no MX set, which makes it its own only host (RFC 5321 5.1).", "type": "boolean" },
         "hosts": {
@@ -267,8 +267,8 @@
         "cut": { "description": "Present where a budget cut the lookups of the hosts short, which leaves how much DANE covers unknown.", "type": "boolean" }
       }
     },
-    "mail_lookup": {
-      "description": "One name the mail check looked up.",
+    "lookup": {
+      "description": "One name a check looked up after the walk, with a walk of its own.",
       "type": "object",
       "required": ["name"],
       "properties": {
@@ -285,8 +285,8 @@
       "properties": {
         "name": { "type": "string" },
         "preference": { "type": "integer" },
-        "address": { "description": "The lookup of its addresses: A, or AAAA where it has none or the run asked IPv6 alone.", "$ref": "#/$defs/mail_lookup" },
-        "tlsa": { "description": "The lookup of its TLSA set at _25._tcp, absent where it was not asked.", "$ref": "#/$defs/mail_lookup" },
+        "address": { "description": "The lookup of its addresses: A, or AAAA where it has none or the run asked IPv6 alone.", "$ref": "#/$defs/lookup" },
+        "tlsa": { "description": "The lookup of its TLSA set at _25._tcp, absent where it was not asked.", "$ref": "#/$defs/lookup" },
         "records": {
           "description": "The TLSA set it found.",
           "type": "array",
@@ -317,7 +317,7 @@
       "required": ["name", "lookup", "found"],
       "properties": {
         "name": { "description": "Where it was asked.", "type": "string" },
-        "lookup": { "$ref": "#/$defs/mail_lookup" },
+        "lookup": { "$ref": "#/$defs/lookup" },
         "found": {
           "description": "published, one record of its version; none, no record of its version; invalid, more than one, or one that does not parse, which a sender reads as none; failed, the lookup did not come back with an answer.",
           "enum": ["published", "none", "invalid", "failed"]

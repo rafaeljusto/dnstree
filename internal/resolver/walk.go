@@ -46,10 +46,10 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 		reach, entered = r.reach(zone, qname), true
 	}
 
-	// top is a walk whose zones the CAA and mail lookups go to: the one for
-	// the question, and those the mail lookups make. recorded is whether this
+	// top is a walk whose zones the CAA lookups and the asides go to: the one
+	// for the question, and those the asides make. recorded is whether this
 	// zone has been kept for them.
-	top := side == 0 && (r.mailing ||
+	top := side == 0 && (r.aside ||
 		(r.cfg.CAA || r.cfg.Mail) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
 	recorded := from != nil
 
@@ -151,7 +151,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 			}
 			r.compact(chain, hop, qname)
 			r.denial(hop, zone, qname)
-			if side == 0 && !r.climbing && !r.mailing {
+			if side == 0 && !r.climbing && !r.aside {
 				r.checkECH(step)
 				r.checkSubnet(step)
 				r.checkNS(ctx, step, referred)
@@ -202,9 +202,9 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 // the question itself: under it, the lookup of a nameserver's address fanning
 // out to every server of every zone above it would spend the budget long
 // before the zone the question is about was asked at all. Nor does it reach
-// the lookups the mail check makes, which a sender's resolver asks of one.
+// the asides, which the client they stand for asks of one.
 func (r *run) every(side int) bool {
-	return r.cfg.All && side == 0 && !r.mailing
+	return r.cfg.All && side == 0 && !r.aside
 }
 
 // reach is how many labels of qname the first question put to zone asks for:

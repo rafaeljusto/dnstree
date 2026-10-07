@@ -25,8 +25,8 @@ func (r *run) mail(ctx context.Context, under *trace.Step) {
 		return
 	}
 
-	r.mailing = true
-	defer func() { r.mailing = false }()
+	r.aside = true
+	defer func() { r.aside = false }()
 
 	m := &trace.Mail{Name: name}
 	r.trace.Mail = m
@@ -39,7 +39,7 @@ func (r *run) mail(ctx context.Context, under *trace.Step) {
 				continue
 			}
 			r.host(ctx, under, &m.Hosts[i])
-			m.Cut = m.Cut || r.mailStopped
+			m.Cut = m.Cut || r.asideStopped
 		}
 	}
 	if !r.counters.spent() {
@@ -52,8 +52,8 @@ func (r *run) mail(ctx context.Context, under *trace.Step) {
 		m.DMARC = r.dmarc(ctx, under, name)
 	}
 
-	if r.counters.spent() || r.mailStopped {
-		r.mailStopped = true
+	if r.counters.spent() || r.asideStopped {
+		r.asideStopped = true
 		if m.Stopped == "" {
 			m.Stopped = "the budget ran out before every lookup was made"
 		}
@@ -65,7 +65,7 @@ func (r *run) mail(ctx context.Context, under *trace.Step) {
 // exchangers looks up the MX set and fills in the hosts it names. It reports
 // whether there are any to look at.
 func (r *run) exchangers(ctx context.Context, under *trace.Step, m *trace.Mail) bool {
-	result, lookup, stopped := r.look(ctx, under, m.Name, dns.TypeMX)
+	result, lookup, stopped := r.look(ctx, under, m.Name, dns.TypeMX, "mail")
 	m.MX = lookup
 	switch {
 	case stopped:
@@ -140,9 +140,9 @@ func (r *run) host(ctx context.Context, under *trace.Step, host *trace.MailHost)
 	if r.cfg.Family == 6 {
 		qtype = dns.TypeAAAA
 	}
-	result, lookup, stopped := r.look(ctx, under, host.Name, qtype)
+	result, lookup, stopped := r.look(ctx, under, host.Name, qtype, "mail")
 	if !stopped && lookup.Err == "" && result.Kind == trace.KindNoData && r.cfg.Family == 0 {
-		result, lookup, stopped = r.look(ctx, under, host.Name, dns.TypeAAAA)
+		result, lookup, stopped = r.look(ctx, under, host.Name, dns.TypeAAAA, "mail")
 	}
 	host.Address = &lookup
 	switch {
@@ -184,7 +184,7 @@ func (r *run) host(ctx context.Context, under *trace.Step, host *trace.MailHost)
 	}
 	for _, base := range bases {
 		r.tlsa(ctx, under, host, "_25._tcp."+base)
-		if host.DANE != trace.DANENone && host.DANE != trace.DANEInsecure || r.mailStopped {
+		if host.DANE != trace.DANENone && host.DANE != trace.DANEInsecure || r.asideStopped {
 			return
 		}
 	}
@@ -192,7 +192,7 @@ func (r *run) host(ctx context.Context, under *trace.Step, host *trace.MailHost)
 
 // tlsa looks up the TLSA set at name for host and decides by it.
 func (r *run) tlsa(ctx context.Context, under *trace.Step, host *trace.MailHost, name string) {
-	result, lookup, stopped := r.look(ctx, under, name, dns.TypeTLSA)
+	result, lookup, stopped := r.look(ctx, under, name, dns.TypeTLSA, "mail")
 	host.TLSA = &lookup
 	host.Records = nil
 	if lookup.Err == "" {
@@ -256,7 +256,7 @@ func tlsaRecords(records []trace.RR, owner string) []trace.TLSARecord {
 // nothing.
 func (r *run) policy(ctx context.Context, under *trace.Step, name, version, reader string, check func(*trace.MailPolicy) string) *trace.MailPolicy {
 	p := &trace.MailPolicy{Name: name}
-	result, lookup, stopped := r.look(ctx, under, name, dns.TypeTXT)
+	result, lookup, stopped := r.look(ctx, under, name, dns.TypeTXT, "mail")
 	p.Lookup = lookup
 	if stopped {
 		// A policy the budget left unasked is no failure of the zone's.
@@ -379,97 +379,6 @@ func isAlnum(c rune) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
 
-// look looks name up with a walk of its own, drawn as an aside under under,
-// starting from the deepest zone the run has entered that name sits in. It
-// returns the step the walk ended on, nil where it got nowhere, the lookup as
-// the mail check keeps it, whose Err is set unless the step answered, and
-// whether a budget of the run's stopped it, which says nothing of the zone.
-func (r *run) look(ctx context.Context, under *trace.Step, name string, qtype uint16) (*trace.Step, trace.MailLookup, bool) {
-	lookup := trace.MailLookup{Name: name}
-	if r.counters.spent() {
-		lookup.Err = "the budget ran out before it was made"
-		r.mailStopped = true
-		return nil, lookup, true
-	}
-	cnames := r.counters.cnames
-
-	from, zone := r.cutOf(name), "."
-	if from != nil {
-		zone = from.zone
-	}
-
-	// The walk's own aliases are not this lookup's, and must not read as a loop.
-	saved := r.chased
-	r.chased = map[string]bool{dnsutil.Canonical(name): true}
-	defer func() { r.chased = saved }()
-
-	root := &trace.Step{Zone: zone, Kind: trace.KindZone, Aside: true,
-		Notes: []string{dnsutil.TypeToString(qtype) + " of " + name + " for mail"}}
-	r.attach(under, root)
-	result := r.walkFrom(ctx, from, name, qtype, root, 0)
-
-	lookup.DNSSEC = verdictOn(root, result)
-	answered := result != nil &&
-		(result.Kind == trace.KindAnswer || result.Kind == trace.KindNoData || result.Kind == trace.KindNXDomain)
-	// A budget that ran out on the way may also have left the chain of trust
-	// short of the keys it needed, so even an answer is not one to judge by.
-	if r.counters.spentSince(cnames) {
-		r.mailStopped = true
-		lookup.Err = "the budget ran out before it was answered"
-		return result, lookup, true
-	}
-	switch {
-	case result == nil:
-		lookup.Err = "no server answered"
-		return nil, lookup, false
-	case !answered:
-		lookup.Err = why(result)
-		return result, lookup, false
-	}
-	if !dns.EqualName(result.Asked.Name, name) {
-		lookup.Alias = result.Asked.Name
-	}
-	return result, lookup, false
-}
-
-// verdictOn is the first verdict that is not secure among the answers on the
-// way from root to result, the aliases included, or else the last of them.
-func verdictOn(root, result *trace.Step) *trace.DNSSECStatus {
-	var last *trace.DNSSECStatus
-	for _, step := range pathTo(root, result) {
-		switch step.Kind {
-		case trace.KindAnswer, trace.KindCNAME, trace.KindNoData, trace.KindNXDomain:
-		default:
-			continue
-		}
-		if step.Minimised || step.DNSSEC == nil {
-			continue
-		}
-		if step.DNSSEC.State != trace.Secure {
-			return step.DNSSEC
-		}
-		last = step.DNSSEC
-	}
-	return last
-}
-
-// pathTo is the steps from step down to target, both included, nil where
-// target is not below step.
-func pathTo(step, target *trace.Step) []*trace.Step {
-	if step == nil || target == nil {
-		return nil
-	}
-	if step == target {
-		return []*trace.Step{step}
-	}
-	for _, child := range step.Children {
-		if path := pathTo(child, target); path != nil {
-			return append([]*trace.Step{step}, path...)
-		}
-	}
-	return nil
-}
-
 // warnMail says what in the mail path stops mail or leaves it unprotected
 // where its owner may think it is not.
 func (r *run) warnMail(m *trace.Mail) {
@@ -493,7 +402,7 @@ func (r *run) warnMail(m *trace.Mail) {
 		}
 	}
 	// A check the budget cut short cannot say which hosts are covered.
-	if dane, hosts := m.Covered(); dane > 0 && dane < hosts && len(uncovered) > 0 && !r.mailStopped {
+	if dane, hosts := m.Covered(); dane > 0 && dane < hosts && len(uncovered) > 0 && !r.asideStopped {
 		r.warnf("", "DANE covers %d of the %d MX hosts of %s, so a sender may deliver to %s unverified; publish TLSA for %s",
 			dane, hosts, m.Name, orList(uncovered), verb(uncovered, "it", "them"))
 	}

@@ -334,16 +334,16 @@ type run struct {
 	secret  []byte
 	cookies map[netip.Addr]string
 
-	// cuts are the zones the walk for the question entered, which the CAA and
-	// mail lookups are asked of, and climbing is set while the CAA ones are
+	// cuts are the zones the walk for the question entered, which the CAA
+	// lookups and the asides are asked of, and climbing is set while the CAA ones are
 	// being made.
 	cuts     []cut
 	climbing bool
 
-	// mailing is set while the mail lookups are being made, whose walks keep
-	// the zones they enter for the ones after them, and mailStopped once a
-	// budget of the run has cut one of them short.
-	mailing, mailStopped bool
+	// aside is set while the lookups a check makes after the walk are being
+	// made, whose walks keep the zones they enter for the ones after them, and
+	// asideStopped once a budget of the run has cut one of them short.
+	aside, asideStopped bool
 
 	// tried is whether the walk came to the delegation --try-ns replaces.
 	tried bool

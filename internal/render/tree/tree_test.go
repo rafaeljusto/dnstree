@@ -141,7 +141,7 @@ func kinds() *trace.Trace {
 			Result:  trace.SPFOK,
 		},
 		Mail: &trace.Mail{
-			Name: "alias.example.com.", MX: trace.MailLookup{Name: "alias.example.com.", DNSSEC: &trace.DNSSECStatus{State: trace.Insecure}},
+			Name: "alias.example.com.", MX: trace.Lookup{Name: "alias.example.com.", DNSSEC: &trace.DNSSECStatus{State: trace.Insecure}},
 			Hosts: []trace.MailHost{
 				{Name: "mx.example.com.", Preference: 10, DANE: trace.DANEVerified, Why: "a sender has to see a certificate that matches",
 					Records: []trace.TLSARecord{{Usage: 3, Selector: 1, Matching: 1, Data: "e41cc763", Usable: true}}},

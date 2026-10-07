@@ -14,7 +14,7 @@ func TestRenderMail(t *testing.T) {
 		want []string
 	}{
 		"hosts covered in part, and the policies": {
-			mail: &trace.Mail{Name: "test.", MX: trace.MailLookup{Name: "test."},
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{Name: "test."},
 				Hosts: []trace.MailHost{
 					{Name: "mx.test.", Preference: 10, DANE: trace.DANEVerified, Why: "a sender has to see a certificate that matches",
 						Records: []trace.TLSARecord{{Usage: 3, Selector: 1, Matching: 1, Data: "ab", Usable: true}}},
@@ -34,7 +34,7 @@ func TestRenderMail(t *testing.T) {
 			},
 		},
 		"every host covered under a signed MX set": {
-			mail: &trace.Mail{Name: "test.", MX: trace.MailLookup{Name: "test.", DNSSEC: secure},
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{Name: "test.", DNSSEC: secure},
 				Hosts: []trace.MailHost{{Name: "mx.test.", Preference: 0, DANE: trace.DANEVerified, Why: "ok"}}},
 			want: []string{"mail: 1 MX host for test. [secure]", "mail:   0 mx.test. dane: ok", "mail: dane covers 1 of 1 MX host"},
 		},

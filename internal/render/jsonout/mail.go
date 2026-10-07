@@ -10,7 +10,7 @@ import (
 // DANE finds out (RFC 7672).
 type mail struct {
 	Name     string      `json:"name"`
-	MX       mailLookup  `json:"mx"`
+	MX       lookup      `json:"mx"`
 	Null     bool        `json:"null,omitempty"`
 	Implicit bool        `json:"implicit,omitempty"`
 	Hosts    []mailHost  `json:"hosts,omitempty"`
@@ -21,7 +21,7 @@ type mail struct {
 	Cut      bool        `json:"cut,omitempty"`
 }
 
-type mailLookup struct {
+type lookup struct {
 	Name   string  `json:"name"`
 	Alias  string  `json:"alias,omitempty"`
 	Error  string  `json:"error,omitempty"`
@@ -31,8 +31,8 @@ type mailLookup struct {
 type mailHost struct {
 	Name       string       `json:"name"`
 	Preference uint16       `json:"preference"`
-	Address    *mailLookup  `json:"address,omitempty"`
-	TLSA       *mailLookup  `json:"tlsa,omitempty"`
+	Address    *lookup      `json:"address,omitempty"`
+	TLSA       *lookup      `json:"tlsa,omitempty"`
 	Records    []tlsaRecord `json:"records,omitempty"`
 	DANE       string       `json:"dane"`
 	Why        string       `json:"why,omitempty"`
@@ -48,7 +48,7 @@ type tlsaRecord struct {
 
 type mailPolicy struct {
 	Name   string      `json:"name"`
-	Lookup mailLookup  `json:"lookup"`
+	Lookup lookup      `json:"lookup"`
 	Found  string      `json:"found"`
 	Record string      `json:"record,omitempty"`
 	Tags   []policyTag `json:"tags,omitempty"`
@@ -65,17 +65,17 @@ func convertMail(from *trace.Mail) *mail {
 		return nil
 	}
 	to := &mail{
-		Name: from.Name, MX: convertMailLookup(from.MX), Null: from.Null, Implicit: from.Implicit,
+		Name: from.Name, MX: convertLookup(from.MX), Null: from.Null, Implicit: from.Implicit,
 		MTASTS: convertPolicy(from.MTASTS), TLSRPT: convertPolicy(from.TLSRPT), DMARC: convertPolicy(from.DMARC),
 		Stopped: from.Stopped, Cut: from.Cut,
 	}
 	for _, host := range from.Hosts {
 		h := mailHost{Name: host.Name, Preference: host.Preference, DANE: string(host.DANE), Why: host.Why}
 		if host.Address != nil {
-			h.Address = new(convertMailLookup(*host.Address))
+			h.Address = new(convertLookup(*host.Address))
 		}
 		if host.TLSA != nil {
-			h.TLSA = new(convertMailLookup(*host.TLSA))
+			h.TLSA = new(convertLookup(*host.TLSA))
 		}
 		for _, record := range host.Records {
 			h.Records = append(h.Records, tlsaRecord{
@@ -88,15 +88,15 @@ func convertMail(from *trace.Mail) *mail {
 	return to
 }
 
-func convertMailLookup(from trace.MailLookup) mailLookup {
-	return mailLookup{Name: from.Name, Alias: from.Alias, Error: from.Err, DNSSEC: convertDNSSEC(from.DNSSEC)}
+func convertLookup(from trace.Lookup) lookup {
+	return lookup{Name: from.Name, Alias: from.Alias, Error: from.Err, DNSSEC: convertDNSSEC(from.DNSSEC)}
 }
 
 func convertPolicy(from *trace.MailPolicy) *mailPolicy {
 	if from == nil {
 		return nil
 	}
-	to := &mailPolicy{Name: from.Name, Lookup: convertMailLookup(from.Lookup), Found: string(from.Found),
+	to := &mailPolicy{Name: from.Name, Lookup: convertLookup(from.Lookup), Found: string(from.Found),
 		Record: from.Record, Why: from.Why}
 	for _, tag := range from.Tags {
 		to.Tags = append(to.Tags, policyTag(tag))
@@ -111,7 +111,7 @@ func readMail(from *mail) (*trace.Mail, error) {
 	if from == nil {
 		return nil, nil
 	}
-	mx, err := readMailLookup(from.MX)
+	mx, err := readLookup(from.MX)
 	if err != nil {
 		return nil, err
 	}
@@ -131,10 +131,10 @@ func readMail(from *mail) (*trace.Mail, error) {
 			return nil, fmt.Errorf("jsonout: %q is not what DANE can do for a host", host.DANE)
 		}
 		h := trace.MailHost{Name: host.Name, Preference: host.Preference, DANE: state, Why: host.Why}
-		if h.Address, err = readMailLookupRef(host.Address); err != nil {
+		if h.Address, err = readLookupRef(host.Address); err != nil {
 			return nil, err
 		}
-		if h.TLSA, err = readMailLookupRef(host.TLSA); err != nil {
+		if h.TLSA, err = readLookupRef(host.TLSA); err != nil {
 			return nil, err
 		}
 		for _, record := range host.Records {
@@ -157,23 +157,23 @@ func readMail(from *mail) (*trace.Mail, error) {
 	return to, nil
 }
 
-func readMailLookup(from mailLookup) (trace.MailLookup, error) {
+func readLookup(from lookup) (trace.Lookup, error) {
 	status, err := readDNSSEC(from.DNSSEC)
 	if err != nil {
-		return trace.MailLookup{}, err
+		return trace.Lookup{}, err
 	}
-	return trace.MailLookup{Name: from.Name, Alias: from.Alias, Err: from.Error, DNSSEC: status}, nil
+	return trace.Lookup{Name: from.Name, Alias: from.Alias, Err: from.Error, DNSSEC: status}, nil
 }
 
-func readMailLookupRef(from *mailLookup) (*trace.MailLookup, error) {
+func readLookupRef(from *lookup) (*trace.Lookup, error) {
 	if from == nil {
 		return nil, nil
 	}
-	lookup, err := readMailLookup(*from)
+	read, err := readLookup(*from)
 	if err != nil {
 		return nil, err
 	}
-	return &lookup, nil
+	return &read, nil
 }
 
 func readPolicy(from *mailPolicy) (*trace.MailPolicy, error) {
@@ -186,11 +186,11 @@ func readPolicy(from *mailPolicy) (*trace.MailPolicy, error) {
 	default:
 		return nil, fmt.Errorf("jsonout: %q is not what a mail policy lookup can come to", from.Found)
 	}
-	lookup, err := readMailLookup(from.Lookup)
+	read, err := readLookup(from.Lookup)
 	if err != nil {
 		return nil, err
 	}
-	to := &trace.MailPolicy{Name: from.Name, Lookup: lookup, Found: found, Record: from.Record, Why: from.Why}
+	to := &trace.MailPolicy{Name: from.Name, Lookup: read, Found: found, Record: from.Record, Why: from.Why}
 	for _, tag := range from.Tags {
 		to.Tags = append(to.Tags, trace.PolicyTag(tag))
 	}

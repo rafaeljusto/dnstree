@@ -14,7 +14,7 @@ type Mail struct {
 	// MX is the lookup of the exchangers. Null is a domain that says it takes
 	// no mail (RFC 7505), and Implicit one with no MX set, whose own name is
 	// its only host (RFC 5321 5.1).
-	MX       MailLookup
+	MX       Lookup
 	Null     bool
 	Implicit bool
 
@@ -36,8 +36,8 @@ type Mail struct {
 	Cut bool
 }
 
-// MailLookup is one name the check looked up, with a walk of its own.
-type MailLookup struct {
+// Lookup is one name a check looked up after the walk, with a walk of its own.
+type Lookup struct {
 	Name string
 
 	// Alias is the name the answer came from, where Name is an alias.
@@ -58,8 +58,8 @@ type MailHost struct {
 
 	// Address is the lookup of its addresses, and TLSA that of its TLSA set,
 	// nil where it was not asked.
-	Address *MailLookup
-	TLSA    *MailLookup
+	Address *Lookup
+	TLSA    *Lookup
 
 	Records []TLSARecord
 	DANE    DANEState
@@ -125,7 +125,7 @@ type TLSARecord struct {
 type MailPolicy struct {
 	// Name is where it was asked, and Lookup how that went.
 	Name   string
-	Lookup MailLookup
+	Lookup Lookup
 
 	Found PolicyFound
 
@@ -218,13 +218,13 @@ func (m *Mail) Shown() *Mail {
 	return &shown
 }
 
-func (l MailLookup) shown() MailLookup {
+func (l Lookup) shown() Lookup {
 	l.Name, l.Alias, l.Err = Shown(l.Name), Shown(l.Alias), Shown(l.Err)
 	l.DNSSEC = l.DNSSEC.shown()
 	return l
 }
 
-func (l *MailLookup) shownRef() *MailLookup {
+func (l *Lookup) shownRef() *Lookup {
 	if l == nil {
 		return nil
 	}
