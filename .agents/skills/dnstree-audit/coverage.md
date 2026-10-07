@@ -2,23 +2,31 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `05467fe`
-- **Date**: 2026-10-05
-- **Scope**: the commits since `0f04f8d` (`--spf`, `--pcap`, `--check-edns`,
-  out-of-zone nameservers on any budget, one-line CLI errors, the layering
-  refactor, the Go 1.27 fixes)
+- **Commit**: `8e729b6`
+- **Date**: 2026-10-07
+- **Scope**: the commits since `05467fe` (`--rdap`, `--mail`, `--propagation`,
+  the SERVFAIL diagnosis, `--check`, `--svcb`, CSYNC and the RFC 9615
+  bootstrap signals, the resolver split, the history and dnstree-web fixes)
 
 ## Open findings
 
+- Low: rdap `get` never checks the content type, unlike DoH; left as is,
+  since a hostile registry sends the right one anyway and a sloppy one would
+  cost the check ([rdap.go:291](../../../internal/rdap/rdap.go#L291)).
+- Low, unverified: a bootstrap signal is not checked to be signed by a key its
+  own CDS/CDNSKEY references; it never reaches an exit code.
 - Low: the SPF check keeps asking after a temperror, so a resolver that times
   out on the policy's names costs a timeout per budgeted query rather than
-  one; left as is, since stopping makes every count after it a floor
-  ([spf.go:60](../../../internal/spf/spf.go#L60)).
+  one; it now stops when ctx ends
+  ([spf.go:71](../../../internal/spf/spf.go#L71)).
 - Low: names, CAA issuer values, SPF names and the report agent inside the
   markdown report's finding sentences are open to GitHub's autolinks,
   `@mentions` and `#refs`; fixing it means marking them apart from the prose
   explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
+- Low, unverified: `TestMailDANE` once came back with the example.com MX set
+  bogus ("the parent published a DS it did not sign") under `-race` while the
+  package was building; 260 runs after it were clean.
 
 ## Checked and sound
 
@@ -111,7 +119,12 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   zone and salt go through `Shown`.
 - `Trace.Chain` reads the chain the way the exit code does: bogus anywhere,
   then indeterminate, then the answer's verdict. `verdict`, the live summary,
-  explain and openmetrics all read it.
+  explain and openmetrics all read it. It, `Soonest` and `Stale` skip the
+  steps under an `Apart` root, the lookups of `--mail`, `--svcb` and the
+  bootstrap signals, so a third party's zone sets no exit code
+  (`TestMailLeavesTheChain`, `TestServiceLeavesTheChain`,
+  `TestBootstrapLeavesTheChain`, `TestApartLeavesTheRun`); `read.go` refuses
+  `apart` off an aside.
 - Waterfall and gantt: every float-to-int conversion is bounded, the axis
   counts its marks, gantt names swap `:`, `#`, `%`, `;` and newline.
 - OpenMetrics: label values escape `\`, `"` and newline over the shown trace.
@@ -195,7 +208,7 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   glue, `zone_addrs` and trial address.
 - The Lambda bootstrap only adds `-client-header X-Forwarded-For`;
   `internal/server` and `cmd/dnstree-web` are unchanged.
-- `go test -race -count=2 ./...` is clean at `05467fe`.
+- `go test -race -count=2 ./...` is clean at `8e729b6`.
 - CAA failures: a referral below the walk is judged by no chain
   (`TestCAAUnenteredZone`); the budget is blamed only when this lookup ran it
   out (`TestCAABudgetSpentBefore`).
@@ -226,3 +239,53 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   the one that says it gave up (`TestSweepStopsAtTheBudget`).
 - `plain()` returns the flag package's error when the name it matched is no
   flag.
+- The resolver split keeps behaviour; `afford` spends before every fan-out and
+  `askAll` waits before any `attach` (glue, keys, serial, exposure, CSYNC).
+- `look()` stops on a spent budget, saves and restores `chased`, and every
+  caller handles `stopped` and `Err` before reading the result; `walkFrom`
+  clones the recorded cut's chain.
+- SVCB: alias loops caught by `seen`, the chain capped at `--max-cname`, `.`
+  means no service, `service()` only type-switches, hints are `netip.Addr`.
+- `--mail`: null MX, hosts deduplicated, two TLSA names per host; `dane` and
+  `none` need a Secure path, a bogus MX stops the check; policies re-parsed
+  through the codec, more than one versioned record is invalid.
+- CSYNC states need a Secure chain at the zone and a Secure CSYNC set;
+  `serialBefore` is RFC 1982; an empty or unknown bitmap indexes nothing.
+- Bootstrap: only under `InsecureAt(zone)`, in-zone nameservers skipped, every
+  signal Secure, "missing" needs a signed denial, names over 255 refused.
+- SERVFAIL diagnosis: one CD=1 `Recheck` per resolver that failed, on its own
+  slot; never in dnstree-web.
+- UDP replies are copied out of the pooled buffer before `Unpack`.
+- `trace/propagation.go` is arithmetic on recorded TTLs (RFC 2308 negative
+  TTL); keys and DS only from Secure verdicts.
+- SVCB/HTTPS, TLSA, DNSKEY, DS and MX sets sort canonically in the codec; SPF
+  `\DDD` refuses values past 255.
+- rdap: redirects only to https and at most 3; bootstrap URLs https with a
+  host; the domain through `ldh()`; body capped at 1 MiB; ctx plus a 10 s
+  client timeout; lists and strings capped; every string through
+  `Registration.Shown`; in `apart`; skipped under `--from`; not in dnstree-web.
+- `Trace.Shown` covers `Mail`, `ServicePath`, `Registration`, `Propagation`,
+  `Check`, `About`, `CSYNC`, `Bootstrap` and `Resolver.Unchecked`; a hostile
+  value in each of the golden's string leaves reached no renderer raw and
+  nothing above 127 in ascii; a fuzz of `Read` and every renderer found no
+  panic.
+- `read.go` validates the new enums (`Failure`, `DANEState`, `PolicyFound`,
+  `CSYNCState`, `BootstrapState`, `SignalingState`, `RegistrationState`,
+  `Area`, `Grade`), SVCB addresses, `registered`/`expires` and the mail shape.
+- History reads only within the cache (`OpenRoot`), non-blocking and only a
+  regular file (`TestLoadIgnoresAFIFO`), names `[a-z0-9.-]`, capped at 1 MiB;
+  `Save` renames over a planted link.
+- `ordered()` covers AVC, RESINFO, WALLET, CLA and CSYNC too
+  (`TestOrderedByItsOctets`).
+- `read.go` errors quote every name from the file (`TestReadRefuses` checks
+  each error for control bytes).
+- TLSA data has to be as long as its matching type for the record to count.
+- `TestTraceShownEveryField` fills every string kind; only the enums
+  `read.go` checks are let through raw (`readChecked`).
+- dnstree-web: a panicking walk releases its slot once, drops `inFlight`,
+  stores nothing and answers 500; `Mail`, `SVCB`, `CheckDS`, `CheckNS`, rdap,
+  propagation, check and the comparison never reach it.
+- `--spf` grace: the goroutine always sends, `ask` stops on ctx, the grace
+  cancels with `DeadlineExceeded`.
+- File of defaults: `pcap`, `against` and the earlier list refused; `rdap` is
+  settable on purpose and writes nothing.
