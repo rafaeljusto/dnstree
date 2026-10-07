@@ -158,6 +158,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--dnssec", "--check-ds", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, CheckDS: true},
 		},
+		"a mail check that connects to the hosts it proves": {
+			args: []string{"--mail", "--dnssec", "--tlsa", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Mail: true, DNSSEC: true, TLSA: true},
+		},
 		"a walk that minimises its questions": {
 			args: []string{"--qmin", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Minimise: true},
@@ -380,6 +384,8 @@ func TestParseRejects(t *testing.T) {
 		"a reverse lookup and a type":              {"-x", "192.0.2.1", "A"},
 		"a reverse lookup of a saved walk":         {"--from", "walk.json", "-x", "192.0.2.1"},
 		"a request weighed unsigned":               {"--check-ds", "example.com"},
+		"certificates matched with no mail check":  {"--dnssec", "--tlsa", "example.com"},
+		"certificates matched, nothing proved":     {"--mail", "--tlsa", "example.com"},
 		"designations asked of no resolver":        {"--ddr", "--no-compare", "example.com"},
 		"a walk already made, asked for ddr":       {"--from", "walk.json", "--ddr"},
 		"a report with no chain of trust to break": {"--report", "example.com"},

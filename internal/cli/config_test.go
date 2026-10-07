@@ -232,6 +232,29 @@ func TestParseDefaultsCheckDS(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsTLSA covers a file that asks for certificates to be
+// matched: the setting waits for a run with a signed mail check to match them
+// against.
+func TestParseDefaultsTLSA(t *testing.T) {
+	path := write(t, "tlsa\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--mail", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.TLSA {
+		t.Error("got --tlsa on a mail check that proves nothing, want it left for one that does")
+	}
+
+	got, err = cli.Parse([]string{"--config", path, "--check", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !got.TLSA {
+		t.Error("got no --tlsa on a signed mail check, want the file's setting")
+	}
+}
+
 // TestParseDefaultsPropagation covers a file that asks how long a change takes,
 // on a run drawn in a format that cannot say it: the setting waits for one
 // that can, rather than refusing every run that cannot.

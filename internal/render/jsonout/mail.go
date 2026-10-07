@@ -2,6 +2,7 @@ package jsonout
 
 import (
 	"fmt"
+	"net/netip"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -36,6 +37,17 @@ type mailHost struct {
 	Records    []tlsaRecord `json:"records,omitempty"`
 	DANE       string       `json:"dane"`
 	Why        string       `json:"why,omitempty"`
+	Addresses  []string     `json:"addresses,omitempty"`
+	Presented  []presented  `json:"presented,omitempty"`
+}
+
+type presented struct {
+	Address string `json:"address"`
+	State   string `json:"state"`
+	Subject string `json:"subject,omitempty"`
+	Since   string `json:"since,omitempty"`
+	Matched []int  `json:"matched,omitempty"`
+	Why     string `json:"why,omitempty"`
 }
 
 type tlsaRecord struct {
@@ -70,7 +82,12 @@ func convertMail(from *trace.Mail) *mail {
 		Stopped: from.Stopped, Cut: from.Cut,
 	}
 	for _, host := range from.Hosts {
-		h := mailHost{Name: host.Name, Preference: host.Preference, DANE: string(host.DANE), Why: host.Why}
+		h := mailHost{Name: host.Name, Preference: host.Preference, DANE: string(host.DANE), Why: host.Why,
+			Addresses: texts(host.Addrs)}
+		for _, p := range host.Presented {
+			h.Presented = append(h.Presented, presented{Address: p.Addr.String(), State: string(p.State),
+				Subject: p.Subject, Since: timestamp(p.Since), Matched: p.Matched, Why: p.Why})
+		}
 		if host.Address != nil {
 			h.Address = new(convertLookup(*host.Address))
 		}
@@ -143,6 +160,12 @@ func readMail(from *mail) (*trace.Mail, error) {
 				Data: record.Data, Usable: record.Usable,
 			})
 		}
+		if h.Addrs, err = parseAddrs("addresses", host.Addresses); err != nil {
+			return nil, err
+		}
+		if h.Presented, err = readPresented(host.Presented, len(h.Records)); err != nil {
+			return nil, err
+		}
 		to.Hosts = append(to.Hosts, h)
 	}
 	if to.MTASTS, err = readPolicy(from.MTASTS); err != nil {
@@ -153,6 +176,35 @@ func readMail(from *mail) (*trace.Mail, error) {
 	}
 	if to.DMARC, err = readPolicy(from.DMARC); err != nil {
 		return nil, err
+	}
+	return to, nil
+}
+
+// readPresented reads what each address showed --tlsa. A match has to name
+// records the host has, since that is what it is drawn by.
+func readPresented(from []presented, records int) ([]trace.Presented, error) {
+	var to []trace.Presented
+	for _, p := range from {
+		state := trace.PresentedState(p.State)
+		switch state {
+		case trace.PresentedMatch, trace.PresentedMismatch, trace.PresentedUnreached:
+		default:
+			return nil, fmt.Errorf("jsonout: %q is not what checking an address can come to", p.State)
+		}
+		addr, err := netip.ParseAddr(p.Address)
+		if err != nil {
+			return nil, fmt.Errorf("jsonout: presented: %w", err)
+		}
+		since, err := moment(p.Since)
+		if err != nil {
+			return nil, fmt.Errorf("jsonout: presented since: %w", err)
+		}
+		for _, i := range p.Matched {
+			if i < 0 || i >= records {
+				return nil, fmt.Errorf("jsonout: presented matches record %d of a set of %d", i, records)
+			}
+		}
+		to = append(to, trace.Presented{Addr: addr, State: state, Subject: p.Subject, Since: since, Matched: p.Matched, Why: p.Why})
 	}
 	return to, nil
 }

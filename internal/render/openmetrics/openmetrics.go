@@ -167,6 +167,19 @@ func Render(w io.Writer, tr *trace.Trace) error {
 			m.family("dnstree_mail_dane_hosts", "", "the MX hosts a sender that checks DANE authenticates, by a signed TLSA set it can use")
 			m.sample("dnstree_mail_dane_hosts", strconv.Itoa(dane))
 		}
+		// Only --tlsa connects, and a count of none would say it had.
+		counted := map[trace.PresentedState]int{}
+		for _, host := range mail.Hosts {
+			for _, p := range host.Presented {
+				counted[p.State]++
+			}
+		}
+		if len(counted) > 0 {
+			m.family("dnstree_mail_tlsa_addresses", "", "the MX host addresses --tlsa connected to, by what their certificate came to: match, mismatch where a sender that checks DANE refuses it, or unreached")
+			for _, state := range []trace.PresentedState{trace.PresentedMatch, trace.PresentedMismatch, trace.PresentedUnreached} {
+				m.sample("dnstree_mail_tlsa_addresses", strconv.Itoa(counted[state]), label{"state", string(state)})
+			}
+		}
 		m.family("dnstree_mail_policy", "", "what the lookup of each mail policy came to: published, none, invalid where a sender reads it as none, or failed")
 		for _, p := range []struct {
 			name   string

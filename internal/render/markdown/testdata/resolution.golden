@@ -27,6 +27,7 @@ spf: www.example.com. takes at least 5 of 10 lookups, at least 1 of 2 finding no
 spf: undecided: the budget ran out
 mail: 2 MX hosts for www.example.com., as an alias for example.com. [secure ECDSAP256SHA256]
 mail:   10 mx.example.com. dane (1 TLSA record): a sender has to see a certificate that matches
+mail:     192.0.2.25 match: 3 1 1 e41cc763 matches CN=mx.example.com, issued 2026-09-01
 mail:   20 backup.example.net. unreachable: its addresses could not be looked up: SERVFAIL
 mail: stopped: the budget ran out before every lookup was made
 mail: mta-sts id=20240101; no tls-rpt; dmarc invalid

@@ -2,7 +2,9 @@ package trace
 
 import (
 	"cmp"
+	"net/netip"
 	"slices"
+	"time"
 )
 
 // Mail is how mail to a domain is delivered, as a sending server finds out: the
@@ -66,7 +68,51 @@ type MailHost struct {
 
 	// Why is what made the state so, in a few words.
 	Why string
+
+	// Addrs are the addresses its lookup found, which are what --tlsa
+	// connects to.
+	Addrs []netip.Addr
+
+	// Presented is what each address showed --tlsa, nil where it connected to
+	// none.
+	Presented []Presented
 }
+
+// Presented is the certificate one address of an MX host showed after
+// STARTTLS, held against the host's TLSA set.
+type Presented struct {
+	Addr  netip.Addr
+	State PresentedState
+
+	// Subject is the leaf certificate's, and Since when it was issued, which
+	// is when a key that no longer matches most likely changed.
+	Subject string
+	Since   time.Time
+
+	// Matched are the indexes into the host's Records the chain matches.
+	Matched []int
+
+	// Why is what made the state so, in a few words.
+	Why string
+}
+
+// PresentedState is what checking one address came to.
+type PresentedState string
+
+// What an address can come to.
+const (
+	// PresentedMatch is a chain a usable record of the set matches.
+	PresentedMatch PresentedState = "match"
+
+	// PresentedMismatch is a chain no usable record matches, or a server that
+	// offers no STARTTLS: either way a sender that checks DANE does not
+	// deliver to it.
+	PresentedMismatch PresentedState = "mismatch"
+
+	// PresentedUnreached is an address that could not be checked from here:
+	// the connection, or the handshake, did not get through.
+	PresentedUnreached PresentedState = "unreached"
+)
 
 // DANEState is what DANE does for mail to one host.
 type DANEState string
@@ -195,6 +241,18 @@ func (m *Mail) Covered() (dane, hosts int) {
 	return dane, hosts
 }
 
+// Mismatched are the MX hosts with an address whose certificate a sender
+// that checks DANE refuses.
+func (m *Mail) Mismatched() []string {
+	var hosts []string
+	for _, host := range m.Hosts {
+		if slices.ContainsFunc(host.Presented, func(p Presented) bool { return p.State == PresentedMismatch }) {
+			hosts = append(hosts, host.Name)
+		}
+	}
+	return hosts
+}
+
 // Shown is the mail path with every name and text the zones wrote escaped.
 func (m *Mail) Shown() *Mail {
 	if m == nil {
@@ -212,6 +270,12 @@ func (m *Mail) Shown() *Mail {
 		host.Records = slices.Clone(host.Records)
 		for j := range host.Records {
 			host.Records[j].Data = Shown(host.Records[j].Data)
+		}
+		host.Presented = slices.Clone(host.Presented)
+		for j := range host.Presented {
+			presented := &host.Presented[j]
+			presented.Subject, presented.Why = Shown(presented.Subject), Shown(presented.Why)
+			presented.State = PresentedState(Shown(string(presented.State)))
 		}
 	}
 	shown.MTASTS, shown.TLSRPT, shown.DMARC = m.MTASTS.shown(), m.TLSRPT.shown(), m.DMARC.shown()

@@ -37,6 +37,12 @@ func TestDelivery(t *testing.T) {
 				Hosts: []trace.MailHost{host("mx.test.", trace.DANEFailed)}},
 			want: "a sender that checks DANE holds mail for test. rather than deliver it to mx.test.",
 		},
+		"a covered host whose certificate does not match": {
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{DNSSEC: secure},
+				Hosts: []trace.MailHost{{Name: "mx.test.", DANE: trace.DANEVerified,
+					Presented: []trace.Presented{{State: trace.PresentedMatch}, {State: trace.PresentedMismatch}}}}},
+			want: "a sender that checks DANE does not deliver mail for test. to mx.test., which presents a certificate its TLSA set does not match",
+		},
 		"no host covered, and MTA-STS published": {
 			mail: &trace.Mail{Name: "test.", Hosts: []trace.MailHost{host("mx.test.", trace.DANEInsecure)},
 				MTASTS: &trace.MailPolicy{Found: trace.PolicyPublished}},

@@ -3,6 +3,7 @@ package tree
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -60,6 +61,9 @@ func (r *renderer) mailPath(m *trace.Mail) []string {
 		default:
 			lines = append(lines, r.paint.dim(text))
 		}
+		for _, p := range host.Presented {
+			lines = append(lines, r.presented(host, p, mark))
+		}
 	}
 
 	if m.Stopped != "" {
@@ -72,6 +76,44 @@ func (r *renderer) mailPath(m *trace.Mail) []string {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+// presented is the line that says what one address of a host showed --tlsa.
+func (r *renderer) presented(host trace.MailHost, p trace.Presented, mark string) string {
+	text := mark + "    " + p.Addr.String() + " " + string(p.State) + ": "
+	var matched []string
+	for _, i := range p.Matched {
+		if i < len(host.Records) {
+			matched = append(matched, tlsaShort(host.Records[i]))
+		}
+	}
+	switch {
+	case len(matched) > 0:
+		text += strings.Join(matched, ", ") + " matches"
+	default:
+		text += p.Why + ";"
+	}
+	if p.Subject != "" {
+		text += " " + p.Subject + ", issued " + p.Since.Format(time.DateOnly)
+	}
+	text = strings.TrimSuffix(text, ";")
+	switch p.State {
+	case trace.PresentedMatch:
+		return r.paint.paint(text, green)
+	case trace.PresentedMismatch:
+		return r.paint.paint(text, red)
+	}
+	return r.paint.dim(text)
+}
+
+// tlsaShort is a TLSA record with enough of its data to tell it from the
+// others of its set.
+func tlsaShort(t trace.TLSARecord) string {
+	data := t.Data
+	if len(data) > 8 {
+		data = data[:8] + "..."
+	}
+	return strconv.Itoa(int(t.Usage)) + " " + strconv.Itoa(int(t.Selector)) + " " + strconv.Itoa(int(t.Matching)) + " " + data
 }
 
 // mailPolicies is the line that says which of the policies were published.
@@ -142,6 +184,9 @@ func (r *renderer) covered(m *trace.Mail, mark string) string {
 	unsigned := m.MX.DNSSEC != nil && m.MX.DNSSEC.State == trace.Insecure
 	if dane > 0 && unsigned {
 		text += ", but the MX set is not signed, so it protects each host and not which hosts get the mail"
+	}
+	if refused := m.Mismatched(); len(refused) > 0 {
+		return r.paint.paint(text+", but "+strings.Join(refused, ", ")+" presents what a sender that checks it refuses", red)
 	}
 	switch {
 	case dane == 0:

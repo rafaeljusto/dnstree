@@ -349,6 +349,18 @@ func TestReadRefuses(t *testing.T) {
 				"mail": {"name": "x.", "mx": {"name": "x."}, "hosts": [{"name": "mx.x.", "preference": 10, "dane": "trusted"}]}}`,
 			want: `"trusted"`,
 		},
+		"a presented certificate in a state nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "hosts": [{"name": "mx.x.", "preference": 10, "dane": "dane",
+				"presented": [{"address": "192.0.2.25", "state": "trusted"}]}]}}`,
+			want: `"trusted"`,
+		},
+		"a presented certificate matched by a record the host does not have": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "hosts": [{"name": "mx.x.", "preference": 10, "dane": "dane",
+				"presented": [{"address": "192.0.2.25", "state": "match", "matched": [3]}]}]}}`,
+			want: "record 3 of a set of 0",
+		},
 		"a mail path with no MX set and no host": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "implicit": true}}`,

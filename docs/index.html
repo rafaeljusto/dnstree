@@ -425,7 +425,7 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">unverified</span>
           <h3>A backup MX nobody can verify</h3>
-          <p><code>--mail</code> looks up each MX host the way a sender that checks DANE does, and says which ones a signed TLSA set covers. A TLSA lookup that fails holds the mail; a backup left out lets it go unverified.</p>
+          <p><code>--mail</code> looks up each MX host the way a sender that checks DANE does, and says which ones a signed TLSA set covers. A TLSA lookup that fails holds the mail; a backup left out lets it go unverified. <code>--tlsa</code> then connects to each of them and matches the certificate it presents, which catches a key renewed without its TLSA record.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">stale</span>

@@ -35,6 +35,11 @@ from that, and both are worth knowing when judging a report:
 for the TLD. A way for a registry to lead it off HTTPS, or to make it read
 without bound, is a vulnerability.
 
+`--tlsa` connects to the mail servers of the name on port 25, only at the
+addresses DNSSEC proved for hosts DANE covers. A way for a server to hold it
+past its timeout, make it read without bound, or have it connect anywhere else
+is a vulnerability.
+
 dnstree-web runs those walks for strangers. A way to make it query a private,
 loopback or link-local address, redirect off its own host, or get round its
 per-client limits is a vulnerability.

@@ -347,6 +347,36 @@
           "description": "dane, a signed TLSA set a sender can use, so the server's certificate has to match it; unusable, a signed set with no record a sender may use, which still makes it insist on TLS; none, a signed proof there is no set; insecure, addresses or a set nothing signed, which DANE does not apply to; failed, a TLSA lookup that failed or did not validate, which makes a sender that checks DANE treat the host as unreachable; unreachable, no address to deliver to; literal, an address where a host name belongs; unchecked, a set looked up without --dnssec; indeterminate, addresses or a set that could not be checked, for an algorithm or a denial this build cannot check, which a validator reads as unsigned, or for a budget dnstree ran out of.",
           "enum": ["dane", "unusable", "none", "insecure", "failed", "unreachable", "literal", "unchecked", "indeterminate"]
         },
+        "why": { "description": "What made it so, in a few words.", "type": "string" },
+        "addresses": {
+          "description": "The addresses its lookup found, absent where it found none.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "presented": {
+          "description": "What each address showed --tlsa after STARTTLS, absent where it connected to none.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/presented" }
+        }
+      }
+    },
+    "presented": {
+      "description": "The certificate one address of an MX host presented, held against the host's TLSA set (RFC 7672 3).",
+      "type": "object",
+      "required": ["address", "state"],
+      "properties": {
+        "address": { "type": "string" },
+        "state": {
+          "description": "match, a chain a usable record of the set matches; mismatch, a chain none matches, or a server that offers no STARTTLS, which a sender that checks DANE does not deliver to; unreached, an address the connection or the handshake did not get through to, which could not be checked from where dnstree ran.",
+          "enum": ["match", "mismatch", "unreached"]
+        },
+        "subject": { "description": "The subject of the leaf certificate, absent where none was presented.", "type": "string" },
+        "since": { "description": "When the leaf certificate was issued, in RFC 3339, which is when a key that no longer matches most likely changed.", "type": "string" },
+        "matched": {
+          "description": "The indexes into the host's records of the ones the chain matches.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
         "why": { "description": "What made it so, in a few words.", "type": "string" }
       }
     },

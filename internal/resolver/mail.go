@@ -144,7 +144,8 @@ func (r *run) host(ctx context.Context, under *trace.Step, host *trace.MailHost)
 	}
 	result, lookup, stopped := r.look(ctx, under, host.Name, qtype, "mail")
 	if !stopped && lookup.Err == "" && result.Kind == trace.KindNoData && r.cfg.Family == 0 {
-		result, lookup, stopped = r.look(ctx, under, host.Name, dns.TypeAAAA, "mail")
+		qtype = dns.TypeAAAA
+		result, lookup, stopped = r.look(ctx, under, host.Name, qtype, "mail")
 	}
 	host.Address = &lookup
 	switch {
@@ -161,6 +162,7 @@ func (r *run) host(ctx context.Context, under *trace.Step, host *trace.MailHost)
 		host.DANE, host.Why = trace.DANEUnreachable, "it has no address"
 		return
 	}
+	host.Addrs = addresses(result.Records, result.Asked.Name, qtype)
 
 	status := lookup.DNSSEC
 	if r.cfg.DNSSEC && status != nil {

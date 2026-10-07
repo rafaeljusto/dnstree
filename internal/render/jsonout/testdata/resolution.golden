@@ -461,7 +461,22 @@
           }
         ],
         "dane": "dane",
-        "why": "a sender has to see a certificate that matches"
+        "why": "a sender has to see a certificate that matches",
+        "addresses": [
+          "192.0.2.25"
+        ],
+        "presented": [
+          {
+            "address": "192.0.2.25",
+            "state": "match",
+            "subject": "CN=mx.example.com",
+            "since": "2026-09-01T00:00:00Z",
+            "matched": [
+              0
+            ],
+            "why": "a sender that checks DANE delivers to it"
+          }
+        ]
       },
       {
         "name": "backup.example.net.",

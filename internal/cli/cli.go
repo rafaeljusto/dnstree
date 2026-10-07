@@ -55,6 +55,7 @@ one after another, each from the root servers down.
   --caa                   say which certificate authorities may issue for NAME
   --spf                   draw NAME's SPF policy and count the lookups it costs
   --mail                  check NAME's MX hosts for DANE, and its mail policies
+  --tlsa                  match the certificate each DANE host presents
   --svcb                  follow NAME's HTTPS or SVCB records to their servers
   --rdap                  ask the registry when the domain expires, and compare
   --propagation           say how long a change takes to reach every cache
@@ -383,8 +384,20 @@ only where --dnssec proves its addresses and a TLSA set a sender can use; a
 host whose addresses do not validate, or whose TLSA set fails to look up or
 validate, makes every sender that checks DANE hold the mail, which is said in a warning, and so is an
 MX host left uncovered while others are covered. Nothing connects to a mail
-server, and the MTA-STS policy file is not fetched. The lookups spend the
-walk's budget.
+server unless --tlsa asks, and the MTA-STS policy file is not fetched. The
+lookups spend the walk's budget.
+
+--tlsa takes the MX hosts --mail found covered by DANE and connects to each
+of their addresses on port 25, starts TLS with STARTTLS, and holds the
+certificate the server presents against the host's TLSA set the way a sender
+does (RFC 7672 3): a DANE-EE record has to match the leaf, and a DANE-TA one
+a certificate of the chain that the leaf chains to and that names the host.
+A key renewed without its TLSA record is said in a warning, with when the
+certificate presented was issued, and so is a server that offers no STARTTLS.
+It needs --mail and --dnssec, since only an address DNSSEC proved is one
+worth checking. An address that cannot be reached, which is what a network
+that blocks port 25 makes of every one, could not be checked from here and
+says so in one line, never as a mismatch.
 
 --svcb follows NAME's HTTPS records (RFC 9460), or its SVCB records where TYPE
 is SVCB, to the servers a client would connect to: down the aliases a record
@@ -501,6 +514,7 @@ type Config struct {
 	CAA            bool
 	SPF            bool
 	Mail           bool
+	TLSA           bool
 	SVCB           bool
 	RDAP           bool
 	Propagation    bool
@@ -734,6 +748,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.CAA, "caa", false, "say which certificate authorities may issue for the name")
 	flags.BoolVar(&cfg.SPF, "spf", false, "draw the name's SPF policy and count the lookups it costs")
 	flags.BoolVar(&cfg.Mail, "mail", false, "check the name's MX hosts for DANE, and its mail policies")
+	flags.BoolVar(&cfg.TLSA, "tlsa", false, "match the certificate each DANE host presents")
 	flags.BoolVar(&cfg.SVCB, "svcb", false, "follow the name's HTTPS or SVCB records to their servers")
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
 	flags.BoolVar(&cfg.Check, "check", false, "run the checks that grade a zone, and grade its health")
@@ -912,6 +927,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			return nil, fmt.Errorf("%w: --check-ds weighs a signed request, and only --dnssec checks signatures", ErrUsage)
 		}
 		cfg.CheckDS = false
+	}
+	if cfg.TLSA && (!cfg.Mail || !cfg.DNSSEC) {
+		if slices.Contains(typed, "tlsa") {
+			return nil, fmt.Errorf("%w: --tlsa checks the certificates of the hosts --mail finds and --dnssec proves", ErrUsage)
+		}
+		cfg.TLSA = false
 	}
 	if cfg.From != "" {
 		// Named on the command line, a flag that shapes the walk would read as
@@ -1157,7 +1178,7 @@ func several(cfg *Config, expecting bool) error {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "svcb": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "svcb": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

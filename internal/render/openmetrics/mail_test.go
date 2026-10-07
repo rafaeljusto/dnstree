@@ -12,7 +12,8 @@ func TestRenderMail(t *testing.T) {
 		Question: trace.Question{Name: "www.test.", Type: "A"},
 		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
 		Mail: &trace.Mail{Name: "www.test.", Hosts: []trace.MailHost{
-			{Name: "mx1.test.", DANE: trace.DANEVerified},
+			{Name: "mx1.test.", DANE: trace.DANEVerified, Presented: []trace.Presented{
+				{State: trace.PresentedMatch}, {State: trace.PresentedUnreached}}},
 			{Name: "mx2.test.", DANE: trace.DANEInsecure},
 			{Name: "gone.test.", DANE: trace.DANEUnreachable},
 		}, DMARC: &trace.MailPolicy{Found: trace.PolicyInvalid}},
@@ -24,6 +25,9 @@ func TestRenderMail(t *testing.T) {
 		`dnstree_mail_dane_hosts{name="www.test.",type="A"} 1`,
 		`dnstree_mail_policy{name="www.test.",type="A",policy="dmarc",found="invalid"} 1`,
 		`dnstree_mail_policy{name="www.test.",type="A",policy="dmarc",found="published"} 0`,
+		`dnstree_mail_tlsa_addresses{name="www.test.",type="A",state="match"} 1`,
+		`dnstree_mail_tlsa_addresses{name="www.test.",type="A",state="mismatch"} 0`,
+		`dnstree_mail_tlsa_addresses{name="www.test.",type="A",state="unreached"} 1`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("got\n%s\nwant %s", out, want)
@@ -34,6 +38,9 @@ func TestRenderMail(t *testing.T) {
 	}
 
 	tr.Mail.Hosts = []trace.MailHost{{Name: "mx1.test.", DANE: trace.DANEVerified}}
+	if out := render(t, tr); strings.Contains(out, "dnstree_mail_tlsa_addresses") {
+		t.Errorf("got\n%s\nwant no count of addresses --tlsa never connected to", out)
+	}
 	tr.Mail.Cut = true
 	if out := render(t, tr); strings.Contains(out, "dnstree_mail_dane_hosts") {
 		t.Errorf("got\n%s\nwant no count of hosts the budget left unchecked", out)

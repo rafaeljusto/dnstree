@@ -27,6 +27,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/asn"
 	"github.com/rafaeljusto/dnstree/v2/internal/capture"
 	"github.com/rafaeljusto/dnstree/v2/internal/cli"
+	"github.com/rafaeljusto/dnstree/v2/internal/dane"
 	"github.com/rafaeljusto/dnstree/v2/internal/expect"
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
@@ -65,6 +66,11 @@ const asnGrace = 2 * time.Second
 // until the walk has said which it is.
 const rdapGrace = 5 * time.Second
 
+// tlsaGrace is how long --tlsa may take, once the walk has said which mail
+// servers to connect to. The addresses are tried at once, each held to a
+// timeout of its own, so this only cuts short what that leaves hanging.
+const tlsaGrace = dane.DefaultTimeout + 2*time.Second
+
 // defaultSPFGrace is how long --spf may carry on once the walk is over. It
 // starts with the walk, and every lookup it makes has a timeout of its own,
 // so only a policy with slow includes is still at it by here.
@@ -79,6 +85,10 @@ var (
 	rdapBootstrap = rdap.Bootstrap
 	rdapHTTP      *http.Client
 )
+
+// tlsaDial is how --tlsa reaches a mail server, nil for port 25 itself: the
+// tests point it at servers of their own.
+var tlsaDial dane.Dial
 
 // version is stamped into a release build; see the dist target of the Makefile.
 var version = "dev"
@@ -402,6 +412,11 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	if registry != nil {
 		grace, cancel := context.WithTimeout(ctx, rdapGrace)
 		tr.Registration = registry.Check(grace, tr)
+		cancel()
+	}
+	if cfg.TLSA {
+		grace, cancel := context.WithTimeout(ctx, tlsaGrace)
+		dane.Check(grace, tr, dane.Config{Dial: tlsaDial})
 		cancel()
 	}
 

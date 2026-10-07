@@ -540,11 +540,60 @@ is its own only host. An MX set that is not signed leaves DANE protecting each
 host and not which hosts get the mail, and the coverage line says so. The
 MTA-STS and TLS-RPT records count only where exactly one begins with their
 version, as the RFCs say, and DMARC falls back to the organisational domain
-where the name has none. Nothing connects to a mail server, and the MTA-STS
-policy file is not fetched. The lookups spend the walk's budget, and a check
-cut short says so. The exit code is left alone. `--format json` carries it as
-`mail`, and `--format openmetrics` as `dnstree_mail_hosts`,
-`dnstree_mail_dane_hosts` and `dnstree_mail_policy`.
+where the name has none. Nothing connects to a mail server unless `--tlsa`
+asks, and the MTA-STS policy file is not fetched. The lookups spend the walk's
+budget, and a check cut short says so. The exit code is left alone.
+`--format json` carries it as `mail`, and `--format openmetrics` as
+`dnstree_mail_hosts`, `dnstree_mail_dane_hosts` and `dnstree_mail_policy`.
+
+### Whether the certificates match
+
+A signed TLSA set says which certificate a sender should see; it does not say
+the server shows it. The usual way DANE breaks is a certificate renewed with a
+new key while the TLSA record still names the old one: the record is there and
+signed, `--mail` calls the host covered, and every sender that checks DANE
+stops delivering to it. `--tlsa` connects to each address `--mail` proved for a
+covered host, on port 25, starts TLS with STARTTLS, and holds the chain the
+server presents against the host's TLSA set the way a sender does:
+
+```
+$ dnstree --mail --tlsa --dnssec --explain --no-asn --no-compare freebsd.org
+...
+mail: 2 MX hosts for freebsd.org. [secure RSASHA256]
+mail:   10 mx1.freebsd.org. dane (1 TLSA record): a sender has to see a certificate that matches
+mail:     96.47.72.80 match: 3 1 1 0a7e2f46... matches CN=mx1.freebsd.org, issued 2026-08-15
+mail:   30 mx66.freebsd.org. none: its zone proves there is no TLSA set
+mail: no mta-sts; no tls-rpt; dmarc p=none
+mail: dane covers 1 of 2 MX hosts
+...
+```
+
+A DANE-EE record (usage 3) has to match the leaf certificate, and its names and
+dates are ignored (RFC 7672 3.1.1). A DANE-TA record (usage 2) has to match a
+certificate of the chain the server presents, the leaf has to chain to it and
+be valid when the walk was made, and it has to name the TLSA base domain, the
+MX host or the domain the mail is for (RFC 7672 3.2.2). PKIX records are not
+used, as no mail sender uses them.
+
+Each address is a line of its own under its host, since a host behind several
+addresses may present a new certificate on one and an old one on another.
+`match` names the records that matched; `mismatch` is a chain none matches, or
+a server that does not offer STARTTLS, and is said in a warning with when the
+certificate presented was issued, which is most likely when its key changed.
+The coverage line and `--explain` both say which hosts a sender refuses. An
+address that cannot be reached is `unreached`: many networks and cloud
+providers block outgoing connections on port 25, so it could not be checked
+from here, and one line says so; it is never taken for a mismatch.
+
+It needs `--mail` and `--dnssec`, since only an address DNSSEC proved is worth
+connecting to; from the file of defaults it waits for a run with both, such as
+one with `--check`, which does not turn it on by itself. It connects only to
+the hosts DANE covers, at most four addresses each and sixteen in all, and a
+warning says how many it left; each is held to ten seconds and to what it may
+send. It never asks of a walk drawn again with `--from`, and dnstree-web never
+does it. The exit code is left alone.
+`--format json` carries it as `addresses` and `presented` on each host, and
+`--format openmetrics` as `dnstree_mail_tlsa_addresses`.
 
 ## Where a browser connects
 

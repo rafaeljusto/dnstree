@@ -1,8 +1,10 @@
 package tree_test
 
 import (
+	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -37,6 +39,31 @@ func TestRenderMail(t *testing.T) {
 			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{Name: "test.", DNSSEC: secure},
 				Hosts: []trace.MailHost{{Name: "mx.test.", Preference: 0, DANE: trace.DANEVerified, Why: "ok"}}},
 			want: []string{"mail: 1 MX host for test. [secure]", "mail:   0 mx.test. dane: ok", "mail: dane covers 1 of 1 MX host"},
+		},
+		"addresses checked with --tlsa": {
+			mail: &trace.Mail{Name: "test.", MX: trace.Lookup{Name: "test.", DNSSEC: secure},
+				Hosts: []trace.MailHost{{Name: "mx.test.", Preference: 10, DANE: trace.DANEVerified, Why: "ok",
+					Records: []trace.TLSARecord{
+						{Usage: 3, Selector: 1, Matching: 1, Data: "0123456789abcdef", Usable: true},
+						{Usage: 3, Selector: 1, Matching: 1, Data: "fedcba9876543210", Usable: true},
+					},
+					Presented: []trace.Presented{
+						{Addr: netip.MustParseAddr("192.0.2.1"), State: trace.PresentedMatch, Matched: []int{1},
+							Subject: "CN=mx.test", Since: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
+						{Addr: netip.MustParseAddr("192.0.2.2"), State: trace.PresentedMismatch,
+							Why:     "no TLSA record matches the certificate or key it presents",
+							Subject: "CN=mx.test", Since: time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)},
+						{Addr: netip.MustParseAddr("2001:db8::1"), State: trace.PresentedUnreached,
+							Why: "could not be checked from here: connection refused"},
+					}}}},
+			want: []string{
+				"mail: 1 MX host for test. [secure]",
+				"mail:   10 mx.test. dane (2 TLSA records): ok",
+				"mail:     192.0.2.1 match: 3 1 1 fedcba98... matches CN=mx.test, issued 2026-09-01",
+				"mail:     192.0.2.2 mismatch: no TLSA record matches the certificate or key it presents; CN=mx.test, issued 2026-09-30",
+				"mail:     2001:db8::1 unreached: could not be checked from here: connection refused",
+				"mail: dane covers 1 of 1 MX host, but mx.test. presents what a sender that checks it refuses",
+			},
 		},
 		"a null MX": {
 			mail: &trace.Mail{Name: "test.", Null: true, DMARC: &trace.MailPolicy{Found: trace.PolicyInvalid}},

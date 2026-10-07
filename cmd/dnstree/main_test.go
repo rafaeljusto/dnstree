@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,6 +24,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/rdap"
+	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakemx"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/output"
 )
@@ -1577,6 +1581,86 @@ _dmarc.example.test.      IN TXT  "v=DMARC1; p=reject"
 	path := filepath.Join(t.TempDir(), "walk.json")
 	if err := os.WriteFile(path, stdout.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	stdout.Reset()
+	if code := run(t.Context(), []string{"--from", path, "--color", "never"}, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q drawn again, want %q", got, want)
+	}
+}
+
+// TestRunTLSA connects to the mail servers of a signed mail path, one that
+// presents the key its TLSA record names and one renewed without its record,
+// and draws what each presented again from the walk --format json saved.
+func TestRunTLSA(t *testing.T) {
+	now := time.Now()
+	current := fakemx.Issue(t, nil, false, now.AddDate(0, 0, -7), now.AddDate(0, 3, 0), "mx1.example.test")
+	renewed := fakemx.Issue(t, nil, false, now.AddDate(0, 0, -1), now.AddDate(0, 3, 0), "mx2.example.test")
+	retired := fakemx.Issue(t, nil, false, now.AddDate(0, -3, 0), now, "mx2.example.test")
+	root := fakens.New(t, fakens.Config{Origin: ".", DNSSEC: true, Zone: rootZone + `
+example.test.              IN MX   10 mx1.example.test.
+example.test.              IN MX   20 mx2.example.test.
+mx1.example.test.          IN A    192.0.2.25
+mx2.example.test.          IN A    192.0.2.26
+_25._tcp.mx1.example.test. IN TLSA 3 1 1 ` + fakemx.Digest(current.Cert, 1, 1) + `
+_25._tcp.mx2.example.test. IN TLSA 3 1 1 ` + fakemx.Digest(retired.Cert, 1, 1) + `
+`})
+	servers := map[netip.AddrPort]netip.AddrPort{
+		netip.MustParseAddrPort("192.0.2.25:25"): fakemx.Serve(t, fakemx.Honest, current.Key, current.Cert),
+		netip.MustParseAddrPort("192.0.2.26:25"): fakemx.Serve(t, fakemx.Honest, renewed.Key, renewed.Cert),
+	}
+	tlsaDial = func(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
+		var dialer net.Dialer
+		return dialer.DialContext(ctx, "tcp", servers[addr].String())
+	}
+	defer func() { tlsaDial = nil }()
+
+	anchors := filepath.Join(t.TempDir(), "anchors")
+	if err := os.WriteFile(anchors, []byte(root.Anchors(t)[0].String()+"\n"), 0o600); err != nil {
+		t.Fatalf("writing the anchors: %v", err)
+	}
+	base := []string{"--root", root.Addr.String(), "--trust-anchors", anchors, "--dnssec", "--mail", "--tlsa",
+		"--no-asn", "--no-compare", "--color", "never"}
+	issued := func(cert fakemx.Issued) string { return cert.Cert.NotBefore.UTC().Format(time.DateOnly) }
+	want := []string{
+		"mail:     192.0.2.25 match: 3 1 1 " + fakemx.Digest(current.Cert, 1, 1)[:8] + "... matches CN=mx1.example.test, issued " + issued(current),
+		"mail:     192.0.2.26 mismatch: no TLSA record matches the certificate or key it presents; CN=mx2.example.test, issued " + issued(renewed),
+		"mail: dane covers 2 of 2 MX hosts, but mx2.example.test. presents what a sender that checks it refuses",
+	}
+	drawn := func(out string) []string {
+		var lines []string
+		for line := range strings.Lines(out) {
+			if strings.HasPrefix(line, "mail:     ") || strings.HasPrefix(line, "mail: dane") {
+				lines = append(lines, strings.TrimSuffix(line, "\n"))
+			}
+		}
+		return lines
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), append(base, "example.test", "A"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if warning := "mx2.example.test. at 192.0.2.26 presents a certificate issued " + issued(renewed) + " that no TLSA record of its matches"; !strings.Contains(stdout.String(), warning) {
+		t.Errorf("got\n%s\nwant a warning saying %q", stdout.String(), warning)
+	}
+
+	stdout.Reset()
+	if code := run(t.Context(), append(base, "--format", "json", "example.test", "A"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	path := filepath.Join(t.TempDir(), "walk.json")
+	if err := os.WriteFile(path, stdout.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tlsaDial = func(context.Context, netip.AddrPort) (net.Conn, error) {
+		t.Error("a walk drawn again connected to a mail server")
+		return nil, errors.New("no")
 	}
 	stdout.Reset()
 	if code := run(t.Context(), []string{"--from", path, "--color", "never"}, &stdout, &stderr); code != exitAnswer {

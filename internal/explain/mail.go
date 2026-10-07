@@ -62,6 +62,12 @@ func dane(m *trace.Mail) (Finding, bool) {
 			m.Name, strings.Join(failed, ", "))}, true
 	}
 
+	if refused := m.Mismatched(); len(refused) > 0 {
+		return Finding{Topic: Mail, Level: Warn, Text: fmt.Sprintf(
+			"a sender that checks DANE does not deliver mail for %s to %s, which presents a certificate its TLSA set does not match, or no STARTTLS",
+			m.Name, strings.Join(refused, ", "))}, true
+	}
+
 	covered, hosts := m.Covered()
 	unsigned := m.MX.DNSSEC != nil && m.MX.DNSSEC.State == trace.Insecure
 	switch {

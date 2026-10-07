@@ -67,7 +67,8 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   renderers and the AS lookups is what makes them testable without a network.
   `internal/layering` fails on any other import of it, and on the trace, the
   renderers, explain, expect, history, the capture, the AS lookups, the SPF
-  check or the registry lookup reaching it through another package.
+  check, the registry lookup or the TLSA check reaching it through another
+  package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net` for names typed in any script
@@ -135,11 +136,14 @@ Each of these has been a bug, or would be a silent regression.
   server, are waited on briefly after it, and never fail a resolution. When they
   come back empty they say in one line which of the two things went wrong: the
   lookups could not get through, or they ran out of time.
-- **`--rdap` is the only request that is not DNS.** It goes over HTTPS to the
-  services IANA's bootstrap file names, refuses a redirect off HTTPS, reads a
-  bounded answer, and is best effort like the AS lookups: a registry that
-  cannot be asked costs the check, in one line, never the walk. dnstree-web
-  never asks it.
+- **`--rdap` and `--tlsa` are the only requests that are not DNS.** `--rdap`
+  goes over HTTPS to the services IANA's bootstrap file names, refuses a
+  redirect off HTTPS and reads a bounded answer. `--tlsa` connects on port 25
+  only to the addresses DNSSEC proved for the MX hosts DANE covers, with a
+  timeout and a bound on what it reads. Both are best effort like the AS
+  lookups: what cannot be asked costs the check, in one line, never the walk,
+  and an address that cannot be reached is never a mismatch. dnstree-web
+  imports neither, and `internal/layering` fails if it comes to.
 - **The file of defaults is parsed as arguments, ahead of the command line.**
   A flag added to the flag set works in the file without being written out a
   second time, and the command line wins by being read last. Flags that answer

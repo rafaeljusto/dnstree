@@ -68,7 +68,7 @@ func TestOnlyTheWireSpeaksTheCodec(t *testing.T) {
 
 // apart are the packages that must not reach the codec through anything they
 // import either: the trace, the renderers and the readings drawn from them,
-// the AS lookups, the SPF check and the registry lookup. A package that
+// the AS lookups, the SPF check, the registry lookup and the TLSA check. A package that
 // imports one which speaks the codec brings the network into their tests all
 // the same.
 var apart = []string{
@@ -81,16 +81,52 @@ var apart = []string{
 	"internal/capture",
 	"internal/spf",
 	"internal/rdap",
+	"internal/dane",
 }
 
 // TestApartFromTheWire holds the layering rule through every import, so that
 // a package kept apart cannot reach the codec by way of another.
 func TestApartFromTheWire(t *testing.T) {
-	root := moduleRoot(t)
-	module := modulePath(t, root)
+	imports, module := packageImports(t)
+	isCodec := func(imported string) bool { return imported == codec || strings.HasPrefix(imported, codec+"/") }
+	for dir := range imports {
+		if !slices.ContainsFunc(apart, func(prefix string) bool { return dir == prefix || strings.HasPrefix(dir, prefix) }) {
+			continue
+		}
+		if path := reaches(imports, module, dir, isCodec, map[string]bool{}); path != nil {
+			t.Errorf("%s reaches %s through %s; keep it apart from the wire", dir, codec, strings.Join(path, " -> "))
+		}
+	}
+}
 
-	// imports maps each package of the module, by its directory, to what its
-	// non-test files import.
+// strangers are the packages that make requests other than DNS, to servers
+// the run's question names (AGENTS.md, Invariants). dnstree-web runs walks for
+// strangers, and must not be able to make them.
+var strangers = []string{"internal/rdap", "internal/dane"}
+
+// TestWebAsksOnlyDNS holds dnstree-web away from the requests that are not
+// DNS, through every import.
+func TestWebAsksOnlyDNS(t *testing.T) {
+	imports, module := packageImports(t)
+	for _, dir := range []string{"cmd/dnstree-web", "internal/server"} {
+		if _, ok := imports[dir]; !ok {
+			t.Fatalf("found no package at %s", dir)
+		}
+		isStranger := func(imported string) bool {
+			inner, ok := strings.CutPrefix(imported, module+"/")
+			return ok && slices.Contains(strangers, inner)
+		}
+		if path := reaches(imports, module, dir, isStranger, map[string]bool{}); path != nil {
+			t.Errorf("%s reaches %s; dnstree-web asks nothing but DNS", dir, strings.Join(path, " -> "))
+		}
+	}
+}
+
+// packageImports maps each package of the module, by its directory, to what
+// its non-test files import, and says what the module is called.
+func packageImports(t *testing.T) (map[string][]string, string) {
+	t.Helper()
+	root := moduleRoot(t)
 	imports := map[string][]string{}
 	fset := token.NewFileSet()
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
@@ -124,29 +160,22 @@ func TestApartFromTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the tree: %v", err)
 	}
-
-	for dir := range imports {
-		if !slices.ContainsFunc(apart, func(prefix string) bool { return dir == prefix || strings.HasPrefix(dir, prefix) }) {
-			continue
-		}
-		if path := reaches(imports, module, dir, map[string]bool{}); path != nil {
-			t.Errorf("%s reaches %s through %s; keep it apart from the wire", dir, codec, strings.Join(path, " -> "))
-		}
-	}
+	return imports, modulePath(t, root)
 }
 
-// reaches is the chain of imports by which dir comes to the codec, or nil.
-func reaches(imports map[string][]string, module, dir string, seen map[string]bool) []string {
+// reaches is the chain of imports by which dir comes to an import that is
+// target, or nil.
+func reaches(imports map[string][]string, module, dir string, target func(string) bool, seen map[string]bool) []string {
 	if seen[dir] {
 		return nil
 	}
 	seen[dir] = true
 	for _, imported := range imports[dir] {
-		if imported == codec || strings.HasPrefix(imported, codec+"/") {
+		if target(imported) {
 			return []string{imported}
 		}
 		if inner, ok := strings.CutPrefix(imported, module+"/"); ok {
-			if path := reaches(imports, module, inner, seen); path != nil {
+			if path := reaches(imports, module, inner, target, seen); path != nil {
 				return append([]string{inner}, path...)
 			}
 		}
