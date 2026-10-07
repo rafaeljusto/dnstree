@@ -463,6 +463,30 @@ func TestReadRefuses(t *testing.T) {
 				"resolvers": [{"server": {"ip": "192.0.2.1"}, "elapsed_ms": 4e10}]}`,
 			want: "elapsed_ms",
 		},
+		"a glue name carrying escapes beside an address that is not one": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "referral",
+					"delegation": {"zone": "x.", "glue": {"ns.\u001b[2Jx.": ["nope"]}}}]}}`,
+			want: "nope",
+		},
+		"a service target carrying escapes beside an address that is not one": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."}}],
+					"targets": [{"name": "t.\u001b[2Jx.", "priority": 1, "addrs": ["nope"]}]}}`,
+			want: "nope",
+		},
+		"a service record carrying escapes left undecoded": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."},
+					"records": [{"name": "x.\u001b[2J", "ttl": 1, "type": "HTTPS\u001b[1A", "data": "1 ."}]}]}}`,
+			want: "not decoded",
+		},
+		"a service record carrying escapes beside a hint that is not one": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."},
+					"records": [{"name": "x.\u001b[2J", "ttl": 1, "type": "HTTPS", "data": "1 .", "service": {"priority": 1, "target": "x.", "hints": ["nope"]}}]}]}}`,
+			want: "nope",
+		},
 		"something after the trace": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} {"more": 1}`,
 			want:     "after",
@@ -474,6 +498,10 @@ func TestReadRefuses(t *testing.T) {
 			_, err := jsonout.Read(strings.NewReader(test.document))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("got %v, want an error about %s", err, test.want)
+			}
+			// The error reaches the terminal as it is, and the file is anybody's.
+			if strings.ContainsFunc(err.Error(), func(r rune) bool { return r < ' ' || r == 0x7f }) {
+				t.Errorf("got %q, want an error that carries no control byte", err)
 			}
 			if errors.Is(err, jsonout.ErrVersion) != test.version {
 				t.Errorf("got %v, want ErrVersion to be %t", err, test.version)

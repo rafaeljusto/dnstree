@@ -78,7 +78,7 @@ func readServicePath(from *servicePath) (*trace.ServicePath, error) {
 		}
 		for _, rr := range set.Records {
 			if rr.Service == nil {
-				return nil, fmt.Errorf("jsonout: the %s record of a service path at %s is not decoded", rr.Type, rr.Name)
+				return nil, fmt.Errorf("jsonout: the %q record of a service path at %q is not decoded", rr.Type, rr.Name)
 			}
 		}
 		records, err := readRecords(set.Records)
@@ -90,13 +90,13 @@ func readServicePath(from *servicePath) (*trace.ServicePath, error) {
 	for _, target := range from.Targets {
 		t := trace.ServiceTarget{Name: target.Name, Priority: target.Priority}
 		var err error
-		if t.Addrs, err = parseAddrs("the addresses of "+target.Name, target.Addrs); err != nil {
+		if t.Addrs, err = parseAddrs(fmt.Sprintf("the addresses of %q", target.Name), target.Addrs); err != nil {
 			return nil, err
 		}
-		if t.Hints, err = parseAddrs("the hints for "+target.Name, target.Hints); err != nil {
+		if t.Hints, err = parseAddrs(fmt.Sprintf("the hints for %q", target.Name), target.Hints); err != nil {
 			return nil, err
 		}
-		if t.Stray, err = parseAddrs("the stray hints for "+target.Name, target.Stray); err != nil {
+		if t.Stray, err = parseAddrs(fmt.Sprintf("the stray hints for %q", target.Name), target.Stray); err != nil {
 			return nil, err
 		}
 		if t.IPv4, err = readLookupRef(target.IPv4); err != nil {

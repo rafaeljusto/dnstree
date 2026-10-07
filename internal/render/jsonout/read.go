@@ -371,7 +371,7 @@ func readRecords(from []record) ([]trace.RR, error) {
 	for _, rr := range from {
 		read := trace.RR{Name: rr.Name, TTL: rr.TTL, Type: rr.Type, Data: rr.Data}
 		if rr.Service != nil {
-			hints, err := parseAddrs("the hints of "+rr.Name, rr.Service.Hints)
+			hints, err := parseAddrs(fmt.Sprintf("the hints of %q", rr.Name), rr.Service.Hints)
 			if err != nil {
 				return nil, err
 			}
@@ -510,7 +510,7 @@ func readAddrs(field string, from map[string][]string) (map[string][]netip.Addr,
 		for _, addr := range addrs {
 			ip, err := netip.ParseAddr(addr)
 			if err != nil {
-				return nil, fmt.Errorf("jsonout: %s for %s: %w", field, name, err)
+				return nil, fmt.Errorf("jsonout: %s for %q: %w", field, name, err)
 			}
 			to[name] = append(to[name], ip)
 		}
