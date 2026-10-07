@@ -65,12 +65,20 @@ func newSigner(tb testing.TB, zone string, behaviour Behaviour) *signer {
 func generate(tb testing.TB, zone string, flags uint16) (*dns.DNSKEY, crypto.Signer) {
 	tb.Helper()
 
-	key := &dns.DNSKEY{Hdr: dns.Header{Name: zone, Class: dns.ClassINET, TTL: 3600}}
-	key.Flags, key.Protocol, key.Algorithm = flags, 3, dns.ECDSAP256SHA256
+	// The library refuses to sign with a key whose tag is 0, which one random
+	// key in 65536 has, so such a key is drawn again.
+	var (
+		key     *dns.DNSKEY
+		private crypto.PrivateKey
+	)
+	for key == nil || key.KeyTag() == 0 {
+		key = &dns.DNSKEY{Hdr: dns.Header{Name: zone, Class: dns.ClassINET, TTL: 3600}}
+		key.Flags, key.Protocol, key.Algorithm = flags, 3, dns.ECDSAP256SHA256
 
-	private, err := key.Generate(256)
-	if err != nil {
-		tb.Fatalf("fakens: generating a key for %s: %v", zone, err)
+		var err error
+		if private, err = key.Generate(256); err != nil {
+			tb.Fatalf("fakens: generating a key for %s: %v", zone, err)
+		}
 	}
 	signer, ok := private.(crypto.Signer)
 	if !ok {
