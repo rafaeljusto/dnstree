@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -334,12 +333,12 @@ func (r *renderer) notes(step *trace.Step) string {
 	return r.paint.dim("(" + strings.Join(step.Notes, "; ") + ")")
 }
 
-// spaced sets an icon off from what it introduces. A symbol from before the
-// emoji blocks is only drawn as one by the variation selector after it, and a
-// terminal that keeps the one cell such a symbol has always had lets the glyph
-// spill over the space that follows, so it is given another.
+// spaced sets an icon off from what it introduces. A symbol that is only
+// drawn as an emoji by the variation selector after it, whichever block it
+// sits in (⚠️, 🗂️, 🕸️), keeps the one cell it has as text in many terminals,
+// and its glyph spills over the space that follows, so it is given another.
 func spaced(icon string) string {
-	if r, _ := utf8.DecodeRuneInString(icon); r < 0x1f000 && strings.ContainsRune(icon, 0xfe0f) {
+	if strings.ContainsRune(icon, 0xfe0f) {
 		return icon + "  "
 	}
 	return icon + " "
