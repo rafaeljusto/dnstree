@@ -138,7 +138,13 @@ make check                      # what CI runs, less hadolint, the packaging dry
 
 go test -race -count=2 ./...    # when concurrency or fakens changed
 make goldens && git diff --stat # goldens stay put?
+make fuzz FUZZPKG=internal/<pkg> FUZZTIME=1m  # for each changed package with a fuzz test
 ```
+
+A fuzz failure is a blocking finding: quote the input `go test` wrote under
+`testdata/fuzz`, which the fix keeps there. A new parser or escaper of what a
+zone or a stranger wrote that comes without a fuzz test is a should (see
+`AGENTS.md`, Tests).
 
 Use a separate worktree. Revert anything `make goldens` rewrote. Don't run
 `make live`.

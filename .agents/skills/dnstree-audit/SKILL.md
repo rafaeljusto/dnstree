@@ -143,6 +143,13 @@ stall a resolution.
   `go test -race -run <Name> ./internal/<pkg>/`, include the code in the report,
   then delete the file. Anything you could not reproduce is marked
   **Unverified** and can be at most Low.
+- **Fuzz before reading.** Where the scope has a fuzz test, search with it
+  first: `make fuzz FUZZPKG=internal/<pkg> FUZZTIME=3m` (no scope, or
+  `full`: every one, at the default). A failure is a reproduced finding, with
+  the input `go test` wrote under `testdata/fuzz`: quote the input in the
+  report, then delete the file, since the audit writes only the ledger. A
+  parser or escaper of what a zone or a stranger wrote that has no fuzz test
+  is worth a Low of its own.
 - After you touch concurrent code or fakens, run `go test -race -count=2 ./...`.
   Both races this repository has had only showed up on the second run.
 - Don't use `make live` or the real internet to build a PoC.
