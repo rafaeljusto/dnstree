@@ -174,6 +174,45 @@ func TestCheck(t *testing.T) {
 		zone:   zone{"example.com. TXT": {`"v=spf1 \999-all"`}},
 		result: trace.SPFPermError,
 		why:    "999-all is no mechanism",
+	}, {
+		name:   "a letter past ASCII that lowercases into one is no mechanism",
+		zone:   zone{"example.com. TXT": {`"v=spf1 \196\176nclude:x.example.net -all"`}},
+		result: trace.SPFPermError,
+		why:    "nclude is no mechanism",
+	}, {
+		name:   "a tab separates no terms",
+		zone:   zone{"example.com. TXT": {`"v=spf1 a\009include:x.example.net -all"`}},
+		result: trace.SPFPermError,
+		why:    "include is no mechanism",
+	}, {
+		name:   "a macro with transformers and delimiters",
+		zone:   zone{"example.com. TXT": {"v=spf1 exists:%{ir.}.%{d2}.%{L-}._spf.example.com -all"}},
+		result: trace.SPFOK, lookups: 1,
+	}, {
+		name:   "a macro with transformers that do not parse",
+		zone:   zone{"example.com. TXT": {"v=spf1 exists:%{sQQ}.example.net -all"}},
+		result: trace.SPFPermError,
+		why:    "has a macro that does not parse",
+	}, {
+		name:   "a domain with a byte past ASCII",
+		zone:   zone{"example.com. TXT": {`"v=spf1 include:\195\169.example.net -all"`}},
+		result: trace.SPFPermError,
+		why:    "is no domain a check can look up",
+	}, {
+		name:   "a domain with an empty label",
+		zone:   zone{"example.com. TXT": {"v=spf1 include:a..example.net -all"}},
+		result: trace.SPFPermError,
+		why:    "a..example.net is no domain a check can look up",
+	}, {
+		name:   "a domain with a label past 63 octets",
+		zone:   zone{"example.com. TXT": {"v=spf1 a:" + strings.Repeat("x", 64) + ".example.net -all"}},
+		result: trace.SPFPermError,
+		why:    "is no domain a check can look up",
+	}, {
+		name:   "a domain past 253 octets",
+		zone:   zone{"example.com. TXT": {"v=spf1 a:" + strings.Repeat("x.", 124) + "example.net -all"}},
+		result: trace.SPFPermError,
+		why:    "is no domain a check can look up",
 	}} {
 		t.Run(tt.name, func(t *testing.T) {
 			var asked int

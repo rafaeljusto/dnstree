@@ -133,7 +133,7 @@ func (c *checker) policy(name string) found {
 	case 0:
 		return found{void: void, result: trace.SPFNone, why: name + " publishes no SPF policy"}
 	case 1:
-		if n := words(policies[0]) - 1; n > maxTerms {
+		if n := len(fieldsOf(policies[0])) - 1; n > maxTerms {
 			return found{result: trace.SPFUndecided,
 				why: fmt.Sprintf("%s publishes a policy of %d terms, past the %d dnstree reads", name, n, maxTerms)}
 		}
@@ -148,12 +148,11 @@ func (c *checker) policy(name string) found {
 // the check and of every renderer after it.
 const maxTerms = 512
 
-func words(record string) int {
-	n := 0
-	for range strings.FieldsSeq(record) {
-		n++
-	}
-	return n
+// fieldsOf are the terms of a policy and its version. Only a space parts them
+// (RFC 7208 4.6.1): any other blank is part of a term, which then does not
+// parse.
+func fieldsOf(record string) []string {
+	return slices.DeleteFunc(strings.Split(record, " "), func(field string) bool { return field == "" })
 }
 
 // term is one term of a policy, read.
@@ -169,7 +168,7 @@ type term struct {
 // already, which an include or a redirect may not come back to; final is
 // whether the policy decides the check, rather than answering an include.
 func (c *checker) terms(record, domain string, path []string, final bool) []trace.SPFTerm {
-	fields := strings.Fields(record)[1:]
+	fields := fieldsOf(record)[1:]
 	parsed := make([]term, len(fields))
 	terms := make([]trace.SPFTerm, len(fields))
 	broken := false
@@ -433,7 +432,13 @@ func parse(text string) term {
 	if i := strings.IndexAny(rest, ":/"); i >= 0 {
 		name, args = rest[:i], rest[i:]
 	}
-	t.mechanism = strings.ToLower(name)
+	// strings.ToLower would read U+0130 as an i, and so İnclude as an include.
+	t.mechanism = strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + 'a' - 'A'
+		}
+		return r
+	}, name)
 
 	switch t.mechanism {
 	case "all":
@@ -491,12 +496,16 @@ func modifierName(name string) bool {
 }
 
 // domainSpec says why a domain-spec does not parse, empty where it does. A
-// name with no macro in it has to end in a top label that is not all digits.
+// name with no macro in it has to be one a query can carry, ending in a top
+// label that is not all digits.
 func domainSpec(spec string) string {
 	if spec == "" {
 		return "an empty domain"
 	}
 	for i := 0; i < len(spec); i++ {
+		if spec[i] < '!' || spec[i] > '~' {
+			return spec + " is no domain a check can look up"
+		}
 		if spec[i] != '%' {
 			continue
 		}
@@ -508,7 +517,7 @@ func domainSpec(spec string) string {
 			i++
 		case '{':
 			end := strings.IndexByte(spec[i:], '}')
-			if end < 0 || end < 3 || !strings.ContainsRune("slodiphcrtvSLODIPHCRTV", rune(spec[i+2])) {
+			if end < 3 || !macro(spec[i+2:i+end]) {
 				return spec + " has a macro that does not parse"
 			}
 			i += end
@@ -520,12 +529,25 @@ func domainSpec(spec string) string {
 		return ""
 	}
 
-	labels := strings.Split(strings.TrimSuffix(spec, "."), ".")
+	name := strings.TrimSuffix(spec, ".")
+	labels := strings.Split(name, ".")
 	top := labels[len(labels)-1]
-	if len(labels) < 2 || top == "" || strings.Trim(top, "0123456789") == "" {
+	if len(labels) < 2 || len(name) > 253 || strings.Trim(top, "0123456789") == "" ||
+		slices.ContainsFunc(labels, func(label string) bool { return label == "" || len(label) > 63 }) {
 		return spec + " is no domain a check can look up"
 	}
 	return ""
+}
+
+// macro is what a macro holds between its braces: a letter, then digits, an r
+// and delimiters, each optional (RFC 7208 7.1).
+func macro(text string) bool {
+	if !strings.ContainsAny(text[:1], "slodiphcrtvSLODIPHCRTV") {
+		return false
+	}
+	rest := strings.TrimLeft(text[1:], "0123456789")
+	rest = strings.TrimPrefix(strings.TrimPrefix(rest, "r"), "R")
+	return strings.Trim(rest, ".-+,/_=") == ""
 }
 
 // dualCIDR checks the /n, //n or /n//n an a or an mx may end in.
