@@ -24,7 +24,7 @@ make check   # build, go vet, golangci-lint, go test -race ./..., the pages' tes
 ```
 
 That is what CI runs, less hadolint (`make lint-docker`), the packaging dry
-run (`make dist` and `make web-lambda`) and the two image builds. Two things it does not run:
+run (`make dist` and `make web-lambda`) and the two image builds. Three things it does not run:
 
 - `make live` goes out to the real root servers. It is never part of `check`;
   CI runs it weekly, because the embedded hints and trust anchors go stale
@@ -32,6 +32,10 @@ run (`make dist` and `make web-lambda`) and the two image builds. Two things it 
 - `go test -race -count=2 ./...` after touching anything concurrent or anything
   in `internal/testutil/fakens`. Both data races this repository has had only
   showed up on the second run.
+- `make fuzz` searches with the fuzz tests, where `check` only replays what
+  they found. CI searches weekly for five minutes each, carrying the corpus
+  over; after changing a package one covers, search it for a minute with
+  `FUZZPKG=internal/<pkg> FUZZTIME=1m`.
 
 Renderer goldens are rewritten with `make goldens`.
 Read the diff before keeping it: those files are the user-visible output. The
