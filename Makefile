@@ -107,10 +107,12 @@ live:
 
 # Searches with every fuzz test for FUZZTIME, one at a time, since go test
 # fuzzes one target of one package per run. check already replays their seeds
-# and what earlier searches found, kept under testdata/fuzz.
+# and what earlier searches found, kept under testdata/fuzz. FUZZPKG narrows the
+# search to the directories it names, as in FUZZPKG=internal/spf.
 FUZZTIME ?= 30s
+FUZZPKG ?= internal cmd
 fuzz:
-	@for file in $$(grep -rlE '^func Fuzz' --include='*_test.go' internal cmd | sort); do \
+	@for file in $$(grep -rlE '^func Fuzz' --include='*_test.go' $(FUZZPKG) | sort); do \
 		for name in $$(sed -nE 's/^func (Fuzz[A-Za-z0-9_]*)\(.*/\1/p' $$file); do \
 			echo "$$name in ./$$(dirname $$file)"; \
 			$(GO) test -run '^$$' -fuzz "^$$name$$" -fuzztime $(FUZZTIME) ./$$(dirname $$file) || exit 1; \

@@ -181,7 +181,7 @@ make lint-docker  # hadolint against the Dockerfile
 make vuln         # govulncheck against the vulnerability database
 make goldens      # rewrite the renderer goldens and docs/trace.schema.json; read the diff
 make live         # goes out to the real root servers; never part of check
-make fuzz         # search with every fuzz test for FUZZTIME (30s) each; check replays what they found
+make fuzz         # search with every fuzz test for FUZZTIME (30s) each, or those in FUZZPKG; check replays what they found
 make demos        # re-record the terminal demos in docs/ from tapes/, and the 3d still
 make demo-3d      # take only the still of --format web-3d in docs/
 make roothints    # refresh the embedded root hints and trust anchors
