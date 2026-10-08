@@ -293,3 +293,8 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - SPF terms part on a space alone, mechanism names fold ASCII letters only,
   and a domain-spec holds printable ASCII, macros as RFC 7208 7.1 writes them
   and, without one, labels of 1 to 63 octets in at most 253 (`TestCheck`).
+- `FuzzCheck` fuzzes the policy at the name and behind every include and
+  redirect: the budget holds, the result is one of five, `Shown` escapes
+  every string, and ok needs every term to parse within the 4.6.4 limits.
+  Its first find, an unknown modifier's value never checked as a
+  macro-string, is fixed and kept in `testdata/fuzz`.
