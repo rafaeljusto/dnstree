@@ -58,7 +58,7 @@ MAN_DATE ?= $(shell git log -1 --format=%cs 2>/dev/null || date -u +'%Y-%m-%d')
 # read, and the man page. Only finished artefacts reach dist.
 BUILD := build
 
-.PHONY: all build install test race js lint lint-docker vuln check live goldens dist man \
+.PHONY: all build install test race js lint lint-docker vuln check live fuzz goldens dist man \
 	archives packages formula checksums image image-push image-web image-web-push web-lambda clean roothints demos demo-3d
 
 # The stages of dist read each other's output, so they run one after another
@@ -104,6 +104,18 @@ check: build lint race js vuln
 # Goes out to the real root servers, so it is never part of check.
 live:
 	$(GO) test -tags live -count=1 ./...
+
+# Searches with every fuzz test for FUZZTIME, one at a time, since go test
+# fuzzes one target of one package per run. check already replays their seeds
+# and what earlier searches found, kept under testdata/fuzz.
+FUZZTIME ?= 30s
+fuzz:
+	@for file in $$(grep -rlE '^func Fuzz' --include='*_test.go' internal cmd | sort); do \
+		for name in $$(sed -nE 's/^func (Fuzz[A-Za-z0-9_]*)\(.*/\1/p' $$file); do \
+			echo "$$name in ./$$(dirname $$file)"; \
+			$(GO) test -run '^$$' -fuzz "^$$name$$" -fuzztime $(FUZZTIME) ./$$(dirname $$file) || exit 1; \
+		done; \
+	done
 
 # Rewrites the renderer goldens, and docs/trace.schema.json with them. go test
 # refuses a flag a package does not define, and only the packages that use

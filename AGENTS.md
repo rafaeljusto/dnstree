@@ -224,6 +224,12 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   strangers or reset. A change to the way a delegation is followed belongs
   with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
+- What a zone or a stranger wrote and is parsed or escaped by hand is fuzzed
+  against a property, not an example: the SPF check, a saved walk read into
+  every renderer, the live line cut, the escaper of each format, and the
+  names dnstree-web redirects to. `make check` replays the seeds and the
+  inputs kept under `testdata/fuzz`; `make fuzz` searches. An input a search
+  finds stays in `testdata/fuzz` once it is fixed.
 - The pages' logic lives in `walk.js` beside each page (and `space.js`,
   `pack.js` and `film.js` beside the scene), which touch neither the DOM nor
   WebGL; the page scripts only draw what those return. `internal/render/web/jstest` tests them
