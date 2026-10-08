@@ -7,14 +7,12 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - **Scope**: the commits since `05467fe` (`--rdap`, `--mail`, `--propagation`,
   the SERVFAIL diagnosis, `--check`, `--svcb`, CSYNC and the RFC 9615
   bootstrap signals, the resolver split, the history and dnstree-web fixes)
+- **Since**: `internal/spf` alone at `9ba8ec7` on 2026-10-08, and its three
+  findings fixed in the working tree. The other commits since `8e729b6`,
+  `--tlsa` among them, are still to read.
 
 ## Open findings
 
-- Low: rdap `get` never checks the content type, unlike DoH; left as is,
-  since a hostile registry sends the right one anyway and a sloppy one would
-  cost the check ([rdap.go:291](../../../internal/rdap/rdap.go#L291)).
-- Low, unverified: a bootstrap signal is not checked to be signed by a key its
-  own CDS/CDNSKEY references; it never reaches an exit code.
 - Low: the SPF check keeps asking after a temperror, so a resolver that times
   out on the policy's names costs a timeout per budgeted query rather than
   one; it now stops when ctx ends
@@ -215,7 +213,7 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - CAA tags: a critical tag the text cannot carry refuses (`TestCAA`); a wire
   tag with `\`, `"`, a space or `;` never reads back as `issue`, since unpack
   escapes `\` and `"` and the rest fail to parse.
-- SPF parsing: `Fields(record)[1:]` only after the `v=spf1` check; CIDR,
+- SPF parsing (re-checked at `9ba8ec7`): `Fields(record)[1:]` only after the `v=spf1` check; CIDR,
   prefix lengths, macros and modifier names index within bounds; include and
   redirect cycles caught on canonical names; every `follow` spends a query.
 - SPF output: every string goes through `Shown`, ESC and high bytes stay out
@@ -285,7 +283,13 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - dnstree-web: a panicking walk releases its slot once, drops `inFlight`,
   stores nothing and answers 500; `Mail`, `SVCB`, `CheckDS`, `CheckNS`, rdap,
   propagation, check and the comparison never reach it.
-- `--spf` grace: the goroutine always sends, `ask` stops on ctx, the grace
+- `--spf` grace (re-checked at `9ba8ec7`): the goroutine always sends, `ask` stops on ctx, the grace
   cancels with `DeadlineExceeded`.
 - File of defaults: `pcap`, `against` and the earlier list refused; `rdap` is
   settable on purpose and writes nothing.
+- SPF budget and recursion: depth is bounded by the query budget, a policy by
+  512 terms, so the tree holds at most 513 terms per query; `trace.Shown`
+  escapes every byte outside printable ASCII, bidi controls included.
+- SPF terms part on a space alone, mechanism names fold ASCII letters only,
+  and a domain-spec holds printable ASCII, macros as RFC 7208 7.1 writes them
+  and, without one, labels of 1 to 63 octets in at most 253 (`TestCheck`).
