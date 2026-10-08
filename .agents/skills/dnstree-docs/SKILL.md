@@ -26,6 +26,7 @@ are held to.
 | `packaging/README.md`, `cmd/next-version/README.md` | maintainers | release mechanics |
 | `.github/pull_request_template.md` | contributors | what a PR is asked for |
 | `.agents/skills/*/SKILL.md` | agents | review and audit checklists |
+| `packaging/plugin/skills/dnstree/SKILL.md` | users' models | which flags answer which question, exit codes, what not to run unasked |
 
 Out of scope: `CODE_OF_CONDUCT.md`, the man page (rendered from `cli.Usage`),
 `docs/trace.schema.json` (a test already holds it to `--schema`) and the page
@@ -91,6 +92,10 @@ Check the docs against these, never against each other alone:
   doesn't mention.
 - A new flag worth setting every day that isn't in `dnstreerc.example`. That
   file is a menu, so a missing one-off flag is not a finding.
+- A flag that answers a question users bring to a model (a check, a verdict,
+  a diagnosis) missing from the plugin skill's table, or one that reaches past
+  the DNS, writes to disk or never returns missing from its "ask first" list.
+  Its tests catch a flag that is gone, not one that is new or changed meaning.
 
 ### 3. Examples
 

@@ -87,7 +87,10 @@ the usual comment:
 3. the landing page in `docs/index.html`
 4. the tests
 
-Also check `dnstreerc.example` for flags worth setting every day. Examples in the
+Also check `dnstreerc.example` for flags worth setting every day, and the
+plugin skill in `packaging/plugin/skills/dnstree/SKILL.md` for a flag that
+answers a question users bring to a model, or that reaches past the DNS and
+belongs in its "ask first" list. Examples in the
 README, the guide and on the page must be real output: an example that doesn't match what
 the code now prints means it was edited by hand, or not regenerated. The man
 page is generated, so don't ask for it.
