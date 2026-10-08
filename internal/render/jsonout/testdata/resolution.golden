@@ -606,6 +606,53 @@
       }
     ]
   },
+  "dependencies": {
+    "name": "www.example.com.",
+    "zones": [
+      {
+        "zone": "com.",
+        "ns": [
+          "a.gtld-servers.net."
+        ],
+        "dnssec": {
+          "state": "secure",
+          "zone": "com."
+        }
+      },
+      {
+        "zone": "net.",
+        "ns": [
+          "a.gtld-servers.net."
+        ],
+        "via": "a.gtld-servers.net.",
+        "for": "com.",
+        "dnssec": {
+          "state": "secure",
+          "zone": "net."
+        }
+      },
+      {
+        "zone": "example.net.",
+        "ns": [
+          "ns.example.net."
+        ],
+        "via": "ns.example.net.",
+        "for": "example.com.",
+        "dnssec": {
+          "state": "insecure",
+          "zone": "example.net."
+        }
+      }
+    ],
+    "unresolved": [
+      {
+        "name": "ns.gone.example.",
+        "for": "example.com.",
+        "error": "does not exist"
+      }
+    ],
+    "stopped": "the budget ran out before every nameserver was looked up"
+  },
   "registration": {
     "domain": "example.com.",
     "server": "https://rdap.verisign.com/com/v1/",

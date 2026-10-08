@@ -57,6 +57,7 @@ one after another, each from the root servers down.
   --mail                  check NAME's MX hosts for DANE, and its mail policies
   --tlsa                  match the certificate each DANE host presents
   --svcb                  follow NAME's HTTPS or SVCB records to their servers
+  --deps                  list every zone NAME depends on, its nameservers' too
   --rdap                  ask the registry when the domain expires, and compare
   --propagation           say how long a change takes to reach every cache
   --check                 run the checks that grade a zone, and grade its health
@@ -85,7 +86,7 @@ one after another, each from the root servers down.
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
   --max-depth N           zone cuts to follow (default 16)
-  --max-queries N         queries to make in all (64; 256 --all, 512 --check)
+  --max-queries N         queries to make in all (64; 256 --all, 512 --check, --deps)
   --max-cname N           aliases to chase (default 8)
   --port N                the port to ask on (53; 853 with --dot, 443 with --doh)
   --root-hints FILE       where the walk starts, instead of the built-in hints
@@ -414,6 +415,18 @@ lookup is a walk of its own, drawn in the tree as an aside, and spends the
 walk's budget; a TYPE of HTTPS or SVCB is the first set itself. A NAME with a
 port is asked as written, such as _8443._https.example.com.
 
+--deps lists every zone NAME depends on: the zones the walk went through, and
+those the lookup of each of their nameservers goes through, and those of
+their nameservers in turn, each zone once. Whoever controls any of them can
+make NAME resolve somewhere else, and most of them nobody chose. A walk stops
+at the first nameserver it reaches; every one of them is followed here, glue
+or not, since any of them may answer. A nameserver inside its own zone adds
+nothing, and the root is left out. Each zone says which nameserver brought it
+in, and with --dnssec which delegations are unsigned. A nameserver that does
+not exist is drawn like one the walk finds. Each lookup is a walk of its own,
+drawn in the tree as an aside, with a budget of 512 queries unless
+--max-queries says otherwise; a budget that runs out says the list is short.
+
 --rdap asks the registry of the domain over RDAP (RFC 9083) when its
 registration runs out, which statuses it carries, and which nameservers and DS
 it holds, and says so when they are not what the TLD hands out: a change stuck
@@ -516,6 +529,7 @@ type Config struct {
 	Mail           bool
 	TLSA           bool
 	SVCB           bool
+	Deps           bool
 	RDAP           bool
 	Propagation    bool
 
@@ -750,6 +764,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Mail, "mail", false, "check the name's MX hosts for DANE, and its mail policies")
 	flags.BoolVar(&cfg.TLSA, "tlsa", false, "match the certificate each DANE host presents")
 	flags.BoolVar(&cfg.SVCB, "svcb", false, "follow the name's HTTPS or SVCB records to their servers")
+	flags.BoolVar(&cfg.Deps, "deps", false, "list every zone the name depends on, its nameservers' too")
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
 	flags.BoolVar(&cfg.Check, "check", false, "run the checks that grade a zone, and grade its health")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
@@ -1013,6 +1028,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Check && cfg.MaxQueries == 0 {
 		cfg.MaxQueries = CheckMaxQueries
 	}
+	if cfg.Deps && cfg.MaxQueries == 0 {
+		cfg.MaxQueries = DepsMaxQueries
+	}
 	if cfg.All && cfg.MaxQueries == 0 {
 		cfg.MaxQueries = AllMaxQueries
 	}
@@ -1093,6 +1111,10 @@ const AllMaxQueries = 256
 // CheckMaxQueries is the query budget of a run with --check that names none:
 // --all's, and the sweeps of every nameserver the checks make on top of it.
 const CheckMaxQueries = 512
+
+// DepsMaxQueries is the query budget of a run with --deps that names none: a
+// name served from other TLDs depends on dozens of zones, each a lookup.
+const DepsMaxQueries = 512
 
 // Question is one name and one type to walk.
 type Question struct {
@@ -1178,7 +1200,7 @@ func several(cfg *Config, expecting bool) error {
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "svcb": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

@@ -433,6 +433,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--svcb</code> follows a name's HTTPS records down their aliases to the servers they name, and holds the <code>ipv4hint</code> and <code>ipv6hint</code> a browser may connect on against where those servers really are.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">hidden</span>
+          <h3>A zone nobody chose to depend on</h3>
+          <p><code>--deps</code> follows every nameserver of every zone on the way, and every nameserver of theirs, and lists each zone the name depends on with the nameserver that brought it in. Whoever controls any of them can make the name resolve somewhere else.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">expiring</span>
           <h3>A registration about to run out</h3>
           <p><code>--rdap</code> asks the registry when the domain expires and whether it is on hold, and compares the nameservers and DS it holds with the TLD's. A lapsed domain drops out of its TLD everywhere at once.</p>

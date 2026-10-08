@@ -218,6 +218,18 @@ func resolution() *trace.Trace {
 				Addrs: []netip.Addr{netip.MustParseAddr("203.0.113.7")},
 				Hints: []netip.Addr{netip.MustParseAddr("192.0.2.1")}, Stray: []netip.Addr{netip.MustParseAddr("192.0.2.1")}}},
 		},
+		Dependencies: &trace.Dependencies{
+			Name: "www.example.com.",
+			Zones: []trace.DependencyZone{
+				{Zone: "com.", NS: []string{"a.gtld-servers.net."}, DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "com."}},
+				{Zone: "net.", NS: []string{"a.gtld-servers.net."}, Via: "a.gtld-servers.net.", For: "com.",
+					DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "net."}},
+				{Zone: "example.net.", NS: []string{"ns.example.net."}, Via: "ns.example.net.", For: "example.com.",
+					DNSSEC: &trace.DNSSECStatus{State: trace.Insecure, Zone: "example.net."}},
+			},
+			Unresolved: []trace.UnresolvedNS{{Name: "ns.gone.example.", For: "example.com.", Err: "does not exist"}},
+			Stopped:    "the budget ran out before every nameserver was looked up",
+		},
 		Registration: &trace.Registration{
 			Domain: "example.com.", Server: "https://rdap.verisign.com/com/v1/", State: trace.Registered,
 			Registered: time.Date(1995, 8, 14, 4, 0, 0, 0, time.UTC), Expires: time.Date(2026, 8, 13, 4, 0, 0, 0, time.UTC),

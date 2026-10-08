@@ -144,6 +144,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--mail`](docs/guide/zones.md#whether-its-mail-can-be-sent-verified) | check the name's MX hosts the way a sender that checks DANE does, and its MTA-STS, TLS-RPT and DMARC records (RFC 7672) |
 | [`--tlsa`](docs/guide/zones.md#whether-the-certificates-match) | connect to each MX host DANE covers, start TLS, and match the certificate it presents against its TLSA set; needs `--mail` and `--dnssec` |
 | [`--svcb`](docs/guide/zones.md#where-a-browser-connects) | follow the name's HTTPS or SVCB records to the servers they name, and hold their address hints against what the servers resolve to (RFC 9460) |
+| [`--deps`](docs/guide/zones.md#what-it-depends-on) | list every zone the name depends on: the walk's own, and those the lookups of every nameserver of each go through in turn, with which are unsigned |
 | [`--rdap`](docs/guide/zones.md#whether-its-registration-is-about-to-run-out) | ask the domain's registry when the registration runs out and whether it is held, and compare its nameservers and DS with the TLD's (RFC 9083) |
 | [`--propagation`](docs/guide/zones.md#how-long-a-change-takes-to-reach-everyone) | say how long each kind of change to the zone takes to reach every cache, from the TTLs the walk saw |
 | [`--check`](docs/guide/zones.md#all-of-it-at-once) | run the checks that grade a zone together, and grade its health one area at a time: passed, worth a look, broken or skipped |
@@ -168,7 +169,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--pcap`](docs/guide/output.md#the-bytes-on-the-wire) | save the walk's queries and answers as a packet capture, for Wireshark or `tcpdump -r` |
 | `--color` | `auto` (the default: only on a terminal, and off where `NO_COLOR` is set or `TERM` is unset or `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
-| `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries (256 with `--all`, 512 with `--check`), 8 aliases |
+| `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries (256 with `--all`, 512 with `--check` or `--deps`), 8 aliases |
 | [`--port`](docs/guide/configuring.md#pointing-it-somewhere-else) | the port nameservers are asked on (53; 853 with `--dot`, 443 with `--doh`) |
 | [`--root-hints`](docs/guide/configuring.md#pointing-it-somewhere-else) | where the walk starts, instead of the built-in hints |
 | [`--trust-anchors`](docs/guide/configuring.md#pointing-it-somewhere-else) | the DS records to trust, instead of the built-in ones |

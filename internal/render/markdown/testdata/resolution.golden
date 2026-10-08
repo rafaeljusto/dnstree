@@ -35,6 +35,12 @@ mail: dane covers 1 of 1 MX host, not counting 1 that cannot be reached
 svcb: www.example.com. HTTPS 0 cdn.example.net.  [secure]
 svcb: cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  [insecure]
 svcb:   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
+deps: www.example.com. depends on at least 3 zones besides the root, 1 of them unsigned
+deps:   com.  the walk
+deps:   net.  by a.gtld-servers.net., a nameserver of com.
+deps:   example.net. (unsigned)  by ns.example.net., a nameserver of example.com.
+deps:   ns.gone.example., a nameserver of example.com.: does not exist
+deps: stopped: the budget ran out before every nameserver was looked up
 csync: com. CSYNC 2024091501 immediate soaminimum A NS AAAA  a parent that polls copies it
 csync:   adds NS ns3.com.
 csync:   removes NS ns4.com.

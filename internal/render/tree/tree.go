@@ -134,6 +134,7 @@ func (r *renderer) render(tr *trace.Trace) {
 	r.writeLines(r.policy(tr.SPF))
 	r.writeLines(r.mailPath(tr.Mail))
 	r.writeLines(r.servicePath(tr.ServicePath))
+	r.writeLines(r.dependencies(tr.Dependencies))
 	r.writeLines(r.requests(tr))
 	r.writeLines(r.registration(tr.Registration))
 	r.writeLines(r.propagation(tr.Propagation))

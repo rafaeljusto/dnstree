@@ -655,6 +655,53 @@ the targets it did not reach unjudged. The exit code is left alone. `--format js
 `service_path`, and `--format openmetrics` as `dnstree_svcb_targets` and
 `dnstree_svcb_stray_hints`.
 
+## What it depends on
+
+To reach a name, a resolver asks the servers of every zone above it. But those
+servers have names too, often in other zones, and finding their addresses
+means walking to those zones first, whose own servers may sit somewhere else
+again. Whoever controls any zone on the way can make the name resolve
+somewhere else, and most of them nobody chose. `--deps` follows every
+nameserver of every zone the walk went through, and then every nameserver of
+every zone those lookups went through, until none is left:
+
+```
+$ dnstree --deps --dnssec --explain --no-asn --no-compare www.example.com
+...
+│   │   │   ├── com.  (A of hera.ns.cloudflare.com. for deps)
+│   │   │   │   ├── l.gtld-servers.net. 192.41.162.30  248ms  NOERROR  DO  referral → cloudflare.com.  [secure ECDSAP256SHA256/SHA256]
+│   │   │   │   │   ├── ns3.cloudflare.com. 162.159.0.33  229ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   │   │   │   ├── hera.ns.cloudflare.com. 86353 A 173.245.58.162
+...
+deps: www.example.com. depends on 6 zones besides the root, 2 of them unsigned
+deps:   com., example.com.  the walk
+deps:   net., gtld-servers.net. (unsigned)  by l.gtld-servers.net., a nameserver of com.
+deps:   cloudflare.com.  by hera.ns.cloudflare.com., a nameserver of example.com.
+deps:   nstld.com. (unsigned)  by av1.nstld.com., a nameserver of gtld-servers.net.
+✔ answered in 11s · 39 queries · 6 servers
+```
+
+Each line names the zones one nameserver's lookup came to that no lookup
+before it had, and the zone that nameserver serves. With `--dnssec`, a
+delegation that is unsigned, or bogus, is said beside its zone: a zone like
+that is easier to forge. The walk itself stops at the first nameserver it
+reaches, but any of them may be the one a resolver asks, so every one is
+followed here, glued or not: glue is a copy, and whoever can change the zone
+the name lives in can change what it says. A nameserver named inside the zone
+it serves adds nothing the list does not have, and the root is left out, since
+every name depends on it.
+
+Each zone and each nameserver is visited once, so zones that serve each other
+end the lookups rather than feed them. A nameserver whose lookup fails is said
+on a line of its own, and one that does not exist is marked in the tree the way
+one the walk finds is: whoever registers the domain it would be in can answer
+for the zone. Every lookup is a walk of its own, drawn in the tree as an aside,
+and starts from the deepest zone the run has already entered. A name served
+from other TLDs costs dozens of queries, so the budget is 512 unless
+`--max-queries` says otherwise, and a budget that runs out says the list is
+short, in a line and a warning. The exit code is left alone. `--format json`
+carries it as `dependencies`.
+
 ## Whether its registration is about to run out
 
 A domain is rented, not owned. When the registration lapses, or the registry

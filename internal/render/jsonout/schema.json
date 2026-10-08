@@ -45,6 +45,7 @@
     "spf": { "$ref": "#/$defs/spf" },
     "mail": { "$ref": "#/$defs/mail" },
     "service_path": { "$ref": "#/$defs/service_path" },
+    "dependencies": { "$ref": "#/$defs/dependencies" },
     "registration": { "$ref": "#/$defs/registration" },
     "propagation": { "$ref": "#/$defs/propagation" },
     "check": { "$ref": "#/$defs/check" },
@@ -289,6 +290,47 @@
         "none": { "description": "Present where an alias to . says the service does not exist (RFC 9460 2.5.1).", "type": "boolean" },
         "stopped": { "description": "Why the chain was left before its end: a lookup failed or did not validate, the aliases looped or went on past --max-cname, or a budget ran out.", "type": "string" },
         "cut": { "description": "Present where a budget cut the address lookups short, which leaves the hints unjudged.", "type": "boolean" }
+      }
+    },
+    "dependencies": {
+      "description": "Every zone the name depends on, present only where --deps asked: the zones the walk was referred to, then those the lookup of each of their nameservers was referred to, in turn, each once. Every lookup is a walk of its own, in the tree as an aside.",
+      "type": "object",
+      "required": ["name", "zones"],
+      "properties": {
+        "name": { "type": "string" },
+        "zones": {
+          "description": "The zones, the walk's own first, then in the order the lookups came to them. The root is left out.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/dependency_zone" }
+        },
+        "unresolved": {
+          "description": "The nameservers whose lookup came to no address, which leaves the zones on their way unknown.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/unresolved_server" }
+        },
+        "stopped": { "description": "Why the lookups were left before every nameserver was looked up, which leaves the list short.", "type": "string" }
+      }
+    },
+    "dependency_zone": {
+      "description": "One zone the name depends on.",
+      "type": "object",
+      "required": ["zone"],
+      "properties": {
+        "zone": { "type": "string" },
+        "ns": { "description": "The nameservers its parent delegated it to.", "type": "array", "items": { "type": "string" } },
+        "via": { "description": "The nameserver whose lookup came to the zone, absent for a zone on the walk's own way.", "type": "string" },
+        "for": { "description": "The zone that nameserver serves, absent for a zone on the walk's own way.", "type": "string" },
+        "dnssec": { "description": "The verdict on the delegation into the zone. Absent without --dnssec.", "$ref": "#/$defs/dnssec" }
+      }
+    },
+    "unresolved_server": {
+      "description": "A nameserver whose lookup came to no address.",
+      "type": "object",
+      "required": ["name", "for", "error"],
+      "properties": {
+        "name": { "type": "string" },
+        "for": { "description": "The zone it serves.", "type": "string" },
+        "error": { "description": "Why: the lookup failed, or the name does not exist.", "type": "string" }
       }
     },
     "service_set": {

@@ -168,6 +168,9 @@ cached, not a bug. Run it again.
 | svcb-aside | `$D $B --svcb cloudflare.com` | exit 0, the HTTPS set looked up as an aside (`HTTPS of cloudflare.com. for svcb`), and no hint said to be stray |
 | svcb-none | `$D $B --svcb pinterest.com` | exit 0, `svcb: no HTTPS records at pinterest.com.` and `svcb: so a client connects as it would without them` |
 | svcb-formats | `$D $B --svcb --format json cloudflare.com HTTPS`, then `--format openmetrics`, then `--from` the JSON | `.service_path.targets` in the JSON; `dnstree_svcb_targets` and `dnstree_svcb_stray_hints … 0`; the same `svcb:` lines drawn back |
+| deps | `$D $B --deps --dnssec www.example.com` | exit 0, `deps: www.example.com. depends on N zones besides the root`, a `deps:   com., example.com.  the walk` line, then a line per nameserver that brought zones in, `gtld-servers.net. (unsigned)` among them, and no warning about the budget |
+| deps-budget | `$D $B --deps --max-queries 20 www.example.com` | exit 0, `depends on at least`, `deps: stopped: the budget ran out …` and a warning ending `raise --max-queries` |
+| deps-formats | `$D $B --deps --format json www.example.com`, then `--from` the JSON | `.dependencies.zones[].via` in the JSON; the same `deps:` lines drawn back |
 | propagation-formats | `$D $B --propagation --format json example.com`, then `--format dot`, then `--from` the JSON without and with `--propagation` | `.propagation.waits` in the JSON; exit 1 for dot; nothing drawn back without the flag, the same lines with it |
 | mail | `$D $B --mail --dnssec --explain freebsd.org` | exit 0, `mail: 2 MX hosts for freebsd.org. [secure …]`, mx1 `dane (1 TLSA record)`, mx66 `none: its zone proves there is no TLSA set`, `mail: dane covers 1 of 2 MX hosts`, and a warning ending `publish TLSA for it` |
 | mail-unchecked | `$D $B --mail freebsd.org` | exit 0, every host `unchecked`, and `mail: dane not checked: add --dnssec` |

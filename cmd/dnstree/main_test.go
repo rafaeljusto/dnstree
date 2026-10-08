@@ -1723,6 +1723,68 @@ edge.example.test. IN A     192.0.2.7
 	}
 }
 
+// TestRunDeps lists the zones a name depends on, says which nameserver does
+// not exist, and draws the list again from the walk --format json saved.
+func TestRunDeps(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: `
+@                     IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                     IN NS   a.root-servers.net.
+a.root-servers.net.   IN A    127.0.0.1
+example.test.         IN NS   ns.example.test.
+example.test.         IN NS   ns.gone.test.
+ns.example.test.      IN A    127.0.0.1
+`})
+	child := fakens.New(t, fakens.Config{Name: "ns.example.test.", Origin: "example.test.", Zone: `
+@     IN SOA  ns hostmaster 1 7200 3600 1209600 3600
+@     IN NS   ns
+@     IN NS   ns.gone.test.
+ns    IN A    127.0.0.1
+www   IN A    192.0.2.10
+`})
+	base := []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(), "--port", strconv.Itoa(int(child.Addr.Port())),
+		"--no-asn", "--no-compare", "--color", "never", "-4",
+	}
+	want := []string{
+		"deps: www.example.test. depends on 1 zone besides the root",
+		"deps:   example.test.  the walk",
+		"deps:   ns.gone.test., a nameserver of example.test.: does not exist",
+	}
+	drawn := func(out string) []string {
+		var lines []string
+		for line := range strings.Lines(out) {
+			if strings.HasPrefix(line, "deps: ") {
+				lines = append(lines, strings.TrimSuffix(line, "\n"))
+			}
+		}
+		return lines
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), append(base, "--deps", "www.example.test"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	stdout.Reset()
+	if code := run(t.Context(), append(base, "--deps", "--format", "json", "www.example.test"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	path := filepath.Join(t.TempDir(), "walk.json")
+	if err := os.WriteFile(path, stdout.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if code := run(t.Context(), []string{"--from", path, "--color", "never"}, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q drawn again, want %q", got, want)
+	}
+}
+
 // TestRunCheck grades a zone whose servers echo an EDNS flag back and whose NS
 // set lists a server the delegation does not, and holds it to --expect: both
 // are worth a look, and neither is broken.

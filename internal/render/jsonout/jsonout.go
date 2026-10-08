@@ -44,6 +44,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.SPF = convertSPF(tr.SPF)
 		document.Mail = convertMail(tr.Mail)
 		document.ServicePath = convertServicePath(tr.ServicePath)
+		document.Dependencies = convertDependencies(tr.Dependencies)
 		document.Registration = convertRegistration(tr.Registration)
 		document.Propagation = convertPropagation(tr.Propagation)
 		document.Check = convertCheck(tr.Check)
@@ -71,6 +72,7 @@ type document struct {
 	SPF           *spf          `json:"spf,omitempty"`
 	Mail          *mail         `json:"mail,omitempty"`
 	ServicePath   *servicePath  `json:"service_path,omitempty"`
+	Dependencies  *dependencies `json:"dependencies,omitempty"`
 	Registration  *registration `json:"registration,omitempty"`
 	Propagation   *propagation  `json:"propagation,omitempty"`
 	Check         *check        `json:"check,omitempty"`

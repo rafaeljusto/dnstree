@@ -89,6 +89,14 @@ func TestParse(t *testing.T) {
 				RootHints: "hints", TrustAnchors: "anchors", TLSCA: "ca.pem", Debug: true,
 			},
 		},
+		"every zone the name depends on, with the budget that takes": {
+			args: []string{"--deps", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Deps: true, MaxQueries: cli.DepsMaxQueries},
+		},
+		"every zone the name depends on, on the budget asked for": {
+			args: []string{"--deps", "--all", "--max-queries", "100", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Deps: true, All: true, MaxQueries: 100},
+		},
 		"every nameserver asked, with the budget that takes": {
 			args: []string{"--all", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", All: true, MaxQueries: cli.AllMaxQueries},

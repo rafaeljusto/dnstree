@@ -185,6 +185,12 @@ type Config struct {
 	// like the mail check's.
 	SVCB bool
 
+	// Deps follows every nameserver of every zone the walk was referred to,
+	// and of every zone those lookups are referred to in turn, to find all the
+	// zones the name depends on. Each lookup is a walk of its own, like the
+	// mail check's, and costs a query or more of the budget.
+	Deps bool
+
 	// Down says why a server is to be treated as unreachable, empty for one
 	// that is not. A server it names is drawn among its zone's but never
 	// asked, the way one of the wrong family is, and the walk goes wherever
@@ -313,6 +319,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 	if r.cfg.SVCB {
 		run.svcb(ctx, cmp.Or(end, run.trace.Root), end)
+	}
+	if r.cfg.Deps {
+		run.deps(ctx, cmp.Or(end, run.trace.Root))
 	}
 	run.bootstrap(ctx)
 	run.trace.Elapsed = time.Since(run.trace.Started)

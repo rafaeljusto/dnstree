@@ -88,6 +88,7 @@ whole; `dnstree --schema` describes every field.
 | whether SPF is over the ten-lookup limit | `dnstree --format markdown --spf NAME` |
 | which CAs may issue a certificate | `dnstree --format markdown --dnssec --caa NAME` |
 | where HTTPS/SVCB records lead | `dnstree --format markdown --dnssec --svcb NAME` |
+| every zone a name depends on, its nameservers' included | `dnstree --format markdown --dnssec --deps NAME` |
 | when the domain registration expires | `dnstree --format markdown --rdap NAME` |
 | whether the zone survives losing a server | `dnstree --format markdown --without SERVER NAME` |
 | what public resolvers answer | `dnstree --format markdown --resolver 1.1.1.1 --resolver 8.8.8.8 NAME` |

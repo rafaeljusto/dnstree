@@ -703,6 +703,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		CAA:            cfg.CAA,
 		Mail:           cfg.Mail,
 		SVCB:           cfg.SVCB,
+		Deps:           cfg.Deps,
 
 		NSID:     cfg.NSID,
 		Cookie:   cfg.Cookie,

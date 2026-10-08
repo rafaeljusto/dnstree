@@ -50,7 +50,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 	// for the question, and those the asides make. recorded is whether this
 	// zone has been kept for them.
 	top := side == 0 && (r.aside ||
-		(r.cfg.CAA || r.cfg.Mail || r.cfg.SVCB) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
+		(r.cfg.CAA || r.cfg.Mail || r.cfg.SVCB || r.cfg.Deps) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
 	recorded := from != nil
 
 	// referred is the step that pointed the walk into this zone, which the

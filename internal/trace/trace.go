@@ -72,6 +72,10 @@ type Trace struct {
 	// records connects, nil where --svcb did not ask.
 	ServicePath *ServicePath
 
+	// Dependencies are the zones the name depends on, nil where --deps did
+	// not ask.
+	Dependencies *Dependencies
+
 	// Registration is what the registry of the domain says about it, nil where
 	// --rdap did not ask.
 	Registration *Registration
