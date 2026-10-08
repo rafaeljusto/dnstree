@@ -416,6 +416,8 @@ func parse(text string) term {
 		t := term{modifier: strings.ToLower(text[:i]), domain: text[i+1:]}
 		if t.modifier == "redirect" || t.modifier == "exp" {
 			t.problem = domainSpec(t.domain)
+		} else {
+			t.problem = macroString(t.domain)
 		}
 		return t
 	}
@@ -502,9 +504,29 @@ func domainSpec(spec string) string {
 	if spec == "" {
 		return "an empty domain"
 	}
+	if problem := macroString(spec); problem != "" {
+		return problem
+	}
+	if strings.Contains(spec, "%{") {
+		return ""
+	}
+
+	name := strings.TrimSuffix(spec, ".")
+	labels := strings.Split(name, ".")
+	top := labels[len(labels)-1]
+	if len(labels) < 2 || len(name) > 253 || strings.Trim(top, "0123456789") == "" ||
+		slices.ContainsFunc(labels, func(label string) bool { return label == "" || len(label) > 63 }) {
+		return spec + " is no domain a check can look up"
+	}
+	return ""
+}
+
+// macroString says why text is no macro-string, the value of any modifier,
+// empty where it is one (RFC 7208 7.1).
+func macroString(spec string) string {
 	for i := 0; i < len(spec); i++ {
 		if spec[i] < '!' || spec[i] > '~' {
-			return spec + " is no domain a check can look up"
+			return spec + " holds a byte that is not printable ASCII"
 		}
 		if spec[i] != '%' {
 			continue
@@ -524,17 +546,6 @@ func domainSpec(spec string) string {
 		default:
 			return spec + " has a % that starts no macro"
 		}
-	}
-	if strings.Contains(spec, "%{") {
-		return ""
-	}
-
-	name := strings.TrimSuffix(spec, ".")
-	labels := strings.Split(name, ".")
-	top := labels[len(labels)-1]
-	if len(labels) < 2 || len(name) > 253 || strings.Trim(top, "0123456789") == "" ||
-		slices.ContainsFunc(labels, func(label string) bool { return label == "" || len(label) > 63 }) {
-		return spec + " is no domain a check can look up"
 	}
 	return ""
 }

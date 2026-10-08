@@ -197,7 +197,17 @@ func TestCheck(t *testing.T) {
 		name:   "a domain with a byte past ASCII",
 		zone:   zone{"example.com. TXT": {`"v=spf1 include:\195\169.example.net -all"`}},
 		result: trace.SPFPermError,
-		why:    "is no domain a check can look up",
+		why:    "holds a byte that is not printable ASCII",
+	}, {
+		name:   "a modifier nobody defined, with a byte past ASCII",
+		zone:   zone{"example.com. TXT": {`"v=spf1 foo=\190 -all"`}},
+		result: trace.SPFPermError,
+		why:    "holds a byte that is not printable ASCII",
+	}, {
+		name:   "a modifier nobody defined, with a macro that does not parse",
+		zone:   zone{"example.com. TXT": {"v=spf1 foo=%{x} -all"}},
+		result: trace.SPFPermError,
+		why:    "has a macro that does not parse",
 	}, {
 		name:   "a domain with an empty label",
 		zone:   zone{"example.com. TXT": {"v=spf1 include:a..example.net -all"}},
@@ -399,5 +409,108 @@ func TestKinds(t *testing.T) {
 	}
 	if want := "ip4 ip6 mx a exp foo all"; strings.Join(kinds, " ") != want {
 		t.Errorf("kinds %q, want %q", kinds, want)
+	}
+}
+
+// FuzzCheck reads a policy at the name, and another at every name it points
+// to, as octets the zones chose. Whatever they hold, the check stays inside
+// its budget, says one of its results, escapes what it draws, and calls ok
+// only a policy every term of which parses (RFC 7208 4.6.1, 12) within the
+// limits of 4.6.4.
+func FuzzCheck(f *testing.F) {
+	for _, seed := range [][2]string{
+		{"v=spf1 ip4:192.0.2.0/24 ip6:2001:db8::/32 -all", ""},
+		{"v=spf1 include:_spf.example.net ptr exists:%{i}.x.example.com +all mx", "v=spf1 ip4:192.0.2.0/24 ?all"},
+		{"v=spf1 a mx/24//64 redirect=_spf.example.net", "v=spf1 include:loop.example.net -all"},
+		{"V=SPF1 IP4:192.0.2.1 ~MX/24 a:x.example.com//64 exp=why.example.com foo=bar ?all", ""},
+		{"v=spf1 exists:%{ir.}.%{d2}.%{L-}._spf.example.com -all", "v=spf1"},
+		{"v=spf1 \xc4\xb0nclude:x.example.net a\tinclude:x -all", "v=spf1 -all"},
+		{"v=spf1 include:\xc3\xa9.example.net include:a..example.net -all", ""},
+		{`v=spf1 \999-all "x"`, "v=spf1 redirect=a.example.net redirect=b.example.net"},
+	} {
+		f.Add(seed[0], seed[1])
+	}
+	f.Fuzz(func(t *testing.T, policy, followed string) {
+		const budget = 16
+		asked := 0
+		lookup := func(_ context.Context, name, qtype string) *trace.Resolver {
+			asked++
+			answer := &trace.Resolver{Rcode: "NOERROR"}
+			switch qtype {
+			case "TXT":
+				text := followed
+				if name == "example.com." {
+					text = policy
+				}
+				answer.Records = []trace.RR{{Name: name, Type: qtype, Data: written(text)}}
+			case "A":
+				answer.Records = []trace.RR{{Name: name, Type: qtype, Data: "192.0.2.1"}}
+			case "MX":
+				answer.Records = []trace.RR{{Name: name, Type: qtype, Data: "10 mx.example.net."}}
+			}
+			return answer
+		}
+		got := spf.Check(t.Context(), "example.com", lookup, budget)
+
+		if asked > budget {
+			t.Errorf("%d queries, past the budget of %d", asked, budget)
+		}
+		switch got.Result {
+		case trace.SPFOK, trace.SPFNone, trace.SPFPermError, trace.SPFTempError, trace.SPFUndecided:
+		default:
+			t.Fatalf("result %q is none a check comes to", got.Result)
+		}
+		if got.Result == trace.SPFOK {
+			if got.Why != "" || got.Lookups > trace.SPFLookupLimit || got.Void > trace.SPFVoidLimit {
+				t.Errorf("ok with %d lookups and %d void (%s)", got.Lookups, got.Void, got.Why)
+			}
+			walkTerms(got.Terms, func(term trace.SPFTerm) {
+				if term.Kind == "" || term.Fatal {
+					t.Errorf("ok, with a term that fails: %q (%s)", term.Term, term.Problem)
+				}
+				if i := strings.IndexFunc(term.Term, func(r rune) bool { return r < '!' || r > '~' }); i >= 0 {
+					t.Errorf("ok, with a term the grammar has no room for: %q", term.Term)
+				}
+			})
+		}
+
+		shown := got.Shown()
+		drawn := []string{shown.Name, shown.Record, shown.Why}
+		walkTerms(shown.Terms, func(term trace.SPFTerm) {
+			drawn = append(drawn, term.Term, term.Kind, term.Target, term.Record, term.Problem)
+			drawn = append(drawn, term.Found...)
+		})
+		for _, text := range drawn {
+			if i := strings.IndexFunc(text, func(r rune) bool { return r < ' ' || r > '~' }); i >= 0 {
+				t.Errorf("drawn unescaped: %q", text)
+			}
+		}
+	})
+}
+
+// written is text the way the codec writes TXT rdata: quoted, with a quote
+// and a backslash escaped and every other byte past printable ASCII as \DDD.
+func written(text string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for i := 0; i < len(text); i++ {
+		switch c := text[i]; {
+		case c == '"' || c == '\\':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		case c < ' ' || c > '~':
+			fmt.Fprintf(&b, "\\%03d", c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+func walkTerms(terms []trace.SPFTerm, visit func(trace.SPFTerm)) {
+	for _, term := range terms {
+		visit(term)
+		walkTerms(term.Terms, visit)
 	}
 }
