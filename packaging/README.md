@@ -105,6 +105,18 @@ and zips it with [`lambda/bootstrap`](lambda/bootstrap), the script Lambda
 starts, into `build/`, one zip per architecture in `LAMBDA_ARCHES`. It is
 uploaded by hand: CI builds it, and nothing publishes it.
 
+## The plugin
+
+[`plugin/`](plugin/) is a Claude Code plugin holding one skill, which teaches a
+model to run dnstree. It is not built or released: Claude Code reads it straight
+from the repository through
+[`.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json), which
+has to sit at the root for `/plugin marketplace add rafaeljusto/dnstree` to
+find it. The plugin carries no version, so an install follows the commit it
+was taken from. `TestSkillFlagsExist` and `TestSkillCommandsParse` hold the
+skill to the usage, the way `TestExampleParses` holds the example file.
+`claude plugin validate .` checks the manifests.
+
 ## The release notes
 
 [`install.md`](install.md) is the install section appended to every release

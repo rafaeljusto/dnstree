@@ -1,0 +1,11 @@
+{
+  "name": "dnstree",
+  "description": "Let the model diagnose a domain's DNS with dnstree: delegations, DNSSEC, mail, CAA, propagation and zone health, walked from the root servers down.",
+  "author": {
+    "name": "Rafael Dantas Justo"
+  },
+  "homepage": "https://github.com/rafaeljusto/dnstree",
+  "repository": "https://github.com/rafaeljusto/dnstree",
+  "license": "MIT",
+  "keywords": ["dns", "dnssec", "diagnostics"]
+}

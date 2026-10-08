@@ -1070,6 +1070,29 @@ timeout = 3s</pre>
       value.
       <a href="https://github.com/rafaeljusto/dnstree/blob/main/dnstreerc.example">dnstreerc.example</a>
       carries every setting worth making, annotated and commented out.</p>
+
+      <h3 style="margin-top:2.2rem">Hand it to your assistant</h3>
+      <p class="section-lede">A skill teaches a model which flags answer which
+      question, how to read the exit codes, and what not to run without asking.
+      In Claude Code:</p>
+
+      <div class="installs">
+        <div class="cmd">
+          <span class="what">claude</span>
+          <code>/plugin marketplace add rafaeljusto/dnstree</code>
+          <button class="copy" type="button">copy</button>
+        </div>
+        <div class="cmd">
+          <span class="what">claude</span>
+          <code>/plugin install dnstree@dnstree</code>
+          <button class="copy" type="button">copy</button>
+        </div>
+      </div>
+
+      <p class="section-lede" style="margin-top:1.2rem">Other agents that read
+      <code>SKILL.md</code> folders can copy
+      <a href="https://github.com/rafaeljusto/dnstree/tree/main/packaging/plugin/skills/dnstree">the skill</a>
+      as it is. The model runs the dnstree you installed above.</p>
     </section>
 
     <section id="try">

@@ -1,0 +1,16 @@
+{
+  "name": "dnstree",
+  "owner": {
+    "name": "Rafael Dantas Justo"
+  },
+  "metadata": {
+    "description": "dnstree, the DNS path tool, as a skill for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "dnstree",
+      "source": "./packaging/plugin",
+      "description": "Let the model diagnose a domain's DNS with dnstree: delegations, DNSSEC, mail, CAA, propagation and zone health, walked from the root servers down."
+    }
+  ]
+}

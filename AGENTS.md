@@ -14,6 +14,9 @@ The repository ships its own skills in `.agents/skills/` (linked from
 over a general-purpose skill that does something similar: they know the rules
 this file sets down, and the others do not.
 
+`packaging/plugin/skills/dnstree` is not one of them: it ships to users, and
+teaches their models to run the tool, not to work on it.
+
 ## Before handing work back
 
 ```bash
@@ -258,6 +261,11 @@ is why every setting in the file is written as `name = value` and why settings
 that contradict each other are kept apart by a line of prose. What the test
 cannot notice is a new flag missing from the file: it is a menu rather than the
 surface, and a flag worth setting every day belongs on it.
+
+The plugin's skill is held the same way: `TestSkillFlagsExist` fails on a flag
+it names that the usage does not, and `TestSkillCommandsParse` parses every
+command it shows. A flag that answers a question users bring to a model belongs
+in its table.
 
 ## Style
 

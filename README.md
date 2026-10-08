@@ -43,6 +43,7 @@ broken, how long each hop took, which AS announces each address, and whether
 the chain of trust holds.
 
 - [Installing](#installing)
+  - [For an AI assistant](#for-an-ai-assistant)
 - [Using it](#using-it)
   - [Reverse lookups](#reverse-lookups)
   - [Exit codes](#exit-codes)
@@ -90,6 +91,21 @@ brew install --formula ./dnstree.rb
 ```
 
 </details>
+
+### For an AI assistant
+
+A [skill](packaging/plugin/skills/dnstree/SKILL.md) teaches a model which
+flags answer which question, how to read the exit codes, and what not to run
+without asking. In Claude Code:
+
+```
+/plugin marketplace add rafaeljusto/dnstree
+/plugin install dnstree@dnstree
+```
+
+Other agents that read `SKILL.md` folders can copy
+[`packaging/plugin/skills/dnstree/`](packaging/plugin/skills/dnstree/) into
+their skills directory. Either way, dnstree itself has to be installed.
 
 ## Using it
 
