@@ -298,3 +298,96 @@ ns    IN A    127.0.0.1
 		t.Errorf("asked %d times, got %+v; want once, and the silence said", carrier.asked, got)
 	}
 }
+
+// probeZone serves the root's SOA and the broken name. A rewriting resolver is
+// played by serving the made-up name too.
+const probeZone = `
+@                  IN SOA  ns.test. hostmaster.test. 1 7200 3600 1209600 3600
+@                  IN NS   ns.test.
+dnssec-failed.org. IN A    192.0.2.20
+`
+
+func TestProbe(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		zone      string
+		behaviour fakens.Behaviour
+		check     func(*testing.T, *trace.Behaviour)
+	}{
+		"a validating resolver is asked the broken name again unchecked": {
+			zone:      probeZone,
+			behaviour: fakens.Behaviour{ServFailUnlessCD: true},
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if found.Broken.Rcode != "SERVFAIL" || found.Broken.Unchecked == nil ||
+					found.Broken.Unchecked.Rcode != "NOERROR" {
+					t.Errorf("got %+v, want SERVFAIL and then an answer unchecked", found.Broken)
+				}
+			},
+		},
+		"a resolver that answers is not asked again": {
+			zone: probeZone,
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if found.Broken.Rcode != "NOERROR" || found.Broken.Unchecked != nil {
+					t.Errorf("got %+v, want one answer", found.Broken)
+				}
+				if found.Missing.Rcode != "NXDOMAIN" {
+					t.Errorf("got %s for the missing name, want NXDOMAIN", found.Missing.Rcode)
+				}
+				if found.Root.Rcode != "NOERROR" || found.Root.Authentic {
+					t.Errorf("got %+v for the root, want an answer not marked authentic", found.Root)
+				}
+			},
+		},
+		"the AD bit is kept": {
+			zone:      probeZone,
+			behaviour: fakens.Behaviour{Authentic: true},
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if !found.Root.Authentic {
+					t.Errorf("got %+v for the root, want it marked authentic", found.Root)
+				}
+			},
+		},
+		"a rewritten name that cannot exist keeps its address": {
+			zone: probeZone + "dnstree-0123456789abcdef.com. IN A 198.51.100.1\n",
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if found.Missing.Rcode != "NOERROR" || len(found.Missing.Records) == 0 {
+					t.Errorf("got %+v, want the address handed out for it", found.Missing)
+				}
+			},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			server := fakens.New(t, fakens.Config{Origin: ".", Zone: test.zone, Behaviour: test.behaviour})
+			found := transport.Probe(t.Context(), transport.NewUDP(transport.Config{}), server.Addr,
+				"dnstree-0123456789abcdef.com.")
+			test.check(t, found)
+
+			// DNSSEC is asked for where an answer is read for it, and only there.
+			for _, query := range server.Queries() {
+				if want := query.Name != "dnstree-0123456789abcdef.com."; query.DO != want {
+					t.Errorf("got %+v, want DO %t", query, want)
+				}
+			}
+		})
+	}
+}
+
+func TestProbeSilent(t *testing.T) {
+	t.Parallel()
+
+	carrier := transport.NewUDP(transport.Config{Timeout: 200 * time.Millisecond})
+	start := time.Now()
+	found := transport.Probe(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:1"), "x.com.")
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("took %s, want one timeout for the questions asked together", took)
+	}
+	for _, answer := range []*trace.Resolver{found.Broken, found.Root, found.Missing} {
+		if answer == nil || answer.Err == "" {
+			t.Errorf("got %+v, want the silence carried in the result", answer)
+		}
+	}
+}

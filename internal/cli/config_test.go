@@ -323,6 +323,28 @@ func TestParseDefaultsDDR(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsBehaviour covers a file that checks the resolvers on a run
+// that asks none: the setting waits for a run that does.
+func TestParseDefaultsBehaviour(t *testing.T) {
+	path := write(t, "check-resolver\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--no-compare", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Behave {
+		t.Error("got --check-resolver on a run that asks no resolver, want it left for one that does")
+	}
+
+	got, err = cli.Parse([]string{"--config", path, "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !got.Behave {
+		t.Error("got no --check-resolver on a run that asks a resolver, want the file's setting")
+	}
+}
+
 // TestParseDefaultsFrom covers a walk already made under a file that sets what
 // only a walk being made can use: the file's live drawing, watch and comparison
 // are about the walks it makes, and give way rather than refuse the run.

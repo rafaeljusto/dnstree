@@ -99,6 +99,17 @@ func (r *Resolver) Shown() *Resolver {
 	shown.Extended = shownExtended(r.Extended)
 	shown.Unchecked = r.Unchecked.Shown()
 	shown.DDR = r.DDR.Shown()
+	shown.Behaviour = r.Behaviour.Shown()
+	return &shown
+}
+
+// Shown is the behaviour with every answer it rests on escaped.
+func (b *Behaviour) Shown() *Behaviour {
+	if b == nil {
+		return nil
+	}
+	shown := *b
+	shown.Broken, shown.Root, shown.Missing = b.Broken.Shown(), b.Root.Shown(), b.Missing.Shown()
 	return &shown
 }
 

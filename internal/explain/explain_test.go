@@ -1049,6 +1049,38 @@ func TestDesignations(t *testing.T) {
 	}
 }
 
+// TestBehaviours covers what --check-resolver caught resolvers doing. Only
+// the habits that cost whoever uses the resolver are findings.
+func TestBehaviours(t *testing.T) {
+	resolver := func(ip string, seen *trace.Behaviour) *trace.Resolver {
+		return &trace.Resolver{Server: trace.Server{IP: netip.MustParseAddr(ip), Port: 53}, Rcode: "NOERROR", Behaviour: seen}
+	}
+
+	tr := walk(answered(300))
+	tr.Resolvers = []*trace.Resolver{
+		resolver("192.0.2.53", &trace.Behaviour{Validates: trace.ObservedNo, Rewrites: trace.ObservedYes,
+			Missing: &trace.Resolver{Rcode: "NOERROR", Records: []trace.RR{{Name: "x.com.", Type: "A", Data: "198.51.100.1"}}}}),
+		resolver("192.0.2.54", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo}),
+		resolver("192.0.2.55", &trace.Behaviour{Validates: trace.ObservedUnknown, Rewrites: trace.ObservedUnknown}),
+		resolver("192.0.2.56", nil),
+	}
+
+	got := said(tr)
+	for _, want := range []string{
+		"192.0.2.53 does not validate DNSSEC: it answered dnssec-failed.org",
+		"192.0.2.53 rewrites NXDOMAIN: a made-up name came back as 198.51.100.1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("got %q, want it to say %q", got, want)
+		}
+	}
+	for _, unsaid := range []string{"192.0.2.54", "192.0.2.55", "192.0.2.56"} {
+		if strings.Contains(got, unsaid) {
+			t.Errorf("got %q, want nothing about %s", got, unsaid)
+		}
+	}
+}
+
 // dangling is a walk ending on a hop that showed a name left pointing at
 // something nobody holds.
 func dangling(kind trace.StepKind, left *trace.Dangling) *trace.Trace {

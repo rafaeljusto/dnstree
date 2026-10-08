@@ -57,7 +57,7 @@ func Read(r io.Reader) (*trace.Trace, error) {
 		return nil, fmt.Errorf("jsonout: started: %w", err)
 	}
 	for _, from := range doc.Resolvers {
-		answer, err := readResolver(from)
+		answer, err := readResolver(from, true)
 		if err != nil {
 			return nil, err
 		}
@@ -262,9 +262,14 @@ func timed(from *step) bool {
 	return slices.ContainsFunc(from.Children, timed)
 }
 
-func readResolver(from *resolver) (*trace.Resolver, error) {
+// readResolver reads one resolver's answer. Only the answer to the question
+// itself may carry a behaviour: the answers a behaviour rests on are its own.
+func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 	if from == nil {
 		return nil, errors.New("jsonout: a resolver with nothing in it")
+	}
+	if from.Behaviour != nil && !top {
+		return nil, errors.New("jsonout: a behaviour inside the answers another rests on")
 	}
 	match := trace.Match(from.Match)
 	switch match {
@@ -297,6 +302,8 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 		Match:    match,
 		Kept:     kept,
 		Failed:   failed,
+
+		Authentic: from.Authentic,
 	}
 	if to.Elapsed, err = duration("elapsed_ms", from.ElapsedMS); err != nil {
 		return nil, err
@@ -311,9 +318,40 @@ func readResolver(from *resolver) (*trace.Resolver, error) {
 		return nil, err
 	}
 	if from.Unchecked != nil {
-		if to.Unchecked, err = readResolver(from.Unchecked); err != nil {
+		if to.Unchecked, err = readResolver(from.Unchecked, false); err != nil {
 			return nil, err
 		}
+	}
+	if to.Behaviour, err = readBehaviour(from.Behaviour); err != nil {
+		return nil, err
+	}
+	return to, nil
+}
+
+func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
+	if from == nil {
+		return nil, nil
+	}
+	to := &trace.Behaviour{Validates: trace.Observed(from.Validates), Rewrites: trace.Observed(from.Rewrites)}
+	for _, seen := range []trace.Observed{to.Validates, to.Rewrites} {
+		switch seen {
+		case trace.ObservedYes, trace.ObservedNo, trace.ObservedUnknown:
+		default:
+			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
+		}
+	}
+	for _, answer := range []struct {
+		from *resolver
+		to   **trace.Resolver
+	}{{from.Broken, &to.Broken}, {from.Root, &to.Root}, {from.Missing, &to.Missing}} {
+		if answer.from == nil {
+			continue
+		}
+		read, err := readResolver(answer.from, false)
+		if err != nil {
+			return nil, err
+		}
+		*answer.to = read
 	}
 	return to, nil
 }

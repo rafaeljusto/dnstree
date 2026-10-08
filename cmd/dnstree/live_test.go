@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // TestLive resolves a name that has been there for decades, the whole way down
@@ -29,5 +31,17 @@ func TestLive(t *testing.T) {
 	}
 	if strings.Contains(out, "[bogus") {
 		t.Errorf("got a broken chain of trust:\n%s", out)
+	}
+}
+
+// TestLiveBrokenOnPurpose checks that the name --check-resolver reads a
+// resolver's validation from is still broken. Fixed, the check reads as
+// unknown rather than wrong, and only this notices.
+func TestLiveBrokenOnPurpose(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := run(t.Context(), []string{"--dnssec", "--no-asn", "--no-compare", "--color", "never", transport.BrokenName, "A"}, &stdout, &stderr)
+	if code != exitBogus {
+		t.Fatalf("got exit %d, want %d: %s is no longer broken\n%s%s", code, exitBogus, transport.BrokenName, stdout.String(), stderr.String())
 	}
 }

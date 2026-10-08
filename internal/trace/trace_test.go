@@ -227,7 +227,7 @@ var readChecked = map[string]bool{
 	"Area": true, "CSYNCState": true, "CookieState": true, "DNSSECState": true,
 	"DanglingKind": true, "EDNSFault": true, "EDNSKind": true, "EDNSState": true,
 	"Failure": true, "Grade": true, "Kept": true, "Match": true,
-	"ProbeKind": true, "ProbeState": true, "RegistrationState": true,
+	"Observed": true, "ProbeKind": true, "ProbeState": true, "RegistrationState": true,
 	"SPFResult": true, "SignalState": true, "StepKind": true,
 }
 

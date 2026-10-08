@@ -92,6 +92,7 @@ whole; `dnstree --schema` describes every field.
 | when the domain registration expires | `dnstree --format markdown --rdap NAME` |
 | whether the zone survives losing a server | `dnstree --format markdown --without SERVER NAME` |
 | what public resolvers answer | `dnstree --format markdown --resolver 1.1.1.1 --resolver 8.8.8.8 NAME` |
+| whether a resolver validates DNSSEC or rewrites NXDOMAIN | `dnstree --format markdown --check-resolver --resolver 1.1.1.1 NAME` |
 | the name of an address | `dnstree --format markdown -x 192.0.2.1` |
 
 `TYPE` defaults to `A`; give `AAAA`, `MX`, `TXT` and so on after the name.

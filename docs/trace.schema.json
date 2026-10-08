@@ -572,7 +572,41 @@
           "type": "string",
           "enum": ["bogus", "validation", "cached", "unreachable"]
         },
-        "ddr": { "$ref": "#/$defs/discovery" }
+        "ddr": { "$ref": "#/$defs/discovery" },
+        "authentic": {
+          "description": "The AD bit of its answer: the resolver says it validated what it handed back (RFC 4035). A claim, worth only as much as the path to the resolver.",
+          "type": "boolean"
+        },
+        "behaviour": { "$ref": "#/$defs/behaviour" }
+      }
+    },
+    "behaviour": {
+      "description": "What --check-resolver saw the resolver do, present only where it asked, with the answers it rests on.",
+      "type": "object",
+      "required": ["validates", "rewrites"],
+      "properties": {
+        "validates": {
+          "description": "yes, it refused dnssec-failed.org and answered it once told not to check; no, it answered that name and marked not even the root authentic; unknown, the answers leave it open.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "rewrites": {
+          "description": "yes, a made-up name under com came back with an address; no, it came back NXDOMAIN; unknown, anything else.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "broken": {
+          "description": "dnssec-failed.org. A, asked with DNSSEC, with unchecked present after a SERVFAIL.",
+          "$ref": "#/$defs/resolver"
+        },
+        "root": {
+          "description": "The root's SOA, asked with DNSSEC.",
+          "$ref": "#/$defs/resolver"
+        },
+        "missing": {
+          "description": "The address of the made-up name.",
+          "$ref": "#/$defs/resolver"
+        }
       }
     },
     "discovery": {

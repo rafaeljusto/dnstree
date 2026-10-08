@@ -178,6 +178,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--ddr", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DDR: true},
 		},
+		"a walk that checks how the resolvers behave": {
+			args: []string{"--check-resolver", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Behave: true},
+		},
 		"a report sent through a resolver nothing else asks": {
 			args: []string{"--report", "--dnssec", "--no-asn", "--no-compare", "--resolver", "192.0.2.53", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Report: true,
@@ -396,6 +400,8 @@ func TestParseRejects(t *testing.T) {
 		"certificates matched, nothing proved":     {"--mail", "--tlsa", "example.com"},
 		"designations asked of no resolver":        {"--ddr", "--no-compare", "example.com"},
 		"a walk already made, asked for ddr":       {"--from", "walk.json", "--ddr"},
+		"resolvers checked that nothing asks":      {"--check-resolver", "--no-compare", "example.com"},
+		"a walk made, asked to check resolvers":    {"--from", "walk.json", "--check-resolver"},
 		"a report with no chain of trust to break": {"--report", "example.com"},
 		"a trial with no zone":                     {"--try-ns", "ns1.new.net", "example.com"},
 		"a trial of two zones at once":             {"--try-ns", "example.com=ns1.new.net", "--try-ns", "example.org=ns1.new.net", "example.com"},

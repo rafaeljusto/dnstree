@@ -144,6 +144,7 @@ func Findings(tr *trace.Trace) []Finding {
 	}
 	findings = append(findings, failures(tr)...)
 	findings = append(findings, designations(tr)...)
+	findings = append(findings, behaviours(tr)...)
 	return findings
 }
 
@@ -1156,6 +1157,36 @@ func designations(tr *trace.Trace) []Finding {
 			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
 				"%s says it can also be reached encrypted, over %s at %s; trust it only once the certificate there names %s, which --ddr does not check",
 				who, offers, list(targets), who)})
+		}
+	}
+	return findings
+}
+
+// behaviours are the habits --check-resolver caught a resolver in that cost
+// whoever uses it. What it does right, and what the answers left open, are on
+// its line under the tree.
+func behaviours(tr *trace.Trace) []Finding {
+	var findings []Finding
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Behaviour == nil {
+			continue
+		}
+		who, seen := at2(answer.Server), answer.Behaviour
+		if seen.Validates == trace.ObservedNo {
+			findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+				"%s does not validate DNSSEC: it answered dnssec-failed.org, whose chain of trust is broken on purpose, so a forged answer for a signed name reaches whoever uses it as though it were real",
+				who)})
+		}
+		if seen.Rewrites == trace.ObservedYes {
+			came := "with an answer"
+			if seen.Missing != nil {
+				if addresses := trace.Answers(seen.Missing.Records, "A"); len(addresses) > 0 {
+					came = "as " + list(addresses)
+				}
+			}
+			findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+				"%s rewrites NXDOMAIN: a made-up name came back %s, which breaks whatever relies on being told a name does not exist; use another resolver",
+				who, came)})
 		}
 	}
 	return findings

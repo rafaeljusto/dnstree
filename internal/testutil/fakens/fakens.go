@@ -133,6 +133,10 @@ type Behaviour struct {
 	// the way a validating resolver answers a name whose chain it finds
 	// broken. With CD set it answers as it would have.
 	ServFailUnlessCD bool
+
+	// Authentic sets AD on every answer, the way a validating resolver marks
+	// what it checked.
+	Authentic bool
 }
 
 // Cookies is how a server answers a DNS cookie.
@@ -509,6 +513,9 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		}
 	}
 
+	if s.behaviour.Authentic && reply.Rcode == dns.RcodeSuccess {
+		reply.AuthenticatedData = true
+	}
 	if s.behaviour.EchoEDNSFlags {
 		reply.Z = req.Z
 	}

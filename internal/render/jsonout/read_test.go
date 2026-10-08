@@ -133,6 +133,25 @@ func TestReadRoundTrip(t *testing.T) {
 				DDR:    &trace.Discovery{Err: "i/o timeout"},
 			}},
 		},
+		"resolvers checked for how they behave": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+				Rcode:  "NOERROR", Authentic: true,
+				Behaviour: &trace.Behaviour{
+					Validates: trace.ObservedYes, Rewrites: trace.ObservedYes,
+					Broken: &trace.Resolver{Rcode: "SERVFAIL", Unchecked: &trace.Resolver{Rcode: "NOERROR"}},
+					Root:   &trace.Resolver{Rcode: "NOERROR", Authentic: true},
+					Missing: &trace.Resolver{Rcode: "NOERROR",
+						Records: []trace.RR{{Name: "dnstree-x.com.", TTL: 60, Type: "A", Data: "198.51.100.1"}}},
+				},
+			}, {
+				Server:    trace.Server{IP: netip.MustParseAddr("192.0.2.54"), Port: 53},
+				Err:       "i/o timeout",
+				Behaviour: &trace.Behaviour{Validates: trace.ObservedUnknown, Rewrites: trace.ObservedUnknown},
+			}},
+		},
 		"resolvers whose TTLs said something of their copies": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -463,6 +482,17 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "rcode": "SERVFAIL", "unchecked": {"elapsed_ms": 1, "kept": "forever"}}]}`,
 			want: `"forever"`,
+		},
+		"a resolver seen to do something nothing here checks": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "sometimes", "rewrites": "no"}}]}`,
+			want: `"sometimes"`,
+		},
+		"a behaviour inside the answers another rests on": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no",
+					"root": {"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no"}}}}]}`,
+			want: "inside the answers",
 		},
 		"an address that is not one": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

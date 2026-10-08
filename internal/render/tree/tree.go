@@ -129,6 +129,7 @@ func (r *renderer) render(tr *trace.Trace) {
 	r.writeLines(r.failures(tr))
 	r.writeLines(r.kept(tr))
 	r.writeLines(r.designations(tr))
+	r.writeLines(r.behaviours(tr))
 	r.writeLines(r.authorities(tr.CAA))
 	r.writeLines(r.policy(tr.SPF))
 	r.writeLines(r.mailPath(tr.Mail))
@@ -765,6 +766,60 @@ func (r *renderer) designations(tr *trace.Trace) []string {
 			}
 			lines = append(lines, r.paint.paint(mark+who+" offers "+strings.Join(offers, ", "), green)+
 				r.paint.dim(" (not verified)"))
+		}
+	}
+	return lines
+}
+
+// behaviours are what --check-resolver saw each resolver do, one line each.
+// A habit the answers left open is said as unknown, never guessed at.
+func (r *renderer) behaviours(tr *trace.Trace) []string {
+	var lines []string
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Behaviour == nil {
+			continue
+		}
+		mark := "resolver: "
+		if r.glyphs.icons {
+			mark = spaced("🧪")
+		}
+		who, seen := "the resolver", answer.Behaviour
+		if answer.Server.IP.IsValid() {
+			who = answer.Server.IP.String()
+		}
+
+		var said []string
+		switch seen.Validates {
+		case trace.ObservedYes:
+			said = append(said, "validates DNSSEC")
+		case trace.ObservedNo:
+			said = append(said, "does not validate DNSSEC")
+		default:
+			said = append(said, "may or may not validate DNSSEC")
+		}
+		switch seen.Rewrites {
+		case trace.ObservedYes:
+			rewritten := "rewrites NXDOMAIN"
+			if seen.Missing != nil {
+				if addresses := trace.Answers(seen.Missing.Records, "A"); len(addresses) > 0 {
+					rewritten += " to " + strings.Join(addresses, ", ")
+				}
+			}
+			said = append(said, rewritten)
+		case trace.ObservedNo:
+			said = append(said, "leaves NXDOMAIN alone")
+		default:
+			said = append(said, "may or may not rewrite NXDOMAIN")
+		}
+
+		line := mark + who + " " + strings.Join(said, " and ")
+		switch {
+		case seen.Validates == trace.ObservedNo || seen.Rewrites == trace.ObservedYes:
+			lines = append(lines, r.paint.paint(line, yellow))
+		case seen.Validates == trace.ObservedYes && seen.Rewrites == trace.ObservedNo:
+			lines = append(lines, r.paint.paint(line, green))
+		default:
+			lines = append(lines, r.paint.dim(line))
 		}
 	}
 	return lines

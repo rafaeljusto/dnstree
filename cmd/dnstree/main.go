@@ -5,6 +5,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -428,6 +429,7 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	if timed != nil {
 		tr.Resolvers = <-timed
 		recursive.Compare(tr)
+		recursive.Behave(tr)
 	}
 	if cfg.Report {
 		report(ctx, cfg, tr)
@@ -948,10 +950,14 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		// that the same command draws the same line twice running.
 		answers := make([]*trace.Resolver, len(servers))
 		discovered := make([]*trace.Discovery, len(servers))
+		behaved := make([]*trace.Behaviour, len(servers))
 		var wait sync.WaitGroup
 		for i, server := range servers {
 			if cfg.DDR {
 				wait.Go(func() { discovered[i] = transport.Discover(ctx, carrier, fallback, server) })
+			}
+			if cfg.Behave {
+				wait.Go(func() { behaved[i] = transport.Probe(ctx, carrier, server, missingName()) })
 			}
 			wait.Go(func() {
 				answer, err := transport.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
@@ -977,6 +983,7 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		for i, answer := range answers {
 			if answer != nil {
 				answer.DDR = discovered[i]
+				answer.Behaviour = behaved[i]
 			}
 		}
 
@@ -986,6 +993,13 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		timed <- slices.DeleteFunc(answers, func(answer *trace.Resolver) bool { return answer == nil })
 	}()
 	return timed
+}
+
+// missingName is a name under com that cannot exist: random enough that no
+// one registered it, and fresh for every resolver, so none answers it from a
+// cache another asked to fill.
+func missingName() string {
+	return "dnstree-" + strings.ToLower(rand.Text()) + ".com."
 }
 
 // asnLookup is where the origin AS lookups go. A nil lookup leaves asn.New to

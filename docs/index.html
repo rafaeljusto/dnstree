@@ -965,6 +965,11 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
       encrypted too (RFC&nbsp;9462), and says under the tree what it offers: DoT, DoH or DoQ,
       at which name and port. It only asks, and connects to none of it, so every offer is
       marked as not verified.</p>
+      <p class="section-lede"><code>--check-resolver</code> sees what each of them does with
+      what it is asked: whether it refuses <code>dnssec-failed.org</code>, whose chain of
+      trust is broken on purpose, and whether a made-up name comes back NXDOMAIN or as the
+      address of a page of its own. What the answers leave open is said as "may or may not",
+      never guessed.</p>
 
       <h3 style="margin-top:2.2rem">Leave it running</h3>
       <p class="section-lede"><code>--watch 30s</code> draws the tree once and then keeps

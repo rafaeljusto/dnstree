@@ -70,6 +70,7 @@ one after another, each from the root servers down.
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
   --ddr                   ask each resolver which encrypted resolvers stand for it
+  --check-resolver        see whether each resolver validates and rewrites NXDOMAIN
   --report                report a bogus chain to the agent the zone names (RFC 9567)
   --format FORMAT         how to draw the walk: tree, waterfall, json, web; see below
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
@@ -483,6 +484,16 @@ connects to what is offered, so no certificate is checked and an offer is only
 what the plain resolver claims. It costs a query per resolver, and needs the
 comparison that --no-compare turns off.
 
+--check-resolver puts questions whose right answers are known to every resolver
+the question is timed against, and says under the tree what each one was seen
+to do. A resolver validates DNSSEC if it refuses dnssec-failed.org, whose chain
+of trust is broken on purpose, and answers once told not to check; it does not
+if it answers that name and marks nothing authentic, not even the root. It
+rewrites NXDOMAIN if a made-up name under com comes back with an address.
+Whatever the answers leave open is said as "may or may not", never guessed. It
+costs up to four queries per resolver, sets no exit code, and needs the
+comparison that --no-compare turns off.
+
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
 where that is unset), then ~/.dnstreerc. Each line of it is a long flag name and
@@ -543,6 +554,7 @@ type Config struct {
 	ASN      bool
 	Compare  bool
 	DDR      bool
+	Behave   bool
 	Report   bool
 	Format   string
 	Live     bool
@@ -776,6 +788,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
+	flags.BoolVar(&cfg.Behave, "check-resolver", false, "see whether each resolver validates and rewrites NXDOMAIN")
 	flags.BoolVar(&cfg.Report, "report", false, "tell the agent a zone names that its chain of trust is bogus")
 	flags.StringVar(&format, "format", "tree", orList(formatNames(nil)))
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")
@@ -1074,6 +1087,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.DDR = false
 	}
+	if cfg.Behave && !cfg.Compare {
+		if slices.Contains(typed, "check-resolver") {
+			return nil, fmt.Errorf("%w: --check-resolver checks the resolvers --no-compare leaves unasked", ErrUsage)
+		}
+		cfg.Behave = false
+	}
 	if cfg.Try != nil && cfg.Diff {
 		return nil, fmt.Errorf("%w: --diff remembers the DNS as it is, and --try-ns walks it as it is not", ErrUsage)
 	}
@@ -1201,7 +1220,7 @@ func several(cfg *Config, expecting bool) error {
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
-	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "report": true, "timeout": true, "retries": true,
+	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
 	"tls-ca": true, "tls-insecure": true,

@@ -196,6 +196,21 @@ type resolver struct {
 	Failed string `json:"failed,omitempty"`
 
 	DDR *discovery `json:"ddr,omitempty"`
+
+	// Authentic is the AD bit of its answer: what it says it validated.
+	Authentic bool `json:"authentic,omitempty"`
+
+	Behaviour *behaviour `json:"behaviour,omitempty"`
+}
+
+// behaviour is what --check-resolver saw the resolver do, and the answers
+// that rest on. Validates and Rewrites are "yes", "no" or "unknown".
+type behaviour struct {
+	Validates string    `json:"validates"`
+	Rewrites  string    `json:"rewrites"`
+	Broken    *resolver `json:"broken,omitempty"`
+	Root      *resolver `json:"root,omitempty"`
+	Missing   *resolver `json:"missing,omitempty"`
 }
 
 // discovery is what the resolver said of its encrypted selves (RFC 9462), none
@@ -503,6 +518,21 @@ func convertResolver(from *trace.Resolver) *resolver {
 		Unchecked: convertResolver(from.Unchecked),
 		Failed:    string(from.Failed),
 		DDR:       convertDiscovery(from.DDR),
+		Authentic: from.Authentic,
+		Behaviour: convertBehaviour(from.Behaviour),
+	}
+}
+
+func convertBehaviour(from *trace.Behaviour) *behaviour {
+	if from == nil {
+		return nil
+	}
+	return &behaviour{
+		Validates: string(from.Validates),
+		Rewrites:  string(from.Rewrites),
+		Broken:    convertResolver(from.Broken),
+		Root:      convertResolver(from.Root),
+		Missing:   convertResolver(from.Missing),
 	}
 }
 

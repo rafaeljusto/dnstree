@@ -157,6 +157,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--no-asn`](docs/guide/configuring.md#pointing-it-somewhere-else) | skip the origin AS lookups |
 | [`--no-compare`](docs/guide/resolvers.md#against-your-resolver) | skip the question put to a recursive resolver, and the comparison with it |
 | [`--ddr`](docs/guide/resolvers.md#whether-a-resolver-can-be-used-encrypted) | ask each resolver which encrypted resolvers stand for it (RFC 9462), and say what they offer |
+| [`--check-resolver`](docs/guide/resolvers.md#whether-a-resolver-validates-and-tells-the-truth-about-nxdomain) | see whether each resolver validates DNSSEC and whether it rewrites NXDOMAIN |
 | [`--format`](docs/guide/output.md#other-formats) | `tree` (the default), `ascii`, `emoji`, `waterfall`, `waterfall-ascii`, `waterfall-mermaid`, `markdown`, `json`, `dot`, `mermaid`, `openmetrics`, `web` or `web-3d` |
 | [`--web-addr`](docs/guide/output.md#other-formats), `--no-browser` | where `--format web` and `web-3d` serve the page, and whether a browser is opened at it |
 | [`--live`](docs/guide/output.md#watching-it-happen) | draw the tree as the walk makes it, hop by hop |

@@ -258,7 +258,43 @@ type Resolver struct {
 	// DDR is what the server said of its encrypted selves, nil where --ddr did
 	// not ask.
 	DDR *Discovery
+
+	// Authentic is the AD bit of its answer: the resolver says it validated
+	// what it handed back (RFC 4035). It is a claim, worth only as much as the
+	// path between here and the resolver.
+	Authentic bool
+
+	// Behaviour is how it handled the questions --check-resolver put to it, nil
+	// where nothing asked.
+	Behaviour *Behaviour
 }
+
+// Behaviour is how a resolver answered questions whose right answers are known
+// beforehand, which is the only way its habits show from outside. Each habit is
+// read from what came back, and a reply that could mean two things is Unknown.
+type Behaviour struct {
+	// Broken is a name whose chain of trust is broken on purpose, asked with
+	// DNSSEC, with Unchecked asked after a SERVFAIL. Root is the root's SOA,
+	// which a resolver that validates marks authentic.
+	Broken *Resolver
+	Root   *Resolver
+
+	// Missing is a name made up so that it cannot exist.
+	Missing *Resolver
+
+	Validates Observed
+	Rewrites  Observed
+}
+
+// Observed is whether a resolver was seen to do something.
+type Observed string
+
+// What a check came to.
+const (
+	ObservedYes     Observed = "yes"
+	ObservedNo      Observed = "no"
+	ObservedUnknown Observed = "unknown"
+)
 
 // Discovery is the answer to _dns.resolver.arpa (RFC 9462): the encrypted
 // resolvers a plain one designates. Nothing here connects to them, so none of

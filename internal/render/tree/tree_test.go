@@ -414,6 +414,56 @@ func designating() *trace.Trace {
 	return tr
 }
 
+// behaving is a walk timed against resolvers --check-resolver put its
+// questions to.
+func behaving() *trace.Trace {
+	tr := resolution()
+	at := func(ip string) trace.Server { return trace.Server{IP: netip.MustParseAddr(ip), Port: 53} }
+	rewritten := &trace.Resolver{Rcode: "NOERROR", Records: []trace.RR{
+		{Name: "dnstree-x.com.", Type: "A", Data: "198.51.100.2"},
+		{Name: "dnstree-x.com.", Type: "A", Data: "198.51.100.1"},
+	}}
+	tr.Resolvers = []*trace.Resolver{{
+		Server: at("192.0.2.53"), Rcode: "NOERROR",
+		Behaviour: &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo},
+	}, {
+		Server: at("192.0.2.54"), Rcode: "NOERROR",
+		Behaviour: &trace.Behaviour{Validates: trace.ObservedNo, Rewrites: trace.ObservedYes, Missing: rewritten},
+	}, {
+		Server: at("192.0.2.55"), Err: "i/o timeout",
+		Behaviour: &trace.Behaviour{Validates: trace.ObservedUnknown, Rewrites: trace.ObservedUnknown},
+	}, {
+		// Never checked: nothing to draw.
+		Server: at("192.0.2.56"), Rcode: "NOERROR",
+	}}
+	return tr
+}
+
+func TestRenderBehaviours(t *testing.T) {
+	var out bytes.Buffer
+	if err := tree.Render(&out, behaving(), tree.Options{Charset: tree.ASCII}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"resolver: 192.0.2.53 validates DNSSEC and leaves NXDOMAIN alone\n",
+		"resolver: 192.0.2.54 does not validate DNSSEC and rewrites NXDOMAIN to 198.51.100.1, 198.51.100.2\n",
+		"resolver: 192.0.2.55 may or may not validate DNSSEC and may or may not rewrite NXDOMAIN\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("got no %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "192.0.2.56") {
+		t.Errorf("got a line for a resolver never checked:\n%s", got)
+	}
+	for i, r := range got {
+		if r > 127 {
+			t.Fatalf("got %q at byte %d, want ASCII only", r, i)
+		}
+	}
+}
+
 func TestRenderDesignations(t *testing.T) {
 	var out bytes.Buffer
 	if err := tree.Render(&out, designating(), tree.Options{Charset: tree.ASCII}); err != nil {

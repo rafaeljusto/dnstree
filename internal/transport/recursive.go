@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"codeberg.org/miekg/dns"
@@ -118,6 +119,7 @@ func ask(ctx context.Context, carrier, fallback Transport, server netip.AddrPort
 		answer.Records = recursiveRecords(resp.Answer)
 		answer.Extended = Extended(resp)
 		answer.Subnet = EchoedSubnet(resp)
+		answer.Authentic = resp.AuthenticatedData
 	}
 	return answer, nil
 
@@ -141,6 +143,43 @@ func recursiveRecords(rrs []dns.RR) []trace.RR {
 		})
 	}
 	return records
+}
+
+// BrokenName is a name whose chain of trust is broken on purpose: its parent
+// publishes a DS that matches none of its keys. Comcast has kept it so since
+// 2010; a live test notices if that stops.
+const BrokenName = "dnssec-failed.org."
+
+// Probe asks server the questions whose right answers are known beforehand:
+// BrokenName and the root's SOA with DNSSEC, and missing, a name that cannot
+// exist. A SERVFAIL for BrokenName is asked again with checking disabled, which
+// tells a failed validation from a failure to get there. What the answers say
+// of the resolver is left to the reading of them.
+//
+// Nothing is asked again over a fallback: the answers are small, and a silent
+// resolver would hold the run up for a timeout per transport per question.
+func Probe(ctx context.Context, carrier Transport, server netip.AddrPort, missing string) *trace.Behaviour {
+	asked := func(name, qtype string, dnssec, unchecked bool) *trace.Resolver {
+		question := trace.Question{Name: name, Type: qtype, Class: "IN"}
+		answer, err := ask(ctx, carrier, nil, server, question, dnssec, netip.Prefix{}, 0, unchecked)
+		if err != nil {
+			return &trace.Resolver{Err: trace.Printable(err.Error(), trace.MaxErr)}
+		}
+		return answer
+	}
+
+	var found trace.Behaviour
+	var wait sync.WaitGroup
+	wait.Go(func() {
+		found.Broken = asked(BrokenName, "A", true, false)
+		if found.Broken.Rcode == "SERVFAIL" {
+			found.Broken.Unchecked = asked(BrokenName, "A", true, true)
+		}
+	})
+	wait.Go(func() { found.Root = asked(".", "SOA", true, false) })
+	wait.Go(func() { found.Missing = asked(missing, "A", false, false) })
+	wait.Wait()
+	return &found
 }
 
 // DDRName is where a resolver says which encrypted resolvers stand for it
