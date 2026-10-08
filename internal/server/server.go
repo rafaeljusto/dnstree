@@ -374,7 +374,10 @@ func canonical(name string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	if name == "" || len(name) > 253 || strings.ContainsAny(name, "/\\ \t") {
+	// An empty label is no name to walk, and a name of dots alone would be
+	// cleaned out of the path a redirect sends the browser to.
+	if name == "" || len(name) > 253 || slices.Contains(strings.Split(name, "."), "") ||
+		strings.ContainsFunc(name, func(r rune) bool { return r <= ' ' || r == 0x7f || r == '/' || r == '\\' }) {
 		return "", false
 	}
 	return name, true

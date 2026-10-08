@@ -122,6 +122,15 @@ func TestRoutes(t *testing.T) {
 		"the root, which a path cannot carry": {
 			path: "/walk?name=.&type=NS", wantStatus: http.StatusBadRequest,
 		},
+		"a name of dots, which a redirect would clean away": {
+			path: "/walk?name=..&type=A", wantStatus: http.StatusBadRequest,
+		},
+		"a name with a control character in it": {
+			path: "/walk?name=www%0D.example.com&type=A", wantStatus: http.StatusBadRequest,
+		},
+		"a name with an empty label": {
+			path: "/walk?name=a..example&type=A", wantStatus: http.StatusBadRequest,
+		},
 		"the scene": {
 			path: "/3d/www.example.com/A/", wantStatus: http.StatusOK, wantType: "text/html; charset=utf-8",
 			wantContent: `<canvas id="scene"`,
