@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -185,6 +186,45 @@ func TestTruncateFits(t *testing.T) {
 			}
 		}
 	}
+}
+
+// FuzzTruncate holds truncate to TestTruncateFits's promise over any text.
+// A line is UTF-8, and the only escapes it holds are the palette's own, since
+// Shown leaves no ESC or stray byte in what a zone wrote: here \x01 stands for
+// a colour and \x02 for its reset. A line that fits comes back whole; one that does not is cut where a
+// rune starts, outside an escape, and ends in the ellipsis and the reset.
+func FuzzTruncate(f *testing.F) {
+	f.Add("example.com.", 7)
+	f.Add("\x01example.com.\x02", 7)
+	f.Add("🌍 ab \U00020000\U0001F1FA\U0001F1F8 🛰️ A\u200dA e\u0301", 5)
+	f.Fuzz(func(t *testing.T, text string, cells int) {
+		cells %= 200
+		text = strings.NewReplacer("\x1b", "", "\x01", grey, "\x02", reset).Replace(strings.ToValidUTF8(text, "?"))
+		got := truncate(text, cells)
+
+		room := max(cells, 1)
+		if w := width(got); w > room {
+			t.Fatalf("%d columns of %q, want at most %d", w, got, room)
+		}
+		if width(text) <= room {
+			if got != text {
+				t.Fatalf("%q fits in %d, and came back as %q", text, room, got)
+			}
+			return
+		}
+		kept, ok := strings.CutSuffix(strings.TrimSuffix(got, reset), "…")
+		if !ok || !strings.HasPrefix(text, kept) {
+			t.Fatalf("%q is no cut of %q", got, text)
+		}
+		if !utf8.ValidString(kept) {
+			t.Fatalf("%q cuts a rune of %q", kept, text)
+		}
+		for _, code := range strings.Split(kept, "\x1b[")[1:] {
+			if !strings.ContainsFunc(code, func(r rune) bool { return r >= '@' && r <= '~' }) {
+				t.Fatalf("%q cuts an escape of %q", kept, text)
+			}
+		}
+	})
 }
 
 // width is what truncate counts, spelled out again so that the test does not
