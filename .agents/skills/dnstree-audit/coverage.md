@@ -298,3 +298,11 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   every string, and ok needs every term to parse within the 4.6.4 limits.
   Its first find, an unknown modifier's value never checked as a
   macro-string, is fixed and kept in `testdata/fuzz`.
+- dnstree-web `canonical` refuses an empty label, so a name of dots is never
+  cleaned out of the redirect, and every byte at or below a space and DEL, so
+  the address it redirects to is one it takes as it stands
+  (`FuzzRedirect`, its two finds kept in `testdata/fuzz`).
+- Fuzzed against a property, with nothing found: `jsonout.Read` into every
+  renderer and back (`FuzzRead`), the live line cut (`FuzzTruncate`), and the
+  DOT, Mermaid, markdown and OpenMetrics escapers read back as their consumer
+  would. `make fuzz` searches with all of them.
