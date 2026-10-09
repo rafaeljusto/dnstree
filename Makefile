@@ -4,7 +4,7 @@ NODE ?= node
 
 # golangci-lint comes from the PATH when it is there, and is fetched at the
 # pinned version when it is not.
-GOLANGCI_LINT_VERSION ?= v2.13.2
+GOLANGCI_LINT_VERSION ?= v2.14.0
 HADOLINT_VERSION ?= v2.15.1
 NFPM_VERSION ?= v2.47.0
 
