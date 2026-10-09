@@ -227,8 +227,8 @@ $ dnstree --check-resolver --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 4.2.
 🧪 8.8.8.8 validates DNSSEC and leaves NXDOMAIN alone
 🧪 8.8.8.8 sends ECS (/24) to google and akamai and minimises queries
 🧪 4.2.2.2 does not validate DNSSEC and leaves NXDOMAIN alone
-🧪 4.2.2.2 sends no ECS to google and may or may not minimise queries
-✔ answered in 2.4s · resolvers in 264ms-281ms · 6 queries · 3 servers
+🧪 4.2.2.2 sends no ECS to google or akamai and minimises queries
+✔ answered in 2.7s · resolvers in 263ms-263ms · 6 queries · 3 servers
 ...
 · 1.1.1.1 sends ECS: akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
 · 8.8.8.8 sends ECS: google's and akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
