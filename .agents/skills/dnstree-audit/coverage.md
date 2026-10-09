@@ -2,29 +2,26 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `8e729b6`
-- **Date**: 2026-10-07
-- **Scope**: the commits since `05467fe` (`--rdap`, `--mail`, `--propagation`,
-  the SERVFAIL diagnosis, `--check`, `--svcb`, CSYNC and the RFC 9615
-  bootstrap signals, the resolver split, the history and dnstree-web fixes)
-- **Since**: `internal/spf` alone at `9ba8ec7` on 2026-10-08, and its three
-  findings fixed in the working tree. The other commits since `8e729b6`,
-  `--tlsa` among them, are still to read.
+- **Commit**: `d0eefea`
+- **Date**: 2026-10-09
+- **Scope**: the commits since `8e729b6` (`--tlsa`, `--dkim`, the RFC 9989
+  DMARC walk, `--replay`, `--check-resolver`, `--deps`, `--serial` timers,
+  the fuzz tests, the plugin skill and the refactors); every fuzz test
+  searched for 30 s, nothing found. Fixed in the working tree after it: a bogus
+  mail policy, `--tlsa` private addresses and long refusals, the `--replay`
+  reader's copies and timestamps, SPF after a temperror, `spell()` on 32-bit.
 
 ## Open findings
 
-- Low: the SPF check keeps asking after a temperror, so a resolver that times
-  out on the policy's names costs a timeout per budgeted query rather than
-  one; it now stops when ctx ends
-  ([spf.go:71](../../../internal/spf/spf.go#L71)).
-- Low: names, CAA issuer values, SPF names and the report agent inside the
-  markdown report's finding sentences are open to GitHub's autolinks,
-  `@mentions` and `#refs`; fixing it means marking them apart from the prose
-  explain writes
+- Low: names, CAA issuer values, SPF names, the report agent, and now MX hosts
+  in the `--tlsa` finding, the `--serial` servers, resolver operators and DKIM
+  selectors in the markdown report's finding sentences are open to GitHub's
+  autolinks, `@mentions` and `#refs`; fixing it means marking them apart from
+  the prose explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
-  bogus ("the parent published a DS it did not sign") under `-race` while the
-  package was building; 260 runs after it were clean.
+  bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea`, were
+  clean.
 
 ## Checked and sound
 
@@ -206,7 +203,7 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   glue, `zone_addrs` and trial address.
 - The Lambda bootstrap only adds `-client-header X-Forwarded-For`;
   `internal/server` and `cmd/dnstree-web` are unchanged.
-- `go test -race -count=2 ./...` is clean at `8e729b6`.
+- `go test -race -count=2 ./...` is clean at `d0eefea`.
 - CAA failures: a referral below the walk is judged by no chain
   (`TestCAAUnenteredZone`); the budget is blamed only when this lookup ran it
   out (`TestCAABudgetSpentBefore`).
@@ -306,3 +303,56 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   renderer and back (`FuzzRead`), the live line cut (`FuzzTruncate`), and the
   DOT, Mermaid, markdown and OpenMetrics escapers read back as their consumer
   would. `make fuzz` searches with all of them.
+- `--tlsa`: only `DANEVerified` hosts, 4 addresses each and 16 in all; reads
+  share a 256 KiB budget, each address has a deadline and an `AfterFunc`
+  cancel; only no STARTTLS or a refusal of it is a mismatch, anything else is
+  `unreached`.
+- `--tlsa` matching: the handshake proves the leaf key, so no match without
+  it; DANE-EE reads the leaf alone, DANE-TA verifies against the anchor alone
+  at `Trace.Started` with RFC 7672 names; PKIX usages and unknown selector or
+  matching types are never usable.
+- `--tlsa` bytes sent after the 220 stay in the textproto buffer, and TLS runs
+  on the raw conn; each goroutine writes its own `Presented[j]`.
+- `--dkim`: one budgeted lookup per selector, bogus is failed, strict base64,
+  ed25519 32 bytes, typed selectors LDH only; `FuzzRead` covers the reader.
+- `txtStrings` `\DDD` parses with `ParseUint(…, 10, 8)`.
+- DMARC walk: at most 7 names above, each through `look`, which stops on a
+  spent budget.
+- `--replay` reader: 64 MiB cap, magic and link type checked, every length
+  checked against its slice, fragments refused, timestamps in order
+  (`FuzzRead`).
+- `--replay` transport: the key covers server, protocol, name, type, class,
+  flags and EDNS options; the question is checked; plain DNS only; `--tlsa`,
+  `--spf`, `--rdap`, AS lookups and the comparison refused or off;
+  signatures judged at `replay.Made()`; not settable from the file of
+  defaults; writes nothing.
+- `--check-resolver`: 7 queries per resolver, each with the transport timeout,
+  joined before the trace is written; `Behaviour.Shown` escapes the operator;
+  `read.go` checks `Observed`, `Echo.Sent` and `Bits` (0..128).
+- `--deps`: each NS name asked once, each zone kept once, every query through
+  `look`, attached on the walking goroutine; `Dependencies.Shown` covers every
+  string.
+- `--serial` timers: uint32 comparisons only.
+- `--check-resolver`, `--deps`, `--dkim`, `--serial` and `--tlsa` are refused
+  with `--from` and never reach dnstree-web; `apart` covers dane, dkim and
+  capture, and `TestWebAsksOnlyDNS` keeps rdap and dane out of the service.
+- `TestTraceShownEveryField` reaches `Presented`, DKIM `Tags` and the
+  behaviour answers; only `Observed`, which `read.go` checks, joined
+  `readChecked`.
+- The icons' second space overcounts width, and attacker text has no non-ASCII
+  left after `Shown`.
+- The plugin ships a SKILL.md and JSON metadata only, with no hooks or
+  scripts.
+- A bogus DMARC, MTA-STS or TLS-RPT answer is `failed`, so the DMARC walk stops
+  at it (`TestMailDMARCTreeWalk`).
+- `--tlsa` dials only what `Allow` admits, `transport.Public` from the CLI; a
+  refused address is its own warning, outside the port 25 count
+  (`TestCheckAllow`, `TestRunTLSA`); server text is clipped to `MaxErr`
+  (`TestCheckLongRefusal`).
+- The `--replay` reader keeps the first message each way and stops copying
+  (`TestReadSegmentsAfterTheMessage`); a timestamp of a million microseconds or
+  more is refused, the `FuzzRead` find kept in `testdata/fuzz`.
+- SPF stops asking after the first failed lookup, after a permerror too, and
+  says so on each term left (`TestTempErrorEndsTheCheck`).
+- `spell()` divides in uint32 before converting, so no timer wraps on a 32-bit
+  build.
