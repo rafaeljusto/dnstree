@@ -86,6 +86,7 @@ whole; `dnstree --schema` describes every field.
 | how long a change takes to reach every cache | `dnstree --format markdown --dnssec --check-ns --propagation NAME` |
 | why mail is refused or delayed | `dnstree --format markdown --dnssec --mail --spf NAME` |
 | whether SPF is over the ten-lookup limit | `dnstree --format markdown --spf NAME` |
+| whether a DKIM key is published and usable (SELECTOR is the s= of the DKIM-Signature header) | `dnstree --format markdown --mail --dkim SELECTOR NAME` |
 | which CAs may issue a certificate | `dnstree --format markdown --dnssec --caa NAME` |
 | where HTTPS/SVCB records lead | `dnstree --format markdown --dnssec --svcb NAME` |
 | every zone a name depends on, its nameservers' included | `dnstree --format markdown --dnssec --deps NAME` |

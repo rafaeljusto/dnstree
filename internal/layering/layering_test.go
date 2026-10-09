@@ -68,7 +68,7 @@ func TestOnlyTheWireSpeaksTheCodec(t *testing.T) {
 
 // apart are the packages that must not reach the codec through anything they
 // import either: the trace, the renderers and the readings drawn from them,
-// the AS lookups, the SPF check, the registry lookup and the TLSA check. A package that
+// the AS lookups, the SPF check, the DKIM key reader, the registry lookup and the TLSA check. A package that
 // imports one which speaks the codec brings the network into their tests all
 // the same.
 var apart = []string{
@@ -80,6 +80,7 @@ var apart = []string{
 	"internal/asn",
 	"internal/capture",
 	"internal/spf",
+	"internal/dkim",
 	"internal/rdap",
 	"internal/dane",
 }

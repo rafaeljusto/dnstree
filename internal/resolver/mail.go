@@ -12,6 +12,7 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/dkim"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -51,6 +52,12 @@ func (r *run) mail(ctx context.Context, under *trace.Step) {
 	}
 	if !r.counters.spent() {
 		m.DMARC = r.dmarc(ctx, under, name)
+	}
+	for _, selector := range r.cfg.DKIM {
+		if r.counters.spent() {
+			break
+		}
+		m.DKIM = append(m.DKIM, r.dkim(ctx, under, selector, name))
 	}
 
 	if r.counters.spent() || r.asideStopped {
@@ -363,6 +370,40 @@ func (r *run) dmarc(ctx context.Context, under *trace.Step, name string) *trace.
 	return applied(found)
 }
 
+// dkim looks up the key selector publishes for mail signed as name, following
+// aliases the way a receiver does: a selector is often an alias for a key its
+// mail provider keeps, and one the provider has dropped is no key at all.
+func (r *run) dkim(ctx context.Context, under *trace.Step, selector, name string) trace.DKIMKey {
+	asked := selector + "._domainkey." + name
+	result, lookup, stopped := r.look(ctx, under, asked, dns.TypeTXT, "mail")
+	key := trace.DKIMKey{Found: trace.PolicyFailed}
+	switch {
+	case stopped:
+		key.Why = "the budget ran out before it was looked up"
+	case lookup.Err != "":
+		key.Why = "the TXT lookup failed: " + lookup.Err
+	case r.cfg.DNSSEC && lookup.DNSSEC != nil && lookup.DNSSEC.State == trace.Bogus:
+		// A receiver that validates gets no key, and fails the signature for
+		// the moment (RFC 6376 6.1.2).
+		key.Why = "it does not validate: " + lookup.DNSSEC.Reason
+	default:
+		records := texts(result.Records, result.Asked.Name)
+		switch len(records) {
+		case 0:
+			key.Found, key.Why = trace.PolicyNone, "no key is published there"
+			if lookup.Alias != "" {
+				key.Why = "it is an alias for " + lookup.Alias + ", which holds no key"
+			}
+		case 1:
+			key = dkim.Read(records[0])
+		default:
+			key.Found, key.Why = trace.PolicyInvalid, strconv.Itoa(len(records))+" TXT records, and which one a receiver reads is undefined (RFC 6376 3.6.2.2)"
+		}
+	}
+	key.Selector, key.Name, key.Lookup = selector, asked, lookup
+	return key
+}
+
 // treeWalk are the names a DMARC tree walk asks above name, its parent first
 // and its top-level domain last. A name of eight labels or more skips to the
 // seven nearest the root, so that a long name costs no more lookups (RFC 9989
@@ -502,6 +543,21 @@ func (r *run) warnMail(m *trace.Mail) {
 	}{{m.MTASTS, "sender"}, {m.TLSRPT, "sender"}, {m.DMARC, "receiver"}} {
 		if p.policy != nil && p.policy.Found == trace.PolicyInvalid {
 			r.warnf(trace.AreaMail, "the policy at %s is no policy to a %s: %s; publish one record that parses", p.policy.Name, p.reader, p.policy.Why)
+		}
+	}
+	for _, key := range m.DKIM {
+		switch {
+		case key.Found == trace.PolicyNone:
+			r.warnf(trace.AreaMail, "there is no DKIM key at %s (%s), so mail signed with selector %s fails DKIM; publish its key, or stop signing with it",
+				key.Name, key.Why, key.Selector)
+		case key.Found == trace.PolicyInvalid:
+			r.warnf(trace.AreaMail, "the DKIM key at %s is no key to a receiver: %s; publish one record that parses", key.Name, key.Why)
+		case key.Found == trace.PolicyFailed && key.Lookup.DNSSEC != nil && key.Lookup.DNSSEC.State == trace.Bogus:
+			r.warnf(trace.AreaMail, "the DKIM key at %s does not validate (%s), so a receiver that validates fails mail signed with selector %s for now; fix the signatures of its zone",
+				key.Name, key.Lookup.DNSSEC.Reason, key.Selector)
+		case key.State == trace.DKIMWeak || key.State == trace.DKIMSHA1:
+			r.warnf(trace.AreaMail, "receivers do not verify with the DKIM key at %s (%s), so mail signed with it fails DKIM; publish a key of 2048 bits that allows sha256",
+				key.Name, key.Why)
 		}
 	}
 }

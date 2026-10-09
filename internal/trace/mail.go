@@ -32,6 +32,9 @@ type Mail struct {
 	TLSRPT *MailPolicy
 	DMARC  *MailPolicy
 
+	// DKIM are the keys of the selectors --dkim named, in the order named.
+	DKIM []DKIMKey
+
 	// Stopped is why the check made fewer lookups than it set out to: the MX
 	// set could not be had, or a budget of the run ran out.
 	Stopped string
@@ -203,6 +206,61 @@ type PolicyTag struct {
 	Value string
 }
 
+// DKIMKey is the key one selector publishes for checking mail signed as the
+// domain (RFC 6376 3.6.1).
+type DKIMKey struct {
+	Selector string
+
+	// Name is where it was asked, and Lookup how that went.
+	Name   string
+	Lookup Lookup
+
+	// Found is invalid for a record a receiver cannot read a key from, and
+	// none for no record, the name an alias leads to missing included.
+	Found PolicyFound
+
+	// Record is the key record as published, and Tags its tags in order.
+	Record string
+	Tags   []PolicyTag
+
+	// Type is the key's algorithm, rsa or ed25519, and Bits the size of an RSA
+	// key; both empty where no key was read.
+	Type string
+	Bits int
+
+	// State is what a receiver makes of a published key, and Testing a key
+	// that asks receivers not to hold a failure against the domain (t=y).
+	State   DKIMState
+	Testing bool
+
+	// Why is what made it so, in a few words.
+	Why string
+}
+
+// DKIMState is what a receiver makes of a published key.
+type DKIMState string
+
+// What a key can come to.
+const (
+	// DKIMUsable is a key a receiver verifies with.
+	DKIMUsable DKIMState = "usable"
+
+	// DKIMRevoked is a key withdrawn with an empty p=, which is how a key is
+	// retired: whatever still signs with it fails.
+	DKIMRevoked DKIMState = "revoked"
+
+	// DKIMWeak is an RSA key under 1024 bits, and DKIMSHA1 one that allows
+	// only SHA-1: receivers verify neither (RFC 8301).
+	DKIMWeak DKIMState = "weak"
+	DKIMSHA1 DKIMState = "sha1"
+)
+
+// Short is a usable RSA key shorter than the 2048 bits RFC 8301 asks signers
+// for, which receivers still verify with.
+func (k DKIMKey) Short() bool {
+	return k.State == DKIMUsable && k.Type == "rsa" && k.Bits < 2048
+}
+
 // Tag is the value of the named tag, empty where the policy has none.
 func (p *MailPolicy) Tag(name string) string {
 	if p == nil {
@@ -299,6 +357,18 @@ func (m *Mail) Shown() *Mail {
 		}
 	}
 	shown.MTASTS, shown.TLSRPT, shown.DMARC = m.MTASTS.shown(), m.TLSRPT.shown(), m.DMARC.shown()
+	shown.DKIM = slices.Clone(m.DKIM)
+	for i := range shown.DKIM {
+		key := &shown.DKIM[i]
+		key.Selector, key.Name, key.Record, key.Why = Shown(key.Selector), Shown(key.Name), Shown(key.Record), Shown(key.Why)
+		key.Type = Shown(key.Type)
+		key.Found, key.State = PolicyFound(Shown(string(key.Found))), DKIMState(Shown(string(key.State)))
+		key.Lookup = key.Lookup.shown()
+		key.Tags = slices.Clone(key.Tags)
+		for j := range key.Tags {
+			key.Tags[j].Name, key.Tags[j].Value = Shown(key.Tags[j].Name), Shown(key.Tags[j].Value)
+		}
+	}
 	return &shown
 }
 

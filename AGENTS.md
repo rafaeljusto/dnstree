@@ -74,8 +74,8 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   renderers and the AS lookups is what makes them testable without a network.
   `internal/layering` fails on any other import of it, and on the trace, the
   renderers, explain, expect, history, the capture, the AS lookups, the SPF
-  check, the registry lookup or the TLSA check reaching it through another
-  package.
+  check, the DKIM key reader, the registry lookup or the TLSA check reaching it
+  through another package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net` for names typed in any script
@@ -229,9 +229,9 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
 - What a zone or a stranger wrote and is parsed or escaped by hand is fuzzed
-  against a property, not an example: the SPF check, a saved walk read into
-  every renderer, the live line cut, the escaper of each format, and the
-  names dnstree-web redirects to. `make check` replays the seeds and the
+  against a property, not an example: the SPF check, the DKIM key reader, a
+  saved walk read into every renderer, the live line cut, the escaper of each
+  format, and the names dnstree-web redirects to. `make check` replays the seeds and the
   inputs kept under `testdata/fuzz`; `make fuzz` searches. An input a search
   finds stays in `testdata/fuzz` once it is fixed.
 - The pages' logic lives in `walk.js` beside each page (and `space.js`,

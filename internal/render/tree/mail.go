@@ -72,6 +72,9 @@ func (r *renderer) mailPath(m *trace.Mail) []string {
 	if line := r.mailPolicies(m, mark); line != "" {
 		lines = append(lines, line)
 	}
+	for _, key := range m.DKIM {
+		lines = append(lines, r.dkim(key, mark))
+	}
 	if line := r.covered(m, mark); line != "" {
 		lines = append(lines, line)
 	}
@@ -159,6 +162,45 @@ func (r *renderer) mailPolicies(m *trace.Mail, mark string) string {
 		return r.paint.paint(mark+strings.Join(said, "; "), yellow)
 	}
 	return r.paint.dim(mark + strings.Join(said, "; "))
+}
+
+// dkim is the line that says what a receiver makes of one DKIM key.
+func (r *renderer) dkim(key trace.DKIMKey, mark string) string {
+	text := mark + "dkim " + key.Name
+	if key.Lookup.Alias != "" {
+		text += " " + r.glyphs.arrow + " " + key.Lookup.Alias
+	}
+	if verdict := r.dnssec(key.Lookup.DNSSEC); verdict != "" {
+		text += " " + verdict
+	}
+	switch {
+	case key.Found != trace.PolicyPublished:
+		text += " " + string(key.Found) + ": " + key.Why
+	case key.State == trace.DKIMRevoked:
+		text += " revoked: " + key.Why
+	default:
+		about := []string{key.Type}
+		if bits := strconv.Itoa(key.Bits) + " bits"; key.Bits > 0 && !strings.HasPrefix(key.Why, bits) {
+			about[0] += " " + bits
+		}
+		if key.State != trace.DKIMUsable {
+			about = append(about, string(key.State))
+		}
+		if key.Testing {
+			about = append(about, "testing (t=y)")
+		}
+		text += " " + strings.Join(about, ", ")
+		if key.Why != "" {
+			text += ": " + key.Why
+		}
+	}
+	switch {
+	case key.State == trace.DKIMRevoked:
+		return r.paint.dim(text)
+	case key.Found == trace.PolicyPublished && key.State == trace.DKIMUsable && !key.Short() && !key.Testing:
+		return r.paint.paint(text, green)
+	}
+	return r.paint.paint(text, yellow)
 }
 
 // covered is the line that says how much of the mail DANE authenticates.

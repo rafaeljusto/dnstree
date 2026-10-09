@@ -143,6 +143,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--spf`](docs/guide/zones.md#what-a-check-of-its-mail-costs) | draw the name's SPF policy as the tree of lookups a mail server makes, and count them against the limit of ten (RFC 7208) |
 | [`--mail`](docs/guide/zones.md#whether-its-mail-can-be-sent-verified) | check the name's MX hosts the way a sender that checks DANE does, and its MTA-STS, TLS-RPT and DMARC records (RFC 7672) |
 | [`--tlsa`](docs/guide/zones.md#whether-the-certificates-match) | connect to each MX host DANE covers, start TLS, and match the certificate it presents against its TLSA set; needs `--mail` and `--dnssec` |
+| [`--dkim SELECTOR`](docs/guide/zones.md#whether-its-dkim-keys-are-there) | check the DKIM key the name publishes for a selector: there, parses, long enough, not revoked or SHA-1 only (RFC 6376, RFC 8301); repeat it; needs `--mail` |
 | [`--svcb`](docs/guide/zones.md#where-a-browser-connects) | follow the name's HTTPS or SVCB records to the servers they name, and hold their address hints against what the servers resolve to (RFC 9460) |
 | [`--deps`](docs/guide/zones.md#what-it-depends-on) | list every zone the name depends on: the walk's own, and those the lookups of every nameserver of each go through in turn, with which are unsigned |
 | [`--rdap`](docs/guide/zones.md#whether-its-registration-is-about-to-run-out) | ask the domain's registry when the registration runs out and whether it is held, and compare its nameservers and DS with the TLD's (RFC 9083) |

@@ -192,6 +192,19 @@ func Render(w io.Writer, tr *trace.Trace) error {
 				m.sample("dnstree_mail_policy", flag(value == p.policy.Found), label{"policy", p.name}, label{"found", string(value)})
 			}
 		}
+		if len(mail.DKIM) > 0 {
+			m.family("dnstree_mail_dkim", "", "what the lookup of each DKIM key --dkim named came to: usable, revoked, weak or sha1 where receivers do not verify with it, or none, invalid or failed")
+			for _, key := range mail.DKIM {
+				got := string(key.Found)
+				if key.Found == trace.PolicyPublished {
+					got = string(key.State)
+				}
+				for _, value := range []string{string(trace.DKIMUsable), string(trace.DKIMRevoked), string(trace.DKIMWeak), string(trace.DKIMSHA1),
+					string(trace.PolicyNone), string(trace.PolicyInvalid), string(trace.PolicyFailed)} {
+					m.sample("dnstree_mail_dkim", flag(value == got), label{"selector", key.Selector}, label{"state", value})
+				}
+			}
+		}
 	}
 
 	if path := tr.ServicePath; path != nil {

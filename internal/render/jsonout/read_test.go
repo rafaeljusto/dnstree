@@ -395,6 +395,16 @@ func TestReadRefuses(t *testing.T) {
 				"mail": {"name": "x.", "mx": {"name": "x."}, "dmarc": {"name": "_dmarc.x.", "lookup": {"name": "_dmarc.x."}, "found": "maybe"}}}`,
 			want: `"maybe"`,
 		},
+		"a DKIM key in a state nothing here knows": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "dkim": [{"selector": "s", "name": "s._domainkey.x.", "lookup": {"name": "s._domainkey.x."}, "found": "published", "state": "strong"}]}}`,
+			want: `"strong"`,
+		},
+		"a DKIM key that was not found, with a state": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "dkim": [{"selector": "s", "name": "s._domainkey.x.", "lookup": {"name": "s._domainkey.x."}, "found": "none", "state": "usable"}]}}`,
+			want: `"usable"`,
+		},
 		"a service path of a type that has no service mode": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "MX", "chain": [{"lookup": {"name": "x."}}]}}`,

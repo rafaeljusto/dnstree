@@ -56,6 +56,7 @@ one after another, each from the root servers down.
   --spf                   draw NAME's SPF policy and count the lookups it costs
   --mail                  check NAME's MX hosts for DANE, and its mail policies
   --tlsa                  match the certificate each DANE host presents
+  --dkim SELECTOR         check the DKIM key NAME publishes for SELECTOR; repeat it
   --svcb                  follow NAME's HTTPS or SVCB records to their servers
   --deps                  list every zone NAME depends on, its nameservers' too
   --rdap                  ask the registry when the domain expires, and compare
@@ -413,6 +414,16 @@ worth checking. An address that cannot be reached, which is what a network
 that blocks port 25 makes of every one, could not be checked from here and
 says so in one line, never as a mismatch.
 
+--dkim looks up the key at SELECTOR._domainkey.NAME, following an alias to
+a mail provider the way a receiver does, and reads it the way a receiver does
+(RFC 6376): whether it is there and parses, how long an RSA key is, whether it
+was withdrawn with an empty p=, whether it allows only sha1, and whether it is
+still marked t=y. A key that is missing, does not parse, or that receivers
+refuse (RSA under 1024 bits, or sha1 alone, RFC 8301) is said in a warning; one
+withdrawn on purpose is not. DNS cannot list a domain's selectors, so only the
+ones named are asked, and --check names none. It needs --mail, and spends the
+walk's budget.
+
 --svcb follows NAME's HTTPS records (RFC 9460), or its SVCB records where TYPE
 is SVCB, to the servers a client would connect to: down the aliases a record
 in alias mode makes, each to the next name's own records, then to the A and
@@ -553,6 +564,7 @@ type Config struct {
 	SPF            bool
 	Mail           bool
 	TLSA           bool
+	DKIM           []string
 	SVCB           bool
 	Deps           bool
 	RDAP           bool
@@ -770,6 +782,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		wanted        expectList
 		resolvers     resolverList
 		without       downList
+		selectors     selectorList
 		trial         trialList
 	)
 	flags.StringVar(&reverse, "x", "", "resolve the PTR of this address")
@@ -793,6 +806,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.SPF, "spf", false, "draw the name's SPF policy and count the lookups it costs")
 	flags.BoolVar(&cfg.Mail, "mail", false, "check the name's MX hosts for DANE, and its mail policies")
 	flags.BoolVar(&cfg.TLSA, "tlsa", false, "match the certificate each DANE host presents")
+	flags.Var(&selectors, "dkim", "check the DKIM key of this selector")
 	flags.BoolVar(&cfg.SVCB, "svcb", false, "follow the name's HTTPS or SVCB records to their servers")
 	flags.BoolVar(&cfg.Deps, "deps", false, "list every zone the name depends on, its nameservers' too")
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
@@ -980,6 +994,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			return nil, fmt.Errorf("%w: --tlsa checks the certificates of the hosts --mail finds and --dnssec proves", ErrUsage)
 		}
 		cfg.TLSA = false
+	}
+	if cfg.DKIM = selectors.names; len(cfg.DKIM) > 0 && !cfg.Mail {
+		if slices.Contains(typed, "dkim") {
+			return nil, fmt.Errorf("%w: --dkim checks keys beside the mail records --mail reads", ErrUsage)
+		}
+		cfg.DKIM = nil
 	}
 	if cfg.From != "" {
 		// Named on the command line, a flag that shapes the walk would read as
@@ -1279,7 +1299,7 @@ var askOutside = map[string]bool{
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
@@ -1469,6 +1489,27 @@ func (l *resolverList) Set(text string) error {
 		return err
 	}
 	l.servers = append(l.servers, server)
+	return nil
+}
+
+// selectorList collects the --dkim flags in the order they were given.
+type selectorList struct{ names []string }
+
+func (l *selectorList) String() string { return strings.Join(l.names, ",") }
+
+// Set reads one --dkim: a selector, which is one or more labels of letters,
+// digits and hyphens that neither begin nor end with a hyphen (RFC 6376 3.1).
+func (l *selectorList) Set(text string) error {
+	selector := strings.ToLower(text)
+	for label := range strings.SplitSeq(selector, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' ||
+			strings.TrimFunc(label, func(c rune) bool { return c == '-' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' }) != "" {
+			return fmt.Errorf("%q is no selector: one or more labels of letters, digits and hyphens", text)
+		}
+	}
+	if !slices.Contains(l.names, selector) {
+		l.names = append(l.names, selector)
+	}
 	return nil
 }
 

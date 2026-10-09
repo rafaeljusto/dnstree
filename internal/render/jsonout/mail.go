@@ -19,6 +19,7 @@ type mail struct {
 	MTASTS   *mailPolicy `json:"mta_sts,omitempty"`
 	TLSRPT   *mailPolicy `json:"tls_rpt,omitempty"`
 	DMARC    *mailPolicy `json:"dmarc,omitempty"`
+	DKIM     []dkimKey   `json:"dkim,omitempty"`
 	Stopped  string      `json:"stopped,omitempty"`
 	Cut      bool        `json:"cut,omitempty"`
 }
@@ -68,6 +69,20 @@ type mailPolicy struct {
 	Why    string      `json:"why,omitempty"`
 }
 
+type dkimKey struct {
+	Selector string      `json:"selector"`
+	Name     string      `json:"name"`
+	Lookup   lookup      `json:"lookup"`
+	Found    string      `json:"found"`
+	Record   string      `json:"record,omitempty"`
+	Tags     []policyTag `json:"tags,omitempty"`
+	Type     string      `json:"type,omitempty"`
+	Bits     int         `json:"bits,omitempty"`
+	State    string      `json:"state,omitempty"`
+	Testing  bool        `json:"testing,omitempty"`
+	Why      string      `json:"why,omitempty"`
+}
+
 type policyTag struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -81,6 +96,14 @@ func convertMail(from *trace.Mail) *mail {
 		Name: from.Name, MX: convertLookup(from.MX), Null: from.Null, Implicit: from.Implicit, Absent: from.Absent,
 		MTASTS: convertPolicy(from.MTASTS), TLSRPT: convertPolicy(from.TLSRPT), DMARC: convertPolicy(from.DMARC),
 		Stopped: from.Stopped, Cut: from.Cut,
+	}
+	for _, key := range from.DKIM {
+		k := dkimKey{Selector: key.Selector, Name: key.Name, Lookup: convertLookup(key.Lookup), Found: string(key.Found),
+			Record: key.Record, Type: key.Type, Bits: key.Bits, State: string(key.State), Testing: key.Testing, Why: key.Why}
+		for _, tag := range key.Tags {
+			k.Tags = append(k.Tags, policyTag(tag))
+		}
+		to.DKIM = append(to.DKIM, k)
 	}
 	for _, host := range from.Hosts {
 		h := mailHost{Name: host.Name, Preference: host.Preference, DANE: string(host.DANE), Why: host.Why,
@@ -178,6 +201,43 @@ func readMail(from *mail) (*trace.Mail, error) {
 	}
 	if to.DMARC, err = readPolicy(from.DMARC); err != nil {
 		return nil, err
+	}
+	for _, key := range from.DKIM {
+		k, err := readDKIM(key)
+		if err != nil {
+			return nil, err
+		}
+		to.DKIM = append(to.DKIM, k)
+	}
+	return to, nil
+}
+
+// readDKIM reads one DKIM key back. A published key has to say what a
+// receiver makes of it, since that is what it is drawn and graded by.
+func readDKIM(from dkimKey) (trace.DKIMKey, error) {
+	found, state := trace.PolicyFound(from.Found), trace.DKIMState(from.State)
+	switch found {
+	case trace.PolicyPublished:
+		switch state {
+		case trace.DKIMUsable, trace.DKIMRevoked, trace.DKIMWeak, trace.DKIMSHA1:
+		default:
+			return trace.DKIMKey{}, fmt.Errorf("jsonout: %q is not what a receiver makes of a DKIM key", from.State)
+		}
+	case trace.PolicyNone, trace.PolicyInvalid, trace.PolicyFailed:
+		if state != "" {
+			return trace.DKIMKey{}, fmt.Errorf("jsonout: a DKIM key that was %s cannot be %q", found, from.State)
+		}
+	default:
+		return trace.DKIMKey{}, fmt.Errorf("jsonout: %q is not what a DKIM key lookup can come to", from.Found)
+	}
+	read, err := readLookup(from.Lookup)
+	if err != nil {
+		return trace.DKIMKey{}, err
+	}
+	to := trace.DKIMKey{Selector: from.Selector, Name: from.Name, Lookup: read, Found: found, Record: from.Record,
+		Type: from.Type, Bits: from.Bits, State: state, Testing: from.Testing, Why: from.Why}
+	for _, tag := range from.Tags {
+		to.Tags = append(to.Tags, trace.PolicyTag(tag))
 	}
 	return to, nil
 }

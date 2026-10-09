@@ -522,6 +522,46 @@
       "found": "invalid",
       "why": "2 records begin v=DMARC1, and a sender reads that as none"
     },
+    "dkim": [
+      {
+        "selector": "s1",
+        "name": "s1._domainkey.www.example.com.",
+        "lookup": {
+          "name": "s1._domainkey.www.example.com.",
+          "alias": "s1.dkim.example.net."
+        },
+        "found": "published",
+        "record": "v=DKIM1; t=y; p=MIIB",
+        "tags": [
+          {
+            "name": "v",
+            "value": "DKIM1"
+          },
+          {
+            "name": "t",
+            "value": "y"
+          },
+          {
+            "name": "p",
+            "value": "MIIB"
+          }
+        ],
+        "type": "rsa",
+        "bits": 1024,
+        "state": "usable",
+        "testing": true,
+        "why": "1024 bits, under the 2048 RFC 8301 asks signers for"
+      },
+      {
+        "selector": "gone",
+        "name": "gone._domainkey.www.example.com.",
+        "lookup": {
+          "name": "gone._domainkey.www.example.com."
+        },
+        "found": "none",
+        "why": "no key is published there"
+      }
+    ],
     "stopped": "the budget ran out before every lookup was made"
   },
   "service_path": {

@@ -428,6 +428,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--mail</code> looks up each MX host the way a sender that checks DANE does, and says which ones a signed TLSA set covers. A TLSA lookup that fails holds the mail; a backup left out lets it go unverified. <code>--tlsa</code> then connects to each of them and matches the certificate it presents, which catches a key renewed without its TLSA record.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">mail</span>
+          <h3>A DKIM key nobody published</h3>
+          <p><code>--dkim</code> reads the key a selector names the way a receiver does: whether it is there, through the alias to a mail provider, whether it parses, and whether it is long enough and not withdrawn. A new mail service set up without its key fails DKIM on every message it sends.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">stale</span>
           <h3>A hint that points at an old server</h3>
           <p><code>--svcb</code> follows a name's HTTPS records down their aliases to the servers they name, and holds the <code>ipv4hint</code> and <code>ipv6hint</code> a browser may connect on against where those servers really are.</p>

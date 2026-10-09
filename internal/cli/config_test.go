@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -229,6 +230,26 @@ func TestParseDefaultsCheckDS(t *testing.T) {
 	}
 	if !got.CheckDS {
 		t.Error("got no --check-ds on a walk that checks signatures, want the file's setting")
+	}
+}
+
+// TestParseDefaultsDKIM covers a file that names a DKIM selector: a default
+// for the walks that check mail, which the others leave alone.
+func TestParseDefaultsDKIM(t *testing.T) {
+	path := write(t, "dkim = google\n")
+	got, err := cli.Parse([]string{"--config", path, "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DKIM != nil {
+		t.Errorf("got --dkim %q on a walk that checks no mail, want it left for one that does", got.DKIM)
+	}
+	got, err = cli.Parse([]string{"--config", path, "--mail", "--dkim", "s1", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"google", "s1"}; !slices.Equal(got.DKIM, want) {
+		t.Errorf("got --dkim %q on a mail check, want %q", got.DKIM, want)
 	}
 }
 

@@ -198,6 +198,16 @@ func resolution() *trace.Trace {
 				Found: trace.PolicyNone},
 			DMARC: &trace.MailPolicy{Name: "_dmarc.example.com.", Lookup: trace.Lookup{Name: "_dmarc.example.com."},
 				Found: trace.PolicyInvalid, Why: "2 records begin v=DMARC1, and a sender reads that as none"},
+			DKIM: []trace.DKIMKey{
+				{Selector: "s1", Name: "s1._domainkey.www.example.com.",
+					Lookup: trace.Lookup{Name: "s1._domainkey.www.example.com.", Alias: "s1.dkim.example.net."},
+					Found:  trace.PolicyPublished, Record: "v=DKIM1; t=y; p=MIIB",
+					Tags: []trace.PolicyTag{{Name: "v", Value: "DKIM1"}, {Name: "t", Value: "y"}, {Name: "p", Value: "MIIB"}},
+					Type: "rsa", Bits: 1024, State: trace.DKIMUsable, Testing: true,
+					Why: "1024 bits, under the 2048 RFC 8301 asks signers for"},
+				{Selector: "gone", Name: "gone._domainkey.www.example.com.", Lookup: trace.Lookup{Name: "gone._domainkey.www.example.com."},
+					Found: trace.PolicyNone, Why: "no key is published there"},
+			},
 			Stopped: "the budget ran out before every lookup was made",
 		},
 		ServicePath: &trace.ServicePath{

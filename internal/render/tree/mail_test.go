@@ -103,6 +103,28 @@ func TestRenderMail(t *testing.T) {
 				"mail: dane not decided: the budget ran out",
 			},
 		},
+		"DKIM keys, one at an alias": {
+			mail: &trace.Mail{Name: "test.", Null: true, DKIM: []trace.DKIMKey{
+				{Name: "google._domainkey.test.", Found: trace.PolicyPublished, Type: "rsa", Bits: 2048, State: trace.DKIMUsable},
+				{Name: "s1._domainkey.test.", Lookup: trace.Lookup{Alias: "s1.mailer.example."}, Found: trace.PolicyPublished,
+					Type: "rsa", State: trace.DKIMRevoked, Why: "its p= is empty, which withdraws the key"},
+				{Name: "old._domainkey.test.", Found: trace.PolicyPublished, Type: "rsa", Bits: 1024, State: trace.DKIMUsable, Testing: true,
+					Why: "1024 bits, under the 2048 RFC 8301 asks signers for"},
+				{Name: "weak._domainkey.test.", Found: trace.PolicyPublished, Type: "rsa", Bits: 512, State: trace.DKIMWeak,
+					Why: "512 bits, under the 1024 receivers verify (RFC 8301)"},
+				{Name: "ed._domainkey.test.", Found: trace.PolicyPublished, Type: "ed25519", State: trace.DKIMUsable},
+				{Name: "none._domainkey.test.", Found: trace.PolicyNone, Why: "no key is published there"},
+			}},
+			want: []string{
+				"mail: test. takes no mail (null MX)",
+				"mail: dkim google._domainkey.test. rsa 2048 bits",
+				"mail: dkim s1._domainkey.test. → s1.mailer.example. revoked: its p= is empty, which withdraws the key",
+				"mail: dkim old._domainkey.test. rsa, testing (t=y): 1024 bits, under the 2048 RFC 8301 asks signers for",
+				"mail: dkim weak._domainkey.test. rsa, weak: 512 bits, under the 1024 receivers verify (RFC 8301)",
+				"mail: dkim ed._domainkey.test. ed25519",
+				"mail: dkim none._domainkey.test. none: no key is published there",
+			},
+		},
 		"a check that stopped": {
 			mail: &trace.Mail{Name: "test.", Stopped: "the MX lookup failed: SERVFAIL"},
 			want: []string{"mail: stopped: the MX lookup failed: SERVFAIL"},

@@ -7,6 +7,10 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
+func dkimMail(key trace.DKIMKey) *trace.Mail {
+	return &trace.Mail{Name: "test.", Null: true, DKIM: []trace.DKIMKey{key}}
+}
+
 func TestDelivery(t *testing.T) {
 	secure := &trace.DNSSECStatus{State: trace.Secure}
 	insecure := &trace.DNSSECStatus{State: trace.Insecure}
@@ -69,6 +73,34 @@ func TestDelivery(t *testing.T) {
 		"no DMARC policy": {
 			mail: &trace.Mail{Name: "test.", Null: true, DMARC: &trace.MailPolicy{Name: "_dmarc.test.", Found: trace.PolicyNone}},
 			want: "test. publishes no DMARC policy",
+		},
+		"a usable DKIM key": {
+			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyPublished, Type: "rsa", Bits: 2048, State: trace.DKIMUsable}),
+			want: "the DKIM key for selector s1 is a 2048 bit rsa key a receiver verifies with",
+		},
+		"a DKIM key shorter than signers are asked for, still testing": {
+			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyPublished, Type: "rsa", Bits: 1024, State: trace.DKIMUsable, Testing: true}),
+			want: "though shorter than the 2048 bits RFC 8301 asks signers for; it is marked t=y",
+		},
+		"an ed25519 DKIM key": {
+			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyPublished, Type: "ed25519", State: trace.DKIMUsable}),
+			want: "the DKIM key for selector s1 is an ed25519 key a receiver verifies with",
+		},
+		"a withdrawn DKIM key": {
+			mail: dkimMail(trace.DKIMKey{Selector: "old", Found: trace.PolicyPublished, Type: "rsa", State: trace.DKIMRevoked}),
+			want: "the DKIM key for selector old is withdrawn, so mail still signed with it fails DKIM; that is how a key is retired",
+		},
+		"a DKIM key receivers refuse": {
+			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyPublished, Type: "rsa", Bits: 512, State: trace.DKIMWeak, Why: "512 bits"}),
+			want: "receivers do not verify with the DKIM key for selector s1 (512 bits)",
+		},
+		"a DKIM key that is missing": {
+			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyNone, Why: "no key is published there"}),
+			want: "there is no DKIM key for selector s1 (no key is published there), so mail signed with it fails DKIM",
+		},
+		"a DKIM key that does not parse": {
+			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyInvalid, Why: "it has no p="}),
+			want: "the DKIM key for selector s1 is no key to a receiver: it has no p=",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

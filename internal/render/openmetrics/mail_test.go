@@ -16,7 +16,10 @@ func TestRenderMail(t *testing.T) {
 				{State: trace.PresentedMatch}, {State: trace.PresentedUnreached}}},
 			{Name: "mx2.test.", DANE: trace.DANEInsecure},
 			{Name: "gone.test.", DANE: trace.DANEUnreachable},
-		}, DMARC: &trace.MailPolicy{Found: trace.PolicyInvalid}},
+		}, DMARC: &trace.MailPolicy{Found: trace.PolicyInvalid}, DKIM: []trace.DKIMKey{
+			{Selector: "s1", Found: trace.PolicyPublished, State: trace.DKIMRevoked},
+			{Selector: "s2", Found: trace.PolicyNone},
+		}},
 	}
 	out := render(t, tr)
 	valid(t, out)
@@ -28,6 +31,9 @@ func TestRenderMail(t *testing.T) {
 		`dnstree_mail_tlsa_addresses{name="www.test.",type="A",state="match"} 1`,
 		`dnstree_mail_tlsa_addresses{name="www.test.",type="A",state="mismatch"} 0`,
 		`dnstree_mail_tlsa_addresses{name="www.test.",type="A",state="unreached"} 1`,
+		`dnstree_mail_dkim{name="www.test.",type="A",selector="s1",state="revoked"} 1`,
+		`dnstree_mail_dkim{name="www.test.",type="A",selector="s1",state="usable"} 0`,
+		`dnstree_mail_dkim{name="www.test.",type="A",selector="s2",state="none"} 1`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("got\n%s\nwant %s", out, want)
@@ -37,7 +43,10 @@ func TestRenderMail(t *testing.T) {
 		t.Errorf("got\n%s\nwant nothing of a policy the check never asked", out)
 	}
 
-	tr.Mail.Hosts = []trace.MailHost{{Name: "mx1.test.", DANE: trace.DANEVerified}}
+	tr.Mail.Hosts, tr.Mail.DKIM = []trace.MailHost{{Name: "mx1.test.", DANE: trace.DANEVerified}}, nil
+	if out := render(t, tr); strings.Contains(out, "dnstree_mail_dkim") {
+		t.Errorf("got\n%s\nwant no DKIM family where --dkim named no selector", out)
+	}
 	if out := render(t, tr); strings.Contains(out, "dnstree_mail_tlsa_addresses") {
 		t.Errorf("got\n%s\nwant no count of addresses --tlsa never connected to", out)
 	}

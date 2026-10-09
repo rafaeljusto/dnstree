@@ -178,6 +178,11 @@ type Config struct {
 	// from the deepest zone the run has entered that the name sits in.
 	Mail bool
 
+	// DKIM are the selectors whose DKIM keys the mail check looks up (RFC
+	// 6376 3.6.2), one lookup each. DNS cannot list a domain's selectors, so
+	// only these are asked.
+	DKIM []string
+
 	// SVCB follows the name's HTTPS records, or its SVCB records where those
 	// are the question, to the servers a client would connect to (RFC 9460):
 	// down the aliases, then to the addresses of every target, which are held

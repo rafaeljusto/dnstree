@@ -603,6 +603,51 @@ does it. The exit code is left alone.
 `--format json` carries it as `addresses` and `presented` on each host, and
 `--format openmetrics` as `dnstree_mail_tlsa_addresses`.
 
+### Whether its DKIM keys are there
+
+A server that sends mail as a domain signs it with DKIM (RFC 6376), and the
+receiver checks the signature against a key it finds at a name made of a
+**selector** and the domain: `google._domainkey.example.com`. The sender picks
+the selector, and DNS has no way to list them, so `--dkim` checks the ones it is
+told, one lookup each, following an alias to a mail provider the way a receiver
+does:
+
+```
+$ dnstree --mail --dnssec --explain --no-asn --no-compare --dkim mail --dkim google ietf.org
+...
+✉️  1 MX host for ietf.org. 🔒 [secure ECDSAP256SHA256]
+✉️    0 mx.ietf.org. dane (2 TLSA records): a sender has to see a certificate that matches
+✉️  no mta-sts; no tls-rpt; dmarc p=none
+✉️  dkim mail._domainkey.ietf.org. 🔒 [secure ECDSAP256SHA256] rsa: 1024 bits, under the 2048 RFC 8301 asks signers for
+✉️  dkim google._domainkey.ietf.org. 🔒 [secure] none: no key is published there
+✉️  dane covers 1 of 1 MX host
+⚠️  there is no DKIM key at google._domainkey.ietf.org. (no key is published there), so mail signed with selector google fails DKIM; publish its key, or stop signing with it
+...
+· the DKIM key for selector mail is a 1024 bit rsa key a receiver verifies with, though shorter than the 2048 bits RFC 8301 asks signers for
+· there is no DKIM key for selector google (no key is published there), so mail signed with it fails DKIM
+```
+
+The record is read as strictly as its grammar: a tag named twice, a quote or a
+stray character pasted from a web form, a `v=` that is not first, an `s=` that
+leaves out email or a `p=` that is not a key make it `invalid`, and so do two
+records at one selector, since which one a receiver reads is undefined. An RSA
+key is read as a SubjectPublicKeyInfo or as a bare RSAPublicKey, and an ed25519
+one (RFC 8463) as its 32 bytes. A key is `weak` under 1024 bits and `sha1` when
+its `h=` allows only SHA-1, since receivers verify with neither (RFC 8301);
+those, a selector with no key, and an alias whose target holds none, are said
+in a warning, and grade the mail area of `--check` worth a look. A key under
+2048 bits still verifies, and is only said. An empty `p=` is `revoked`: that is
+how a key is retired, so it is said without a warning, though anything still
+signing with it fails. A key marked `t=y` is said to be testing. With
+`--dnssec` a key that does not validate is `failed`, since a receiver that
+validates cannot have it.
+
+It needs `--mail`, and `--check` names no selectors, so it asks none; from the
+file of defaults a selector waits for a run with `--mail`. The lookups spend the
+walk's budget. The exit code is left alone.
+`--format json` carries it as `dkim` in `mail`, and `--format openmetrics` as
+`dnstree_mail_dkim`.
+
 ## Where a browser connects
 
 An HTTPS record (RFC 9460) tells a browser how to reach a site before it

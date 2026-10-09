@@ -30,7 +30,42 @@ func delivery(tr *trace.Trace) []Finding {
 				"%s publishes no DMARC policy, so a receiver decides alone what to do with mail forged as it", m.Name)})
 		}
 	}
+	for _, key := range m.DKIM {
+		findings = append(findings, dkimKey(key))
+	}
 	return findings
+}
+
+// dkimKey is the finding about one DKIM key --dkim named.
+func dkimKey(key trace.DKIMKey) Finding {
+	finding := Finding{Topic: Mail, Level: Warn}
+	switch {
+	case key.Found == trace.PolicyNone:
+		finding.Text = fmt.Sprintf("there is no DKIM key for selector %s (%s), so mail signed with it fails DKIM", key.Selector, key.Why)
+	case key.Found == trace.PolicyInvalid:
+		finding.Text = fmt.Sprintf("the DKIM key for selector %s is no key to a receiver: %s, so mail signed with it fails DKIM", key.Selector, key.Why)
+	case key.Found == trace.PolicyFailed:
+		finding.Level, finding.Unknown = Note, true
+		finding.Text = fmt.Sprintf("the DKIM key for selector %s could not be had: %s", key.Selector, key.Why)
+	case key.State == trace.DKIMWeak || key.State == trace.DKIMSHA1:
+		finding.Text = fmt.Sprintf("receivers do not verify with the DKIM key for selector %s (%s), so mail signed with it fails DKIM", key.Selector, key.Why)
+	case key.State == trace.DKIMRevoked:
+		finding.Level, finding.Text = Note, fmt.Sprintf(
+			"the DKIM key for selector %s is withdrawn, so mail still signed with it fails DKIM; that is how a key is retired", key.Selector)
+	default:
+		finding.Level = Note
+		finding.Text = fmt.Sprintf("the DKIM key for selector %s is an %s key a receiver verifies with", key.Selector, key.Type)
+		if key.Bits > 0 {
+			finding.Text = fmt.Sprintf("the DKIM key for selector %s is a %d bit %s key a receiver verifies with", key.Selector, key.Bits, key.Type)
+		}
+		if key.Short() {
+			finding.Text += ", though shorter than the 2048 bits RFC 8301 asks signers for"
+		}
+	}
+	if key.Testing && key.Found == trace.PolicyPublished {
+		finding.Text += "; it is marked t=y, which asks receivers not to hold a failure against the domain"
+	}
+	return finding
 }
 
 // dane is the finding about the MX hosts, where there are any to speak of.

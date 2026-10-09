@@ -31,6 +31,8 @@ mail:     192.0.2.25 match: 3 1 1 e41cc763 matches CN=mx.example.com, issued 202
 mail:   20 backup.example.net. unreachable: its addresses could not be looked up: SERVFAIL
 mail: stopped: the budget ran out before every lookup was made
 mail: mta-sts id=20240101; no tls-rpt; dmarc invalid
+mail: dkim s1._domainkey.www.example.com. → s1.dkim.example.net. rsa, testing (t=y): 1024 bits, under the 2048 RFC 8301 asks signers for
+mail: dkim gone._domainkey.www.example.com. none: no key is published there
 mail: dane covers 1 of 1 MX host, not counting 1 that cannot be reached
 svcb: www.example.com. HTTPS 0 cdn.example.net.  [secure]
 svcb: cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  [insecure]
@@ -79,6 +81,8 @@ check example.com.
 - the CAA set at example.com. lets only letsencrypt.org issue for www.example.com., and no certificate authority issue wildcards below it
 - ⚠ the SPF policy of www.example.com. could not be followed to its end: the budget ran out
 - DANE covers every MX host of www.example.com. that can be reached, so a sender that checks it delivers only over TLS, to a server whose certificate matches
+- the DKIM key for selector s1 is a 1024 bit rsa key a receiver verifies with, though shorter than the 2048 bits RFC 8301 asks signers for; it is marked t=y, which asks receivers not to hold a failure against the domain
+- ⚠ there is no DKIM key for selector gone (no key is published there), so mail signed with it fails DKIM
 - ⚠ the HTTPS records of www.example.com. hint at addresses edge.example.net. does not have, so a client that connects on the hints may reach another server
 - ⚠ 198.51.100.53 answered this question differently, which a name whose answer is tailored to where it is asked from does honestly, and nothing else should
 
