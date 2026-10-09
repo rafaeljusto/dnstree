@@ -52,7 +52,13 @@ func Read(r io.Reader) ([]Exchange, error) {
 		if size > snaplen || size > len(data)-offset {
 			return nil, fmt.Errorf("packet %d is cut short", n)
 		}
-		at := time.Unix(int64(binary.LittleEndian.Uint32(header)), int64(binary.LittleEndian.Uint32(header[4:]))*1000).UTC()
+		micro := binary.LittleEndian.Uint32(header[4:])
+		if micro >= 1e6 {
+			// Carried into the seconds, it would name a time no capture
+			// can write.
+			return nil, fmt.Errorf("packet %d has a timestamp of more than a second of microseconds", n)
+		}
+		at := time.Unix(int64(binary.LittleEndian.Uint32(header)), int64(micro)*1000).UTC()
 		// WriteTo puts every packet in the order it was sent, which is what
 		// pairs an answer with the query before it.
 		if at.Before(last) {
@@ -151,19 +157,26 @@ func (rd *reader) segment(f flow, out bool, at time.Time, segment []byte) error 
 	if len(payload) == 0 {
 		return nil
 	}
+	// Only the first message each way is read, and once it is in, what
+	// follows is not kept: copying it out again for every later segment
+	// would cost a capture of small segments the square of its length.
 	if out {
 		if seq == s.clientSeq {
-			s.query = append(s.query, payload...)
 			s.clientSeq += uint32(len(payload))
-			s.exchange.Query = unframed(s.query)
+			if s.exchange.Query == nil {
+				s.query = append(s.query, payload...)
+				s.exchange.Query = unframed(s.query)
+			}
 		}
 		return nil
 	}
 	if seq == s.serverSeq {
-		s.answer = append(s.answer, payload...)
 		s.serverSeq += uint32(len(payload))
-		if answer := unframed(s.answer); answer != nil && s.exchange.Answer == nil {
-			s.exchange.Answer, s.exchange.Took = answer, at.Sub(s.exchange.Sent)
+		if s.exchange.Answer == nil {
+			s.answer = append(s.answer, payload...)
+			if answer := unframed(s.answer); answer != nil {
+				s.exchange.Answer, s.exchange.Took = answer, at.Sub(s.exchange.Sent)
+			}
 		}
 	}
 	return nil

@@ -3,6 +3,7 @@ package capture
 import (
 	"bytes"
 	"encoding/binary"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -69,6 +70,8 @@ func TestReadRefuses(t *testing.T) {
 	binary.LittleEndian.PutUint32(ethernet[20:], 1)
 	backwards := slices.Clone(good)
 	binary.LittleEndian.PutUint32(backwards[24+16+len("q")+28:], uint32(start.Unix()-1))
+	overflowing := slices.Clone(good)
+	binary.LittleEndian.PutUint32(overflowing[24+4:], 1e6)
 
 	tests := map[string]struct {
 		data []byte
@@ -79,6 +82,7 @@ func TestReadRefuses(t *testing.T) {
 		"a capture with link headers":        {ethernet, "link headers"},
 		"a capture cut in the middle":        {good[:len(good)-1], "cut short"},
 		"an answer written before its query": {backwards, "out of order"},
+		"microseconds past a second":         {overflowing, "more than a second of microseconds"},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -87,6 +91,58 @@ func TestReadRefuses(t *testing.T) {
 				t.Errorf("got %v, want an error saying %q", err, test.want)
 			}
 		})
+	}
+}
+
+// TestReadSegmentsAfterTheMessage covers a stream that goes on in one-byte
+// segments once its message is in: reading it costs what the file holds, not
+// a copy of the message for every segment after it.
+func TestReadSegmentsAfterTheMessage(t *testing.T) {
+	var data bytes.Buffer
+	header := binary.LittleEndian.AppendUint32(nil, 0xa1b2c3d4)
+	header = binary.LittleEndian.AppendUint32(header, 2|4<<16)
+	header = binary.LittleEndian.AppendUint64(header, 0)
+	header = binary.LittleEndian.AppendUint32(header, snaplen)
+	header = binary.LittleEndian.AppendUint32(header, linkRaw)
+	data.Write(header)
+	segment := func(seq uint32, flags byte, payload []byte) {
+		packet := make([]byte, 40+len(payload))
+		packet[0], packet[9] = 0x45, protoTCP
+		binary.BigEndian.PutUint16(packet[2:], uint16(len(packet)))
+		copy(packet[12:], []byte{192, 0, 2, 1})
+		copy(packet[16:], []byte{198, 51, 100, 53})
+		binary.BigEndian.PutUint16(packet[20:], 40000)
+		binary.BigEndian.PutUint16(packet[22:], 53)
+		binary.BigEndian.PutUint32(packet[24:], seq)
+		packet[32], packet[33] = 5<<4, flags
+		copy(packet[40:], payload)
+		record := binary.LittleEndian.AppendUint64(nil, 1)
+		record = binary.LittleEndian.AppendUint32(record, uint32(len(packet)))
+		record = binary.LittleEndian.AppendUint32(record, uint32(len(packet)))
+		data.Write(record)
+		data.Write(packet)
+	}
+	const syn, psh = 0x02, 0x18
+	message := make([]byte, 2+65000)
+	binary.BigEndian.PutUint16(message, 65000)
+	segment(0, syn, nil)
+	segment(1, psh, message)
+	for seq := uint32(1 + len(message)); data.Len() < 1<<20; seq++ {
+		segment(seq, psh, []byte{0})
+	}
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	exchanges, err := Read(bytes.NewReader(data.Bytes()))
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if len(exchanges) != 1 || !bytes.Equal(exchanges[0].Query, message[2:]) {
+		t.Errorf("got %d exchanges, want the one message", len(exchanges))
+	}
+	if spent, most := after.TotalAlloc-before.TotalAlloc, uint64(16*data.Len()); spent > most {
+		t.Errorf("reading %d bytes allocated %d, want at most %d", data.Len(), spent, most)
 	}
 }
 
