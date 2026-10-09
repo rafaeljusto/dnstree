@@ -945,6 +945,21 @@
           "description": "The last field of the SOA rdata, in seconds. A denial lives for the shorter of this and the TTL on the record (RFC 2308); both are carried, because which of them wins is a reading and this document records what the zone said.",
           "type": "integer",
           "minimum": 0
+        },
+        "refresh": {
+          "description": "How often the zone's secondaries are told to check for a new copy, in seconds. Absent in a walk saved before it was recorded.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "retry": {
+          "description": "How soon a secondary is told to check again after a check failed, in seconds. Absent in a walk saved before it was recorded.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "expire": {
+          "description": "How long a secondary that cannot check is told to go on serving its copy before it stops answering for the zone, in seconds. Absent in a walk saved before it was recorded.",
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

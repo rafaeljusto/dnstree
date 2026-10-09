@@ -369,6 +369,9 @@ type soa struct {
 	Serial  uint32 `json:"serial"`
 	TTL     uint32 `json:"ttl"`
 	Minimum uint32 `json:"minimum"`
+	Refresh uint32 `json:"refresh,omitempty"`
+	Retry   uint32 `json:"retry,omitempty"`
+	Expire  uint32 `json:"expire,omitempty"`
 }
 
 type dnssec struct {
@@ -687,7 +690,8 @@ func convertSOA(from *trace.SOA) *soa {
 	if from == nil {
 		return nil
 	}
-	return &soa{Serial: from.Serial, TTL: from.TTL, Minimum: from.Minimum}
+	return &soa{Serial: from.Serial, TTL: from.TTL, Minimum: from.Minimum,
+		Refresh: from.Refresh, Retry: from.Retry, Expire: from.Expire}
 }
 
 func convertDelegation(from *trace.Delegation) *delegation {

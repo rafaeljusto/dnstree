@@ -209,7 +209,8 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		to.Flags = trace.Flags{AA: from.Flags.AA, TC: from.Flags.TC, AD: from.Flags.AD, DO: from.Flags.DO, EDNS: from.Flags.EDNS}
 	}
 	if from.SOA != nil {
-		to.SOA = &trace.SOA{Serial: from.SOA.Serial, TTL: from.SOA.TTL, Minimum: from.SOA.Minimum}
+		to.SOA = &trace.SOA{Serial: from.SOA.Serial, TTL: from.SOA.TTL, Minimum: from.SOA.Minimum,
+			Refresh: from.SOA.Refresh, Retry: from.SOA.Retry, Expire: from.SOA.Expire}
 	}
 	switch to.Cookie {
 	case "", trace.CookieSupported, trace.CookieAbsent, trace.CookieMismatch, trace.CookieMalformed, trace.CookieRejected:

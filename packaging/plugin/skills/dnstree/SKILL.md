@@ -81,6 +81,7 @@ whole; `dnstree --schema` describes every field.
 | whether DNSSEC holds, and signatures are fresh | `dnstree --format markdown --dnssec NAME` |
 | whether a DS or key rollover is ready | `dnstree --format markdown --dnssec --check-ds NAME` |
 | whether all nameservers serve the same zone | `dnstree --format markdown --serial --all NAME` |
+| whether the SOA timers would drop the zone, or keep a new name missing | `dnstree --format markdown --serial NAME` |
 | whether NS and glue match parent and child | `dnstree --format markdown --check-ns NAME` |
 | whether a nameserver move will work, before it is made | `dnstree --format markdown --dnssec --try-ns ZONE=NEWSERVER NAME` |
 | how long a change takes to reach every cache | `dnstree --format markdown --dnssec --check-ns --propagation NAME` |

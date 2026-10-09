@@ -52,7 +52,11 @@ func grade(tr *trace.Trace, area trace.Area) trace.Graded {
 			problems = append(problems, finding)
 		}
 	}
-	slices.SortStableFunc(problems, func(a, b Finding) int { return int(b.Level - a.Level) })
+	// A timer says what would happen one day, so it never heads an area over
+	// something that is happening now, such as a secondary left behind.
+	slices.SortStableFunc(problems, func(a, b Finding) int {
+		return cmp.Or(int(b.Level-a.Level), compareBool(a.Topic == Timers, b.Topic == Timers))
+	})
 	if len(problems) > 0 {
 		graded := trace.Graded{Area: area, Grade: trace.GradeLook, Text: problems[0].Text, More: len(problems) - 1}
 		if problems[0].Level == Fault {
@@ -118,6 +122,7 @@ func about(tr *trace.Trace, area trace.Area) (findings []Finding, ran bool, pass
 		if addrs == 0 {
 			return nil, false, ""
 		}
+		findings = timers(tr)
 		passed = "every nameserver asked serves one copy of " + zone
 		if len(serials) == 1 {
 			for serial := range serials {
@@ -125,7 +130,7 @@ func about(tr *trace.Trace, area trace.Area) (findings []Finding, ran bool, pass
 			}
 		}
 		passed += fmt.Sprintf(" (%s, %s)", plural(len(names), "nameserver", "nameservers"), plural(addrs, "address", "addresses"))
-		return nil, true, passed
+		return findings, true, passed
 
 	case trace.AreaDNSSEC:
 		// The zones above are signed by somebody else.
@@ -184,4 +189,16 @@ func texts(findings []Finding) []string {
 		out = append(out, finding.Text)
 	}
 	return out
+}
+
+// compareBool orders false before true.
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	default:
+		return -1
+	}
 }

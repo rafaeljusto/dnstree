@@ -135,7 +135,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--check-ns`](docs/guide/zones.md#whether-the-parent-and-the-child-agree) | ask the zone that answered for its own NS set, its nameservers' addresses and its CSYNC, and compare them with the delegation and its glue |
 | [`--check-ds`](docs/guide/dnssec.md#what-the-zone-asks-its-parent) | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS, or, for a zone with none, check the bootstrap signals of RFC 9615 |
 | [`--report`](docs/guide/dnssec.md#telling-the-zone-it-is-broken) | tell the agent a zone names that its chain of trust is bogus (RFC 9567) |
-| [`--serial`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of the zone which copy of it they serve, and compare |
+| [`--serial`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of the zone which copy of it they serve, and compare, and judge the SOA's timers |
 | [`--check-axfr`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over |
 | [`--check-recursion`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone to look up somebody else's name, and say which do |
 | [`--check-edns`](docs/guide/zones.md#how-they-handle-edns) | ask every nameserver of the zone the RFC 8906 EDNS tests, and say which fail them |

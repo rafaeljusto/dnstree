@@ -241,6 +241,35 @@ arithmetic wraps around (RFC 1982), so the larger number is not reliably the
 later zone, and a tool that guessed would send somebody to restart the wrong
 server.
 
+The same answers carry the timers the zone gives its secondaries, and the sweep
+reads them too: refresh, how often a secondary checks for a new copy; retry, how
+soon it checks again after a check failed; expire, how long it goes on serving a
+copy it cannot check; and the negative TTL, how long a resolver remembers that a
+name does not exist. Where they would hurt, it says so:
+
+```
+$ dnstree --serial --no-asn google.com A
+...
+· the SOA of google.com. expires a copy after 30 minutes, so a secondary that cannot reach the primary for longer would stop answering for the zone; RFC 1912 suggests two to four weeks
+```
+
+It says something when:
+
+- expire is no longer than refresh, so a secondary that missed one check would
+  drop the zone;
+- expire is under a week, against the two to four weeks RFC 1912 suggests;
+- retry is longer than refresh, so a failed check is followed up later than a
+  check that worked;
+- the negative TTL, the shorter of the SOA's TTL and its minimum, is a day or
+  more, so a new name stays missing that long for anyone who asked too early.
+  RFC 2308 suggests one to three hours;
+- the nameservers hand out different timers.
+
+Hosted and anycast services copy their zones their own way and never read
+refresh or expire, which is why google.com. gets away with thirty minutes. Each
+line says what the timer would do, not that an outage is coming, and `--check`
+grades them worth a look, never broken.
+
 It costs a query per nameserver and is off unless asked for. A walk looks up
 only as many of the nameservers named outside the zone as it needs to get an
 answer, so the sweep looks up the rest itself, at a few queries each. It does

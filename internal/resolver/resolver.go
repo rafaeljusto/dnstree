@@ -514,7 +514,8 @@ func dedupe(servers []trace.Server) []trace.Server {
 func soa(authority []dns.RR) *trace.SOA {
 	for _, rr := range authority {
 		if record, ok := rr.(*dns.SOA); ok {
-			return &trace.SOA{Serial: record.Serial, TTL: record.Header().TTL, Minimum: record.Minttl}
+			return &trace.SOA{Serial: record.Serial, TTL: record.Header().TTL, Minimum: record.Minttl,
+				Refresh: record.Refresh, Retry: record.Retry, Expire: record.Expire}
 		}
 	}
 	return nil

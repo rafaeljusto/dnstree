@@ -681,7 +681,8 @@ func (s *Step) Tight() bool {
 }
 
 // SOA is as much of a zone's start of authority as it is read for: how long a
-// denial from it lives, and which copy of the zone the server answering holds.
+// denial from it lives, which copy of the zone the server answering holds, and
+// how its secondaries are told to keep their copies.
 type SOA struct {
 	// Serial is the version of the zone the server is serving. Two nameservers
 	// of one zone that answer with different serials are answering from
@@ -695,6 +696,14 @@ type SOA struct {
 	// zone said rather than what somebody made of it.
 	TTL     uint32
 	Minimum uint32
+
+	// Refresh, Retry and Expire are how the zone's secondaries are told to keep
+	// their copies: how often to check for a new one, how soon to check again
+	// after a check failed, and how long to go on serving one they cannot
+	// check. All three are zero in a walk saved before they were recorded.
+	Refresh uint32
+	Retry   uint32
+	Expire  uint32
 }
 
 // Server is the nameserver a step queried.

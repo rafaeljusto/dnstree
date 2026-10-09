@@ -25,7 +25,7 @@ func TestReadRoundTrip(t *testing.T) {
 				Zone: "example.com.", Kind: trace.KindNoData, Minimised: true,
 				Server:   trace.Server{Name: "ns.example.com.", IP: netip.MustParseAddr("192.0.2.3"), Port: 53},
 				Asked:    trace.Question{Name: "b.example.com.", Type: "A"},
-				SOA:      &trace.SOA{Serial: 7, TTL: 3600, Minimum: 300},
+				SOA:      &trace.SOA{Serial: 7, TTL: 3600, Minimum: 300, Refresh: 7200, Retry: 900, Expire: 1209600},
 				Subnet:   &trace.Subnet{Prefix: netip.MustParsePrefix("203.0.113.0/24")},
 				Extended: []trace.ExtendedError{{Code: 0, Text: `a \ and a ` + "\x1b"}},
 			}}},

@@ -98,6 +98,30 @@ func TestSerialsAreAsked(t *testing.T) {
 	}
 }
 
+// TestSerialTimersAreRecorded keeps what each nameserver says about keeping the
+// zone, which explain judges and the walk never does.
+func TestSerialTimersAreRecorded(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := replicated(t, caughtUp, caughtUp)
+	cfg.Serial = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := trace.SOA{Serial: 2, TTL: 3600, Minimum: 3600, Refresh: 7200, Retry: 3600, Expire: 1209600}
+	asked := serialsIn(tr)
+	if len(asked) == 0 {
+		t.Fatalf("got no serials: %s", format(steps(tr)))
+	}
+	for _, step := range asked {
+		if step.SOA == nil || *step.SOA != want {
+			t.Errorf("got %+v, want %+v, as the zone was written", step.SOA, want)
+		}
+	}
+}
+
 // TestSerialsDisagree is the reason the sweep exists. A secondary left behind
 // by a zone transfer answers every question correctly and answers it out of an
 // older zone, and only the serials say so.

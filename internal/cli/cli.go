@@ -336,7 +336,10 @@ A walk stops at the first nameserver that answers, so a secondary left behind by
 a zone transfer is invisible to everything else here: it answers the question
 correctly, out of an older zone. It costs a query per nameserver, and a lookup
 of each one named outside the zone that the walk did not need, and which of the
-serials is the newer one is not claimed, because serial arithmetic wraps.
+serials is the newer one is not claimed, because serial arithmetic wraps. It
+also reads the timers in the SOA, and says where refresh, retry, expire and the
+negative TTL would hurt: a secondary dropping the zone after one missed check,
+or a new name staying missing for a day.
 
 --check-axfr asks every nameserver of the zone the walk ends in for the whole
 zone (AXFR), the way anybody could, and says on each which of them hand it

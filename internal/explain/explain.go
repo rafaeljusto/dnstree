@@ -31,6 +31,7 @@ const (
 	Registry              // what the registry holds about the domain
 	Takeover              // what somebody else could take the name over with
 	Spread                // what the nameservers of the zone have in common
+	Timers                // how the zone tells its secondaries to keep their copies
 	Servers               // the servers that made the walk harder
 	Issuance              // who may issue certificates for the name
 	Mail                  // what a check of mail sent as the name comes to
@@ -53,6 +54,8 @@ func (t Topic) String() string {
 		return "takeover"
 	case Spread:
 		return "spread"
+	case Timers:
+		return "timers"
 	case Servers:
 		return "servers"
 	case Issuance:
@@ -124,6 +127,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, setup(tr)...)
 	findings = append(findings, takeover(tr)...)
 	findings = append(findings, spread(tr)...)
+	findings = append(findings, timers(tr)...)
 	findings = append(findings, requests(tr)...)
 	findings = append(findings, servers(tr)...)
 	findings = append(findings, cookies(tr)...)
