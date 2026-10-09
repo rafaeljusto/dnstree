@@ -919,6 +919,7 @@ func TestCacheLifetimesAreSpelledOut(t *testing.T) {
 		{ttl: 86400, want: "1 day"},
 		{ttl: 90000, want: "1 day 1 hour"},
 		{ttl: 172800, want: "2 days"},
+		{ttl: 1<<32 - 1, want: "49710 days 6 hours"},
 	} {
 		t.Run(tt.want, func(t *testing.T) {
 			want := "a cache may hold this answer for " + tt.want

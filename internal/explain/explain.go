@@ -1306,25 +1306,27 @@ func add(names []string, name string) []string {
 // below where there is a remainder. It is read by somebody working out whether
 // to wait through it, so "2 days" earns its room over "172800" and over "48h".
 func spell(seconds uint32) string {
-	switch n := int(seconds); {
-	case n < 60:
-		return plural(n, "second", "seconds")
-	case n < 3600:
-		return spelled(n, 60, 1, "minute", "second")
-	case n < 86400:
-		return spelled(n, 3600, 60, "hour", "minute")
+	switch {
+	case seconds < 60:
+		return plural(int(seconds), "second", "seconds")
+	case seconds < 3600:
+		return spelled(seconds, 60, 1, "minute", "second")
+	case seconds < 86400:
+		return spelled(seconds, 3600, 60, "hour", "minute")
 	default:
-		return spelled(n, 86400, 3600, "day", "hour")
+		return spelled(seconds, 86400, 3600, "day", "hour")
 	}
 }
 
 // spelled is a count of one unit and, where the remainder does not divide away,
 // of the one below it. Two are as far as it goes: the third would be noise
 // against the first, and nobody waiting out a delegation cares about seconds.
-func spelled(seconds, size, smaller int, unit, below string) string {
-	whole := plural(seconds/size, unit, unit+"s")
+// It divides before it converts, since a timer past 2^31 is no int on a 32-bit
+// build.
+func spelled(seconds, size, smaller uint32, unit, below string) string {
+	whole := plural(int(seconds/size), unit, unit+"s")
 	if rest := (seconds % size) / smaller; rest > 0 {
-		return whole + " " + plural(rest, below, below+"s")
+		return whole + " " + plural(int(rest), below, below+"s")
 	}
 	return whole
 }
