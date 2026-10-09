@@ -282,8 +282,32 @@ type Behaviour struct {
 	// Missing is a name made up so that it cannot exist.
 	Missing *Resolver
 
+	// Google, Akamai and Minimisation are TXT answers from zones that report
+	// what reached their servers: the first two the client subnet (RFC 7871),
+	// internet.nl's whether the name was asked a label at a time (RFC 9156).
+	// All three are nil in a walk saved before they were asked.
+	Google       *Resolver
+	Akamai       *Resolver
+	Minimisation *Resolver
+
 	Validates Observed
 	Rewrites  Observed
+
+	// Subnet is whether any of the zones was sent a client subnet, and
+	// Echoes what each zone that answered readably saw. A resolver chooses
+	// per zone whether to send one, so a no says nothing of the others.
+	Subnet    Observed
+	Echoes    []Echo
+	Minimises Observed
+}
+
+// Echo is what one zone saw of the client subnet: Bits is the prefix length
+// it was sent, where Sent is yes. The address itself is not kept, since the
+// answer may come from a cache another client filled.
+type Echo struct {
+	Operator string
+	Sent     Observed
+	Bits     int
 }
 
 // Observed is whether a resolver was seen to do something.

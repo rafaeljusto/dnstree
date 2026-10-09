@@ -45,3 +45,19 @@ func TestLiveBrokenOnPurpose(t *testing.T) {
 		t.Fatalf("got exit %d, want %d: %s is no longer broken\n%s%s", code, exitBogus, transport.BrokenName, stdout.String(), stderr.String())
 	}
 }
+
+// TestLiveEchoes checks that the zones --check-resolver reads ECS and
+// minimisation from still answer in the shape it reads. Google's resolver
+// sends a subnet to its own zone and minimises, so an unknown from it means a
+// zone has changed.
+func TestLiveEchoes(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := run(t.Context(), []string{"--check-resolver", "--resolver", "8.8.8.8", "--no-asn", "--color", "never", "example.com", "A"}, &stdout, &stderr)
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, "8.8.8.8 sends ECS (/24) to google") || !strings.Contains(out, "and minimises queries") {
+		t.Errorf("got no ECS sent to %s or no minimisation from %s:\n%s", transport.GoogleEcho, transport.MinimisationEcho, out)
+	}
+}

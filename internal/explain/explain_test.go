@@ -1060,8 +1060,15 @@ func TestBehaviours(t *testing.T) {
 	tr.Resolvers = []*trace.Resolver{
 		resolver("192.0.2.53", &trace.Behaviour{Validates: trace.ObservedNo, Rewrites: trace.ObservedYes,
 			Missing: &trace.Resolver{Rcode: "NOERROR", Records: []trace.RR{{Name: "x.com.", Type: "A", Data: "198.51.100.1"}}}}),
-		resolver("192.0.2.54", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo}),
+		resolver("192.0.2.54", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Subnet: trace.ObservedNo, Minimises: trace.ObservedYes,
+			Echoes: []trace.Echo{{Operator: "google", Sent: trace.ObservedNo}}}),
 		resolver("192.0.2.55", &trace.Behaviour{Validates: trace.ObservedUnknown, Rewrites: trace.ObservedUnknown}),
+		resolver("192.0.2.57", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Subnet: trace.ObservedYes, Minimises: trace.ObservedNo, Echoes: []trace.Echo{
+				{Operator: "google", Sent: trace.ObservedYes, Bits: 24},
+				{Operator: "akamai", Sent: trace.ObservedNo},
+			}}),
 		resolver("192.0.2.56", nil),
 	}
 
@@ -1069,6 +1076,8 @@ func TestBehaviours(t *testing.T) {
 	for _, want := range []string{
 		"192.0.2.53 does not validate DNSSEC: it answered dnssec-failed.org",
 		"192.0.2.53 rewrites NXDOMAIN: a made-up name came back as 198.51.100.1",
+		"192.0.2.57 sends ECS: google's servers were told the /24 the question came from",
+		"192.0.2.57 does not minimise queries: internet.nl's test zone",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("got %q, want it to say %q", got, want)

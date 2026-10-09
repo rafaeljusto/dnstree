@@ -150,11 +150,22 @@ func recursiveRecords(rrs []dns.RR) []trace.RR {
 // 2010; a live test notices if that stops.
 const BrokenName = "dnssec-failed.org."
 
+// Names whose servers answer with what reached them. Google's and Akamai's
+// report the client subnet a resolver sent, internet.nl's whether it asked a
+// label at a time. None takes a label of our own, so a resolver's cache can
+// hand back what another client's question was seen as.
+const (
+	GoogleEcho       = "o-o.myaddr.l.google.com."
+	AkamaiEcho       = "whoami.ds.akahelp.net."
+	MinimisationEcho = "qnamemintest.internet.nl."
+)
+
 // Probe asks server the questions whose right answers are known beforehand:
-// BrokenName and the root's SOA with DNSSEC, and missing, a name that cannot
-// exist. A SERVFAIL for BrokenName is asked again with checking disabled, which
-// tells a failed validation from a failure to get there. What the answers say
-// of the resolver is left to the reading of them.
+// BrokenName and the root's SOA with DNSSEC, missing, a name that cannot
+// exist, and the TXT of each echo. A SERVFAIL for BrokenName is asked again
+// with checking disabled, which tells a failed validation from a failure to
+// get there. What the answers say of the resolver is left to the reading of
+// them.
 //
 // Nothing is asked again over a fallback: the answers are small, and a silent
 // resolver would hold the run up for a timeout per transport per question.
@@ -178,6 +189,9 @@ func Probe(ctx context.Context, carrier Transport, server netip.AddrPort, missin
 	})
 	wait.Go(func() { found.Root = asked(".", "SOA", true, false) })
 	wait.Go(func() { found.Missing = asked(missing, "A", false, false) })
+	wait.Go(func() { found.Google = asked(GoogleEcho, "TXT", false, false) })
+	wait.Go(func() { found.Akamai = asked(AkamaiEcho, "TXT", false, false) })
+	wait.Go(func() { found.Minimisation = asked(MinimisationEcho, "TXT", false, false) })
 	wait.Wait()
 	return &found
 }

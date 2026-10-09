@@ -204,13 +204,26 @@ type resolver struct {
 }
 
 // behaviour is what --check-resolver saw the resolver do, and the answers
-// that rest on. Validates and Rewrites are "yes", "no" or "unknown".
+// that rest on. Validates, Rewrites, Subnet and Minimises are "yes", "no" or
+// "unknown"; the last two are absent from a walk saved before they were asked.
 type behaviour struct {
-	Validates string    `json:"validates"`
-	Rewrites  string    `json:"rewrites"`
-	Broken    *resolver `json:"broken,omitempty"`
-	Root      *resolver `json:"root,omitempty"`
-	Missing   *resolver `json:"missing,omitempty"`
+	Validates    string    `json:"validates"`
+	Rewrites     string    `json:"rewrites"`
+	Subnet       string    `json:"subnet,omitempty"`
+	Echoes       []echo    `json:"echoes,omitempty"`
+	Minimises    string    `json:"minimises,omitempty"`
+	Broken       *resolver `json:"broken,omitempty"`
+	Root         *resolver `json:"root,omitempty"`
+	Missing      *resolver `json:"missing,omitempty"`
+	Google       *resolver `json:"google,omitempty"`
+	Akamai       *resolver `json:"akamai,omitempty"`
+	Minimisation *resolver `json:"minimisation,omitempty"`
+}
+
+type echo struct {
+	Operator string `json:"operator"`
+	Sent     string `json:"sent"`
+	Bits     int    `json:"bits,omitempty"`
 }
 
 // discovery is what the resolver said of its encrypted selves (RFC 9462), none
@@ -527,13 +540,22 @@ func convertBehaviour(from *trace.Behaviour) *behaviour {
 	if from == nil {
 		return nil
 	}
-	return &behaviour{
-		Validates: string(from.Validates),
-		Rewrites:  string(from.Rewrites),
-		Broken:    convertResolver(from.Broken),
-		Root:      convertResolver(from.Root),
-		Missing:   convertResolver(from.Missing),
+	to := &behaviour{
+		Validates:    string(from.Validates),
+		Rewrites:     string(from.Rewrites),
+		Subnet:       string(from.Subnet),
+		Minimises:    string(from.Minimises),
+		Broken:       convertResolver(from.Broken),
+		Root:         convertResolver(from.Root),
+		Missing:      convertResolver(from.Missing),
+		Google:       convertResolver(from.Google),
+		Akamai:       convertResolver(from.Akamai),
+		Minimisation: convertResolver(from.Minimisation),
 	}
+	for _, seen := range from.Echoes {
+		to.Echoes = append(to.Echoes, echo{Operator: seen.Operator, Sent: string(seen.Sent), Bits: seen.Bits})
+	}
+	return to
 }
 
 func convertCAA(from *trace.CAA) *caa {

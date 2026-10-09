@@ -70,7 +70,7 @@ one after another, each from the root servers down.
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
   --ddr                   ask each resolver which encrypted resolvers stand for it
-  --check-resolver        see whether each resolver validates and rewrites NXDOMAIN
+  --check-resolver        see what each resolver validates, rewrites and gives away
   --report                report a bogus chain to the agent the zone names (RFC 9567)
   --format FORMAT         how to draw the walk: tree, waterfall, json, web; see below
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
@@ -501,9 +501,11 @@ the question is timed against, and says under the tree what each one was seen
 to do. A resolver validates DNSSEC if it refuses dnssec-failed.org, whose chain
 of trust is broken on purpose, and answers once told not to check; it does not
 if it answers that name and marks nothing authentic, not even the root. It
-rewrites NXDOMAIN if a made-up name under com comes back with an address.
+rewrites NXDOMAIN if a made-up name under com comes back with an address. It
+sends ECS if Google's or Akamai's test zone reports a client subnet arriving
+with the question, and minimises queries if internet.nl's test zone says so.
 Whatever the answers leave open is said as "may or may not", never guessed. It
-costs up to four queries per resolver, sets no exit code, and needs the
+costs up to seven queries per resolver, sets no exit code, and needs the
 comparison that --no-compare turns off.
 
 What the command line leaves out is taken from a file of defaults: the one named
@@ -804,7 +806,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
-	flags.BoolVar(&cfg.Behave, "check-resolver", false, "see whether each resolver validates and rewrites NXDOMAIN")
+	flags.BoolVar(&cfg.Behave, "check-resolver", false, "see what each resolver validates, rewrites and gives away")
 	flags.BoolVar(&cfg.Report, "report", false, "tell the agent a zone names that its chain of trust is bogus")
 	flags.StringVar(&format, "format", "tree", orList(formatNames(nil)))
 	flags.StringVar(&cfg.WebAddr, "web-addr", "", "where the served page listens")

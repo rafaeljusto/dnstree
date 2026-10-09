@@ -1188,6 +1188,23 @@ func behaviours(tr *trace.Trace) []Finding {
 				"%s rewrites NXDOMAIN: a made-up name came back %s, which breaks whatever relies on being told a name does not exist; use another resolver",
 				who, came)})
 		}
+		if seen.Subnet == trace.ObservedYes {
+			var told, bits []string
+			for _, echo := range seen.Echoes {
+				if echo.Sent == trace.ObservedYes {
+					told = add(told, echo.Operator+"'s")
+					bits = add(bits, fmt.Sprintf("/%d", echo.Bits))
+				}
+			}
+			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s sends ECS: %s servers were told the %s the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)",
+				who, list(told), strings.Join(bits, " or "))})
+		}
+		if seen.Minimises == trace.ObservedNo {
+			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s does not minimise queries: internet.nl's test zone was asked the whole name where a part would do, so the root and the top-level domains see every name its clients look up (RFC 9156)",
+				who)})
+		}
 	}
 	return findings
 }

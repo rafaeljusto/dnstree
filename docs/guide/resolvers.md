@@ -206,24 +206,32 @@ A resolver that designates nothing says so, and one that cannot be asked says
 why. Without `--resolver` the question goes to the host's own resolver;
 `--no-compare` leaves nothing to ask.
 
-## Whether a resolver validates, and tells the truth about NXDOMAIN
+## How a resolver behaves
 
-From outside, most resolvers look alike: you ask, you get an answer. Two
+From outside, most resolvers look alike: you ask, you get an answer. A few
 habits set them apart where it matters. One that does not validate DNSSEC lets
 a forged answer for a signed name through as though it were real. One that
 rewrites NXDOMAIN answers a name that does not exist with the address of a page
-of its own, which breaks whatever relies on being told a name is not there.
-`--check-resolver` puts questions whose right answers are known to each
-resolver the question is timed against, and says under the tree what each one
-was seen to do:
+of its own, which breaks whatever relies on being told a name is not there. One
+that sends ECS tells the servers it asks which network you are on, and one that
+does not minimise its queries shows the root and the top-level domains every
+name you look up. `--check-resolver` puts questions whose right answers are
+known to each resolver the question is timed against, and says under the tree
+what each one was seen to do:
 
 ```
-$ dnstree --check-resolver --resolver 1.1.1.1 --resolver 4.2.2.2 --explain www.isc.org
+$ dnstree --check-resolver --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 4.2.2.2 --explain www.isc.org
 ...
 🧪 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone
+🧪 1.1.1.1 sends ECS (/24) to akamai but not google and minimises queries
+🧪 8.8.8.8 validates DNSSEC and leaves NXDOMAIN alone
+🧪 8.8.8.8 sends ECS (/24) to google and akamai and minimises queries
 🧪 4.2.2.2 does not validate DNSSEC and leaves NXDOMAIN alone
-✔ answered in 2.5s · resolvers in 264ms-377ms · 6 queries · 3 servers
+🧪 4.2.2.2 sends no ECS to google and may or may not minimise queries
+✔ answered in 2.4s · resolvers in 264ms-281ms · 6 queries · 3 servers
 ...
+· 1.1.1.1 sends ECS: akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
+· 8.8.8.8 sends ECS: google's and akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
 · 4.2.2.2 does not validate DNSSEC: it answered dnssec-failed.org, whose chain of trust is broken on purpose, so a forged answer for a signed name reaches whoever uses it as though it were real
 ```
 
@@ -235,13 +243,23 @@ $ dnstree --check-resolver --resolver 1.1.1.1 --resolver 4.2.2.2 --explain www.i
   resolver to validate everything but it, and the line says it cannot tell.
 - **NXDOMAIN rewriting** rests on a name made up for the run under `com.`. An
   NXDOMAIN is the truth; an address is a rewrite, and the line names it.
+- **ECS** ([RFC 7871](https://www.rfc-editor.org/rfc/rfc7871)) rests on two
+  names whose servers report what reached them: `o-o.myaddr.l.google.com` and
+  `whoami.ds.akahelp.net`. A resolver chooses for each zone whether to send
+  a subnet, so the line names the zones that were sent one and those that
+  were not, and a "no" says nothing of any other zone. Only the prefix length
+  is shown: both answers are cached for under a minute, and the address in
+  one may be another client's.
+- **QNAME minimisation** ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156))
+  rests on `qnamemintest.internet.nl`, whose servers say in words whether the
+  name reached them a label at a time.
 
 Whatever the answers leave open is said as "may or may not", never guessed:
 a resolver that forwards to another, or treats these names specially, is
-something the questions cannot see past. It costs up to four queries per
+something the questions cannot see past. It costs up to seven queries per
 resolver, and sets no exit code: a resolver is not the name being asked about.
 
 > [!NOTE]
-> The validation check depends on a zone somebody else runs. Should
-> `dnssec-failed.org` ever be fixed, the check reads as "may or may not" rather
-> than as a wrong answer.
+> Every check depends on a zone somebody else runs. Should one of them be
+> fixed, change its answers or go away, its check reads as "may or may not"
+> rather than as a wrong answer.

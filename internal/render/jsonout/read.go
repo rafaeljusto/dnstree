@@ -332,18 +332,38 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 	if from == nil {
 		return nil, nil
 	}
-	to := &trace.Behaviour{Validates: trace.Observed(from.Validates), Rewrites: trace.Observed(from.Rewrites)}
+	to := &trace.Behaviour{
+		Validates: trace.Observed(from.Validates), Rewrites: trace.Observed(from.Rewrites),
+		Subnet: trace.Observed(from.Subnet), Minimises: trace.Observed(from.Minimises),
+	}
 	for _, seen := range []trace.Observed{to.Validates, to.Rewrites} {
-		switch seen {
-		case trace.ObservedYes, trace.ObservedNo, trace.ObservedUnknown:
-		default:
+		if !observed(seen) {
 			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
 		}
+	}
+	// Absent from a walk saved before they were asked.
+	for _, seen := range []trace.Observed{to.Subnet, to.Minimises} {
+		if seen != "" && !observed(seen) {
+			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
+		}
+	}
+	for _, seen := range from.Echoes {
+		sent := trace.Observed(seen.Sent)
+		if (sent != trace.ObservedYes && sent != trace.ObservedNo) || seen.Operator == "" {
+			return nil, fmt.Errorf("jsonout: %q is not what a zone can have been sent", seen.Sent)
+		}
+		if seen.Bits < 0 || seen.Bits > 128 {
+			return nil, fmt.Errorf("jsonout: /%d is no prefix length", seen.Bits)
+		}
+		to.Echoes = append(to.Echoes, trace.Echo{Operator: seen.Operator, Sent: sent, Bits: seen.Bits})
 	}
 	for _, answer := range []struct {
 		from *resolver
 		to   **trace.Resolver
-	}{{from.Broken, &to.Broken}, {from.Root, &to.Root}, {from.Missing, &to.Missing}} {
+	}{
+		{from.Broken, &to.Broken}, {from.Root, &to.Root}, {from.Missing, &to.Missing},
+		{from.Google, &to.Google}, {from.Akamai, &to.Akamai}, {from.Minimisation, &to.Minimisation},
+	} {
 		if answer.from == nil {
 			continue
 		}
@@ -354,6 +374,14 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 		*answer.to = read
 	}
 	return to, nil
+}
+
+func observed(seen trace.Observed) bool {
+	switch seen {
+	case trace.ObservedYes, trace.ObservedNo, trace.ObservedUnknown:
+		return true
+	}
+	return false
 }
 
 func readDiscovery(from *discovery) (*trace.Discovery, error) {

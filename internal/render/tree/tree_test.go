@@ -425,10 +425,24 @@ func behaving() *trace.Trace {
 	}}
 	tr.Resolvers = []*trace.Resolver{{
 		Server: at("192.0.2.53"), Rcode: "NOERROR",
-		Behaviour: &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo},
+		Behaviour: &trace.Behaviour{
+			Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Google: &trace.Resolver{}, Akamai: &trace.Resolver{}, Minimisation: &trace.Resolver{},
+			Subnet: trace.ObservedYes, Minimises: trace.ObservedYes, Echoes: []trace.Echo{
+				{Operator: "google", Sent: trace.ObservedNo},
+				{Operator: "akamai", Sent: trace.ObservedYes, Bits: 24},
+			},
+		},
 	}, {
 		Server: at("192.0.2.54"), Rcode: "NOERROR",
-		Behaviour: &trace.Behaviour{Validates: trace.ObservedNo, Rewrites: trace.ObservedYes, Missing: rewritten},
+		Behaviour: &trace.Behaviour{
+			Validates: trace.ObservedNo, Rewrites: trace.ObservedYes, Missing: rewritten,
+			Google: &trace.Resolver{}, Akamai: &trace.Resolver{}, Minimisation: &trace.Resolver{},
+			Subnet: trace.ObservedNo, Minimises: trace.ObservedNo, Echoes: []trace.Echo{
+				{Operator: "google", Sent: trace.ObservedNo},
+				{Operator: "akamai", Sent: trace.ObservedNo},
+			},
+		},
 	}, {
 		Server: at("192.0.2.55"), Err: "i/o timeout",
 		Behaviour: &trace.Behaviour{Validates: trace.ObservedUnknown, Rewrites: trace.ObservedUnknown},
@@ -449,10 +463,16 @@ func TestRenderBehaviours(t *testing.T) {
 		"resolver: 192.0.2.53 validates DNSSEC and leaves NXDOMAIN alone\n",
 		"resolver: 192.0.2.54 does not validate DNSSEC and rewrites NXDOMAIN to 198.51.100.1, 198.51.100.2\n",
 		"resolver: 192.0.2.55 may or may not validate DNSSEC and may or may not rewrite NXDOMAIN\n",
+		"resolver: 192.0.2.53 sends ECS (/24) to akamai but not google and minimises queries\n",
+		"resolver: 192.0.2.54 sends no ECS to google or akamai and does not minimise queries\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("got no %q in:\n%s", want, got)
 		}
+	}
+	// A walk saved before ECS and minimisation were asked draws no line for them.
+	if strings.Count(got, "192.0.2.55") != 1 {
+		t.Errorf("got a second line for a resolver whose echoes were never asked:\n%s", got)
 	}
 	if strings.Contains(got, "192.0.2.56") {
 		t.Errorf("got a line for a resolver never checked:\n%s", got)

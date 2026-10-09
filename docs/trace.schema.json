@@ -606,6 +606,52 @@
         "missing": {
           "description": "The address of the made-up name.",
           "$ref": "#/$defs/resolver"
+        },
+        "subnet": {
+          "description": "yes, google or akamai was sent a client subnet (ECS, RFC 7871); no, those that answered readably were sent none, which says nothing of other zones; unknown, neither answered readably. Absent from a walk saved before it was asked.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "echoes": {
+          "description": "What each of google and akamai saw of the client subnet, for those that answered readably.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/echo" }
+        },
+        "minimises": {
+          "description": "yes, internet.nl's test zone saw the name asked a label at a time (RFC 9156); no, it saw the whole name; unknown, it said neither. Absent from a walk saved before it was asked.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "google": {
+          "description": "o-o.myaddr.l.google.com. TXT, which reports the address the question came from and any client subnet sent with it.",
+          "$ref": "#/$defs/resolver"
+        },
+        "akamai": {
+          "description": "whoami.ds.akahelp.net. TXT, which reports the same as google, in pairs of strings.",
+          "$ref": "#/$defs/resolver"
+        },
+        "minimisation": {
+          "description": "qnamemintest.internet.nl. TXT, which says in words whether the name was asked a label at a time.",
+          "$ref": "#/$defs/resolver"
+        }
+      }
+    },
+    "echo": {
+      "description": "What one zone saw of the client subnet. The address is left out: the answer may come from a cache another client filled.",
+      "type": "object",
+      "required": ["operator", "sent"],
+      "properties": {
+        "operator": {
+          "description": "Who runs the zone: google or akamai.",
+          "type": "string"
+        },
+        "sent": {
+          "type": "string",
+          "enum": ["yes", "no"]
+        },
+        "bits": {
+          "description": "The prefix length of the subnet, where one was sent.",
+          "type": "integer"
         }
       }
     },

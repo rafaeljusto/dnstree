@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -821,8 +822,55 @@ func (r *renderer) behaviours(tr *trace.Trace) []string {
 		default:
 			lines = append(lines, r.paint.dim(line))
 		}
+		if exposure := exposed(seen); exposure != "" {
+			lines = append(lines, r.paint.dim(mark+who+" "+exposure))
+		}
 	}
 	return lines
+}
+
+// exposed is what a resolver tells the servers it asks: the client subnet,
+// and the whole name where it could ask a label at a time. Empty for a walk
+// saved before these were asked.
+func exposed(seen *trace.Behaviour) string {
+	if seen.Google == nil && seen.Akamai == nil && seen.Minimisation == nil {
+		return ""
+	}
+	var sent, withheld []string
+	var bits []string
+	for _, echo := range seen.Echoes {
+		switch echo.Sent {
+		case trace.ObservedYes:
+			sent = append(sent, echo.Operator)
+			if b := fmt.Sprintf("/%d", echo.Bits); !slices.Contains(bits, b) {
+				bits = append(bits, b)
+			}
+		case trace.ObservedNo:
+			withheld = append(withheld, echo.Operator)
+		}
+	}
+	var said []string
+	switch {
+	case len(sent) > 0:
+		subnet := "sends ECS (" + strings.Join(bits, ", ") + ") to " + strings.Join(sent, " and ")
+		if len(withheld) > 0 {
+			subnet += " but not " + strings.Join(withheld, " or ")
+		}
+		said = append(said, subnet)
+	case len(withheld) > 0:
+		said = append(said, "sends no ECS to "+strings.Join(withheld, " or "))
+	default:
+		said = append(said, "may or may not send ECS")
+	}
+	switch seen.Minimises {
+	case trace.ObservedYes:
+		said = append(said, "minimises queries")
+	case trace.ObservedNo:
+		said = append(said, "does not minimise queries")
+	default:
+		said = append(said, "may or may not minimise queries")
+	}
+	return strings.Join(said, " and ")
 }
 
 // authorities say who may issue certificates for the name and which set

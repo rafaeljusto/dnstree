@@ -305,6 +305,10 @@ const probeZone = `
 @                  IN SOA  ns.test. hostmaster.test. 1 7200 3600 1209600 3600
 @                  IN NS   ns.test.
 dnssec-failed.org. IN A    192.0.2.20
+o-o.myaddr.l.google.com.   IN TXT "192.0.2.53"
+o-o.myaddr.l.google.com.   IN TXT "edns0-client-subnet 198.51.100.0/24"
+whoami.ds.akahelp.net.     IN TXT "ns" "192.0.2.53"
+qnamemintest.internet.nl.  IN TXT "HOORAY - QNAME minimisation is enabled on your resolver :)!"
 `
 
 func TestProbe(t *testing.T) {
@@ -322,6 +326,18 @@ func TestProbe(t *testing.T) {
 				if found.Broken.Rcode != "SERVFAIL" || found.Broken.Unchecked == nil ||
 					found.Broken.Unchecked.Rcode != "NOERROR" {
 					t.Errorf("got %+v, want SERVFAIL and then an answer unchecked", found.Broken)
+				}
+			},
+		},
+		"the echoes are asked for their TXT": {
+			zone: probeZone,
+			check: func(t *testing.T, found *trace.Behaviour) {
+				for name, answer := range map[string]*trace.Resolver{
+					"google": found.Google, "akamai": found.Akamai, "minimisation": found.Minimisation,
+				} {
+					if answer == nil || answer.Rcode != "NOERROR" || len(trace.Answers(answer.Records, "TXT")) == 0 {
+						t.Errorf("got %+v for %s, want its TXT", answer, name)
+					}
 				}
 			},
 		},
@@ -368,7 +384,7 @@ func TestProbe(t *testing.T) {
 
 			// DNSSEC is asked for where an answer is read for it, and only there.
 			for _, query := range server.Queries() {
-				if want := query.Name != "dnstree-0123456789abcdef.com."; query.DO != want {
+				if want := query.Name == transport.BrokenName || query.Name == "."; query.DO != want {
 					t.Errorf("got %+v, want DO %t", query, want)
 				}
 			}
@@ -385,7 +401,7 @@ func TestProbeSilent(t *testing.T) {
 	if took := time.Since(start); took > time.Second {
 		t.Errorf("took %s, want one timeout for the questions asked together", took)
 	}
-	for _, answer := range []*trace.Resolver{found.Broken, found.Root, found.Missing} {
+	for _, answer := range []*trace.Resolver{found.Broken, found.Root, found.Missing, found.Google, found.Akamai, found.Minimisation} {
 		if answer == nil || answer.Err == "" {
 			t.Errorf("got %+v, want the silence carried in the result", answer)
 		}
