@@ -1453,7 +1453,7 @@ func sender(tr *trace.Trace) (Finding, bool) {
 			"an SPF check of mail sent as %s fails for now, and the receiver may defer the mail: %s", spf.Name, spf.Why)}, true
 	case trace.SPFUndecided:
 		return Finding{Topic: Mail, Level: Warn, Text: fmt.Sprintf(
-			"the SPF policy of %s could not be followed to its end: %s", spf.Name, spf.Why)}, true
+			"no verdict on the SPF policy of %s: %s", spf.Name, spf.Why)}, true
 	}
 	if spf.Lookups == trace.SPFLookupLimit {
 		return Finding{Topic: Mail, Level: Warn, Text: fmt.Sprintf(

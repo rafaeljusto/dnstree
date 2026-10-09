@@ -79,7 +79,7 @@ check example.com.
 - ⚠ 1 server did not answer in time: b.gtld-servers.net.
 - ⚠ 1 server answered with almost nothing left of the datagram the answer had to fit in (a.iana-servers.net. with 1187 of 1232 bytes), so one more record in the zone truncates it, and every resolver that asks then pays a second round trip over TCP for the whole of it
 - the CAA set at example.com. lets only letsencrypt.org issue for www.example.com., and no certificate authority issue wildcards below it
-- ⚠ the SPF policy of www.example.com. could not be followed to its end: the budget ran out
+- ⚠ no verdict on the SPF policy of www.example.com.: the budget ran out
 - DANE covers every MX host of www.example.com. that can be reached, so a sender that checks it delivers only over TLS, to a server whose certificate matches
 - the DKIM key for selector s1 is a 1024 bit rsa key a receiver verifies with, though shorter than the 2048 bits RFC 8301 asks signers for; it is marked t=y, which asks receivers not to hold a failure against the domain
 - ⚠ there is no DKIM key for selector gone (no key is published there), so mail signed with it fails DKIM
