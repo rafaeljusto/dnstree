@@ -210,7 +210,7 @@ func txtStrings(data string) []string {
 			quoted = !quoted
 		case !quoted:
 		case ch == '\\' && i+3 < len(data) && decimal(data[i+1:i+4]):
-			n, _ := strconv.Atoi(data[i+1 : i+4])
+			n, _ := strconv.ParseUint(data[i+1:i+4], 10, 8)
 			b.WriteByte(byte(n))
 			i += 3
 		case ch == '\\' && i+1 < len(data):
@@ -226,6 +226,6 @@ func txtStrings(data string) []string {
 // decimal is whether text is the three digits of a \DDD escape. Past 255 it
 // is none, and the backslash quotes only the first digit.
 func decimal(text string) bool {
-	n, err := strconv.Atoi(text)
-	return err == nil && n <= 255 && strings.Trim(text, "0123456789") == ""
+	_, err := strconv.ParseUint(text, 10, 8)
+	return err == nil
 }

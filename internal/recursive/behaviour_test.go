@@ -196,6 +196,10 @@ func TestBehaveEchoes(t *testing.T) {
 			},
 			minimises: trace.ObservedUnknown,
 		},
+		"an escape past 255 quotes only its first digit": {
+			behaviour: trace.Behaviour{Google: &trace.Resolver{Err: "timeout"}, Akamai: txt(`"\357cs" "198.51.100.0/24/0"`)},
+			subnet:    trace.ObservedUnknown, minimises: trace.ObservedUnknown,
+		},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
