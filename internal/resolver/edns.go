@@ -3,7 +3,6 @@ package resolver
 import (
 	"cmp"
 	"context"
-	"time"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
@@ -101,7 +100,7 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 		Server: server,
 		Proto:  carrier.Proto(),
 		Asked:  trace.Question{Name: zone, Type: "SOA"},
-		Start:  time.Since(r.began),
+		Start:  r.since(),
 		Aside:  true,
 		EDNS:   &trace.EDNSTest{Kind: kind, State: trace.EDNSUnchecked},
 	}

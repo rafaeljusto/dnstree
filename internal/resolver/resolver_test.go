@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -692,4 +693,37 @@ func format(steps []*trace.Step) string {
 		out += "\n\t" + step.Zone + " " + string(step.Kind) + " " + step.Rcode + " " + step.Err
 	}
 	return out
+}
+
+// TestResolveOnItsOwnClock covers a walk timed by a clock of the run's own, the
+// way a replay is: the walk starts where that clock stood, a later walk of the
+// run later than the first, and its hops and its length are counted from there.
+func TestResolveOnItsOwnClock(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	var ticks atomic.Int64
+	ticks.Store(int64(5 * time.Second))
+	clock := func() time.Duration { return time.Duration(ticks.Add(int64(time.Second))) - time.Second }
+
+	tr, err := newResolver(t, internet(t), resolver.Config{At: at, Clock: clock}).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if want := at.Add(5 * time.Second); !tr.Started.Equal(want) {
+		t.Errorf("got a walk started at %s, want %s, where the clock stood", tr.Started, want)
+	}
+	hops := 0
+	for step := range tr.Steps() {
+		if step.RTT == 0 {
+			continue
+		}
+		hops++
+		if step.Start <= 0 || step.Start >= tr.Elapsed {
+			t.Errorf("got %s asked at %s, want inside the walk's %s", step.Server.IP, step.Start, tr.Elapsed)
+		}
+	}
+	if hops == 0 {
+		t.Fatal("got no hop that was asked")
+	}
 }

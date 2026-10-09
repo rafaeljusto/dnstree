@@ -558,14 +558,14 @@ failed last month.
 $ dnstree --dnssec --pcap walk.pcap www.example.com
 $ dnstree --dnssec --replay walk.pcap www.example.com
 🌍  . (root)  🔒 [secure RSASHA256/SHA256]
-├── 🛰️  a.root-servers.net. 198.41.0.4  248ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  🔒 [secure ECDSAP256SHA256/SHA256]
-│   ├── 🎯  a.root-servers.net. 198.41.0.4  🐢 745ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
-│   ├── 🛰️  l.gtld-servers.net. 192.41.162.30  303ms  NOERROR  DO  referral → example.com.  🔒 [secure ECDSAP256SHA256/SHA256]
-│   │   ├── 🎯  l.gtld-servers.net. 192.41.162.30  252ms  NOERROR  AA DO  (DNSKEY of com.)
-│   │   ├── 🎯  hera.ns.cloudflare.com. 108.162.192.162  235ms  NOERROR  AA DO  🔒 [secure ECDSAP256SHA256]
-│   │   │   ├── 📍 www.example.com. 300 A 172.66.147.243
+├── 🛰️  a.root-servers.net. 198.41.0.4  239ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  🔒 [secure ECDSAP256SHA256/SHA256]
+│   ├── 🎯  a.root-servers.net. 198.41.0.4  🐢 770ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
+│   ├── 🛰️  l.gtld-servers.net. 192.41.162.30  276ms  NOERROR  DO  referral → example.com.  🔒 [secure ECDSAP256SHA256/SHA256]
+│   │   ├── 🎯  l.gtld-servers.net. 192.41.162.30  308ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── 🎯  hera.ns.cloudflare.com. 108.162.192.162  254ms  NOERROR  AA DO  🔒 [secure ECDSAP256SHA256]
 │   │   │   ├── 📍 www.example.com. 300 A 104.20.23.154
-│   │   │   └── 🎯  hera.ns.cloudflare.com. 108.162.192.162  232ms  NOERROR  AA DO  (DNSKEY of example.com.)
+│   │   │   ├── 📍 www.example.com. 300 A 172.66.147.243
+│   │   │   └── 🎯  hera.ns.cloudflare.com. 108.162.192.162  221ms  NOERROR  AA DO  (DNSKEY of example.com.)
 │   │   ├── 💤  hera.ns.cloudflare.com. 172.64.32.162  (not queried)
 │   │   ├── 💤  hera.ns.cloudflare.com. 173.245.58.162  (not queried)
 │   │   ├── 💤  hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
@@ -578,13 +578,14 @@ $ dnstree --dnssec --replay walk.pcap www.example.com
 ├── 💤  b.root-servers.net. 170.247.170.2  (not queried)
 ├── 💤  b.root-servers.net. 2801:1b8:10::b  (not queried)
 └── 💤  (and 22 more not queried)
-✔ answered in 1ms · 6 queries · 3 servers
+✔ answered in 2.1s · 6 queries · 3 servers
 ```
 
-Each hop keeps the time its answer took when the capture was made, and the
-line at the bottom says how long the replay took. Signatures and trust anchors
-are judged as of the moment the capture was made, so a signed walk replayed
-after its signatures ran out still reads as it did then.
+Each hop keeps the time its answer took when the capture was made, and so
+does the walk: the line at the bottom, and the waterfall, count the capture's
+time rather than the replay's, which takes a millisecond. Signatures and
+trust anchors are judged as of the moment the capture was made, so a signed
+walk replayed after its signatures ran out still reads as it did then.
 
 The walk is made afresh, not read back: a query is matched to the one in the
 capture put the same way, to the same server, over the same protocol, with the

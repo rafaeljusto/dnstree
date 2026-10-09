@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"codeberg.org/miekg/dns"
 
@@ -119,6 +120,42 @@ func TestReplayInOrder(t *testing.T) {
 	for range 2 {
 		if _, _, err := carrier.Exchange(t.Context(), query(t, "www.example.com.", dns.TypeA), silent.Addr, ""); err != nil {
 			t.Fatalf("got %v, want the answer to the retry", err)
+		}
+	}
+}
+
+// TestReplayClock covers the clock a replayed walk is timed by: it stands where
+// the capture had got by the latest answer handed out, and an answer handed out
+// again does not take it back.
+func TestReplayClock(t *testing.T) {
+	t.Parallel()
+
+	server := newServer(t, fakens.Behaviour{})
+	exchanges := recording(t, transport.NewUDP(fastConfig), server.Addr,
+		query(t, "www.example.com.", dns.TypeA), query(t, "www.example.com.", dns.TypeAAAA))
+	if len(exchanges) != 2 {
+		t.Fatalf("got %d exchanges, want 2", len(exchanges))
+	}
+	replay := transport.NewReplay(exchanges)
+	carrier := replay.Carrier(transport.ProtoUDP, transport.PortDNS)
+	if got := replay.Clock(); got != 0 {
+		t.Fatalf("got a clock at %s before anything was asked, want 0", got)
+	}
+
+	ended := func(ex capture.Exchange) time.Duration { return ex.Sent.Add(ex.Took).Sub(exchanges[0].Sent) }
+	for _, step := range []struct {
+		qtype uint16
+		want  time.Duration
+	}{
+		{dns.TypeA, ended(exchanges[0])},
+		{dns.TypeAAAA, ended(exchanges[1])},
+		{dns.TypeA, ended(exchanges[1])},
+	} {
+		if _, _, err := carrier.Exchange(t.Context(), query(t, "www.example.com.", step.qtype), server.Addr, ""); err != nil {
+			t.Fatalf("Exchange: %v", err)
+		}
+		if got := replay.Clock(); got != step.want {
+			t.Errorf("got the clock at %s after %s, want %s", got, dns.TypeToString[step.qtype], step.want)
 		}
 	}
 }

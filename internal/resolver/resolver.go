@@ -213,6 +213,12 @@ type Config struct {
 	// walk replayed from a capture is given the time the capture was made.
 	At time.Time
 
+	// Clock says how far a clock of the run's own has got. Each walk measures
+	// its steps and its length from where it stood when the walk began, so a
+	// replay draws the time the capture took, not the time the replay took.
+	// Nil is the clock on the wall.
+	Clock func() time.Duration
+
 	Budget Budget
 }
 
@@ -316,6 +322,11 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	run.trace.Trial = r.cfg.Try
 	run.began = time.Now()
 	run.trace.Started = cmp.Or(r.cfg.At, run.began)
+	if r.cfg.Clock != nil {
+		// The steps start from here, so a later walk of the run starts later.
+		run.ticked = r.cfg.Clock()
+		run.trace.Started = run.trace.Started.Add(run.ticked)
+	}
 	run.trace.Timed = true
 	end := run.walk(ctx, qname, rrtype, run.trace.Root, 0)
 	if r.cfg.Try != nil && !run.tried {
@@ -335,8 +346,16 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		run.deps(ctx, cmp.Or(end, run.trace.Root))
 	}
 	run.bootstrap(ctx)
-	run.trace.Elapsed = time.Since(run.began)
+	run.trace.Elapsed = run.since()
 	return run.trace, nil
+}
+
+// since is how far into the walk it is.
+func (r *run) since() time.Duration {
+	if r.cfg.Clock != nil {
+		return r.cfg.Clock() - r.ticked
+	}
+	return time.Since(r.began)
 }
 
 // hop is a step and the message behind it. The trace deliberately keeps no DNS
@@ -355,6 +374,8 @@ type run struct {
 	// began is when the walk started on the clock, which every step's start is
 	// measured from even when the trace says it was made at another time.
 	began time.Time
+	// ticked is where Config.Clock stood when the walk began.
+	ticked time.Duration
 
 	// chased are the names a CNAME has already pointed at, so that a chain
 	// cannot bite its own tail.

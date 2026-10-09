@@ -741,6 +741,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	config.Try = cfg.Try
 	if replay != nil {
 		config.At = replay.Made()
+		config.Clock = replay.Clock
 	}
 	if len(cfg.Without) > 0 {
 		config.Down = outage.left

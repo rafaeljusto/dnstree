@@ -3,7 +3,6 @@ package resolver
 import (
 	"cmp"
 	"context"
-	"time"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
@@ -91,7 +90,7 @@ func (r *run) probe(ctx context.Context, zone string, server trace.Server, carri
 		Server: server,
 		Proto:  carrier.Proto(),
 		Asked:  trace.Question{Name: qname, Type: dnsutil.TypeToString(qtype)},
-		Start:  time.Since(r.began),
+		Start:  r.since(),
 		Aside:  true,
 		Probe:  &trace.Probe{Kind: kind, State: trace.ProbeUnchecked},
 	}

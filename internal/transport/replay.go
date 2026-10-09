@@ -28,9 +28,11 @@ type Replay struct {
 	made    time.Time
 	mu      sync.Mutex
 	answers map[string][]replayed
+	reached time.Duration // the latest any answer handed out came back, from made
 }
 
 type replayed struct {
+	sent   time.Time
 	took   time.Duration
 	answer []byte
 }
@@ -48,7 +50,7 @@ func NewReplay(exchanges []capture.Exchange) *Replay {
 			continue
 		}
 		k := replayKey(ex.Proto, ex.Server, query)
-		r.answers[k] = append(r.answers[k], replayed{took: ex.Took, answer: ex.Answer})
+		r.answers[k] = append(r.answers[k], replayed{sent: ex.Sent, took: ex.Took, answer: ex.Answer})
 	}
 	return r
 }
@@ -56,6 +58,15 @@ func NewReplay(exchanges []capture.Exchange) *Replay {
 // Made is when the first query of the capture was sent, zero for a capture
 // that holds none.
 func (r *Replay) Made() time.Time { return r.made }
+
+// Clock is how far the capture had got by the latest answer handed out, which
+// is where a walk replayed from it stands: its hops take the time they took
+// then, so its length has to be counted the same way.
+func (r *Replay) Clock() time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.reached
+}
 
 // Carrier is the transport that answers what the capture holds for proto,
 // expecting servers on port where a delegation names none.
@@ -73,6 +84,7 @@ func (r *Replay) next(k string) (replayed, bool) {
 	if len(queue) > 1 {
 		r.answers[k] = queue[1:]
 	}
+	r.reached = max(r.reached, queue[0].sent.Add(queue[0].took).Sub(r.made))
 	return queue[0], true
 }
 

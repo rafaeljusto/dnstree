@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,9 +26,11 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/rdap"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakemx"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/output"
+	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
 // rootZone is a whole synthetic internet in one zone, so that the command can
@@ -1517,7 +1520,8 @@ func TestRunReplay(t *testing.T) {
 		t.Errorf("got %d queries at the servers during the replay, want none", now-asked)
 	}
 
-	// The run's own time is how long the replay took; every hop keeps its own.
+	// The run's time is counted on the capture's clock, as every hop's is, but
+	// the walk that made it ran on the wall's and can differ by a rounding.
 	took := regexp.MustCompile(`answered in [^ ]+`)
 	want, got := took.ReplaceAllString(made.String(), ""), took.ReplaceAllString(replayed.String(), "")
 	if got != want {
@@ -1525,6 +1529,35 @@ func TestRunReplay(t *testing.T) {
 	}
 	if !strings.Contains(got, "truncated over udp") {
 		t.Errorf("got no hop retried over tcp, which the test is about:\n%s", got)
+	}
+
+	// The hops were asked one after another, and the replay has to draw them
+	// that way, inside a walk as long as they took.
+	var saved bytes.Buffer
+	if code := run(t.Context(), append([]string{"--replay", path, "--format", "json"}, walk...), &saved, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	tr, err := jsonout.Read(&saved)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	var hops []*trace.Step
+	for step := range tr.Steps() {
+		if step.RTT > 0 {
+			hops = append(hops, step)
+		}
+	}
+	slices.SortFunc(hops, func(a, b *trace.Step) int { return cmp.Compare(a.Start, b.Start) })
+	if len(hops) < 2 {
+		t.Fatalf("got %d hops that took any time, want the walk's", len(hops))
+	}
+	for i, hop := range hops[1:] {
+		if before := hops[i]; hop.Start < before.Start+before.RTT {
+			t.Errorf("got %s asked at %s, before %s came back at %s", hop.Server.IP, hop.Start, before.Server.IP, before.Start+before.RTT)
+		}
+	}
+	if last := hops[len(hops)-1]; tr.Elapsed < last.Start+last.RTT {
+		t.Errorf("got a walk of %s, want one that lasts until its last hop came back at %s", tr.Elapsed, last.Start+last.RTT)
 	}
 }
 
