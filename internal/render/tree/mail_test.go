@@ -83,6 +83,12 @@ func TestRenderMail(t *testing.T) {
 				Tags: []trace.PolicyTag{{Name: "p", Value: "reject"}, {Name: "sp", Value: "none"}}}},
 			want: []string{"mail: www.test. takes no mail (null MX)", "mail: dmarc sp=none (from test.)"},
 		},
+		"a DMARC policy from above a name that does not exist is read by its np": {
+			mail: &trace.Mail{Name: "gone.test.", Absent: true, Stopped: "gone.test. does not exist, so no mail is delivered to it",
+				DMARC: &trace.MailPolicy{Name: "_dmarc.test.", Found: trace.PolicyPublished,
+					Tags: []trace.PolicyTag{{Name: "p", Value: "reject"}, {Name: "sp", Value: "none"}, {Name: "np", Value: "quarantine"}}}},
+			want: []string{"mail: stopped: gone.test. does not exist, so no mail is delivered to it", "mail: dmarc np=quarantine (from test.)"},
+		},
 		"no MX set and, from a crafted file, no host": {
 			mail: &trace.Mail{Name: "test.", Implicit: true},
 			want: nil,

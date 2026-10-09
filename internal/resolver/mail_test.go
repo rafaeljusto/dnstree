@@ -66,12 +66,18 @@ _25._tcp.mx   IN TLSA 3 1 1 ` + tlsaData + `
 // all but plain.com.
 func mailed(tb testing.TB, extra string, behaviour fakens.Behaviour, signed bool) (harness, resolver.Config) {
 	tb.Helper()
+	return mailedUnder(tb, "", fakens.Behaviour{}, extra, behaviour, signed)
+}
+
+// mailedUnder is mailed with com. serving above as well, with com.
+func mailedUnder(tb testing.TB, above string, com fakens.Behaviour, extra string, behaviour fakens.Behaviour, signed bool) (harness, resolver.Config) {
+	tb.Helper()
 
 	hierarchy := fakens.NewHierarchy(tb)
 	root := hierarchy.Add(fakens.Config{
 		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: signed,
 	})
-	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: mailComZone, Declared: "192.0.2.2", DNSSEC: signed})
+	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: mailComZone + above, Declared: "192.0.2.2", DNSSEC: signed, Behaviour: com})
 	hierarchy.Add(fakens.Config{
 		Name: "ns.example.com.", Origin: "example.com.", Zone: mailExampleZone + extra, Declared: "192.0.2.3",
 		DNSSEC: signed, Denial: fakens.DenialNSEC3,
@@ -346,19 +352,143 @@ _mta-sts IN TXT "v=STSv1; id=2"`,
 	}
 }
 
-// TestMailDMARCSubdomain covers a policy found at the organisational domain,
-// whose sp is what applies to the name below it (RFC 7489 6.3).
+// TestMailDMARCSubdomain covers a policy found above the name, whose sp is
+// what applies to a name that exists and whose np to one that does not (RFC
+// 9989 4.10.1).
 func TestMailDMARCSubdomain(t *testing.T) {
 	t.Parallel()
 
-	h, cfg := mailed(t, `_dmarc IN TXT "v=DMARC1; p=reject; sp=none"`, fakens.Behaviour{}, false)
+	for name, tt := range map[string]struct {
+		record string
+		qname  string
+		want   string
+	}{
+		"a name that exists goes by sp": {
+			record: `"v=DMARC1; p=reject; sp=none; np=quarantine"`, qname: "solo.example.com", want: "none",
+		},
+		"a name that does not exist goes by np": {
+			record: `"v=DMARC1; p=reject; sp=none; np=quarantine"`, qname: "gone.example.com", want: "quarantine",
+		},
+		"a name that does not exist goes by p where there is no np": {
+			record: `"v=DMARC1; p=reject; sp=none"`, qname: "gone.example.com", want: "reject",
+		},
+		"an np that is not valid makes the record read as p=none": {
+			record: `"v=DMARC1; p=reject; np=deny; rua=mailto:d@example.com"`, qname: "gone.example.com", want: "none",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := mailed(t, `_dmarc IN TXT `+tt.record, fakens.Behaviour{}, false)
 
-	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "solo.example.com", "A")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), tt.qname, "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if got := tr.Mail.DMARCPolicy(); got != tt.want {
+				t.Errorf("got the policy %q applying to %s, want %q", got, tt.qname, tt.want)
+			}
+		})
 	}
-	if got := tr.Mail.DMARCPolicy(); got != "none" {
-		t.Errorf("got the policy %q applying to solo.example.com., want its sp, none", got)
+}
+
+// TestMailDMARCTreeWalk covers the walk up the tree for a name with no policy
+// of its own (RFC 9989 4.10): which policy applies, and what it asks.
+func TestMailDMARCTreeWalk(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		above, extra string
+		com          fakens.Behaviour
+		qname        string
+
+		dmarcAt string
+		found   trace.PolicyFound
+		asked   []string
+	}{
+		"a policy two labels up is found": {
+			extra:   `_dmarc IN TXT "v=DMARC1; p=quarantine"`,
+			qname:   "x.y.example.com",
+			dmarcAt: "_dmarc.example.com.",
+			asked:   []string{"_dmarc.x.y.example.com.", "_dmarc.y.example.com.", "_dmarc.example.com.", "_dmarc.com."},
+		},
+		"the walk goes past a policy with no psd to the one nearest the root": {
+			extra: `_dmarc IN TXT "v=DMARC1; p=reject"
+_dmarc.y IN TXT "v=DMARC1; p=none"`,
+			qname:   "x.y.example.com",
+			dmarcAt: "_dmarc.example.com.",
+		},
+		"psd=n stops the walk at its own domain": {
+			extra: `_dmarc IN TXT "v=DMARC1; p=reject"
+_dmarc.y IN TXT "v=DMARC1; p=none; psd=n"`,
+			qname:   "x.y.example.com",
+			dmarcAt: "_dmarc.y.example.com.",
+			asked:   []string{"_dmarc.x.y.example.com.", "_dmarc.y.example.com."},
+		},
+		"a public suffix's policy applies where the domain below it has none": {
+			above:   `_dmarc IN TXT "v=DMARC1; p=reject; psd=y"`,
+			qname:   "solo.example.com",
+			dmarcAt: "_dmarc.com.",
+		},
+		"under a public suffix the domain below it is the one whose policy applies": {
+			above:   `_dmarc IN TXT "v=DMARC1; p=reject; psd=y"`,
+			extra:   `_dmarc IN TXT "v=DMARC1; p=quarantine"`,
+			qname:   "solo.example.com",
+			dmarcAt: "_dmarc.example.com.",
+		},
+		"two records at one name are passed over like none": {
+			extra: `_dmarc IN TXT "v=DMARC1; p=reject"
+_dmarc.y IN TXT "v=DMARC1; p=none; psd=n"
+_dmarc.y IN TXT "v=DMARC1; p=quarantine; psd=n"`,
+			qname:   "x.y.example.com",
+			dmarcAt: "_dmarc.example.com.",
+		},
+		"a lookup that fails on the way stops the walk rather than guess": {
+			extra:   `_dmarc IN TXT "v=DMARC1; p=reject"`,
+			com:     fakens.Behaviour{ServFailType: dns.TypeTXT},
+			qname:   "solo.example.com",
+			dmarcAt: "_dmarc.com.",
+			found:   trace.PolicyFailed,
+		},
+		"nothing found anywhere is no policy at the name": {
+			qname:   "x.y.example.com",
+			dmarcAt: "_dmarc.x.y.example.com.",
+		},
+		"a name of eight labels or more skips to the seven nearest the root": {
+			qname:   "a.b.c.d.e.f.g.h.example.com",
+			dmarcAt: "_dmarc.a.b.c.d.e.f.g.h.example.com.",
+			asked: []string{"_dmarc.a.b.c.d.e.f.g.h.example.com.", "_dmarc.d.e.f.g.h.example.com.",
+				"_dmarc.e.f.g.h.example.com.", "_dmarc.f.g.h.example.com.", "_dmarc.g.h.example.com.",
+				"_dmarc.h.example.com.", "_dmarc.example.com.", "_dmarc.com."},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := mailedUnder(t, tt.above, tt.com, `x.y IN A 192.0.2.40
+`+tt.extra, fakens.Behaviour{}, false)
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), tt.qname, "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if tr.Mail.DMARC == nil || tr.Mail.DMARC.Name != tt.dmarcAt {
+				t.Fatalf("got DMARC %+v, want the one at %s", tr.Mail.DMARC, tt.dmarcAt)
+			}
+			if tt.found != "" && tr.Mail.DMARC.Found != tt.found {
+				t.Errorf("got DMARC %s, want %s", tr.Mail.DMARC.Found, tt.found)
+			}
+			if tt.asked == nil {
+				return
+			}
+			var asked []string
+			for step := range tr.Steps() {
+				if len(step.Notes) > 0 {
+					if owner, ok := strings.CutPrefix(step.Notes[0], "TXT of _dmarc."); ok {
+						asked = append(asked, "_dmarc."+strings.TrimSuffix(owner, " for mail"))
+					}
+				}
+			}
+			if !slices.Equal(asked, tt.asked) {
+				t.Errorf("asked %q, want %q", asked, tt.asked)
+			}
+		})
 	}
 }
 

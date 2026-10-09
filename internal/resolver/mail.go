@@ -11,7 +11,6 @@ import (
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
-	"golang.org/x/net/publicsuffix"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -86,6 +85,8 @@ func (r *run) exchangers(ctx context.Context, under *trace.Step, m *trace.Mail) 
 		return false
 	case result.Kind == trace.KindNXDomain:
 		m.Stopped = cmp.Or(lookup.Alias, m.Name) + " does not exist, so no mail is delivered to it"
+		// An alias that leads nowhere is still a name that exists.
+		m.Absent = lookup.Alias == ""
 		return false
 	}
 
@@ -330,32 +331,101 @@ func tlsRPT(p *trace.MailPolicy) string {
 	return ""
 }
 
-// dmarc looks up the DMARC policy of name, and where it has none, that of its
-// organisational domain (RFC 7489 6.6.3).
+// dmarc looks up the DMARC policy of name, and where it has none, walks up the
+// tree for the one that applies to it (RFC 9989 4.10.1). Nil where the budget
+// ran out before the walk could say.
 func (r *run) dmarc(ctx context.Context, under *trace.Step, name string) *trace.MailPolicy {
-	p := r.policy(ctx, under, "_dmarc."+name, "v=DMARC1", "receiver", dmarcPolicy)
-	if p == nil || p.Found != trace.PolicyNone {
-		return p
+	own := r.policy(ctx, under, "_dmarc."+name, "v=DMARC1", "receiver", dmarcPolicy)
+	if own == nil || own.Found != trace.PolicyNone {
+		return own
 	}
-	org, err := publicsuffix.EffectiveTLDPlusOne(strings.ToLower(strings.TrimSuffix(name, ".")))
-	if err != nil || dns.EqualName(dnsutil.Fqdn(org), name) || r.counters.spent() {
-		return p
+	var found []*trace.MailPolicy
+	for _, above := range treeWalk(name) {
+		p := r.policy(ctx, under, "_dmarc."+above, "v=DMARC1", "receiver", dmarcPolicy)
+		switch {
+		case p == nil:
+			return nil
+		case p.Found == trace.PolicyFailed:
+			// Whether a policy further up applies cannot be said.
+			return p
+		case p.Record == "":
+			// None, or several, which a receiver discards alike.
+			continue
+		}
+		found = append(found, p)
+		if psd := strings.ToLower(p.Tag("psd")); psd == "y" || psd == "n" {
+			break
+		}
 	}
-	return r.policy(ctx, under, "_dmarc."+dnsutil.Fqdn(org), "v=DMARC1", "receiver", dmarcPolicy)
+	if len(found) == 0 {
+		return own
+	}
+	return applied(found)
 }
 
-// dmarcPolicy is what is wrong with a DMARC record. One without a valid p is
-// read as p=none where it says where reports go, and as nothing otherwise.
+// treeWalk are the names a DMARC tree walk asks above name, its parent first
+// and its top-level domain last. A name of eight labels or more skips to the
+// seven nearest the root, so that a long name costs no more lookups (RFC 9989
+// 4.10).
+func treeWalk(name string) []string {
+	labels := dnsutil.Labels(name)
+	skip := 1
+	if labels >= 8 {
+		skip = labels - 7
+	}
+	var names []string
+	for i, end := 0, false; !end; i, end = dnsutil.Next(name, i) {
+		if skip > 0 {
+			skip--
+			continue
+		}
+		names = append(names, name[i:])
+	}
+	return names
+}
+
+// applied is the policy a tree walk found, nearest the name first: a psd=n
+// marks the organisational domain, and a psd=y a public suffix whose own
+// policy applies only where the domain one label below it publishes none.
+// Without either, the policy nearest the root applies (RFC 9989 4.10.2).
+func applied(found []*trace.MailPolicy) *trace.MailPolicy {
+	last := found[len(found)-1]
+	if len(found) > 1 && strings.EqualFold(last.Tag("psd"), "y") {
+		if below := found[len(found)-2]; dnsutil.Labels(below.Name) == dnsutil.Labels(last.Name)+1 {
+			return below
+		}
+	}
+	return last
+}
+
+// dmarcPolicy is what is wrong with a DMARC record. One without a valid p, or
+// with an sp or np that is not valid, is read as p=none where it says where
+// reports go, and as nothing otherwise (RFC 9989 4.10.1).
 func dmarcPolicy(p *trace.MailPolicy) string {
-	switch p.Tag("p") {
-	case "none", "quarantine", "reject":
+	wrong := ""
+	if !dmarcAction(p.Tag("p")) {
+		wrong = "it has no valid p"
+	}
+	for _, tag := range []string{"sp", "np"} {
+		named := slices.ContainsFunc(p.Tags, func(t trace.PolicyTag) bool { return t.Name == tag })
+		if wrong == "" && named && !dmarcAction(p.Tag(tag)) {
+			wrong = "its " + tag + " is not valid"
+		}
+	}
+	switch {
+	case wrong == "":
+		return ""
+	case p.Tag("rua") != "":
+		p.Why = wrong + ", so a receiver acts as though it said p=none"
 		return ""
 	}
-	if p.Tag("rua") != "" {
-		p.Why = "it has no valid p, so a receiver acts as though it said p=none"
-		return ""
-	}
-	return "it has no valid p, and says nowhere to send reports, so a receiver applies no policy"
+	return wrong + ", and says nowhere to send reports, so a receiver applies no policy"
+}
+
+// dmarcAction reports whether a DMARC policy tag says something a receiver
+// can do.
+func dmarcAction(value string) bool {
+	return value == "none" || value == "quarantine" || value == "reject"
 }
 
 // texts are the TXT records owner owns, each one's strings joined the way a

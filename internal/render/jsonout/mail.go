@@ -14,6 +14,7 @@ type mail struct {
 	MX       lookup      `json:"mx"`
 	Null     bool        `json:"null,omitempty"`
 	Implicit bool        `json:"implicit,omitempty"`
+	Absent   bool        `json:"absent,omitempty"`
 	Hosts    []mailHost  `json:"hosts,omitempty"`
 	MTASTS   *mailPolicy `json:"mta_sts,omitempty"`
 	TLSRPT   *mailPolicy `json:"tls_rpt,omitempty"`
@@ -77,7 +78,7 @@ func convertMail(from *trace.Mail) *mail {
 		return nil
 	}
 	to := &mail{
-		Name: from.Name, MX: convertLookup(from.MX), Null: from.Null, Implicit: from.Implicit,
+		Name: from.Name, MX: convertLookup(from.MX), Null: from.Null, Implicit: from.Implicit, Absent: from.Absent,
 		MTASTS: convertPolicy(from.MTASTS), TLSRPT: convertPolicy(from.TLSRPT), DMARC: convertPolicy(from.DMARC),
 		Stopped: from.Stopped, Cut: from.Cut,
 	}
@@ -138,7 +139,8 @@ func readMail(from *mail) (*trace.Mail, error) {
 	case from.Null && len(from.Hosts) > 0:
 		return nil, fmt.Errorf("jsonout: a mail path with a null MX has no hosts, not %d", len(from.Hosts))
 	}
-	to := &trace.Mail{Name: from.Name, MX: mx, Null: from.Null, Implicit: from.Implicit, Stopped: from.Stopped, Cut: from.Cut}
+	to := &trace.Mail{Name: from.Name, MX: mx, Null: from.Null, Implicit: from.Implicit, Absent: from.Absent,
+		Stopped: from.Stopped, Cut: from.Cut}
 	for _, host := range from.Hosts {
 		state := trace.DANEState(host.DANE)
 		switch state {

@@ -391,9 +391,9 @@ without being asked. It spends a budget of --max-queries apart from the walk's.
 --mail looks up NAME's mail path the way a sending server that checks DANE
 does (RFC 7672): the MX hosts by preference, the addresses of each, and the
 TLSA set at _25._tcp of each whose addresses are signed, then the MTA-STS,
-TLS-RPT and DMARC records beside them, DMARC falling back to the
-organisational domain. Each lookup is a walk of its own, from the deepest zone
-the run has entered, drawn in the tree as an aside. A host is covered by DANE
+TLS-RPT and DMARC records beside them, DMARC walking up the tree where the
+name has none (RFC 9989). Each lookup is a walk of its own, from the deepest
+zone the run has entered, drawn in the tree as an aside. A host is covered by DANE
 only where --dnssec proves its addresses and a TLSA set a sender can use; a
 host whose addresses do not validate, or whose TLSA set fails to look up or
 validate, makes every sender that checks DANE hold the mail, which is said in a warning, and so is an

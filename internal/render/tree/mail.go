@@ -131,12 +131,10 @@ func (r *renderer) mailPolicies(m *trace.Mail, mark string) string {
 		}
 		switch p.policy.Found {
 		case trace.PolicyPublished:
-			// A policy found at the organisational domain applies its sp to
-			// the name, where it has one.
 			inherited := p.name == "dmarc" && p.policy.Name != "_dmarc."+m.Name
 			tag := p.tag
-			if inherited && p.policy.Tag("sp") != "" {
-				tag = "sp"
+			if p.name == "dmarc" {
+				tag = m.DMARCTag()
 			}
 			text := p.name
 			if value := p.policy.Tag(tag); value != "" {

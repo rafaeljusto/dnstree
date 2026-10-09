@@ -79,9 +79,9 @@ tagging by hand skips the calculation, and the tag carries no changelog.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net` for names typed in any script
-  (`idna`), which the codec leaves to its callers, and for the organisational
-  domain DMARC falls back to (`publicsuffix`, whose list is as old as the
-  pinned version). Adding a fourth needs an argument.
+  (`idna`), which the codec leaves to its callers. DMARC finds the policy
+  above a name by walking up the tree (RFC 9989), not from a public suffix
+  list. Adding a fourth needs an argument.
 
 ## Invariants
 

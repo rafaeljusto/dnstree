@@ -1,7 +1,6 @@
 package trace
 
 import (
-	"cmp"
 	"net/netip"
 	"slices"
 	"time"
@@ -19,6 +18,10 @@ type Mail struct {
 	MX       Lookup
 	Null     bool
 	Implicit bool
+
+	// Absent is a domain the MX lookup found does not exist, to which a DMARC
+	// policy from above applies its np rather than its sp (RFC 9989 4.10.1).
+	Absent bool
 
 	// Hosts are the exchangers by preference, best first.
 	Hosts []MailHost
@@ -213,17 +216,34 @@ func (p *MailPolicy) Tag(name string) string {
 	return ""
 }
 
-// DMARCPolicy is what the DMARC policy asks of mail sent as the name: p, or
-// for a policy found at the organisational domain, sp where it says one (RFC
-// 7489 6.3). Empty where none was published.
+// DMARCPolicy is what the DMARC policy asks of mail sent as the name: none
+// for a record a receiver reads as p=none. Empty where none was published.
 func (m *Mail) DMARCPolicy() string {
+	if m.DMARC != nil && m.DMARC.Found == PolicyPublished && m.DMARC.Why != "" {
+		return "none"
+	}
+	return m.DMARC.Tag(m.DMARCTag())
+}
+
+// DMARCTag is the tag of the DMARC policy that applies to the name: p, or for
+// a policy found above it, np where the name does not exist and sp where it
+// does, each where it says one (RFC 9989 4.10.1). Empty where none was
+// published.
+func (m *Mail) DMARCTag() string {
 	if m.DMARC == nil || m.DMARC.Found != PolicyPublished {
 		return ""
 	}
-	if m.DMARC.Name != "_dmarc."+m.Name {
-		return cmp.Or(m.DMARC.Tag("sp"), m.DMARC.Tag("p"))
+	if m.DMARC.Name == "_dmarc."+m.Name {
+		return "p"
 	}
-	return m.DMARC.Tag("p")
+	tag := "sp"
+	if m.Absent {
+		tag = "np"
+	}
+	if m.DMARC.Tag(tag) == "" {
+		return "p"
+	}
+	return tag
 }
 
 // Covered is how many hosts DANE authenticates, out of how many mail may go

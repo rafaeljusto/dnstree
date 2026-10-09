@@ -257,6 +257,7 @@
         "mx": { "description": "The lookup of the MX set.", "$ref": "#/$defs/lookup" },
         "null": { "description": "Present where the name says it takes no mail, with a null MX (RFC 7505).", "type": "boolean" },
         "implicit": { "description": "Present where the name has no MX set, which makes it its own only host (RFC 5321 5.1).", "type": "boolean" },
+        "absent": { "description": "Present where the MX lookup found the name does not exist, so a DMARC policy found above it applies its np rather than its sp (RFC 9989).", "type": "boolean" },
         "hosts": {
           "description": "The MX hosts by preference, best first, and those of one preference by name.",
           "type": "array",
@@ -264,7 +265,7 @@
         },
         "mta_sts": { "description": "The MTA-STS record at _mta-sts (RFC 8461). Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
         "tls_rpt": { "description": "The TLS-RPT record at _smtp._tls (RFC 8460). Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
-        "dmarc": { "description": "The DMARC record at _dmarc of the name, or of its organisational domain where the name has none (RFC 7489 6.6.3), in which case its sp tag, where it has one, is what applies to the name. Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
+        "dmarc": { "description": "The DMARC record at _dmarc of the name, or where the name has none, the one a walk up the tree found for it: at its organisational domain, or at a public suffix marked psd=y (RFC 9989 4.10). A record found above the name applies its np where the name does not exist and its sp where it does, each where it has one, and its p otherwise. Absent where the check stopped before asking, or before the walk could say.", "$ref": "#/$defs/mail_policy" },
         "stopped": { "description": "Why the check made fewer lookups than it set out to: the MX lookup failed or did not validate, the name does not exist, or a budget ran out. The policies are still looked up unless it was the budget.", "type": "string" },
         "cut": { "description": "Present where a budget cut the lookups of the hosts short, which leaves how much DANE covers unknown.", "type": "boolean" }
       }

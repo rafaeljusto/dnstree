@@ -129,8 +129,7 @@ Some other important notes when contributing:
 - **Keep the dependency list short.** dnstree has three dependencies:
   `codeberg.org/miekg/dns`, because the standard library has no DNS wire-format
   codec, `golang.org/x/sys`, for the terminal size, and `golang.org/x/net`, for
-  names typed in any script (`idna`), which the codec leaves to its callers,
-  and for the organisational domain DMARC falls back to (`publicsuffix`).
+  names typed in any script (`idna`), which the codec leaves to its callers.
   Everything else is standard library, and a pull request adding a dependency
   needs to argue for it.
 - **Only three packages may import the DNS codec**: `transport`, `resolver` and

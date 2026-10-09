@@ -539,8 +539,16 @@ A null MX (RFC 7505) says the domain takes no mail, and a domain with no MX set
 is its own only host. An MX set that is not signed leaves DANE protecting each
 host and not which hosts get the mail, and the coverage line says so. The
 MTA-STS and TLS-RPT records count only where exactly one begins with their
-version, as the RFCs say, and DMARC falls back to the organisational domain
-where the name has none. Nothing connects to a mail server unless `--tlsa`
+version, as the RFCs say. A name with no DMARC record of its own goes by one
+found above it, walking up the tree the way RFC 9989 says: every name up to the
+top-level domain is asked, eight lookups at most, and the record nearest the
+root applies, unless one on the way says `psd=n`, which makes it the name's
+own, or `psd=y`, which makes it a public suffix whose record applies only where
+the domain one label below publishes none. A record found above the name
+applies its `np` where the name does not exist and its `sp` where it does,
+each where it has one, and its `p` otherwise. A lookup that fails on the way
+stops the walk, and the line says so rather than guess which record applies.
+Nothing connects to a mail server unless `--tlsa`
 asks, and the MTA-STS policy file is not fetched. The lookups spend the walk's
 budget, and a check cut short says so. The exit code is left alone.
 `--format json` carries it as `mail`, and `--format openmetrics` as
