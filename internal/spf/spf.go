@@ -63,12 +63,17 @@ type checker struct {
 	budget  int
 	queries int
 	stopped bool // ctx is done, which cuts the check short like the budget
+	failed  bool // a lookup failed, which ends the asking whatever the result
 	spf     *trace.SPF
 }
 
 // ask spends a query of the budget, and is nil once there is none left, or no
-// time.
+// time, or a lookup has failed: a temperror ends the check (RFC 7208 4.4), and
+// against a resolver that times out, asking on would cost a timeout a name.
 func (c *checker) ask(name, qtype string) *trace.Resolver {
+	if c.failed {
+		return nil
+	}
 	if c.queries >= c.budget || c.ctx.Err() != nil {
 		c.spf.Cut = true
 		c.stopped = c.ctx.Err() != nil
@@ -301,10 +306,12 @@ func (c *checker) follow(t *trace.SPFTerm, spec string, path []string, final boo
 	}
 	switch found.result {
 	case trace.SPFUndecided:
-		// Without a reason it is the budget, or ctx, which Check says once.
+		// Without a reason it is the budget, ctx or a temperror, which Check
+		// says once.
 		if found.why != "" {
 			c.fail(t, found.result, found.why)
 		}
+		c.unasked(t)
 	case trace.SPFOK:
 		t.Record = found.record
 		t.Terms = c.terms(found.record, name, append(slices.Clone(path), canonical(name)), final)
@@ -328,6 +335,7 @@ func (c *checker) addresses(t *trace.SPFTerm, spec string, qtypes ...string) {
 	for _, qtype := range qtypes {
 		answer := c.ask(name, qtype)
 		if answer == nil {
+			c.unasked(t)
 			return
 		}
 		if why := failure(answer); why != "" {
@@ -355,6 +363,7 @@ func (c *checker) exchangers(t *trace.SPFTerm, spec string) {
 	}
 	answer := c.ask(name, "MX")
 	if answer == nil {
+		c.unasked(t)
 		return
 	}
 	if why := failure(answer); why != "" {
@@ -393,8 +402,16 @@ func (c *checker) exchangers(t *trace.SPFTerm, spec string) {
 func (c *checker) fail(t *trace.SPFTerm, result trace.SPFResult, why string) {
 	c.note(t, why)
 	t.Fatal = true
+	c.failed = c.failed || result == trace.SPFTempError
 	if c.spf.Result == trace.SPFOK {
 		c.spf.Result, c.spf.Why = result, t.Term+": "+why
+	}
+}
+
+// unasked says a term went unlooked-up because a lookup before it failed.
+func (c *checker) unasked(t *trace.SPFTerm) {
+	if c.failed && !t.Fatal {
+		c.note(t, "not looked up, since a lookup before it failed")
 	}
 }
 

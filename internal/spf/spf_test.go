@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/spf"
@@ -512,5 +513,51 @@ func walkTerms(terms []trace.SPFTerm, visit func(trace.SPFTerm)) {
 	for _, term := range terms {
 		visit(term)
 		walkTerms(term.Terms, visit)
+	}
+}
+
+// TestTempErrorEndsTheCheck covers a resolver that times out on every name a
+// policy includes: nothing after the first failed lookup is asked, after a
+// permerror too, and each term left says so.
+func TestTempErrorEndsTheCheck(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		before string
+		result trace.SPFResult
+		asked  int32
+	}{
+		"the first temperror is the result": {result: trace.SPFTempError, asked: 2},
+		"a permerror before it stays the result, and the asking still ends": {
+			before: "include:empty.example. ", result: trace.SPFPermError, asked: 3,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var asked atomic.Int32
+			lookup := func(_ context.Context, name, _ string) *trace.Resolver {
+				asked.Add(1)
+				switch name {
+				case "empty.example.":
+					return &trace.Resolver{Rcode: "NXDOMAIN"}
+				case "example.com.":
+					return &trace.Resolver{Rcode: "NOERROR", Records: []trace.RR{{Type: "TXT",
+						Data: `"v=spf1 ` + tt.before + `include:a.example. include:b.example. a:c.example. mx:d.example. -all"`}}}
+				default:
+					return &trace.Resolver{Err: "i/o timeout"}
+				}
+			}
+			got := spf.Check(context.Background(), "example.com", lookup, 64)
+			if got.Result != tt.result || asked.Load() != tt.asked {
+				t.Errorf("%s after %d queries, want %s after %d", got.Result, asked.Load(), tt.result, tt.asked)
+			}
+			terms := got.Terms[len(got.Terms)-4 : len(got.Terms)-1]
+			for _, term := range terms {
+				if term.Problem != "not looked up, since a lookup before it failed" {
+					t.Errorf("%s says %q, want it not looked up", term.Term, term.Problem)
+				}
+			}
+		})
 	}
 }
