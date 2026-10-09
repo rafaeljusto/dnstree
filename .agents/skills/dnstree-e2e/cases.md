@@ -96,6 +96,7 @@ These need no network: every one exits before a query goes out.
 | ipv4 | `$D $B -4 example.com` | exit 0, only IPv4 addresses asked |
 | ipv6 | `$D $B -6 example.com` | exit 0, only IPv6 addresses asked. Skip it if the environment has no IPv6 |
 | color | `$D --no-asn --no-compare --color always example.com` | escapes on stdout even though it is a pipe |
+| check-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --check-resolver example.com` | exit 0, `resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone`, then a line on ECS and minimisation. With `--no-compare`, exit 1: `--check-resolver checks the resolvers --no-compare leaves unasked` |
 
 ## dnssec
 
@@ -131,6 +132,10 @@ cached, not a bug. Run it again.
 | fallback | `$D $B --dot --fallback --timeout 1s example.com` | exit 0: plain DNS picks up the hops DoT could not. Expect it to be slow |
 | pcap | `$D $B --pcap w.pcap example.com`, then `tcpdump -nn -r w.pcap` | exit 0; one query from `192.0.2.1` and one answer per hop the tree drew, the answer last |
 | pcap-tcp | `$D $B --tcp --dnssec --pcap t.pcap example.com`, then `tcpdump -nn -vv -r t.pcap` | exit 0; each query its own connection, `[S]`, `[S.]`, `[.]`, `[P.]`; no checksum tcpdump calls bad |
+| replay | after `pcap`, `$D $B --replay w.pcap example.com`, then with `--format waterfall` | exit 0, the tree of `pcap` and its `answered in`, counted on the capture's clock; the bars one after another, not all from 0 |
+| replay-miss | `$D $B --dnssec --replay w.pcap example.com`, then `iana.org` | exit 2, every hop `the capture holds no answer to … asked this way` |
+| replay-refused | `--replay w.pcap` with `--rdap`, then `--dot` | exit 1, one line each |
+| replay-file | `--replay nope.pcap`, then `--replay junk.txt` | exit 1, `--replay nope.pcap: no such file or directory`, then `not a packet capture dnstree --pcap wrote` |
 
 ## zone
 
@@ -174,6 +179,12 @@ cached, not a bug. Run it again.
 | propagation-formats | `$D $B --propagation --format json example.com`, then `--format dot`, then `--from` the JSON without and with `--propagation` | `.propagation.waits` in the JSON; exit 1 for dot; nothing drawn back without the flag, the same lines with it |
 | mail | `$D $B --mail --dnssec --explain freebsd.org` | exit 0, `mail: 2 MX hosts for freebsd.org. [secure …]`, mx1 `dane (1 TLSA record)`, mx66 `none: its zone proves there is no TLSA set`, `mail: dane covers 1 of 2 MX hosts`, and a warning ending `publish TLSA for it` |
 | mail-unchecked | `$D $B --mail freebsd.org` | exit 0, every host `unchecked`, and `mail: dane not checked: add --dnssec` |
+| tlsa-alone | `$D $B --tlsa freebsd.org`, then with `--mail` alone | exit 1, `--tlsa checks the certificates of the hosts --mail finds and --dnssec proves` |
+| tlsa | `$D $B --mail --dnssec --tlsa freebsd.org` | exit 0, `mail:     <address> match: 3 1 1 … matches CN=mx1.freebsd.org`. Where port 25 is blocked, one line saying so, never a mismatch |
+| dkim-alone | `$D $B --dkim google github.com` | exit 1, `--dkim checks keys beside the mail records --mail reads` |
+| dkim | `$D $B --mail --dkim google github.com` | exit 0, `mail: dkim google._domainkey.github.com. rsa 2048 bits` |
+| dkim-withdrawn | `$D $B --mail --dkim 20230601 gmail.com` | exit 0, `revoked: its p= is empty, which withdraws the key`, and no warning |
+| dkim-missing | `$D $B --mail --dkim nope-e2e-zz9 github.com` | exit 0, a warning ending `publish its key, or stop signing with it` |
 | check | `$D --no-compare --color never --check --expect check:ok example.com` | exit 0, a `check example.com.` block with a line per area, then `N to look at · N passed · N skipped` |
 | check-clean | the same with `--expect check:clean` | exit 4, `expected check:clean, got servers look`: both of example.com.'s nameservers are in one AS |
 | check-alone | `$D $B --expect check:ok example.com` | exit 4, `got a walk that --check did not grade` |

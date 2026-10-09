@@ -57,8 +57,11 @@ B="--no-asn --no-compare --color never"   # quiet base: no side lookups, no esca
 
 Record the environment, so a failure caused by the network is not called a bug:
 `$D $B -6 --timeout 1s --retries 0 example.com` says whether IPv6 works, and
-`nc -z -w2 1.1.1.1 853` whether DoT can leave the network. Note `dig` and `dot`
-(Graphviz) if they are on the PATH: some checks use them.
+`nc -z -w2 1.1.1.1 853` whether DoT can leave the network. `--spf` and
+`--check` ask the host's resolver: `dig +bufsize=1232 sendgrid.net TXT`, run a
+few times, says whether its larger answers get through over UDP. A path that
+drops them leaves the SPF check undecided, which is the environment. Note `dig`
+and `dot` (Graphviz) if they are on the PATH: some checks use them.
 
 Run each case through one helper, so every run is judged the same way:
 
