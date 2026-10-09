@@ -294,6 +294,11 @@ func (r *run) policy(ctx context.Context, under *trace.Step, name, version, read
 		p.Found, p.Why = trace.PolicyFailed, "the TXT lookup failed: "+lookup.Err
 		return p
 	}
+	if r.cfg.DNSSEC && lookup.DNSSEC != nil && lookup.DNSSEC.State == trace.Bogus {
+		// A reader that validates gets no record, and so no policy.
+		p.Found, p.Why = trace.PolicyFailed, "it does not validate: "+lookup.DNSSEC.Reason
+		return p
+	}
 
 	var versioned []string
 	for _, text := range texts(result.Records, result.Asked.Name) {

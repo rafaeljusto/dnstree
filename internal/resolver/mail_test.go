@@ -398,6 +398,7 @@ func TestMailDMARCTreeWalk(t *testing.T) {
 	for name, tt := range map[string]struct {
 		above, extra string
 		com          fakens.Behaviour
+		signed       bool
 		qname        string
 
 		dmarcAt string
@@ -448,6 +449,14 @@ _dmarc.y IN TXT "v=DMARC1; p=quarantine; psd=n"`,
 			dmarcAt: "_dmarc.com.",
 			found:   trace.PolicyFailed,
 		},
+		"an answer that does not validate stops the walk before a policy above is taken": {
+			above:   `_dmarc IN TXT "v=DMARC1; p=reject; psd=y"`,
+			com:     fakens.Behaviour{BadSignature: true},
+			signed:  true,
+			qname:   "solo.example.com",
+			dmarcAt: "_dmarc.solo.example.com.",
+			found:   trace.PolicyFailed,
+		},
 		"nothing found anywhere is no policy at the name": {
 			qname:   "x.y.example.com",
 			dmarcAt: "_dmarc.x.y.example.com.",
@@ -462,7 +471,7 @@ _dmarc.y IN TXT "v=DMARC1; p=quarantine; psd=n"`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			h, cfg := mailedUnder(t, tt.above, tt.com, `x.y IN A 192.0.2.40
-`+tt.extra, fakens.Behaviour{}, false)
+`+tt.extra, fakens.Behaviour{}, tt.signed)
 
 			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), tt.qname, "A")
 			if err != nil {
