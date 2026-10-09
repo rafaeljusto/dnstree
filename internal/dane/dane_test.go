@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/x509"
+	"errors"
 	"net"
 	"net/netip"
 	"slices"
@@ -177,5 +178,57 @@ func TestCheckBounded(t *testing.T) {
 	}
 	if want := "--tlsa left 2 mail server addresses unchecked"; !strings.Contains(strings.Join(tr.Warnings, "\n"), want) {
 		t.Errorf("warnings = %q, want %q", tr.Warnings, want)
+	}
+}
+
+// TestCheckAllow covers a signed zone that names a loopback or private address
+// for its mail host: the check does not connect there, and says why apart from
+// the addresses it could not reach.
+func TestCheckAllow(t *testing.T) {
+	t.Parallel()
+
+	tr := &trace.Trace{Started: walked, Mail: &trace.Mail{Name: "example.com.", Hosts: []trace.MailHost{{
+		Name: "mx.example.com.", DANE: trace.DANEVerified, Records: []trace.TLSARecord{{Usage: 3, Selector: 1, Matching: 1, Usable: true}},
+		TLSA: &trace.Lookup{Name: "_25._tcp.mx.example.com."}, Addrs: []netip.Addr{netip.MustParseAddr("127.0.0.1")},
+	}}}}
+	dane.Check(context.Background(), tr, dane.Config{Timeout: time.Second,
+		Allow: func(addr netip.Addr) bool { return !addr.IsLoopback() },
+		Dial: func(context.Context, netip.AddrPort) (net.Conn, error) {
+			t.Error("dialled an address Allow refused")
+			return nil, errors.New("no")
+		}})
+
+	if got := tr.Mail.Hosts[0].Presented; len(got) != 1 || got[0].State != trace.PresentedUnreached {
+		t.Errorf("presented %+v, want 127.0.0.1 unreached", got)
+	}
+	want := "mx.example.com. publishes 127.0.0.1, which is no public address"
+	if warned := strings.Join(tr.Warnings, "\n"); !strings.Contains(warned, want) || strings.Contains(warned, "port 25 may be blocked") {
+		t.Errorf("warnings = %q, want only %q", warned, want)
+	}
+}
+
+// TestCheckLongRefusal covers a server that turns the check away with as much
+// text as the read bound lets it: what is kept of it is clipped.
+func TestCheckLongRefusal(t *testing.T) {
+	t.Parallel()
+
+	addr := fakemx.Serve(t, fakemx.Rambling, nil)
+	tr := &trace.Trace{Started: walked, Mail: &trace.Mail{Name: "example.com.", Hosts: []trace.MailHost{{
+		Name: "mx.example.com.", DANE: trace.DANEVerified, Records: []trace.TLSARecord{{Usage: 3, Selector: 1, Matching: 1, Usable: true}},
+		TLSA: &trace.Lookup{Name: "_25._tcp.mx.example.com."}, Addrs: []netip.Addr{netip.MustParseAddr("192.0.2.25")},
+	}}}}
+	dane.Check(context.Background(), tr, dane.Config{Timeout: time.Second,
+		Dial: func(ctx context.Context, _ netip.AddrPort) (net.Conn, error) {
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, "tcp", addr.String())
+		}})
+
+	if why := tr.Mail.Hosts[0].Presented[0].Why; len(why) > 2*trace.MaxErr {
+		t.Errorf("kept %d bytes of the refusal, want at most %d", len(why), 2*trace.MaxErr)
+	}
+	for _, warning := range tr.Warnings {
+		if len(warning) > 2*trace.MaxErr {
+			t.Errorf("warned in %d bytes, want at most %d", len(warning), 2*trace.MaxErr)
+		}
 	}
 }

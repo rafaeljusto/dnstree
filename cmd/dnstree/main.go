@@ -87,9 +87,12 @@ var (
 	rdapHTTP      *http.Client
 )
 
-// tlsaDial is how --tlsa reaches a mail server, nil for port 25 itself: the
-// tests point it at servers of their own.
-var tlsaDial dane.Dial
+// tlsaDial is how --tlsa reaches a mail server, nil for port 25 itself, and
+// tlsaAllow the addresses it may: the tests point both at servers of their own.
+var (
+	tlsaDial  dane.Dial
+	tlsaAllow = transport.Public
+)
 
 // version is stamped into a release build; see the dist target of the Makefile.
 var version = "dev"
@@ -425,7 +428,7 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	}
 	if cfg.TLSA {
 		grace, cancel := context.WithTimeout(ctx, tlsaGrace)
-		dane.Check(grace, tr, dane.Config{Dial: tlsaDial})
+		dane.Check(grace, tr, dane.Config{Dial: tlsaDial, Allow: tlsaAllow})
 		cancel()
 	}
 

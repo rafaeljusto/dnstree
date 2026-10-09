@@ -146,8 +146,8 @@ Each of these has been a bug, or would be a silent regression.
 - **`--rdap` and `--tlsa` are the only requests that are not DNS.** `--rdap`
   goes over HTTPS to the services IANA's bootstrap file names, refuses a
   redirect off HTTPS and reads a bounded answer. `--tlsa` connects on port 25
-  only to the addresses DNSSEC proved for the MX hosts DANE covers, with a
-  timeout and a bound on what it reads. Both are best effort like the AS
+  only to the public addresses DNSSEC proved for the MX hosts DANE covers,
+  with a timeout and a bound on what it reads. Both are best effort like the AS
   lookups: what cannot be asked costs the check, in one line, never the walk,
   and an address that cannot be reached is never a mismatch. dnstree-web
   imports neither, and `internal/layering` fails if it comes to.

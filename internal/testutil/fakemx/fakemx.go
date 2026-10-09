@@ -87,11 +87,12 @@ type Mode int
 
 // The ways a server can behave.
 const (
-	Honest Mode = iota
-	Plain       // offers no STARTTLS
-	Stall       // never greets
-	Flood       // greets without end
-	Picky       // refuses EHLO, and takes HELO
+	Honest   Mode = iota
+	Plain         // offers no STARTTLS
+	Stall         // never greets
+	Flood         // greets without end
+	Picky         // refuses EHLO, and takes HELO
+	Rambling      // turns the connection away at length
 )
 
 // Serve runs a mail server that presents the leaf, made for key, and the
@@ -136,6 +137,9 @@ func converse(conn net.Conn, how Mode, config *tls.Config) {
 				return
 			}
 		}
+	case Rambling:
+		_, _ = conn.Write([]byte(strings.Repeat("554-"+strings.Repeat("x", 1000)+"\r\n", 200) + "554 go away\r\n"))
+		return
 	}
 	_, _ = conn.Write([]byte("220 mx.example.com ESMTP\r\n"))
 	reader := bufio.NewReader(conn)

@@ -1690,18 +1690,33 @@ _25._tcp.mx2.example.test. IN TLSA 3 1 1 ` + fakemx.Digest(retired.Cert, 1, 1) +
 		netip.MustParseAddrPort("192.0.2.25:25"): fakemx.Serve(t, fakemx.Honest, current.Key, current.Cert),
 		netip.MustParseAddrPort("192.0.2.26:25"): fakemx.Serve(t, fakemx.Honest, renewed.Key, renewed.Cert),
 	}
-	tlsaDial = func(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
-		var dialer net.Dialer
-		return dialer.DialContext(ctx, "tcp", servers[addr].String())
-	}
-	defer func() { tlsaDial = nil }()
-
 	anchors := filepath.Join(t.TempDir(), "anchors")
 	if err := os.WriteFile(anchors, []byte(root.Anchors(t)[0].String()+"\n"), 0o600); err != nil {
 		t.Fatalf("writing the anchors: %v", err)
 	}
 	base := []string{"--root", root.Addr.String(), "--trust-anchors", anchors, "--dnssec", "--mail", "--tlsa",
 		"--no-asn", "--no-compare", "--color", "never"}
+
+	// The documentation addresses are no public ones, so left to itself the
+	// check connects to neither.
+	tlsaDial = func(context.Context, netip.AddrPort) (net.Conn, error) {
+		t.Error("connected to an address that is no public one")
+		return nil, errors.New("no")
+	}
+	defer func(allow func(netip.Addr) bool) { tlsaDial, tlsaAllow = nil, allow }(tlsaAllow)
+	var refused bytes.Buffer
+	if code := run(t.Context(), append(base, "example.test", "A"), &refused, &refused); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, refused.String())
+	}
+	if warning := "mx1.example.test. publishes 192.0.2.25, which is no public address"; !strings.Contains(refused.String(), warning) {
+		t.Errorf("got\n%s\nwant a warning saying %q", refused.String(), warning)
+	}
+
+	tlsaDial = func(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
+		var dialer net.Dialer
+		return dialer.DialContext(ctx, "tcp", servers[addr].String())
+	}
+	tlsaAllow = func(netip.Addr) bool { return true }
 	issued := func(cert fakemx.Issued) string { return cert.Cert.NotBefore.UTC().Format(time.DateOnly) }
 	want := []string{
 		"mail:     192.0.2.25 match: 3 1 1 " + fakemx.Digest(current.Cert, 1, 1)[:8] + "... matches CN=mx1.example.test, issued " + issued(current),

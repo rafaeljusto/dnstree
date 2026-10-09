@@ -589,9 +589,11 @@ A signed TLSA set says which certificate a sender should see; it does not say
 the server shows it. The usual way DANE breaks is a certificate renewed with a
 new key while the TLSA record still names the old one: the record is there and
 signed, `--mail` calls the host covered, and every sender that checks DANE
-stops delivering to it. `--tlsa` connects to each address `--mail` proved for a
-covered host, on port 25, starts TLS with STARTTLS, and holds the chain the
-server presents against the host's TLSA set the way a sender does:
+stops delivering to it. `--tlsa` connects to each public address `--mail`
+proved for a covered host, on port 25, starts TLS with STARTTLS, and holds the
+chain the server presents against the host's TLSA set the way a sender does. A
+loopback or private address is not connected to, and is said in a warning,
+since no sender on the internet reaches it:
 
 ```
 $ dnstree --mail --tlsa --dnssec --explain --no-asn --no-compare freebsd.org

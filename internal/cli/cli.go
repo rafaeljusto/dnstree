@@ -413,9 +413,11 @@ a certificate of the chain that the leaf chains to and that names the host.
 A key renewed without its TLSA record is said in a warning, with when the
 certificate presented was issued, and so is a server that offers no STARTTLS.
 It needs --mail and --dnssec, since only an address DNSSEC proved is one
-worth checking. An address that cannot be reached, which is what a network
-that blocks port 25 makes of every one, could not be checked from here and
-says so in one line, never as a mismatch.
+worth checking. An address that is no public one is not connected to, and is
+said in a warning, since no sender on the internet reaches it. An address that
+cannot be reached, which is what a network that blocks port 25 makes of every
+one, could not be checked from here and says so in one line, never as a
+mismatch.
 
 --dkim looks up the key at SELECTOR._domainkey.NAME, following an alias to
 a mail provider the way a receiver does, and reads it the way a receiver does

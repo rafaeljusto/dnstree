@@ -48,11 +48,16 @@ const (
 type Dial func(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
 
 // Config is how the check reaches the servers. The zero value dials port 25
-// with DefaultTimeout.
+// with DefaultTimeout, at any address.
 type Config struct {
 	Dial    Dial
 	Port    uint16
 	Timeout time.Duration
+
+	// Allow is which addresses may be dialled, nil for any. The addresses are
+	// a signed zone's to choose, and one that names a loopback or private
+	// address would have this machine greet whatever listens there.
+	Allow func(netip.Addr) bool
 }
 
 // Check connects to every address of each host of the mail path whose TLSA
@@ -85,6 +90,10 @@ func Check(ctx context.Context, tr *trace.Trace, cfg Config) {
 		checks, left = checks+len(addrs), left+len(host.Addrs)-len(addrs)
 		host.Presented = make([]trace.Presented, len(addrs))
 		for j, addr := range addrs {
+			if cfg.Allow != nil && !cfg.Allow(addr) {
+				host.Presented[j] = trace.Presented{Addr: addr, State: trace.PresentedUnreached, Why: reached + private}
+				continue
+			}
 			wg.Go(func() {
 				host.Presented[j] = check(ctx, cfg, tr.Started, host, names, addr)
 			})
@@ -106,6 +115,12 @@ func warn(tr *trace.Trace) {
 	asked := 0
 	for _, host := range tr.Mail.Hosts {
 		for _, p := range host.Presented {
+			if p.State == trace.PresentedUnreached && p.Why == reached+private {
+				tr.Warnings = append(tr.Warnings, fmt.Sprintf(
+					"%s publishes %s, which is no public address, so a sender on the internet cannot deliver to it and --tlsa did not connect; publish its public address",
+					host.Name, p.Addr))
+				continue
+			}
 			asked++
 			switch {
 			case p.State == trace.PresentedUnreached:
@@ -156,10 +171,11 @@ func check(ctx context.Context, cfg Config, at time.Time, host *trace.MailHost, 
 	var refused *noSTARTTLS
 	switch {
 	case errors.As(err, &refused):
-		presented.State, presented.Why = trace.PresentedMismatch, err.Error()
+		// The refusal is the server's text, and as long as it likes.
+		presented.State, presented.Why = trace.PresentedMismatch, trace.Printable(err.Error(), trace.MaxErr)
 		return presented
 	case err != nil:
-		presented.State, presented.Why = trace.PresentedUnreached, reached+err.Error()
+		presented.State, presented.Why = trace.PresentedUnreached, reached+trace.Printable(err.Error(), trace.MaxErr)
 		return presented
 	}
 
@@ -194,6 +210,9 @@ func check(ctx context.Context, cfg Config, at time.Time, host *trace.MailHost, 
 
 // reached begins why an address could not be checked.
 const reached = "could not be checked from here: "
+
+// private is why an address Allow refused was not dialled.
+const private = "it is no public address"
 
 // unmatched is why a record matched nothing in the chain.
 const unmatched = "no TLSA record matches the certificate or key it presents"
