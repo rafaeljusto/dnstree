@@ -107,14 +107,15 @@ jobs:
           exit $missing
 
       # The package is only worth building if it installs and carries the page.
-      # zcat rather than man, which is not on every runner image.
+      # zcat rather than man, which is not on every runner image. sed reads to
+      # the end, where head would close the pipe on zcat and fail pipefail.
       - name: Install what was built
         run: |
           set -euo pipefail
 
           sudo dpkg -i dist/dnstree_0.0.0_amd64.deb
           dnstree --version
-          zcat /usr/share/man/man1/dnstree.1.gz | head -n 3
+          zcat /usr/share/man/man1/dnstree.1.gz | sed -n 1,3p
 
   # The images are only ever pushed by a release, so the same reasoning holds:
   # both are built here, for every platform a release publishes, and kept
