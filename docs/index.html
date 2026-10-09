@@ -937,6 +937,14 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
         filter. The headers around the messages are rebuilt, and your side of them is written
         as a documentation address.
       </p>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        <code>--replay walk.pcap</code> walks again from that capture, offline: every server
+        answers what it answered then, and signatures are judged as of when it was made. A
+        problem seen from one network can be sent with a bug report, or tried on a newer
+        dnstree a month later. A question the capture does not hold fails its hop and says
+        so.
+      </p>
     </section>
 
     <section id="scripts">

@@ -166,13 +166,21 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return watch(ctx, cfg, log, lookups, registry, reference, stdout, stderr)
 	}
 	if cfg.From != "" {
-		return one(ctx, cfg, log, lookups, registry, nil, reference, stdout, stderr)
+		return one(ctx, cfg, log, lookups, registry, nil, nil, reference, stdout, stderr)
 	}
 
 	questions, err := asked(cfg)
 	if err != nil {
 		fmt.Fprintln(stderr, cli.Message(err))
 		return exitUsage
+	}
+
+	var replay *transport.Replay
+	if cfg.Replay != "" {
+		if replay, err = replayed(cfg.Replay); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
 	}
 
 	// The file is made before any server is asked, so that a path that cannot
@@ -202,7 +210,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			// A report heads itself with its question already.
 			tree.Asked(stdout, trace.Question{Name: fqdn(question.Name), Type: question.Type}, treeOptions(cfg))
 		}
-		code := one(ctx, &walk, log, lookups, registry, rec, reference, stdout, stderr)
+		code := one(ctx, &walk, log, lookups, registry, rec, replay, reference, stdout, stderr)
 		if code == exitUsage {
 			return code
 		}
@@ -270,7 +278,7 @@ func worse(a, b int) int {
 // one draws one walk, made now or read back with --from, with everything the
 // run asked to be said under it.
 func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, registry *rdap.Client, rec *recording, reference *history.Walk, stdout, stderr io.Writer) int {
+	lookups *asn.Resolver, registry *rdap.Client, rec *recording, replay *transport.Replay, reference *history.Walk, stdout, stderr io.Writer) int {
 
 	var err error
 
@@ -291,7 +299,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			tr.Propagation = tr.Propagated()
 		}
 	} else {
-		tr, err = made(ctx, cfg, log, lookups, registry, rec, live)
+		tr, err = made(ctx, cfg, log, lookups, registry, rec, replay, live)
 		rec.save(stderr)
 	}
 	if err != nil {
@@ -388,7 +396,7 @@ func outcome(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) int {
 // the question put to a recursive server for comparison. A run makes one of
 // these; --watch makes one after another.
 func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, registry *rdap.Client, rec *recording, live *tree.Live) (*trace.Trace, error) {
+	lookups *asn.Resolver, registry *rdap.Client, rec *recording, replay *transport.Replay, live *tree.Live) (*trace.Trace, error) {
 
 	// The comparison runs beside the walk rather than after it: a recursive
 	// server answers in the time one hop of the walk takes, so waiting for it
@@ -401,7 +409,7 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		registry.Prepare(ctx)
 	}
 
-	tr, err := resolve(ctx, cfg, log, lookups, rec, live)
+	tr, err := resolve(ctx, cfg, log, lookups, rec, replay, live)
 	if err != nil {
 		return nil, err
 	}
@@ -589,7 +597,7 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			live = tree.NewLive(stdout, treeOptions(cfg))
 		}
 
-		tr, err := made(ctx, cfg, log, lookups, registry, nil, live)
+		tr, err := made(ctx, cfg, log, lookups, registry, nil, nil, live)
 		live.Clear()
 		if err != nil {
 			fmt.Fprintln(stderr, err)
@@ -677,7 +685,7 @@ func changed(tr *trace.Trace, stderr io.Writer) []explain.Finding {
 
 // resolve builds the resolution the flags asked for and runs it.
 func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, rec *recording, live *tree.Live) (*trace.Trace, error) {
+	lookups *asn.Resolver, rec *recording, replay *transport.Replay, live *tree.Live) (*trace.Trace, error) {
 	roots, err := rootServers(cfg)
 	if err != nil {
 		return nil, err
@@ -688,9 +696,16 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	}
 
 	carrier := transport.Config{Timeout: cfg.Timeout, Port: cfg.Port, TLS: tlsConfig}
+	// A replay answers each protocol from the capture, and sends nothing.
+	carrying := func(proto string) transport.Transport {
+		if replay != nil {
+			return replay.Carrier(proto, cmp.Or(cfg.Port, transport.PortDNS))
+		}
+		return carry(proto, carrier)
+	}
 	outage := newOutage(cfg.Without)
 	config := resolver.Config{
-		Transport: outage.carry(rec.carry(carry(cfg.Proto, carrier))),
+		Transport: outage.carry(rec.carry(carrying(cfg.Proto))),
 		Roots:     roots,
 		DNSSEC:    cfg.DNSSEC,
 		All:       cfg.All,
@@ -720,6 +735,9 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	}
 	config.Log = log
 	config.Try = cfg.Try
+	if replay != nil {
+		config.At = replay.Made()
+	}
 	if len(cfg.Without) > 0 {
 		config.Down = outage.left
 	}
@@ -734,10 +752,10 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	// Only a datagram can be truncated, and only plain DNS is worth falling
 	// back to.
 	if cfg.Proto == "udp" {
-		config.TCP = outage.carry(rec.carry(transport.NewTCP(carrier)))
+		config.TCP = outage.carry(rec.carry(carrying("tcp")))
 	}
 	if cfg.Fallback {
-		config.Fallback = outage.carry(rec.carry(transport.NewUDP(carrier)))
+		config.Fallback = outage.carry(rec.carry(carrying("udp")))
 	}
 	if cfg.TrustAnchors != "" {
 		if config.Anchors, err = roothints.LoadAnchorsFile(cfg.TrustAnchors); err != nil {
@@ -752,6 +770,24 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	tr, err := engine.Resolve(ctx, cfg.Name, cfg.Type)
 	outage.record(tr)
 	return tr, err
+}
+
+// replayed is the capture --replay names, read whole before the walk starts.
+func replayed(path string) (*transport.Replay, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, unopened("--replay", err)
+	}
+	defer file.Close()
+	exchanges, err := capture.Read(file)
+	if err != nil {
+		return nil, fmt.Errorf("--replay %s: %w", path, err)
+	}
+	replay := transport.NewReplay(exchanges)
+	if replay.Made().IsZero() {
+		return nil, fmt.Errorf("--replay %s: the capture holds no query to answer", path)
+	}
+	return replay, nil
 }
 
 // recording is what --pcap keeps of the run's walks, and the file it keeps it

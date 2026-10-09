@@ -56,6 +56,13 @@ func New(anchors roothints.Anchors) *Chain {
 	return &Chain{anchors: anchors, state: trace.Secure, zone: ".", now: time.Now}
 }
 
+// At judges signatures and anchors as of moment rather than the clock, which
+// is how a walk replayed from a capture reads as it did when it was made.
+func (c *Chain) At(moment time.Time) *Chain {
+	c.now = func() time.Time { return moment }
+	return c
+}
+
 // Clone is the chain as it stands, to check a zone's answers against after the
 // walk has gone below it. Nil stays nil.
 func (c *Chain) Clone() *Chain {
@@ -103,7 +110,7 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 
 	delegated := dsRecords(authority, zone)
 	if zone == "." {
-		delegated = anchorDS(c.anchors)
+		delegated = anchorDS(c.anchors, c.now())
 	}
 	if len(delegated) == 0 {
 		// The root has no parent to prove anything: without an anchor there is
@@ -646,9 +653,9 @@ func dsRecords(authority []dns.RR, zone string) []*dns.DS {
 
 // anchorDS turns the trust anchors into the DS records the root is checked
 // against.
-func anchorDS(anchors roothints.Anchors) []*dns.DS {
+func anchorDS(anchors roothints.Anchors, now time.Time) []*dns.DS {
 	var delegated []*dns.DS
-	for _, anchor := range anchors.ValidAt(time.Now()) {
+	for _, anchor := range anchors.ValidAt(now) {
 		ds := &dns.DS{Hdr: dns.Header{Name: ".", Class: dns.ClassINET}}
 		ds.KeyTag, ds.Algorithm, ds.DigestType = anchor.KeyTag, anchor.Algorithm, anchor.DigestType
 		ds.Digest = hexDigest(anchor.Digest)

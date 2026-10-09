@@ -101,7 +101,7 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 		Server: server,
 		Proto:  carrier.Proto(),
 		Asked:  trace.Question{Name: zone, Type: "SOA"},
-		Start:  time.Since(r.trace.Started),
+		Start:  time.Since(r.began),
 		Aside:  true,
 		EDNS:   &trace.EDNSTest{Kind: kind, State: trace.EDNSUnchecked},
 	}

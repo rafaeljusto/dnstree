@@ -203,6 +203,11 @@ type Config struct {
 	// gave it, DS included. Nil walks the DNS as it is.
 	Try *trace.Trial
 
+	// At is the moment the walk is read as made at: its start, and the clock
+	// its signatures and anchors are judged against. The zero value is now; a
+	// walk replayed from a capture is given the time the capture was made.
+	At time.Time
+
 	Budget Budget
 }
 
@@ -304,7 +309,8 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 
 	run.trace.Trial = r.cfg.Try
-	run.trace.Started = time.Now()
+	run.began = time.Now()
+	run.trace.Started = cmp.Or(r.cfg.At, run.began)
 	run.trace.Timed = true
 	end := run.walk(ctx, qname, rrtype, run.trace.Root, 0)
 	if r.cfg.Try != nil && !run.tried {
@@ -324,7 +330,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		run.deps(ctx, cmp.Or(end, run.trace.Root))
 	}
 	run.bootstrap(ctx)
-	run.trace.Elapsed = time.Since(run.trace.Started)
+	run.trace.Elapsed = time.Since(run.began)
 	return run.trace, nil
 }
 
@@ -340,6 +346,10 @@ type run struct {
 	cfg      Config
 	trace    *trace.Trace
 	counters *counters
+
+	// began is when the walk started on the clock, which every step's start is
+	// measured from even when the trace says it was made at another time.
+	began time.Time
 
 	// chased are the names a CNAME has already pointed at, so that a chain
 	// cannot bite its own tail.

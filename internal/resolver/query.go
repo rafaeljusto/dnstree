@@ -36,7 +36,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 		Server: server,
 		Proto:  r.cfg.Transport.Proto(),
 		Asked:  trace.Question{Name: qname, Type: dnsutil.TypeToString(qtype)},
-		Start:  time.Since(r.trace.Started),
+		Start:  time.Since(r.began),
 	}
 
 	udpSize := r.cfg.UDPSize

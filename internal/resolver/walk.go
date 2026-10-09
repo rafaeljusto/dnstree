@@ -33,6 +33,9 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 	var chain *dnssec.Chain
 	if r.cfg.DNSSEC {
 		chain = dnssec.New(r.cfg.Anchors)
+		if !r.cfg.At.IsZero() {
+			chain.At(r.cfg.At)
+		}
 	}
 	var delegation []dns.RR // the authority section that led into this zone
 

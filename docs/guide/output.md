@@ -545,3 +545,77 @@ DNS on port 853 or 443 would misrepresent it. `--from` has nothing to capture,
 and `--watch` would hold every round in memory until it was interrupted, so
 both are refused too. The file of defaults cannot set `--pcap`: a default that
 writes a file over on every run is a trap.
+
+## Walking it again
+
+`--replay FILE` makes the walk again from a capture `--pcap` made, with every
+server answering what it answered then. Nothing is sent. It is how a problem
+seen from one network, or on one day, can be looked at somewhere else, later:
+send the capture with a bug report, or try a newer dnstree on a walk that
+failed last month.
+
+```
+$ dnstree --dnssec --pcap walk.pcap www.example.com
+$ dnstree --dnssec --replay walk.pcap www.example.com
+🌍  . (root)  🔒 [secure RSASHA256/SHA256]
+├── 🛰️  a.root-servers.net. 198.41.0.4  248ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  🔒 [secure ECDSAP256SHA256/SHA256]
+│   ├── 🎯  a.root-servers.net. 198.41.0.4  🐢 745ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
+│   ├── 🛰️  l.gtld-servers.net. 192.41.162.30  303ms  NOERROR  DO  referral → example.com.  🔒 [secure ECDSAP256SHA256/SHA256]
+│   │   ├── 🎯  l.gtld-servers.net. 192.41.162.30  252ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── 🎯  hera.ns.cloudflare.com. 108.162.192.162  235ms  NOERROR  AA DO  🔒 [secure ECDSAP256SHA256]
+│   │   │   ├── 📍 www.example.com. 300 A 172.66.147.243
+│   │   │   ├── 📍 www.example.com. 300 A 104.20.23.154
+│   │   │   └── 🎯  hera.ns.cloudflare.com. 108.162.192.162  232ms  NOERROR  AA DO  (DNSKEY of example.com.)
+│   │   ├── 💤  hera.ns.cloudflare.com. 172.64.32.162  (not queried)
+│   │   ├── 💤  hera.ns.cloudflare.com. 173.245.58.162  (not queried)
+│   │   ├── 💤  hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
+│   │   └── 💤  (and 8 more not queried)
+│   ├── 💤  l.gtld-servers.net. 2001:500:d937::30  (not queried)
+│   ├── 💤  j.gtld-servers.net. 192.48.79.30  (not queried)
+│   ├── 💤  j.gtld-servers.net. 2001:502:7094::30  (not queried)
+│   └── 💤  (and 22 more not queried)
+├── 💤  a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── 💤  b.root-servers.net. 170.247.170.2  (not queried)
+├── 💤  b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── 💤  (and 22 more not queried)
+✔ answered in 1ms · 6 queries · 3 servers
+```
+
+Each hop keeps the time its answer took when the capture was made, and the
+line at the bottom says how long the replay took. Signatures and trust anchors
+are judged as of the moment the capture was made, so a signed walk replayed
+after its signatures ran out still reads as it did then.
+
+The walk is made afresh, not read back: a query is matched to the one in the
+capture put the same way, to the same server, over the same protocol, with the
+same EDNS options and DO bit. Answers to the same query come back in the order
+they came, so a silence and then the answer to the retry happen again. A query
+the capture holds no reply to comes back as a silence, whether the server said
+nothing, reset the connection or sent what dnstree could not read: the capture
+does not say which. A question the capture does not hold at all fails its hop
+and says so, rather than being made up:
+
+```
+$ dnstree --replay walk.pcap www.example.com AAAA | tail -3
+✘ no answer in 0s · 26 queries · 26 servers
+
+· nothing answered for www.example.com. AAAA, and the walk stopped at .: udp [2001:dc3::35]:53: the capture holds no answer to www.example.com. AAAA asked this way
+```
+
+So flags that change what is asked, like `--qmin`, `--all`, `--check` or
+another type, get no further than the first query the capture lacks, unless
+the capture was made with them too. Flags that only change how the walk is
+drawn, like `--explain` or a `--format`, work as they always do.
+
+Nothing outside the walk is asked. The comparison with a resolver and the
+origin AS lookups are off, and `--rdap`, `--spf`, `--tlsa`, `--resolver` and
+`--check-resolver` are refused, as are `--dot` and `--doh`, which a capture of
+plain DNS holds nothing for. So are `--watch`, since a replay answers the same
+every time, and `--diff`, which would remember an old walk as the latest. Only
+a capture `--pcap` wrote can be replayed, not one taken with tcpdump, and the
+file of defaults cannot set `--replay`.
+
+> [!WARNING]
+> A capture holds every answer whole, not just what the tree draws: the
+> names, addresses and records of every zone on the way. Read it with
+> `tcpdump -r` before attaching it somewhere public.

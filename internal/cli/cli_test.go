@@ -202,6 +202,16 @@ func TestParse(t *testing.T) {
 			args: []string{"--pcap", "walk.pcap", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Pcap: "walk.pcap"},
 		},
+		"a walk answered from a capture, which asks nothing beside it": {
+			args: []string{"--replay", "walk.pcap", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Replay: "walk.pcap"},
+		},
+		"a replayed check, which grades what the capture holds": {
+			args: []string{"--replay", "walk.pcap", "--check", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Replay: "walk.pcap", Check: true,
+				DNSSEC: true, All: true, CheckNS: true, CheckDS: true, Serial: true, CheckEDNS: true, Cookie: true,
+				CAA: true, Mail: true, MaxQueries: 512},
+		},
 		"a broken chain reported to the agent its zone names": {
 			args: []string{"--report", "--dnssec", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Report: true},
@@ -286,10 +296,10 @@ func TestParse(t *testing.T) {
 				want.Format = "tree"
 			}
 			given := strings.Join(test.args, " ")
-			if !strings.Contains(given, "--no-asn") {
+			if !strings.Contains(given, "--no-asn") && !strings.Contains(given, "--replay") {
 				want.ASN = true
 			}
-			if !strings.Contains(given, "--no-compare") {
+			if !strings.Contains(given, "--no-compare") && !strings.Contains(given, "--replay") {
 				want.Compare = true
 			}
 			if !strings.Contains(given, "--no-browser") {
@@ -416,6 +426,17 @@ func TestParseRejects(t *testing.T) {
 		"a capture of a walk already made":         {"--from", "walk.json", "--pcap", "walk.pcap"},
 		"a capture of every walk watched":          {"--watch", "30s", "--pcap", "walk.pcap", "example.com"},
 		"a capture written into the drawing":       {"--pcap", "-", "example.com"},
+		"a replay of a walk already made":          {"--from", "walk.json", "--replay", "walk.pcap"},
+		"a replay read where the names may be":     {"--replay", "-", "example.com"},
+		"a replay of queries carried in tls":       {"--dot", "--replay", "walk.pcap", "example.com"},
+		"a replay of queries carried in https":     {"--doh", "--replay", "walk.pcap", "example.com"},
+		"a replay watched for changes":             {"--watch", "30s", "--replay", "walk.pcap", "example.com"},
+		"a replay remembered as the latest walk":   {"--diff", "--replay", "walk.pcap", "example.com"},
+		"a replay timed against a resolver":        {"--resolver", "192.0.2.1", "--replay", "walk.pcap", "example.com"},
+		"a replay that asks the registry":          {"--rdap", "--replay", "walk.pcap", "example.com"},
+		"a replay that asks for the SPF policy":    {"--spf", "--replay", "walk.pcap", "example.com"},
+		"a replay that connects to mail servers":   {"--mail", "--dnssec", "--tlsa", "--replay", "walk.pcap", "example.com"},
+		"a replay that checks each resolver":       {"--check-resolver", "--replay", "walk.pcap", "example.com"},
 		"an unknown colour":                        {"--color", "sometimes", "example.com"},
 		"a timeout of nothing":                     {"--timeout", "0", "example.com"},
 		"a negative retry count":                   {"--retries", "-1", "example.com"},

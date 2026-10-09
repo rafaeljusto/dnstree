@@ -91,7 +91,7 @@ func (r *run) probe(ctx context.Context, zone string, server trace.Server, carri
 		Server: server,
 		Proto:  carrier.Proto(),
 		Asked:  trace.Question{Name: qname, Type: dnsutil.TypeToString(qtype)},
-		Start:  time.Since(r.trace.Started),
+		Start:  time.Since(r.began),
 		Aside:  true,
 		Probe:  &trace.Probe{Kind: kind, State: trace.ProbeUnchecked},
 	}

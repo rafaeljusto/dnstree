@@ -83,6 +83,7 @@ one after another, each from the root servers down.
   --from FILE             draw a walk --format json saved, instead of walking
   --against FILE          say how the walk differs from one --format json saved
   --pcap FILE             save the walk's queries and answers as a packet capture
+  --replay FILE           walk again offline, answered from a capture --pcap made
   --color WHEN            auto, always or never (default auto)
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
@@ -255,6 +256,17 @@ question timed against a resolver and the origin AS lookups are not. Over --dot
 and --doh what crossed the wire was TLS, which a capture of plain DNS would
 misrepresent, so they are refused. Every walk of the run goes into the one file,
 which is written over; the file of defaults cannot set it.
+
+--replay walks again from a capture --pcap made, with every server answering
+what it answered then and nothing sent: a query is matched to the one put the
+same way to the same server, and one the capture does not hold fails its hop
+and says so. Signatures and trust anchors are judged as of when the capture was
+made. The walk is made afresh, so a newer dnstree, or flags that shape the walk
+differently, can be tried on a problem long since fixed, but whatever it asks
+that the first walk did not goes unanswered. Nothing outside the walk is asked:
+the resolver comparison and the origin AS lookups are off, what --check would
+ask beside the walk is left out, and --rdap, --spf, --tlsa, --resolver,
+--check-resolver, --diff, --watch, --dot and --doh are refused.
 
 --names reads the questions from FILE, or from the standard input where it is
 -, one to a line and written as on the command line: a name, then the types to
@@ -630,6 +642,10 @@ type Config struct {
 	// Pcap is the file --pcap writes the walk's packets to, empty for none.
 	Pcap string
 
+	// Replay is a capture --pcap made, to answer the walk from instead of the
+	// servers, empty for none.
+	Replay string
+
 	// Schema asks for the JSON Schema of the json format and nothing else. Like
 	// Version it answers a question about the command rather than resolving a
 	// name, so it needs no name to resolve.
@@ -802,6 +818,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&cfg.From, "from", "", "draw a walk --format json saved")
 	flags.StringVar(&cfg.Against, "against", "", "say how the walk differs from one --format json saved")
 	flags.StringVar(&cfg.Pcap, "pcap", "", "save the walk's queries and answers as a packet capture")
+	flags.StringVar(&cfg.Replay, "replay", "", "walk again offline, answered from a capture --pcap made")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
 	flags.DurationVar(&timeout, "timeout", transport.DefaultTimeout, "how long one query may take")
 	flags.IntVar(&cfg.Retries, "retries", 1, "how often to ask again after a silence")
@@ -1114,6 +1131,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.Pcap != "" && cfg.Watch != 0 {
 		return nil, fmt.Errorf("%w: --pcap with --watch would keep every walk in memory until it is interrupted", ErrUsage)
 	}
+	if err := replayable(&cfg, typed); err != nil {
+		return nil, err
+	}
 	if (cfg.TLSCA != "" || cfg.TLSInsecure) && cfg.Proto != "dot" && cfg.Proto != "doh" {
 		return nil, fmt.Errorf("%w: only --dot and --doh use TLS", ErrUsage)
 	}
@@ -1215,6 +1235,44 @@ func several(cfg *Config, expecting bool) error {
 	return nil
 }
 
+// replayable checks --replay against the rest of the run, and turns off what
+// would ask outside the walk where only a default or --check asked for it.
+func replayable(cfg *Config, typed []string) error {
+	if cfg.Replay == "" {
+		return nil
+	}
+	var outside []string
+	for _, name := range typed {
+		if askOutside[name] {
+			outside = append(outside, "--"+name)
+		}
+	}
+	switch {
+	case cfg.Replay == "-":
+		return fmt.Errorf("%w: --replay - would read the capture where the names may be; name a file", ErrUsage)
+	case len(outside) > 0:
+		return fmt.Errorf("%w: --replay answers the walk from a capture, and %s would ask outside it",
+			ErrUsage, strings.Join(outside, " and "))
+	case cfg.Proto == "dot" || cfg.Proto == "doh":
+		return fmt.Errorf("%w: --replay answers from a capture of plain DNS, which --%s does not send", ErrUsage, cfg.Proto)
+	case cfg.Watch != 0:
+		return fmt.Errorf("%w: --replay answers the same every time, so there is nothing to watch change", ErrUsage)
+	case cfg.Diff:
+		return fmt.Errorf("%w: --diff remembers the walk, and a replayed one is not what the name does now", ErrUsage)
+	}
+	cfg.ASN, cfg.Compare, cfg.DDR, cfg.Behave = false, false, false, false
+	cfg.SPF, cfg.RDAP, cfg.TLSA, cfg.Report = false, false, false, false
+	cfg.Resolvers = nil
+	return nil
+}
+
+// askOutside are the flags that ask something other than the walk's servers,
+// which a capture holds no answer for.
+var askOutside = map[string]bool{
+	"resolver": true, "asn-resolver": true, "ddr": true, "check-resolver": true, "report": true,
+	"spf": true, "rdap": true, "tlsa": true,
+}
+
 // walkFlags are the flags that shape a walk being made, and say nothing about
 // one already made.
 var walkFlags = map[string]bool{
@@ -1223,7 +1281,7 @@ var walkFlags = map[string]bool{
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
-	"tls-ca": true, "tls-insecure": true,
+	"tls-ca": true, "tls-insecure": true, "replay": true,
 }
 
 // format is what the rest of the run needs to know about one --format.

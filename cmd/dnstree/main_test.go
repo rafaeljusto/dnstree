@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/capture"
 	"github.com/rafaeljusto/dnstree/v2/internal/cli"
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/rdap"
@@ -1483,6 +1484,84 @@ func TestRunPcap(t *testing.T) {
 	}
 	if !maps.Equal(asked, want) {
 		t.Errorf("got %v queries in the capture, want the %v the servers saw", asked, want)
+	}
+}
+
+// TestRunReplay walks a capture --pcap made again, with the nameserver of the
+// zone truncating every answer over UDP: the replay draws the tree the walk
+// drew, down to the bytes each answer took, without asking either server
+// anything.
+func TestRunReplay(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+	child := fakens.New(t, fakens.Config{Name: "ns.test.", Origin: "test.", Zone: splitChildZone,
+		Behaviour: fakens.Behaviour{TruncateUDP: true}})
+	path := filepath.Join(t.TempDir(), "walk.pcap")
+	walk := []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())),
+		"--color", "never", "www.test", "A",
+	}
+
+	var made, stderr bytes.Buffer
+	if code := run(t.Context(), append([]string{"--pcap", path, "--no-asn", "--no-compare"}, walk...), &made, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, made.String(), stderr.String())
+	}
+	asked := len(root.Queries()) + len(child.Queries())
+
+	var replayed bytes.Buffer
+	stderr.Reset()
+	if code := run(t.Context(), append([]string{"--replay", path}, walk...), &replayed, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, replayed.String(), stderr.String())
+	}
+	if now := len(root.Queries()) + len(child.Queries()); now != asked {
+		t.Errorf("got %d queries at the servers during the replay, want none", now-asked)
+	}
+
+	// The run's own time is how long the replay took; every hop keeps its own.
+	took := regexp.MustCompile(`answered in [^ ]+`)
+	want, got := took.ReplaceAllString(made.String(), ""), took.ReplaceAllString(replayed.String(), "")
+	if got != want {
+		t.Errorf("got the replay\n%s\nwant the walk it replays\n%s", got, want)
+	}
+	if !strings.Contains(got, "truncated over udp") {
+		t.Errorf("got no hop retried over tcp, which the test is about:\n%s", got)
+	}
+}
+
+// TestRunReplayRefuses covers a file --replay cannot answer from: it costs the
+// run before anything is walked, and says which flag named it.
+func TestRunReplayRefuses(t *testing.T) {
+	dir := t.TempDir()
+	empty := filepath.Join(dir, "empty.pcap")
+	var none bytes.Buffer
+	if _, err := capture.New().WriteTo(&none); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if err := os.WriteFile(empty, none.Bytes(), 0o600); err != nil {
+		t.Fatalf("writing the capture: %v", err)
+	}
+	walk := filepath.Join(dir, "walk.json")
+	if err := os.WriteFile(walk, []byte(`{"schema_version":4,"question":{"name":"www.test.","type":"A","class":"IN"}}`), 0o600); err != nil {
+		t.Fatalf("writing the walk: %v", err)
+	}
+
+	tests := map[string]struct {
+		path, want string
+	}{
+		"a file that is not there":           {filepath.Join(dir, "missing.pcap"), "--replay " + filepath.Join(dir, "missing.pcap")},
+		"a saved walk rather than a capture": {walk, "not a packet capture dnstree --pcap wrote"},
+		"a capture of nothing":               {empty, "the capture holds no query to answer"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run(t.Context(), []string{"--replay", test.path, "www.test", "A"}, &stdout, &stderr); code != exitUsage {
+				t.Fatalf("got exit %d, want %d\n%s%s", code, exitUsage, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stderr.String(), test.want) {
+				t.Errorf("got %q, want it to say %q", stderr.String(), test.want)
+			}
+		})
 	}
 }
 

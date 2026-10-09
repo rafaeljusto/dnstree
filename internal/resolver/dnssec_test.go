@@ -489,6 +489,47 @@ func TestDNSSECExpiring(t *testing.T) {
 	}
 }
 
+// TestDNSSECAt judges a walk's signatures as of the moment Config.At names,
+// which is how a replay reads a capture made while they still held.
+func TestDNSSECAt(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		at   time.Duration
+		want trace.DNSSECState
+	}{
+		"at the moment the walk is made the chain holds":          {0, trace.Secure},
+		"a day on, inside the two days left, it still holds":      {24 * time.Hour, trace.Secure},
+		"three days on, past the two days left, it is bogus":      {72 * time.Hour, trace.Bogus},
+		"a month before the zone was signed, it is not yet valid": {-30 * 24 * time.Hour, trace.Bogus},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{},
+				fakens.Behaviour{SignatureLeft: 48 * time.Hour})
+			at := time.Now().Add(test.at)
+			cfg.At = at
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if !tr.Started.Equal(at) {
+				t.Errorf("got the walk started at %v, want %v", tr.Started, at)
+			}
+			chain := tr.Chain()
+			if chain == nil || chain.DNSSEC == nil || chain.DNSSEC.State != test.want {
+				t.Fatalf("got %+v, want %s: %s", chain, test.want, format(steps(tr)))
+			}
+			if tr.Elapsed > time.Minute {
+				t.Errorf("got %s elapsed, want the time the walk took, not the distance to Config.At", tr.Elapsed)
+			}
+		})
+	}
+}
+
 // TestCheckDS holds what the zone that answers asks its parent to publish, in
 // its CDS and CDNSKEY, against the DS the parent publishes for it.
 func TestCheckDS(t *testing.T) {

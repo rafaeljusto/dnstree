@@ -41,7 +41,7 @@ var groups = [][]string{
 
 // askedFor are the flags that ask for one run of their own, and that a file of
 // defaults cannot set for every run.
-var askedFor = []string{"version", "schema", "from", "against", "x", "names", "without", "report", "try-ns", "pcap"}
+var askedFor = []string{"version", "schema", "from", "against", "x", "names", "without", "report", "try-ns", "pcap", "replay"}
 
 // defaultFile is where the defaults are read from when the command line does
 // not say: the file named by the environment, then the XDG location, then the
