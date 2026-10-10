@@ -214,6 +214,75 @@ func TestUnsignedDS(t *testing.T) {
 	}
 }
 
+// TestMissingKeys covers a signed DS with no key set below it: the zone saying
+// it has none is a broken link, RFC 4035 5.2, and nobody answering is not. An
+// unsigned DS stays bogus either way, since no answer can make it the parent's,
+// and a root with no keys is one the anchors do not describe.
+func TestMissingKeys(t *testing.T) {
+	root := newZone(t, ".")
+	child := newZone(t, "example.")
+
+	signedDS := func() []dns.RR {
+		ds := child.ds()
+		return []dns.RR{ds, root.sign(t, []dns.RR{ds}, time.Now().Add(time.Hour))}
+	}
+
+	tests := map[string]struct {
+		enter  func(*dnssec.Chain) *trace.DNSSECStatus
+		state  trace.DNSSECState
+		reason string
+	}{
+		"the zone answered with no keys": {
+			enter:  func(chain *dnssec.Chain) *trace.DNSSECStatus { return chain.Enter("example.", signedDS(), nil) },
+			state:  trace.Bogus,
+			reason: "no DNSKEY for the DS",
+		},
+		"the zone answered with keys of another name": {
+			enter: func(chain *dnssec.Chain) *trace.DNSSECStatus {
+				return chain.Enter("example.", signedDS(), root.dnskeys(t))
+			},
+			state:  trace.Bogus,
+			reason: "no DNSKEY for the DS",
+		},
+		"the root answered with no keys": {
+			enter: func(*dnssec.Chain) *trace.DNSSECStatus {
+				return dnssec.New(root.anchors(t, dns.SHA256)).Enter(".", nil, nil)
+			},
+			state:  trace.Indeterminate,
+			reason: "trust anchors",
+		},
+		"nobody answered": {
+			enter:  func(chain *dnssec.Chain) *trace.DNSSECStatus { return chain.EnterUnanswered("example.", signedDS()) },
+			state:  trace.Indeterminate,
+			reason: "could not be fetched",
+		},
+		"nobody answered, under a DS the parent did not sign": {
+			enter: func(chain *dnssec.Chain) *trace.DNSSECStatus {
+				return chain.EnterUnanswered("example.", []dns.RR{child.ds()})
+			},
+			state:  trace.Bogus,
+			reason: "did not sign",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			chain := dnssec.New(root.anchors(t, dns.SHA256))
+			if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+				t.Fatalf("got %+v entering the root, want it secure", status)
+			}
+
+			status := test.enter(chain)
+			if status.State != test.state {
+				t.Fatalf("got %+v, want %s", status, test.state)
+			}
+			if !strings.Contains(status.Reason, test.reason) {
+				t.Errorf("got reason %q, want it to mention %q", status.Reason, test.reason)
+			}
+		})
+	}
+}
+
 // TestUnchecked covers a link that could not be fetched at all: not a break,
 // and not something to pass off as checked either.
 func TestUnchecked(t *testing.T) {

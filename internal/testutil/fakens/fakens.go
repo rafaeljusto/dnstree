@@ -47,7 +47,7 @@ type Behaviour struct {
 	// The ways a signed zone can break its own chain of trust.
 	NoDS         bool // the parent vouches for nobody, leaving the zone unsigned
 	NoDenial     bool // and does not sign the claim that it has nobody to vouch for
-	NoDNSKEY     bool // the keys cannot be fetched at all
+	NoDNSKEY     bool // the zone says it has no keys, though its DS points at one
 	StrayDNSKEY  bool // the keys served are not the ones the DS points at
 	BadSignature bool // the signatures over the records do not verify
 

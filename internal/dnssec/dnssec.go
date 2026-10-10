@@ -94,10 +94,18 @@ func (c *Chain) InsecureAt(zone string) bool {
 // anchors instead of from a parent.
 func (c *Chain) Enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECStatus {
 	c.signatures, c.nsec3 = nil, nil
-	return c.about(c.enter(zone, authority, dnskeys))
+	return c.about(c.enter(zone, authority, dnskeys, true))
 }
 
-func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECStatus {
+// EnterUnanswered is Enter for a zone whose DNSKEY query got no answer to read:
+// the DS is still checked, but keys nobody handed over are not keys the zone
+// lacks.
+func (c *Chain) EnterUnanswered(zone string, authority []dns.RR) *trace.DNSSECStatus {
+	c.signatures, c.nsec3 = nil, nil
+	return c.about(c.enter(zone, authority, nil, false))
+}
+
+func (c *Chain) enter(zone string, authority, dnskeys []dns.RR, answered bool) *trace.DNSSECStatus {
 	zone = dnsutil.Fqdn(zone)
 	c.zone = zone
 
@@ -165,9 +173,19 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR) *trace.DNSSECSta
 			algorithm(delegated[0].Algorithm)), nil)
 	}
 
+	// A signed DS for a key the zone says it does not have is a broken link,
+	// RFC 4035 5.2, however the zone came to say so. The root's DS is the
+	// anchors, which a root with no keys at all is one --root chose rather than
+	// one they describe.
 	keys, signatures := split(dnskeys, zone)
-	if len(keys) == 0 {
+	switch {
+	case len(keys) > 0:
+	case !answered:
 		return c.settleAs(status, trace.Indeterminate, "the DNSKEY set could not be fetched", nil)
+	case zone == ".":
+		return c.settleAs(status, trace.Indeterminate, "the root has no DNSKEY for the trust anchors to point at", nil)
+	default:
+		return c.settleAs(status, trace.Bogus, "the zone has no DNSKEY for the DS to point at", nil)
 	}
 
 	pointed, err := matchDS(usable, keys)

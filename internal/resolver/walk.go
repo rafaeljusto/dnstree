@@ -234,22 +234,25 @@ func ancestor(name string, labels int) string {
 // reached the zone; the verdict belongs further up, on the step that pointed
 // here, because that is the one that published the DS.
 func (r *run) enterZone(ctx context.Context, chain *dnssec.Chain, zone string, reached *trace.Step, delegation []dns.RR) *trace.DNSSECStatus {
-	var keys []dns.RR
 	// Once the chain has left secure there is no way back to it, so there is
 	// nothing left to learn from the keys below. The budget is asked second:
 	// a slot spent here is a query that never goes out.
-	if chain.State() == trace.Secure && r.counters.query() == nil {
-		hop := r.query(ctx, zone, reached.Server, zone, dns.TypeDNSKEY)
-		hop.step.Aside = true
-		hop.step.Records = nil // a key set is not something to read in a tree
-		hop.step.Notes = append(hop.step.Notes, "DNSKEY of "+zone)
-		r.attach(reached, hop.step)
-
-		if hop.resp != nil {
-			keys = hop.resp.Answer
-		}
+	if chain.State() != trace.Secure || r.counters.query() != nil {
+		return chain.EnterUnanswered(zone, delegation)
 	}
-	return chain.Enter(zone, delegation, keys)
+	hop := r.query(ctx, zone, reached.Server, zone, dns.TypeDNSKEY)
+	hop.step.Aside = true
+	hop.step.Records = nil // a key set is not something to read in a tree
+	hop.step.Notes = append(hop.step.Notes, "DNSKEY of "+zone)
+	r.attach(reached, hop.step)
+
+	// Only the zone speaking for itself can say it has no keys. A server that
+	// failed, refused or does not serve the zone has said nothing about them.
+	if resp := hop.resp; resp == nil || !resp.Authoritative || resp.Truncated ||
+		(resp.Rcode != dns.RcodeSuccess && resp.Rcode != dns.RcodeNameError) {
+		return chain.EnterUnanswered(zone, delegation)
+	}
+	return chain.Enter(zone, delegation, hop.resp.Answer)
 }
 
 // zoneCut is the zone cut the walk last crossed: the zone below it, the step that

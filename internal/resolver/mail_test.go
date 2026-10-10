@@ -190,8 +190,13 @@ relay IN CNAME mx.mailhost.com.`,
 			qname: "example.com", hosts: []string{"relay.example.com. dane"}, tlsa: "_25._tcp.mx.mailhost.com.",
 		},
 		"keys the zone will not hand over leave its host unchecked rather than failed": {
-			extra: `@ IN MX 10 mx.mailhost.com.`, behaviour: fakens.Behaviour{NoDNSKEY: true},
+			extra: `@ IN MX 10 mx.mailhost.com.`, behaviour: fakens.Behaviour{ServFailType: dns.TypeDNSKEY},
 			qname: "example.com", hosts: []string{"mx.mailhost.com. indeterminate"},
+		},
+		"a zone with no keys for its DS leaves its host unreachable": {
+			extra: `@ IN MX 10 mx.mailhost.com.`, behaviour: fakens.Behaviour{NoDNSKEY: true},
+			qname: "example.com", hosts: []string{"mx.mailhost.com. failed"},
+			warning: "treats mx.mailhost.com. as unreachable",
 		},
 		"a TLSA lookup that fails beside a covered host is not one to publish TLSA for": {
 			extra: `@ IN MX 10 mx

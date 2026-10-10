@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"codeberg.org/miekg/dns"
+
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -272,8 +274,9 @@ func TestDNSSECHiddenCutReferral(t *testing.T) {
 }
 
 // TestDNSSECBroken covers one broken link at a time, each of which has its own
-// verdict: a missing DS is not a failure, a missing key set is not a forgery,
-// and a signature that does not verify is.
+// verdict: a missing DS is not a failure, a key set nobody handed over is not a
+// forgery, and a zone that says it has no keys for its DS, or a signature that
+// does not verify, is.
 func TestDNSSECBroken(t *testing.T) {
 	t.Parallel()
 
@@ -288,9 +291,14 @@ func TestDNSSECBroken(t *testing.T) {
 			reason:  "no DS",
 		},
 		"the keys cannot be fetched": {
-			example: fakens.Behaviour{NoDNSKEY: true},
+			example: fakens.Behaviour{ServFailType: dns.TypeDNSKEY},
 			state:   trace.Indeterminate,
 			reason:  "could not be fetched",
+		},
+		"the zone says it has no keys for the DS": {
+			example: fakens.Behaviour{NoDNSKEY: true},
+			state:   trace.Bogus,
+			reason:  "no DNSKEY for the DS",
 		},
 		"the keys are not the ones vouched for": {
 			example: fakens.Behaviour{StrayDNSKEY: true},
