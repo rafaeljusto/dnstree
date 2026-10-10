@@ -275,14 +275,16 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
   at servers other than the real root, and the transports.
 - [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, `--report`, and
   what DNSSEC is worth to ECH.
-- [Checking a zone](docs/guide/zones.md): parent and child NS sets, serials, zone
-  transfers and open recursion, how they handle EDNS, aliases where they may not
-  be, who may issue certificates, what a check of its mail costs, which servers
-  a browser connects to, how long a change takes to reach every cache, extended
-  errors, NSID, cookies, `--qmin`, `--without`, `--try-ns` and answer sizes.
+- [Checking a zone](docs/guide/zones.md): `--check`, parent and child NS sets,
+  serials and SOA timers, zone transfers and open recursion, how they handle
+  EDNS, aliases where they may not be, who may issue certificates, SPF, DANE,
+  DMARC and DKIM, which servers a browser connects to, what a name depends on,
+  when its registration runs out, how long a change takes to reach every cache,
+  extended errors, NSID, cookies, `--qmin`, `--without`, `--try-ns` and answer
+  sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
-  people use, from here or from another subnet, and whether they offer
-  encryption.
+  people use, why one answers SERVFAIL, from here or from another subnet,
+  whether they offer encryption, and how each behaves.
 - [Reading a walk](docs/guide/output.md): `--explain`, `--live`, the waterfall,
   every other format, `--schema`, `--pcap` and `--replay`.
 - [Scripts and monitoring](docs/guide/scripting.md): `--expect`, `--diff`, several

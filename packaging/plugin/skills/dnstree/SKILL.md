@@ -84,10 +84,11 @@ whole; `dnstree --schema` describes every field.
 | whether the SOA timers would drop the zone, or keep a new name missing | `dnstree --format markdown --serial NAME` |
 | whether NS and glue match parent and child | `dnstree --format markdown --check-ns NAME` |
 | whether a nameserver move will work, before it is made | `dnstree --format markdown --dnssec --try-ns ZONE=NEWSERVER NAME` |
-| how long a change takes to reach every cache | `dnstree --format markdown --dnssec --check-ns --propagation NAME` |
+| how long a change takes to reach every cache | `dnstree --format markdown --dnssec --check-ns --serial --propagation NAME` |
 | why mail is refused or delayed | `dnstree --format markdown --dnssec --mail --spf NAME` |
 | whether SPF is over the ten-lookup limit | `dnstree --format markdown --spf NAME` |
 | whether a DKIM key is published and usable (SELECTOR is the s= of the DKIM-Signature header) | `dnstree --format markdown --mail --dkim SELECTOR NAME` |
+| whether each mail host's certificate matches its TLSA records | `dnstree --format markdown --dnssec --mail --tlsa NAME` |
 | which CAs may issue a certificate | `dnstree --format markdown --dnssec --caa NAME` |
 | where HTTPS/SVCB records lead | `dnstree --format markdown --dnssec --svcb NAME` |
 | every zone a name depends on, its nameservers' included | `dnstree --format markdown --dnssec --deps NAME` |
@@ -120,6 +121,7 @@ These reach beyond the DNS, touch the user's machine, or never return:
   would and show up in their logs: only for zones the user runs or was asked
   to check.
 - `--tlsa` connects to each DANE mail host on port 25.
+- `--rdap`, and `--check` with it, asks the domain's registry over HTTPS.
 - `--pcap` and `--diff` write to the disk.
 - `--format web` and `--format web-3d` serve a page and open a browser, and do
   not return until interrupted.

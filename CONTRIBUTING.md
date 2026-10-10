@@ -193,10 +193,14 @@ make web-lambda   # zip dnstree-web for AWS Lambda into build/
 
 After touching anything concurrent or `fakens`, run
 `go test -race -count=2 ./...`: races here have only shown up on the second
-run. Tests that need the internet go behind `//go:build live`. A new flag goes
+run. Tests that need the internet go behind `//go:build live`. A parser or
+escaper of what a zone wrote comes with a fuzz test, and an input `make fuzz`
+finds stays under `testdata/fuzz` with the fix. A new flag goes
 in the usage string in `internal/cli/cli.go`, the README flag table,
 `docs/index.html` and the tests; a flag that needs more than a row gets a
-section in [`docs/guide/`](docs/guide/), linked from the row.
+section in [`docs/guide/`](docs/guide/), linked from the row, and one that
+answers a question users bring to a model a row in
+[the plugin skill](packaging/plugin/skills/dnstree/SKILL.md).
 
 ### Demos
 

@@ -123,7 +123,10 @@ Each of these has been a bug, or would be a silent regression.
   That is what makes a trace drawn again with `--from` say what it said when it
   was made, and keeps the goldens still. Staleness is a share of the life a
   signature was made for, not a fixed margin: online signers hand out
-  signatures that last a day, fresh every time.
+  signatures that last a day, fresh every time. A walk `--replay` makes is
+  timed by the capture: `Config.At` sets `Trace.Started` and `Config.Clock`
+  every step's start, so a new timing goes through `run.since`, never
+  `time.Since`.
 - **Nothing reaches the disk unless `--diff` or `--pcap` asks for it.**
   `internal/history` is the only writer of the cache: it keeps one file per
   question, and the file names what was looked up and when. `--pcap` writes
@@ -161,6 +164,11 @@ Each of these has been a bug, or would be a silent regression.
   3 a broken chain of trust, 4 an `--expect` that did not hold. Scripts read them; do not repurpose one.
   A run of several walks exits with the worst of them, ranked 3, 2, 4, 0 — not
   the highest number.
+- **A check's own lookups are not the run's.** The walks `--mail`, `--dkim`,
+  `--svcb`, `--deps` and the bootstrap signals make start at a step marked
+  `Apart` (`run.look`), and the chain of trust, signature lifetimes and the
+  exit code read only `Trace.judged`, so somebody else's broken zone never
+  exits 3.
 - **`--format ascii` emits nothing above codepoint 127** — a test asserts it,
   because the format exists for pasting into documents.
 - **`schema_version` in the JSON output** is bumped whenever a field changes
@@ -223,13 +231,15 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   has a knob for each way a server misbehaves — silence, REFUSED, lameness,
   truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, six ways to
   break a chain of trust, signatures near expiry, NXDOMAIN for an empty
-  non-terminal, SERVFAIL for a single type, broken cookies and CDS, eight ways
+  non-terminal, SERVFAIL for a single type, a validating resolver's SERVFAIL
+  and AD bit, broken cookies and CDS, eight ways
   to mishandle EDNS (RFC 8906), and zone transfers and recursion open to
   strangers or reset. A change to the way a delegation is followed belongs
   with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
 - What a zone or a stranger wrote and is parsed or escaped by hand is fuzzed
   against a property, not an example: the SPF check, the DKIM key reader, a
+  capture `--replay` reads, the TXT the resolver tests' zones write, a
   saved walk read into every renderer, the live line cut, the escaper of each
   format, and the names dnstree-web redirects to. `make check` replays the seeds and the
   inputs kept under `testdata/fuzz`; `make fuzz` searches. An input a search

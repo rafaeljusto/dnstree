@@ -188,8 +188,8 @@
 # What bounds a walk
 
 # Zone cuts followed, queries made in total, aliases chased. Every walk ends;
-# these say when. all raises the queries to 256 only where this file leaves
-# max-queries unset.
+# these say when. all raises the queries to 256, and check and deps to 512,
+# only where this file leaves max-queries unset.
 # max-depth = 16
 # max-queries = 64
 # max-cname = 8

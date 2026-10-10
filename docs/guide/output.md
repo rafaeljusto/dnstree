@@ -7,6 +7,7 @@ What the walk says in sentences, and the ways it can be drawn.
 - [Where the time went](#where-the-time-went)
 - [Other formats](#other-formats)
 - [The bytes on the wire](#the-bytes-on-the-wire)
+- [Walking it again](#walking-it-again)
 
 ## Saying what happened
 
@@ -557,27 +558,27 @@ failed last month.
 ```
 $ dnstree --dnssec --pcap walk.pcap www.example.com
 $ dnstree --dnssec --replay walk.pcap www.example.com
-🌍  . (root)  🔒 [secure RSASHA256/SHA256]
-├── 🛰️  a.root-servers.net. 198.41.0.4  239ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  🔒 [secure ECDSAP256SHA256/SHA256]
-│   ├── 🎯  a.root-servers.net. 198.41.0.4  🐢 770ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
-│   ├── 🛰️  l.gtld-servers.net. 192.41.162.30  276ms  NOERROR  DO  referral → example.com.  🔒 [secure ECDSAP256SHA256/SHA256]
-│   │   ├── 🎯  l.gtld-servers.net. 192.41.162.30  308ms  NOERROR  AA DO  (DNSKEY of com.)
-│   │   ├── 🎯  hera.ns.cloudflare.com. 108.162.192.162  254ms  NOERROR  AA DO  🔒 [secure ECDSAP256SHA256]
-│   │   │   ├── 📍 www.example.com. 300 A 104.20.23.154
-│   │   │   ├── 📍 www.example.com. 300 A 172.66.147.243
-│   │   │   └── 🎯  hera.ns.cloudflare.com. 108.162.192.162  221ms  NOERROR  AA DO  (DNSKEY of example.com.)
-│   │   ├── 💤  hera.ns.cloudflare.com. 172.64.32.162  (not queried)
-│   │   ├── 💤  hera.ns.cloudflare.com. 173.245.58.162  (not queried)
-│   │   ├── 💤  hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
-│   │   └── 💤  (and 8 more not queried)
-│   ├── 💤  l.gtld-servers.net. 2001:500:d937::30  (not queried)
-│   ├── 💤  j.gtld-servers.net. 192.48.79.30  (not queried)
-│   ├── 💤  j.gtld-servers.net. 2001:502:7094::30  (not queried)
-│   └── 💤  (and 22 more not queried)
-├── 💤  a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
-├── 💤  b.root-servers.net. 170.247.170.2  (not queried)
-├── 💤  b.root-servers.net. 2801:1b8:10::b  (not queried)
-└── 💤  (and 22 more not queried)
+. (root)  [secure RSASHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  310ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  834ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
+│   ├── l.gtld-servers.net. 192.41.162.30  246ms  NOERROR  DO  referral → example.com.  [secure ECDSAP256SHA256/SHA256]
+│   │   ├── l.gtld-servers.net. 192.41.162.30  240ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  226ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   ├── www.example.com. 300 A 104.20.23.154
+│   │   │   ├── www.example.com. 300 A 172.66.147.243
+│   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  221ms  NOERROR  AA DO  (DNSKEY of example.com.)
+│   │   ├── hera.ns.cloudflare.com. 172.64.32.162  (not queried)
+│   │   ├── hera.ns.cloudflare.com. 173.245.58.162  (not queried)
+│   │   ├── hera.ns.cloudflare.com. 2606:4700:50::adf5:3aa2  (not queried)
+│   │   └── (and 8 more not queried)
+│   ├── l.gtld-servers.net. 2001:500:d937::30  (not queried)
+│   ├── j.gtld-servers.net. 192.48.79.30  (not queried)
+│   ├── j.gtld-servers.net. 2001:502:7094::30  (not queried)
+│   └── (and 22 more not queried)
+├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+├── b.root-servers.net. 170.247.170.2  (not queried)
+├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+└── (and 22 more not queried)
 ✔ answered in 2.1s · 6 queries · 3 servers
 ```
 
@@ -598,9 +599,9 @@ and says so, rather than being made up:
 
 ```
 $ dnstree --replay walk.pcap www.example.com AAAA | tail -3
+└── m.root-servers.net. 2001:dc3::35  error: udp [2001:dc3::35]:53: the capture holds no answer to www.example.com. AAAA asked this way
+warning: no server answered for .
 ✘ no answer in 0s · 26 queries · 26 servers
-
-· nothing answered for www.example.com. AAAA, and the walk stopped at .: udp [2001:dc3::35]:53: the capture holds no answer to www.example.com. AAAA asked this way
 ```
 
 So flags that change what is asked, like `--qmin`, `--all`, `--check` or
@@ -609,9 +610,10 @@ the capture was made with them too. Flags that only change how the walk is
 drawn, like `--explain` or a `--format`, work as they always do.
 
 Nothing outside the walk is asked. The comparison with a resolver and the
-origin AS lookups are off, and `--rdap`, `--spf`, `--tlsa`, `--resolver` and
-`--check-resolver` are refused, as are `--dot` and `--doh`, which a capture of
-plain DNS holds nothing for. So are `--watch`, since a replay answers the same
+origin AS lookups are off, and `--rdap`, `--spf`, `--tlsa`, `--resolver`,
+`--ddr`, `--check-resolver` and `--report` are refused, as are `--dot` and
+`--doh`, which a capture of plain DNS holds nothing for. So are `--watch`,
+since a replay answers the same
 every time, and `--diff`, which would remember an old walk as the latest. Only
 a capture `--pcap` wrote can be replayed, not one taken with tcpdump, and the
 file of defaults cannot set `--replay`.

@@ -13,6 +13,7 @@ server says about its own answer.
 - [What a check of its mail costs](#what-a-check-of-its-mail-costs)
 - [Whether its mail can be sent verified](#whether-its-mail-can-be-sent-verified)
 - [Where a browser connects](#where-a-browser-connects)
+- [What it depends on](#what-it-depends-on)
 - [Whether its registration is about to run out](#whether-its-registration-is-about-to-run-out)
 - [How long a change takes to reach everyone](#how-long-a-change-takes-to-reach-everyone)
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
@@ -568,7 +569,9 @@ A null MX (RFC 7505) says the domain takes no mail, and a domain with no MX set
 is its own only host. An MX set that is not signed leaves DANE protecting each
 host and not which hosts get the mail, and the coverage line says so. The
 MTA-STS and TLS-RPT records count only where exactly one begins with their
-version, as the RFCs say. A name with no DMARC record of its own goes by one
+version, as the RFCs say. With `--dnssec`, one that does not validate counts
+as failed, since a receiver that validates never sees it. A name with no DMARC
+record of its own goes by one
 found above it, walking up the tree the way RFC 9989 says: every name up to the
 top-level domain is asked, eight lookups at most, and the record nearest the
 root applies, unless one on the way says `psd=n`, which makes it the name's
@@ -646,13 +649,13 @@ does:
 ```
 $ dnstree --mail --dnssec --explain --no-asn --no-compare --dkim mail --dkim google ietf.org
 ...
-✉️  1 MX host for ietf.org. 🔒 [secure ECDSAP256SHA256]
-✉️    0 mx.ietf.org. dane (2 TLSA records): a sender has to see a certificate that matches
-✉️  no mta-sts; no tls-rpt; dmarc p=none
-✉️  dkim mail._domainkey.ietf.org. 🔒 [secure ECDSAP256SHA256] rsa: 1024 bits, under the 2048 RFC 8301 asks signers for
-✉️  dkim google._domainkey.ietf.org. 🔒 [secure] none: no key is published there
-✉️  dane covers 1 of 1 MX host
-⚠️  there is no DKIM key at google._domainkey.ietf.org. (no key is published there), so mail signed with selector google fails DKIM; publish its key, or stop signing with it
+mail: 1 MX host for ietf.org. [secure ECDSAP256SHA256]
+mail:   0 mx.ietf.org. dane (2 TLSA records): a sender has to see a certificate that matches
+mail: no mta-sts; no tls-rpt; dmarc p=none
+mail: dkim mail._domainkey.ietf.org. [secure ECDSAP256SHA256] rsa: 1024 bits, under the 2048 RFC 8301 asks signers for
+mail: dkim google._domainkey.ietf.org. [secure] none: no key is published there
+mail: dane covers 1 of 1 MX host
+warning: there is no DKIM key at google._domainkey.ietf.org. (no key is published there), so mail signed with selector google fails DKIM; publish its key, or stop signing with it
 ...
 · the DKIM key for selector mail is a 1024 bit rsa key a receiver verifies with, though shorter than the 2048 bits RFC 8301 asks signers for
 · there is no DKIM key for selector google (no key is published there), so mail signed with it fails DKIM
@@ -829,8 +832,9 @@ rdap: the registry holds no registration for zzzz-not-registered-4711.com.
 ```
 
 The registry is found in [IANA's bootstrap file](https://data.iana.org/rdap/dns.json)
-(RFC 9224), over HTTPS: these are the only requests dnstree makes that are not
-DNS, which is why it is off unless asked for. A TLD whose registry runs no RDAP
+(RFC 9224), over HTTPS: with `--tlsa`'s connections to port 25, these are the
+only requests dnstree makes that are not DNS, which is why it is off unless
+asked for. A TLD whose registry runs no RDAP
 service says so, and so does a registry that could not be reached or did not
 answer in time; either costs the check and never the walk. Each domain is
 asked about once an hour at most, so `--watch` does not hammer the registry.
@@ -877,7 +881,8 @@ It asks nothing more than the walk: the parent's NS TTL comes with the
 referral, the zone's own only with `--check-ns`, the SOA with a denial or
 `--serial`, and the DS and DNSKEY TTLs only with `--dnssec`. A line the walk
 had no TTL for is left out, and the flag that reads it is named under the
-others. It is worked out again for a walk read back with `--from`, and
+others. It is worked out again for a walk read back with `--from`. Tree,
+ascii, emoji, markdown and json draw it, and the other formats refuse it;
 `--format json` carries it as `propagation`.
 
 ## What a server said about its answer

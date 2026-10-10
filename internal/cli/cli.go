@@ -266,8 +266,8 @@ made. The walk is made afresh, so a newer dnstree, or flags that shape the walk
 differently, can be tried on a problem long since fixed, but whatever it asks
 that the first walk did not goes unanswered. Nothing outside the walk is asked:
 the resolver comparison and the origin AS lookups are off, what --check would
-ask beside the walk is left out, and --rdap, --spf, --tlsa, --resolver,
---check-resolver, --diff, --watch, --dot and --doh are refused.
+ask beside the walk is left out, and --rdap, --spf, --tlsa, --resolver, --ddr,
+--check-resolver, --report, --diff, --watch, --dot and --doh are refused.
 
 --names reads the questions from FILE, or from the standard input where it is
 -, one to a line and written as on the command line: a name, then the types to
@@ -463,8 +463,9 @@ between the registry and the zone. A registration that lapses, or that the
 registry puts on hold, takes the domain out of its TLD everywhere at once, and
 the registry knew for weeks. The domain is the zone the walk was delegated to
 below the TLD, or the TLD and one label of NAME where the TLD said it does not
-exist. The registry is found in IANA's bootstrap file, over HTTPS, the only
-requests dnstree makes that are not DNS; a registry that cannot be asked costs
+exist. The registry is found in IANA's bootstrap file, over HTTPS, which with
+--tlsa's connections to port 25 are the only requests dnstree makes that are
+not DNS; a registry that cannot be asked costs
 the check and says so in one line, never the walk. The DS are compared only
 with --dnssec, since a referral carries them only then.
 
