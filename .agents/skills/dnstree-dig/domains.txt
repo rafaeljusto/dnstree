@@ -1,0 +1,185 @@
+# Questions chosen for what they exercise. NAME [TYPE], TYPE defaults to A.
+# A target that drifts is replaced, not dropped.
+
+# signed with NSEC, NSEC3, and unsigned under an opt-out parent
+example.com
+example.com AAAA
+example.com DNSKEY
+example.com DS
+iana.org MX
+denic.de
+isc.org TXT
+nlnetlabs.nl AAAA
+registro.br
+github.com
+google.com CAA
+ietf.org
+icann.org AAAA
+ripe.net
+sidn.nl MX
+nic.se
+nic.at
+afnic.fr
+lacnic.net
+quad9.net AAAA
+
+# signing algorithms: RSASHA1-NSEC3 (7), RSASHA256 (8), two at once,
+# ECDSA P-256 (13) and P-384 (14), Ed25519 (15), Ed448 (16)
+spodhuis.org
+nlnet.nl
+torproject.org
+debian.org
+www.debian.org AAAA
+debian.org DNSKEY
+nic.cz
+gentoo.org
+gentoo.org DNSKEY
+ed25519.nl
+ed25519.nl DNSKEY
+ed25519.cz NS
+ed448.nl
+ed448.nl MX
+ed448.nl DNSKEY
+
+# denial: classic NSEC, NSEC3, NSEC3 with opt-out, unsigned, at the root
+nope-e2e-zz9.iana.org
+nope-dnstree-zz9.denic.de
+nope-dnstree-zz9.github.com
+nope-dnstree-zz9.zz9tld
+example.com NAPTR
+nope-dnstree-zz9.nl
+nope-dnstree-zz9.se
+nope-dnstree-zz9.br
+nope-dnstree-zz9.ch
+nope-dnstree-zz9.cz
+nope-dnstree-zz9.org
+nope-dnstree-zz9.de
+nope-dnstree-zz9.uk
+nope-dnstree-zz9.co.uk
+nope-dnstree-zz9.jp
+nope-dnstree-zz9.ed25519.nl
+nope-dnstree-zz9.google.com
+nope-dnstree-zz9.amazon.com
+
+# synthesised denial: NODATA for a name that does not exist (black lies)
+nope-dnstree-zz9.cloudflare.com
+nope-dnstree-zz9.ietf.org
+
+# empty non-terminals
+_tcp.gmail.com
+_domainkey.google.com TXT
+_tcp.jabber.org
+
+# wildcards
+nope-dnstree-zz9.github.io
+nope-dnstree-zz9.herokuapp.com
+nope-dnstree-zz9.s3.amazonaws.com
+nope-dnstree-zz9.netlify.app
+nope-dnstree-zz9.vercel.app
+nope-dnstree-zz9.blogspot.com
+nope-dnstree-zz9.pages.dev
+nope-dnstree-zz9.azurewebsites.net
+
+# aliases, across zones and providers, up to four deep
+www.github.com
+www.microsoft.com
+www.apple.com
+www.bbc.co.uk
+www.amazon.com
+www.linkedin.com
+www.paypal.com
+www.netflix.com
+www.yahoo.com
+www.office.com
+www.bing.com
+www.ebay.com
+www.cnn.com
+www.nytimes.com
+www.salesforce.com
+www.adobe.com
+www.spotify.com
+www.dropbox.com
+sigok.verteiltesysteme.net
+
+# broken on purpose
+dnssec-failed.org
+www.dnssec-failed.org
+rhybar.cz
+brokendnssec.net
+sigfail.verteiltesysteme.net
+sigfail.rsa2048-sha256.ippacket.stream
+
+# mail: MX, the policies beside it, DANE
+gmail.com MX
+outlook.com MX
+yahoo.com MX
+protonmail.com MX
+fastmail.com MX
+freebsd.org MX
+netbsd.org MX
+_dmarc.google.com TXT
+_mta-sts.gmail.com TXT
+_smtp._tls.gmail.com TXT
+_25._tcp.mail.ietf.org TLSA
+_25._tcp.mx1.freebsd.org TLSA
+_443._tcp.fedoraproject.org TLSA
+_443._tcp.www.nlnetlabs.nl TLSA
+
+# services: SRV, HTTPS, SVCB
+_xmpp-server._tcp.jabber.org SRV
+_imaps._tcp.gmail.com SRV
+_submission._tcp.gmail.com SRV
+_ldap._tcp.google.com SRV
+_matrix._tcp.matrix.org SRV
+_caldavs._tcp.fastmail.com SRV
+cloudflare.com HTTPS
+dns.google HTTPS
+crypto.cloudflare.com HTTPS
+www.google.com HTTPS
+blog.cloudflare.com HTTPS
+
+# other types
+cloudflare.com CDS
+cloudflare.com DNSKEY
+letsencrypt.org CAA
+github.com CAA
+mozilla.org CAA
+sip2sip.info NAPTR
+caida.org LOC
+freebsd.org SSHFP
+isc.org HINFO
+ietf.org SOA
+one.one.one.one AAAA
+
+# reverse, v4 and v6, under several registries
+8.8.8.8.in-addr.arpa PTR
+1.1.1.1.in-addr.arpa PTR
+9.9.9.9.in-addr.arpa PTR
+4.0.41.198.in-addr.arpa PTR
+8.8.8.in-addr.arpa NS
+in-addr.arpa NS
+8.8.8.8.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.6.8.4.0.6.8.4.1.0.0.2.ip6.arpa PTR
+
+# names outside ASCII
+xn--mnchen-3ya.de
+xn--bcher-kva.ch
+xn--fiq228c.com
+xn--p1ai NS
+xn--fiqs8s DS
+
+# TLDs, a large DNSKEY set that will not fit in UDP, and the root
+br DS
+de DNSKEY
+org DNSKEY
+se DNSKEY
+ch DNSKEY
+in DNSKEY
+uk NS
+jp NS
+au NS
+io NS
+dev NS
+gov NS
+arpa DS
+. NS
+. DNSKEY
