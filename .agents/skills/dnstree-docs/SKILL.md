@@ -39,7 +39,7 @@ Check the docs against these, never against each other alone:
 - **Flags and defaults**: the `Usage` constant in `internal/cli/cli.go`, and
   the flag set that parses them in the same file.
 - **Exit codes**: `cmd/dnstree` and wherever the code it calls picks them.
-- **Formats**: the `--format` switch in `internal/cli`, and `internal/render`.
+- **Formats**: the `formats` table in `internal/cli/cli.go`, and `internal/render`.
 - **What the output looks like**: the goldens under `internal/render/**/testdata`.
 - **Build, test and release**: `Makefile`, `.github/workflows/*.yml`, `go.mod`
   (the Go version) and `tapes/` (what the demo recordings type).

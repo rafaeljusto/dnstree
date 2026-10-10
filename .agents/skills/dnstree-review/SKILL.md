@@ -65,6 +65,10 @@ change touches without a test holding it. The ones that regress most quietly:
   `transport.Public`, a resolver option the service sets on its own, a
   redirect built from the path asked, or a forwarded address read from
   anywhere but the header's last entry.
+- A request that is not DNS beyond `--rdap` and `--tlsa`; `--tlsa` dialling
+  an address that is not public or that DNSSEC did not prove; a non-DNS
+  check that fails the walk; or dnstree-web reaching `internal/rdap` or
+  `internal/dane`.
 - A name or wire text drawn without going through `Trace.Shown`.
 - A minimised hop (`Step.Minimised`) read as the answer.
 - A signature's time left read against the clock rather than `Trace.Started`.

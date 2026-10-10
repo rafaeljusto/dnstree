@@ -105,6 +105,9 @@ Work through them in this order unless the scope names one.
    was sent. `internal/rdap` the same way over HTTPS: a hostile registry or
    bootstrap file, bodies bounded, redirects kept on HTTPS, and the domain
    kept to letters, digits and hyphens before it goes into a URL.
+   `internal/dane` the same way over port 25: only the public addresses
+   DNSSEC proved, a timeout and a bounded read, and an address that cannot
+   be reached is never a mismatch.
 5. **output: attacker text reaching the user.** ANSI and control bytes in
    record data or NSID in the tree and live renderers (terminal injection,
    cursor movement that forges lines). HTML and JS injection in
@@ -117,7 +120,9 @@ Work through them in this order unless the scope names one.
    the question (path traversal, separators, case, IDNs), permissions, atomic
    writes, and a corrupt or hostile cache file being read back. A capture
    writes only the path `--pcap` names, and a hostile answer must not be able
-   to make the headers it is rebuilt into lie about its length.
+   to make the headers it is rebuilt into lie about its length. A capture
+   handed to `--replay` is attacker input too: bounded, read once, and
+   every length checked.
 7. **concurrency.** `run.attach` from any goroutine other than the walk's,
    `Config.Asking` or the live tail reading the trace, AS lookups outliving the
    run, goroutines left blocked after ctx is cancelled, and shared state in
@@ -127,7 +132,8 @@ Work through them in this order unless the scope names one.
    name and type, never from the path; the client address is the header's last
    entry; and the walk, per-client and timeout bounds hold.
 
-`internal/asn`, `internal/recursive`, `internal/cli` and `cmd/` are in scope too,
+`internal/asn`, `internal/recursive`, `internal/dkim`, `internal/cli` and `cmd/`
+are in scope too,
 at lower priority: config file parsing, and AS lookups that must never fail or
 stall a resolution.
 
