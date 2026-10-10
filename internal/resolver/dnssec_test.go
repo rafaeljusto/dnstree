@@ -712,3 +712,83 @@ txt IN TXT "\255"`, fakens.Behaviour{}, true)
 		t.Errorf("got %+v, want the set secure", answer.DNSSEC)
 	}
 }
+
+// TestDNSSECAliasChain covers an answer reached through aliases: it is only as
+// secure as the least secure of them, the way a validator sets AD for a whole
+// response or not at all, so a signed end behind an unsigned alias is insecure.
+func TestDNSSECAliasChain(t *testing.T) {
+	t.Parallel()
+
+	const com = `
+@          IN SOA ns hostmaster 1 7200 3600 1209600 3600
+@          IN NS  ns
+ns         IN A   192.0.2.2
+example    IN NS  ns.example
+ns.example IN A   192.0.2.3
+plain      IN NS  ns.plain
+ns.plain   IN A   192.0.2.6
+`
+	const example = `
+@    IN SOA   ns hostmaster 1 7200 3600 1209600 3600
+@    IN NS    ns
+ns   IN A     192.0.2.3
+www  IN A     192.0.2.80
+link IN CNAME www
+out  IN CNAME www.plain.com.
+`
+	const plain = `
+@     IN SOA   ns hostmaster 1 7200 3600 1209600 3600
+@     IN NS    ns
+ns    IN A     192.0.2.6
+www   IN A     192.0.2.81
+alias IN CNAME www.example.com.
+`
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{
+		Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: true,
+	})
+	hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: com, Declared: "192.0.2.2", DNSSEC: true})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.example.com.", Origin: "example.com.", Zone: example, Declared: "192.0.2.3", DNSSEC: true,
+	})
+	hierarchy.Add(fakens.Config{Name: "ns.plain.com.", Origin: "plain.com.", Zone: plain, Declared: "192.0.2.6"})
+	h, cfg := harness{hierarchy, root}, resolver.Config{DNSSEC: true, Anchors: root.Anchors(t)}
+
+	tests := map[string]struct {
+		qname string
+		want  trace.DNSSECState
+		zone  string
+	}{
+		"an unsigned alias into a signed zone is insecure": {
+			qname: "alias.plain.com", want: trace.Insecure, zone: "plain.com.",
+		},
+		"a signed alias within a signed zone stays secure": {
+			qname: "link.example.com", want: trace.Secure, zone: "example.com.",
+		},
+		"a signed alias into an unsigned zone is insecure": {
+			qname: "out.example.com", want: trace.Insecure, zone: "plain.com.",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), test.qname, "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if result := tr.Result(); result == nil || result.Kind != trace.KindAnswer {
+				t.Fatalf("got %+v, want an answer: %s", result, format(steps(tr)))
+			}
+			if tr.Broken() {
+				t.Errorf("got a broken chain, want none: %s", format(steps(tr)))
+			}
+			for name, step := range map[string]*trace.Step{"Trust": tr.Trust(), "Chain": tr.Chain()} {
+				if step == nil || step.DNSSEC == nil {
+					t.Fatalf("%s: got no verdict: %s", name, format(steps(tr)))
+				}
+				if step.DNSSEC.State != test.want || step.DNSSEC.Zone != test.zone {
+					t.Errorf("%s: got %s for %s, want %s for %s", name, step.DNSSEC.State, step.DNSSEC.Zone, test.want, test.zone)
+				}
+			}
+		})
+	}
+}

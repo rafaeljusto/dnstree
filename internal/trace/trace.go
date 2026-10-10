@@ -1273,12 +1273,25 @@ func (t *Trace) Allowed() uint32 {
 // where the walk ended, or the last verdict it reached where it ended without
 // an answer. It is nil for a walk that followed no chain of trust.
 //
+// An answer reached through aliases rests on every one of them, the way a
+// validator sets AD for a whole response or not at all (RFC 6840 5.8): a
+// secure end behind an alias nobody signed is no more secure than that alias,
+// which is the step returned then.
+//
 // The step is returned rather than the verdict alone because a verdict names
 // the zone it is about, which is not the zone of the step it sits on: a cut is
 // judged from above, so a referral carries the verdict of the zone it points
 // at, and only the step has both.
 func (t *Trace) Trust() *Step {
 	if result := t.Result(); result != nil && result.DNSSEC != nil {
+		if result.DNSSEC.State == Secure {
+			for step := range t.Mainline() {
+				if step != result && step.Kind == KindCNAME && !step.Minimised &&
+					step.DNSSEC != nil && step.DNSSEC.State != Secure {
+					return step
+				}
+			}
+		}
 		return result
 	}
 
