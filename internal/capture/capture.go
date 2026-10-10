@@ -151,7 +151,7 @@ func (c *Capture) WriteTo(w io.Writer) (int64, error) {
 	slices.SortStableFunc(packets, func(a, b packet) int { return cmp.Compare(a.at.UnixNano(), b.at.UnixNano()) })
 
 	var out []byte
-	out = binary.LittleEndian.AppendUint32(out, 0xa1b2c3d4) // microsecond timestamps
+	out = binary.LittleEndian.AppendUint32(out, magicNano)
 	out = binary.LittleEndian.AppendUint16(out, 2)
 	out = binary.LittleEndian.AppendUint16(out, 4)
 	out = binary.LittleEndian.AppendUint32(out, 0) // the timestamps are UTC
@@ -160,7 +160,7 @@ func (c *Capture) WriteTo(w io.Writer) (int64, error) {
 	out = binary.LittleEndian.AppendUint32(out, linkRaw)
 	for _, p := range packets {
 		out = binary.LittleEndian.AppendUint32(out, uint32(p.at.Unix()))
-		out = binary.LittleEndian.AppendUint32(out, uint32(p.at.Nanosecond()/1000))
+		out = binary.LittleEndian.AppendUint32(out, uint32(p.at.Nanosecond()))
 		out = binary.LittleEndian.AppendUint32(out, uint32(len(p.data)))
 		out = binary.LittleEndian.AppendUint32(out, uint32(len(p.data)))
 		out = append(out, p.data...)
@@ -170,6 +170,12 @@ func (c *Capture) WriteTo(w io.Writer) (int64, error) {
 }
 
 const (
+	// The timestamps are kept to the nanosecond, so that a hop replayed takes
+	// exactly as long as the one recorded: to the microsecond, sent and
+	// answered round apart, and a hop of two exchanges can come out 2µs off.
+	magicNano  = 0xa1b23c4d
+	magicMicro = 0xa1b2c3d4 // what earlier releases wrote, still read
+
 	snaplen = 262144
 	linkRaw = 101 // LINKTYPE_RAW: each packet starts at its IP header
 )

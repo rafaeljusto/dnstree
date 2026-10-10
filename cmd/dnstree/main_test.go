@@ -1452,7 +1452,7 @@ func TestRunPcap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the capture: %v", err)
 	}
-	if len(data) < 24 || !bytes.Equal(data[:4], []byte{0xd4, 0xc3, 0xb2, 0xa1}) {
+	if len(data) < 24 || !bytes.Equal(data[:4], []byte{0x4d, 0x3c, 0xb2, 0xa1}) {
 		t.Fatalf("got no pcap header: % x", data[:min(len(data), 24)])
 	}
 

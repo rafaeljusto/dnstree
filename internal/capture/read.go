@@ -31,7 +31,13 @@ func Read(r io.Reader) ([]Exchange, error) {
 	if len(data) < 24 {
 		return nil, errors.New("too short to be a packet capture")
 	}
-	if binary.LittleEndian.Uint32(data) != 0xa1b2c3d4 {
+	var unit time.Duration
+	switch binary.LittleEndian.Uint32(data) {
+	case magicNano:
+		unit = time.Nanosecond
+	case magicMicro:
+		unit = time.Microsecond
+	default:
 		return nil, errors.New("not a packet capture dnstree --pcap wrote")
 	}
 	if binary.LittleEndian.Uint32(data[20:]) != linkRaw {
@@ -52,13 +58,13 @@ func Read(r io.Reader) ([]Exchange, error) {
 		if size > snaplen || size > len(data)-offset {
 			return nil, fmt.Errorf("packet %d is cut short", n)
 		}
-		micro := binary.LittleEndian.Uint32(header[4:])
-		if micro >= 1e6 {
+		fraction := time.Duration(binary.LittleEndian.Uint32(header[4:])) * unit
+		if fraction >= time.Second {
 			// Carried into the seconds, it would name a time no capture
 			// can write.
-			return nil, fmt.Errorf("packet %d has a timestamp of more than a second of microseconds", n)
+			return nil, fmt.Errorf("packet %d has a timestamp of more than a second past its seconds", n)
 		}
-		at := time.Unix(int64(binary.LittleEndian.Uint32(header)), int64(micro)*1000).UTC()
+		at := time.Unix(int64(binary.LittleEndian.Uint32(header)), int64(fraction)).UTC()
 		// WriteTo puts every packet in the order it was sent, which is what
 		// pairs an answer with the query before it.
 		if at.Before(last) {

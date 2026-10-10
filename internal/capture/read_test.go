@@ -45,6 +45,10 @@ func TestRead(t *testing.T) {
 		"a connection nothing answered on": {
 			{Proto: TCP, Server: v4Server, Sent: start, Query: []byte("q")},
 		},
+		"times finer than a microsecond, kept whole": {
+			{Proto: UDP, Server: v4Server, Sent: start.Add(123456789), Took: 724600, Query: []byte("q"), Answer: []byte("a")},
+			{Proto: TCP, Server: v4Server, Sent: start.Add(124181389), Took: 5400, Query: []byte("q"), Answer: []byte("a")},
+		},
 		"queries out at once, answered out of order": {
 			{Proto: UDP, Server: v4Server, Sent: start, Took: 100 * time.Millisecond, Query: []byte("first"), Answer: []byte("late")},
 			{Proto: TCP, Server: v4Server, Sent: start.Add(10 * time.Millisecond), Took: 20 * time.Millisecond, Query: []byte("second"), Answer: []byte("early")},
@@ -71,7 +75,9 @@ func TestReadRefuses(t *testing.T) {
 	backwards := slices.Clone(good)
 	binary.LittleEndian.PutUint32(backwards[24+16+len("q")+28:], uint32(start.Unix()-1))
 	overflowing := slices.Clone(good)
-	binary.LittleEndian.PutUint32(overflowing[24+4:], 1e6)
+	binary.LittleEndian.PutUint32(overflowing[24+4:], 1e9)
+	overflowingMicro := micro(t, good)
+	binary.LittleEndian.PutUint32(overflowingMicro[24+4:], 1e6)
 
 	tests := map[string]struct {
 		data []byte
@@ -82,7 +88,8 @@ func TestReadRefuses(t *testing.T) {
 		"a capture with link headers":        {ethernet, "link headers"},
 		"a capture cut in the middle":        {good[:len(good)-1], "cut short"},
 		"an answer written before its query": {backwards, "out of order"},
-		"microseconds past a second":         {overflowing, "more than a second of microseconds"},
+		"nanoseconds past a second":          {overflowing, "more than a second past its seconds"},
+		"microseconds past a second":         {overflowingMicro, "more than a second past its seconds"},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -92,6 +99,36 @@ func TestReadRefuses(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReadMicroseconds covers a capture an earlier release wrote, with its
+// timestamps to the microsecond: it still replays, to the microsecond.
+func TestReadMicroseconds(t *testing.T) {
+	want := []Exchange{{Proto: UDP, Server: v4Server, Sent: start.Add(5 * time.Microsecond), Took: 30 * time.Millisecond, Query: []byte("q"), Answer: []byte("a")}}
+	got, err := Read(bytes.NewReader(micro(t, written(t, want...))))
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if !sameExchanges(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+// micro rewrites a capture the way earlier releases wrote it: the same
+// packets, with their timestamps to the microsecond.
+func micro(t *testing.T, data []byte) []byte {
+	t.Helper()
+	data = slices.Clone(data)
+	le := binary.LittleEndian
+	le.PutUint32(data, magicMicro)
+	for offset := 24; offset < len(data); {
+		if fraction := le.Uint32(data[offset+4:]); fraction%1000 != 0 {
+			t.Fatalf("got %dns at offset %d, want a time a microsecond capture can hold", fraction, offset)
+		}
+		le.PutUint32(data[offset+4:], le.Uint32(data[offset+4:])/1000)
+		offset += 16 + int(le.Uint32(data[offset+8:]))
+	}
+	return data
 }
 
 // TestReadSegmentsAfterTheMessage covers a stream that goes on in one-byte

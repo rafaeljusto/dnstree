@@ -32,7 +32,7 @@ func readBack(t *testing.T, c *Capture) []read {
 		t.Fatalf("got %d bytes, want a pcap header at least", len(data))
 	}
 	le := binary.LittleEndian
-	if le.Uint32(data) != 0xa1b2c3d4 || le.Uint16(data[4:]) != 2 || le.Uint16(data[6:]) != 4 || le.Uint32(data[20:]) != linkRaw {
+	if le.Uint32(data) != magicNano || le.Uint16(data[4:]) != 2 || le.Uint16(data[6:]) != 4 || le.Uint32(data[20:]) != linkRaw {
 		t.Fatalf("got a pcap header of % x", data[:24])
 	}
 
@@ -45,7 +45,7 @@ func readBack(t *testing.T, c *Capture) []read {
 		if incl != orig || len(rest) < 16+incl {
 			t.Fatalf("got a record of %d bytes kept and %d sent, with %d left", incl, orig, len(rest)-16)
 		}
-		at := time.Unix(int64(le.Uint32(rest)), int64(le.Uint32(rest[4:]))*1000)
+		at := time.Unix(int64(le.Uint32(rest)), int64(le.Uint32(rest[4:])))
 		packets = append(packets, parse(t, at, rest[16:16+incl]))
 		rest = rest[16+incl:]
 	}

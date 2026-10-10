@@ -350,8 +350,9 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   (`TestCheckAllow`, `TestRunTLSA`); server text is clipped to `MaxErr`
   (`TestCheckLongRefusal`).
 - The `--replay` reader keeps the first message each way and stops copying
-  (`TestReadSegmentsAfterTheMessage`); a timestamp of a million microseconds or
-  more is refused, the `FuzzRead` find kept in `testdata/fuzz`.
+  (`TestReadSegmentsAfterTheMessage`); a timestamp a second or more past its
+  seconds is refused at either resolution, the `FuzzRead` find kept in
+  `testdata/fuzz`.
 - SPF stops asking after the first failed lookup, after a permerror too, and
   says so on each term left (`TestTempErrorEndsTheCheck`).
 - `spell()` divides in uint32 before converting, so no timer wraps on a 32-bit
