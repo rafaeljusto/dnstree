@@ -265,8 +265,7 @@ func handshake(ctx context.Context, cfg Config, name string, addr netip.AddrPort
 		return nil, err
 	}
 	if _, _, err := text.ReadResponse(220); err != nil {
-		var reply *textproto.Error
-		if errors.As(err, &reply) {
+		if _, ok := errors.AsType[*textproto.Error](err); ok {
 			return nil, &noSTARTTLS{"it refuses STARTTLS (" + err.Error() + "), so a sender that checks DANE does not deliver to it"}
 		}
 		return nil, fmt.Errorf("STARTTLS: %w", err)
