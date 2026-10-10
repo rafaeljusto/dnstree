@@ -51,6 +51,10 @@ type Behaviour struct {
 	StrayDNSKEY  bool // the keys served are not the ones the DS points at
 	BadSignature bool // the signatures over the records do not verify
 
+	// NoDenialFor leaves the proof out of the answers about this one name, so
+	// a denial of it is bogus while the zone's others hold.
+	NoDenialFor string
+
 	// BadKeySignature breaks the other link: the key set the DS points at is
 	// there, but it did not sign itself.
 	BadKeySignature bool

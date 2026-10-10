@@ -66,7 +66,7 @@ func (r *run) deps(ctx context.Context, under *trace.Step) {
 				d.Stopped = "the budget ran out before every nameserver was looked up"
 				break
 			}
-			claim(result, r.orphan(result), trace.DanglingNameserver, zone.Zone, zone.Zone)
+			r.claim(ctx, result, r.orphan(result), trace.DanglingNameserver, zone.Zone, zone.Zone)
 
 			switch {
 			case lookup.Err != "":

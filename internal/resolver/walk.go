@@ -153,7 +153,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 				}
 			}
 			r.compact(chain, hop, qname)
-			r.denial(hop, zone, qname)
+			r.denial(ctx, chain, hop, zone, qname)
 			if side == 0 && !r.climbing && !r.aside {
 				r.checkECH(step)
 				r.checkSubnet(step)
@@ -626,7 +626,7 @@ func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string
 		if result == nil {
 			continue
 		}
-		claim(result, r.orphan(result), trace.DanglingNameserver, step.Delegation.Zone, step.Delegation.Zone)
+		r.claim(ctx, result, r.orphan(result), trace.DanglingNameserver, step.Delegation.Zone, step.Delegation.Zone)
 		for _, record := range result.Records {
 			// A server may answer with more than was asked for. Only the
 			// records the name itself owns are addresses of that nameserver.
@@ -668,7 +668,7 @@ func (r *run) chaseCNAME(ctx context.Context, step *trace.Step, qname string, qt
 	r.attach(step, root)
 	result := r.walk(ctx, target, qtype, root, side)
 	if result != nil {
-		claim(result, r.orphan(result), trace.DanglingAlias, qname, step.Zone)
+		r.claim(ctx, result, r.orphan(result), trace.DanglingAlias, qname, step.Zone)
 	}
 	return result
 }

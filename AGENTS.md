@@ -229,7 +229,7 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
 - The engine is tested offline against in-process authoritative servers
   (`internal/testutil/fakens`), signed hierarchies included. `fakens.Behaviour`
   has a knob for each way a server misbehaves — silence, REFUSED, lameness,
-  truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, six ways to
+  truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, seven ways to
   break a chain of trust, signatures near expiry, NXDOMAIN for an empty
   non-terminal, SERVFAIL for a single type, a validating resolver's SERVFAIL
   and AD bit, broken cookies and CDS, eight ways

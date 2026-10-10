@@ -1,9 +1,12 @@
 package resolver
 
 import (
+	"context"
+
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 
+	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -53,25 +56,65 @@ func unowned(resp *dns.Msg, zone, qname string) *trace.Dangling {
 	return nil
 }
 
+// denied is what an NXDOMAIN said is missing, with the hop that said so and
+// the chain of trust it was checked against, for whoever claims it.
+type denied struct {
+	missing *trace.Dangling
+	hop     *hop
+	chain   *dnssec.Chain
+}
+
 // claim marks what a step said is missing as something name was left pointing
 // at, where it is. A name missing inside home, the zone that name is served
 // from, is only the owner's to create, so nobody else can take anything over
 // with it.
-func claim(step *trace.Step, missing *trace.Dangling, kind trace.DanglingKind, name, home string) {
-	if missing == nil || step.Dangling != nil || dnsutil.IsBelow(home, missing.Missing) {
+func (r *run) claim(ctx context.Context, step *trace.Step, d denied, kind trace.DanglingKind, name, home string) {
+	missing := d.missing
+	if missing == nil || step.Dangling != nil || dnsutil.IsBelow(home, missing.Missing) || !r.vacant(ctx, d) {
 		return
 	}
 	missing.Kind, missing.Name = kind, name
 	step.Dangling = missing
 }
 
+// vacant reports whether the name directly below the denying zone is missing
+// too. An NXDOMAIN says nothing about the names above the one asked: a target
+// missing under a name somebody holds is the holder's to create, not a
+// stranger's. So that name is asked of the same server, and checked like the
+// denial was.
+func (r *run) vacant(ctx context.Context, d denied) bool {
+	missing := d.missing
+	if dns.EqualName(missing.Missing, missing.Target) {
+		return true
+	}
+	if r.counters.query() != nil {
+		return false
+	}
+	asked := d.hop.step
+	hop := r.query(ctx, asked.Zone, asked.Server, missing.Missing, dns.TypeNS)
+	// The question is dnstree's own, not the run's: a verdict on it costs the
+	// claim, never the chain of trust or the exit code.
+	hop.step.Aside, hop.step.Apart = true, true
+	hop.step.Notes = append(hop.step.Notes, "NS of "+missing.Missing+", to see if it exists")
+	r.attach(asked, hop.step)
+
+	if hop.resp == nil || hop.resp.Rcode != dns.RcodeNameError {
+		return false
+	}
+	if d.chain != nil {
+		hop.step.DNSSEC = d.chain.Verify(hop.resp.Answer, hop.resp.Ns, hop.resp.Rcode, missing.Missing, dns.TypeNS)
+		return hop.step.DNSSEC.State != trace.Bogus
+	}
+	return true
+}
+
 // orphan hands over what a step said is missing, once, to the walk that went
 // looking for it: a nameserver's name, or an alias's target. What nobody claims
 // is only a name that is not there.
-func (r *run) orphan(step *trace.Step) *trace.Dangling {
-	missing := r.missing[step]
+func (r *run) orphan(step *trace.Step) denied {
+	d := r.missing[step]
 	delete(r.missing, step)
-	return missing
+	return d
 }
 
 // abandoned marks the zone every one of whose nameservers answered without
@@ -107,7 +150,7 @@ func abandoned(referred, parent *trace.Step, zone string) {
 // denial keeps what an NXDOMAIN a walk ended on says is missing, for the walk
 // that asked to claim. A denial the chain of trust found forged is nobody's
 // word, and one that followed an alias to get there is claimed on the spot.
-func (r *run) denial(hop *hop, zone, qname string) {
+func (r *run) denial(ctx context.Context, chain *dnssec.Chain, hop *hop, zone, qname string) {
 	step := hop.step
 	if step.Kind != trace.KindNXDomain || hop.resp == nil {
 		return
@@ -116,11 +159,12 @@ func (r *run) denial(hop *hop, zone, qname string) {
 		return
 	}
 	missing := unowned(hop.resp, zone, qname)
+	d := denied{missing: missing, hop: hop, chain: chain}
 	switch {
 	case missing == nil:
 	case missing.Kind == trace.DanglingAlias:
-		claim(step, missing, missing.Kind, missing.Name, zone)
+		r.claim(ctx, step, d, missing.Kind, missing.Name, zone)
 	default:
-		r.missing[step] = missing
+		r.missing[step] = d
 	}
 }

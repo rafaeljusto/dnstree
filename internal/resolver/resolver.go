@@ -306,7 +306,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		cfg:      r.cfg,
 		counters: newCounters(r.cfg.Budget),
 		chased:   map[string]bool{dnsutil.Canonical(qname): true},
-		missing:  map[*trace.Step]*trace.Dangling{},
+		missing:  map[*trace.Step]denied{},
 		trace: &trace.Trace{
 			Question: trace.Question{Name: qname, Type: qtype, Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -383,7 +383,7 @@ type run struct {
 
 	// missing is what each NXDOMAIN a walk ended on says is not there, until
 	// the walk that asked for a nameserver or an alias target claims it.
-	missing map[*trace.Step]*trace.Dangling
+	missing map[*trace.Step]denied
 
 	// secret is what the client cookies of this run are derived from, and
 	// cookies the server cookies handed out so far, by address.

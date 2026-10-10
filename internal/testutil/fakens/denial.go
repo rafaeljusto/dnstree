@@ -49,7 +49,7 @@ const (
 // zone as it stands. Which types the name does hold is in the record itself, so
 // the type asked for never comes into building it.
 func (s *Server) denial(name string, absent bool) []dns.RR {
-	if s.signer == nil || s.behaviour.NoDenial {
+	if s.signer == nil || s.behaviour.NoDenial || s.behaviour.NoDenialFor != "" && dns.EqualName(name, s.behaviour.NoDenialFor) {
 		return nil
 	}
 	if s.denialKind == DenialCompact && absent {

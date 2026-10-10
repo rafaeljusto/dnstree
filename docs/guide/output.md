@@ -100,6 +100,11 @@ are said, and the hop that showed each is marked `dangling` in the tree:
 - a zone every one of whose nameservers answered without authority for it,
   which is how a hosting service answers for a zone nobody has created there.
 
+A denial says nothing about the names above the one denied, so where the
+missing name is deeper than the one below the zone, that name is asked of the
+same server too. If it exists, only whoever holds it can create what is
+missing, and nothing is said.
+
 None of them is a claim that the name can be taken, only what the walk saw:
 a zone halfway through a move looks the same, and so does a service that does
 not let strangers in. No list of risky services is carried, since it would go

@@ -1,6 +1,7 @@
 package resolver_test
 
 import (
+	"cmp"
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
@@ -54,6 +55,8 @@ www   IN A    192.0.2.10
 shop  IN CNAME gone.host.net.
 store IN CNAME www.nowhere.net.
 here  IN CNAME gone.example.com.
+held  IN CNAME sel.x.host.net.
+deep  IN CNAME sel.b.host.net.
 `
 	// comFor delegates example.com to the nameservers given. The ones inside
 	// it are ns1.example, glued to an IPv4 address, and ns2.example, glued to
@@ -122,6 +125,18 @@ ns2.example IN AAAA 2001:db8::30
 			com:  comFor("good.outside.net."),
 			name: "store.example.com",
 			want: &trace.Dangling{Kind: trace.DanglingAlias, Name: "store.example.com.", Target: "www.nowhere.net.", Missing: "nowhere.net.", Zone: "net."},
+		},
+		"an alias for a name missing under one somebody holds is the holder's to fix": {
+			com:  comFor("good.outside.net."),
+			name: "held.example.com",
+		},
+		"an alias for a name under one nobody holds in a zone somebody else runs": {
+			com:  comFor("good.outside.net."),
+			name: "deep.example.com",
+			want: &trace.Dangling{Kind: trace.DanglingAlias, Name: "deep.example.com.", Target: "sel.b.host.net.", Missing: "b.host.net.", Zone: "host.net."},
+		},
+		"a nameserver missing under a name somebody holds is the holder's to fix": {
+			com: comFor("ns.x.host.net.", "good.outside.net."),
 		},
 		"an alias for a name missing from its own zone is the owner's to fix": {
 			com:  comFor("good.outside.net."),
@@ -255,13 +270,19 @@ func TestDanglingForged(t *testing.T) {
 @     IN NS   ns
 ns    IN A    192.0.2.3
 shop  IN CNAME gone.com.
+deep  IN CNAME www.gone.com.
 `
 	for name, test := range map[string]struct {
 		com  fakens.Behaviour
+		name string
 		want bool
 	}{
 		"a signed denial is read":    {want: true},
 		"a forged denial is ignored": {com: fakens.Behaviour{BadSignature: true}},
+		"a signed denial of a deeper name is read once the name below the zone is denied too": {name: "deep", want: true},
+		// The name below the zone is dnstree's own question, so its verdict is
+		// not the run's: it costs the claim, never the exit code.
+		"a deeper name whose parent's denial is forged is not claimed": {name: "deep", com: fakens.Behaviour{NoDenialFor: "gone.com."}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			hierarchy := fakens.NewHierarchy(t)
@@ -270,14 +291,14 @@ shop  IN CNAME gone.com.
 			hierarchy.Add(fakens.Config{Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3", DNSSEC: true})
 
 			cfg := resolver.Config{DNSSEC: true, Anchors: root.Anchors(t)}
-			tr, err := newResolver(t, harness{hierarchy, root}, cfg).Resolve(t.Context(), "shop.example.com", "A")
+			tr, err := newResolver(t, harness{hierarchy, root}, cfg).Resolve(t.Context(), cmp.Or(test.name, "shop")+".example.com", "A")
 			if err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
 
 			var denial, found *trace.Step
 			for step := range tr.Steps() {
-				if step.Kind == trace.KindNXDomain {
+				if step.Kind == trace.KindNXDomain && !step.Aside {
 					denial = step
 				}
 				if step.Dangling != nil {
@@ -286,6 +307,15 @@ shop  IN CNAME gone.com.
 			}
 			if denial == nil {
 				t.Fatalf("got no denial of gone.com.: %s", format(steps(tr)))
+			}
+			if tr.Broken() != test.com.BadSignature {
+				t.Errorf("got the chain broken %v, want it broken only by a forged answer to the walk itself", tr.Broken())
+			}
+			if !test.want && test.com.NoDenialFor != "" {
+				if found != nil {
+					t.Errorf("got %+v, want nothing read off a forged denial", *found.Dangling)
+				}
+				return
 			}
 			if !test.want {
 				if denial.DNSSEC == nil || denial.DNSSEC.State != trace.Bogus {
