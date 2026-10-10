@@ -70,6 +70,40 @@ func TestWithSubnet(t *testing.T) {
 	}
 }
 
+// TestNewQueryWithoutEDNS covers the query a server that could not parse EDNS0
+// is asked again with. The DO bit lives in the OPT record, so asking for
+// signatures must not put one back on the wire.
+func TestNewQueryWithoutEDNS(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		udpSize uint16
+		dnssec  bool
+		opt     bool
+	}{
+		"no EDNS0 and no signatures carries no OPT record":             {udpSize: 0, dnssec: false, opt: false},
+		"no EDNS0 carries no OPT record, signatures asked or not":      {udpSize: 0, dnssec: true, opt: false},
+		"EDNS0 with signatures carries the OPT record with the DO bit": {udpSize: transport.DefaultUDPSize, dnssec: true, opt: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, err := transport.NewQuery("www.test.", dns.TypeA, tt.udpSize, tt.dnssec)
+			if err != nil {
+				t.Fatalf("NewQuery: %v", err)
+			}
+			if err := req.Pack(); err != nil {
+				t.Fatalf("Pack: %v", err)
+			}
+			arcount := int(req.Data[10])<<8 | int(req.Data[11])
+			if got := arcount == 1; got != tt.opt {
+				t.Errorf("got %d additional records, want an OPT record %v", arcount, tt.opt)
+			}
+			if tt.opt && !req.Security {
+				t.Error("got no DO bit, want signatures asked for")
+			}
+		})
+	}
+}
+
 // TestWithSubnetNeedsEDNS covers the query that has nowhere to carry an option.
 // A query without EDNS0 is what a server that could not parse it is asked
 // again with, and smuggling the option back in would fail it a second time.

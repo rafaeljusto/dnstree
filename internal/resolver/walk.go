@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"codeberg.org/miekg/dns"
@@ -270,7 +271,19 @@ func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname s
 	// The authority section comes too: an answer with no records is denied
 	// there rather than answered, and the denial is what makes it checkable.
 	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, hop.resp.Ns, hop.resp.Rcode, qname, qtype)
+	// The DO bit rides in EDNS0, so an answer without it never had room for a
+	// signature: say so, rather than blame the zone's signing.
+	if hop.step.DNSSEC.State == trace.Bogus && hop.resp.UDPSize == 0 && !signedAny(hop.resp) {
+		hop.step.DNSSEC.Reason = "the server answered without EDNS0, so it could not carry the signatures"
+	}
 	return crossed
+}
+
+// signedAny reports whether a response carries a signature anywhere.
+func signedAny(resp *dns.Msg) bool {
+	return slices.ContainsFunc(slices.Concat(resp.Answer, resp.Ns), func(rr dns.RR) bool {
+		return dns.RRToType(rr) == dns.TypeRRSIG
+	})
 }
 
 // crossReferral enters the zone a referral came from when the walk was never

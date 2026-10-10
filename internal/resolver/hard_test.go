@@ -1,6 +1,7 @@
 package resolver_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -96,6 +97,59 @@ func TestEDNSFallback(t *testing.T) {
 	}
 	if answer.Flags.EDNS {
 		t.Error("got EDNS0 on the answer, want the one asked for without it")
+	}
+}
+
+// TestEDNSFallbackWhileValidating covers the same server under a walk that
+// asks for signatures, which the default is. The DO bit rides in EDNS0, so
+// the retry has to drop it too, or it fails just as the first try did.
+func TestEDNSFallbackWhileValidating(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{NoDS: true, FormErrEDNS: true})
+	cfg.UDPSize = transport.DefaultUDPSize
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	answer := tr.Result()
+	if answer == nil || answer.Kind != trace.KindAnswer {
+		t.Fatalf("got %+v, want the answer the second try brought: %s", answer, format(steps(tr)))
+	}
+	if !slices.Contains(answer.Notes, "retried without EDNS0") {
+		t.Errorf("got notes %q, want the fallback noted", answer.Notes)
+	}
+	if answer.DNSSEC == nil || answer.DNSSEC.State != trace.Insecure {
+		t.Errorf("got %+v, want the unsigned zone insecure", answer.DNSSEC)
+	}
+}
+
+// TestEDNSFallbackInASignedZone covers the same server in a zone that signs.
+// The answer the retry brings carries no signature, which a validator cannot
+// accept either, but it is the server that left no room for one, not the
+// zone's signing that failed, and the reason says so.
+func TestEDNSFallbackInASignedZone(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{FormErrEDNS: true})
+	cfg.UDPSize = transport.DefaultUDPSize
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	answer := tr.Result()
+	if answer == nil || answer.Kind != trace.KindAnswer {
+		t.Fatalf("got %+v, want the answer the second try brought: %s", answer, format(steps(tr)))
+	}
+	if answer.DNSSEC == nil || answer.DNSSEC.State != trace.Bogus {
+		t.Fatalf("got %+v, want an unsigned answer from a signed zone bogus", answer.DNSSEC)
+	}
+	if want := "without EDNS0"; !strings.Contains(answer.DNSSEC.Reason, want) {
+		t.Errorf("got the reason %q, want it to name the server answering %s", answer.DNSSEC.Reason, want)
 	}
 }
 

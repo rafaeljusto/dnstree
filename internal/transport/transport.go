@@ -105,7 +105,10 @@ func (c Config) tlsConfig(name string, protocols []string) *tls.Config {
 
 // NewQuery builds an iterative query: recursion is never desired, since every
 // server we talk to is meant to answer from its own zone. EDNS0 is advertised
-// when udpSize is not zero, and the DO bit asks for signatures.
+// when udpSize is not zero, and the DO bit asks for signatures. The DO bit
+// rides in the OPT record, so a query asked without EDNS0 goes without it:
+// the codec would otherwise write the OPT record anyway, and a server that
+// cannot parse EDNS0 would refuse the retry as it refused the first try.
 func NewQuery(name string, qtype uint16, udpSize uint16, dnssec bool) (*dns.Msg, error) {
 	req := dns.NewMsg(name, qtype)
 	if req == nil {
@@ -113,7 +116,7 @@ func NewQuery(name string, qtype uint16, udpSize uint16, dnssec bool) (*dns.Msg,
 	}
 	req.RecursionDesired = false
 	req.UDPSize = udpSize
-	req.Security = dnssec
+	req.Security = dnssec && udpSize > 0
 	return req, nil
 }
 
