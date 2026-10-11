@@ -3,8 +3,12 @@
 # hold each walk against dig: the server the walk ended at, asked again, and two
 # validating resolvers. One row per question goes to OUT/results.tsv.
 set -u
+# DIG is the dig to ask with. DIG_NEW, where set, is a newer one asked only for
+# the types DIG cannot read: the host's own keeps what the newer one's sandbox
+# may lack, such as IPv6.
 DIG=${DIG:-dig}
-export DIG
+DIG_NEW=${DIG_NEW:-}
+export DIG DIG_NEW
 
 if [ "${1:-}" = one ]; then
 	shift
@@ -12,6 +16,11 @@ if [ "${1:-}" = one ]; then
 	D=$OUT/q/q_$(printf '%s_%s' "$NAME" "$TYPE" | tr -c 'A-Za-z0-9._-' '_')
 	mkdir -p "$D"
 	printf '%s %s\n' "$NAME" "$TYPE" > "$D/question"
+
+	if grep -qx "$TYPE" "$OUT/newer"; then
+		DIG=$DIG_NEW
+	fi
+	echo "$DIG" > "$D/dig"
 
 	timeout 120 "$BIN" --no-asn --no-compare --color never --format json "$NAME" "$TYPE" > "$D/trace.json" 2> "$D/err"
 	code=$?
@@ -105,8 +114,10 @@ if [ "${1:-}" = one ]; then
 	elif [ "$auth" != - ] && [ "$auth" != unreachable ] && [ "$ours" != - ] && [ "$auth" != "$ours" ]; then
 		class=auth-rcode notes="walk $ours, server $auth"
 	elif [ "$auth" = NOERROR ] && ! answers "$D/auth" | cmp -s - "$D/walk.answers"; then
-		if answers "$D/auth" | tr A-Z a-z | cmp -s - <(tr A-Z a-z < "$D/walk.answers"); then
-			class=auth-case
+		# Letter case and quotes around a value (RFC 9460 2.1) are how the
+		# data is written, not what it is.
+		if answers "$D/auth" | tr -d '"' | tr A-Z a-z | cmp -s - <(tr -d '"' < "$D/walk.answers" | tr A-Z a-z); then
+			class=auth-format
 		elif [ "$varies" -gt 1 ]; then
 			class=auth-varies notes="$varies different answers in 5 asks"
 		else
@@ -130,19 +141,50 @@ if [ "${1:-}" = one ]; then
 		class=rec-answer
 	fi
 
+	# No dig at hand can read the type, so nothing it said about it counts.
+	if [ "$class" != crash ] && grep -qx "$TYPE" "$OUT/unknown"; then
+		class=untested notes="no dig at hand reads $TYPE"
+	fi
+
 	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s/%s\t%s\t%s\t%s\n' "$class" "$NAME" "$TYPE" "$code" "$kind" "$dnssec" "$auth" "$rec1" "$rec2" "$ad" "$notes" "$D" > "$D/row"
+	exit 0
+fi
+
+# A dig that does not know a type says so before it asks anything, and would
+# draw the answer as TYPE65 and the like, a mismatch on every one.
+knows() { ! "$1" -t "$2" +time=1 +tries=1 @127.0.0.1 . 2>&1 | grep -q 'invalid type'; }
+types() { grep -vE '^[[:space:]]*(#|$)' "$1" | awk '{print ($2 == "" ? "A" : $2)}' | sort -u; }
+
+# compare.sh need LIST — the types of LIST that DIG cannot read, one a line:
+# nothing printed means no newer dig is needed.
+if [ "${1:-}" = need ]; then
+	for type in $(types "$2"); do
+		knows "$DIG" "$type" || echo "$type"
+	done
 	exit 0
 fi
 
 BIN=$1 LIST=$2 OUT=$3
 JOBS=${JOBS:-4}
-# A dig older than 9.18 draws HTTPS, SVCB and newer types as TYPE65 and the
-# like, which would read as a mismatch on every one of them.
-"$DIG" -v 2>&1 | grep -qE 'DiG 9\.(1[89]|[2-9][0-9])' || echo "warning: $("$DIG" -v 2>&1) predates 9.18; newer types will not compare. Set DIG." >&2
 mkdir -p "$OUT/q"
 grep -vE '^[[:space:]]*(#|$)' "$LIST" | while read -r name type _; do
-	printf '%s\0%s\0' "$name" "${type:-A}"
-done | xargs -0 -n 2 -P "$JOBS" "$0" one "$BIN" "$OUT"
+	printf '%s %s\n' "$name" "${type:-A}"
+done > "$OUT/questions"
+: > "$OUT/newer"
+: > "$OUT/unknown"
+for type in $(types "$OUT/questions"); do
+	if knows "$DIG" "$type"; then
+		continue
+	elif [ -n "$DIG_NEW" ] && knows "$DIG_NEW" "$type"; then
+		echo "$type" >> "$OUT/newer"
+	else
+		echo "$type" >> "$OUT/unknown"
+	fi
+done
+[ -s "$OUT/newer" ] && echo "asking $DIG_NEW for $(paste -sd' ' "$OUT/newer")" >&2
+[ -s "$OUT/unknown" ] && echo "warning: no dig at hand reads $(paste -sd' ' "$OUT/unknown"); those questions are untested. Set DIG_NEW." >&2
+
+tr '\n' '\0' < "$OUT/questions" | tr ' ' '\0' | xargs -0 -n 2 -P "$JOBS" "$0" one "$BIN" "$OUT"
 
 {
 	printf 'class\tname\ttype\texit\tkind\tdnssec\tauth\tresolvers\tad\tnotes\tdir\n'

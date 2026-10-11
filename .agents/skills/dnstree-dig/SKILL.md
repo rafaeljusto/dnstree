@@ -29,7 +29,7 @@ Each question gets one class in `results.tsv`, worst first:
 | `crash` | panic, race, hang, or exit 1 on a question the list meant to be valid | bug unless the question is bad |
 | `auth-rcode` | the walk's rcode differs from the same server's | likely bug |
 | `auth-answer` | the rdata differs from the same server's, five times | likely bug, or presentation |
-| `auth-case` | differs only in letter case | presentation; check which is right |
+| `auth-format` | differs only in letter case or quoting | presentation; check both are valid |
 | `auth-varies` | the server gave more than one answer across five asks | the zone rotates; ignore unless the walk's answer is not one it could give |
 | `no-answer` | exit 2 where both resolvers answered | likely bug, or a lame/partial zone |
 | `bogus-only-here` | exit 3, neither resolver fails validation | bug until shown otherwise |
@@ -37,6 +37,7 @@ Each question gets one class in `results.tsv`, worst first:
 | `rec-rcode` | NXDOMAIN on one side, NOERROR on the other, resolvers agreeing | investigate |
 | `secure-unproven` / `secure-missed` | secure where neither resolver sets AD, or insecure where both do | investigate |
 | `auth-unreachable` | dig could not reach the server the walk ended at | environment |
+| `untested` | no dig at hand reads the type, so only a crash counts | environment |
 | `rec-answer` | answer differs from both resolvers but not from the server | usually a CDN or geo answer |
 | `ok` | agrees | — |
 
@@ -50,11 +51,8 @@ go -C $R build -race -o $W/dnstree ./cmd/dnstree
 dig -v; jq --version; timeout --version | head -1
 ```
 
-`dig` must be BIND 9.18 or later, or HTTPS, SVCB and other newer types come
-back as `TYPE65` and every one of them reads as `auth-answer`. macOS ships 9.10:
-use `DIG=$(brew --prefix bind)/bin/dig` if it is installed, otherwise say so in
-the report and treat those types as untested. Note whether IPv6 works
-(`dig -6 @2001:500:2::c . SOA`): a walk can end at a v6 address dig cannot reach.
+Note whether IPv6 works (`dig -6 @2001:500:2::c . SOA`): a walk can end at a
+v6 address dig cannot reach.
 
 ## The questions
 
@@ -79,10 +77,51 @@ the report and treat those types as untested. Note whether IPv6 works
 
 If Tranco cannot be reached, say so and go on with the curated list.
 
+```bash
+touch $W/tranco.txt   # empty under the curated scope
+cat $R/.agents/skills/dnstree-dig/domains.txt $W/tranco.txt > $W/questions.txt
+```
+
+## A dig for every type
+
+`compare.sh` asks the host's `dig` (or `DIG`) for every type it can read,
+and `DIG_NEW`, where set, for the ones it cannot: an old dig draws HTTPS,
+SVCB and other newer types as `TYPE65`, a mismatch on every one. A type no
+dig at hand reads is `untested`.
+
+Ask the script which types of the questions the host's dig cannot read:
+
+```bash
+$R/.agents/skills/dnstree-dig/compare.sh need $W/questions.txt
+```
+
+Nothing printed: the host's dig reads them all. Ask nothing and go on.
+
+Otherwise **ask the user**, every run, naming the types it printed, which of
+these they want. Never pick for them and never carry an answer over from an
+earlier run: the first two change their machine.
+
+1. **Upgrade the host's dig**, the better choice: it keeps IPv6, costs
+   nothing per run, and is asked once. `brew install bind` on macOS
+   (then `export DIG=$(brew --prefix bind)/bin/dig`), `apt install
+   bind9-dnsutils` on Debian and Ubuntu, `dnf install bind-utils` on
+   Fedora. Run `need` again: it should print nothing.
+2. **A container**, offered only where `docker info` answers. It pulls
+   `alpine:3.24` and installs BIND's `bind-tools` (dig 9.20, no server):
+
+   ```bash
+   $R/.agents/skills/dnstree-dig/dig-docker.sh up $W && export DIG_NEW=$W/dig
+   ```
+
+   Only the types `need` printed go to it. It has no IPv6 by default, so one
+   of those questions ending `auth-unreachable` at a v6 address is the
+   environment.
+3. **Neither**: leave `DIG_NEW` unset. Those questions come out `untested`,
+   and the report says so.
+
 ## Run
 
 ```bash
-cat $R/.agents/skills/dnstree-dig/domains.txt $W/tranco.txt > $W/questions.txt
 JOBS=4 $R/.agents/skills/dnstree-dig/compare.sh $W/dnstree $W/questions.txt $W/out
 ```
 
@@ -103,8 +142,9 @@ which of these it is:
   it did, judged a chain the resolvers judge otherwise and the RFCs side with
   them, or crashed. That is a finding.
 - **dig or this harness**: dig's presentation differs (an old dig's `TYPE65`,
-  escapes in TXT, upper-case hex in TLSA, which is `auth-case`, or `107.00m`
-  against `107m` in LOC, both valid under RFC 1876), or the script misread the
+  escapes in TXT, upper-case hex in TLSA or quoted SvcParam values, which are
+  `auth-format`, or `107.00m` against `107m` in LOC, both valid under RFC
+  1876), or the script misread the
   trace. Fix the script or the setup, not dnstree, and say so.
 - **the zone**: servers of the zone disagree with each other, a load balancer
   hands out one address that moves every few minutes (`auth-answer` that
@@ -129,10 +169,16 @@ against `fakens`. A real server is not a reproduction there.
 A curated question whose zone changed is **target drift**: propose a new target
 for `domains.txt` that exercises the same thing.
 
+## Clean up
+
+If the container was started, stop it, even when the run failed:
+`$R/.agents/skills/dnstree-dig/dig-docker.sh down $W`. Leave `$W` in place,
+since the report points into it.
+
 ## Report
 
 One line first: questions asked, how many per class, the commit built, the dig
-version, and how long it took.
+version and where it ran, and how long it took.
 
 Then the findings, dnstree first, each as:
 
