@@ -91,6 +91,11 @@ type Trace struct {
 	// file.
 	Propagation *Propagation
 
+	// Rollover is where a change of keys in the zone the walk ended in stands,
+	// nil where --rollover did not ask. Like Propagation it is worked out once
+	// the walk is over, never read back from a file.
+	Rollover *Rollover
+
 	// Check is the grade --check gave each area of the zone's health, nil
 	// where it did not ask.
 	Check *Check

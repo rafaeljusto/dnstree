@@ -47,7 +47,7 @@ written once at the end and leave neither anything to draw nor anything to
 change; `json`, `dot`, `mermaid`, `waterfall-mermaid` and `openmetrics` drop an
 `explain` and a `diff` as well, being read by a program that has the whole trace
 already. Every format but `tree`, `ascii`, `emoji`, `markdown` and `json`
-drops a `check` and a `propagation`, which it does not draw. A
+drops a `check`, a `propagation` and a `rollover`, which it does not draw. A
 format that serves no page drops a `web-addr` and a `no-browser` it set, and
 `--from` drops a `live`, a `watch` and a `diff`, which are about walks being
 made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.

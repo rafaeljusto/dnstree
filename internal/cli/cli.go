@@ -61,6 +61,7 @@ one after another, each from the root servers down.
   --deps                  list every zone NAME depends on, its nameservers' too
   --rdap                  ask the registry when the domain expires, and compare
   --propagation           say how long a change takes to reach every cache
+  --rollover              say where a key rollover stands and what it waits on
   --check                 run the checks that grade a zone, and grade its health
   --nsid                  ask each server which of itself answered (RFC 5001)
   --cookie                send each server a DNS cookie and say how it answered
@@ -170,6 +171,18 @@ worst case, a cache filled just before the change; a resolver that caps TTLs
 lets go sooner. The parent's NS TTL is read from the referral and the zone's
 own only with --check-ns, the SOA from a denial or --serial, and the DS and
 DNSKEY TTLs only with --dnssec. It asks nothing more, and works with --from.
+
+--rollover says where a change of keys in the zone the walk ends in stands
+(RFC 6781, RFC 7583): the method, the step it has reached, the step that comes
+next and the TTL that step waits on. One walk sees where the keys are but not
+which way they are going, so where neither a CDS (--check-ds) nor an earlier
+walk (--diff) says which key is the new one, both readings are given. With
+--diff each key and DS is remembered from the first walk that saw it, and the
+TTL the next step waits on is counted from then. That is when dnstree looked at
+one server, not when every server had the record, so one that picked it up
+later, or a TTL lowered for the rollover, makes the real wait longer. It needs
+--dnssec, unless --from reads a walk saved with it; a file of defaults that
+sets it is heeded only by the runs that check signatures. It asks nothing more.
 
 --check runs together the checks that grade the zone the walk ends in, and
 grades it one area at a time: the answer, the delegation, whether every
@@ -575,6 +588,7 @@ type Config struct {
 	Deps           bool
 	RDAP           bool
 	Propagation    bool
+	Rollover       bool
 
 	// Check grades the zone's health one area at a time, and turns on every
 	// check that grades one, bar the probes a zone's owner is the one to run.
@@ -835,6 +849,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.DurationVar(&cfg.Watch, "watch", 0, "walk again this often, and say only what changed")
 	flags.BoolVar(&cfg.Explain, "explain", false, "say in sentences what the walk came to")
 	flags.BoolVar(&cfg.Propagation, "propagation", false, "say how long a change takes to reach every cache")
+	flags.BoolVar(&cfg.Rollover, "rollover", false, "say where a key rollover stands and what it waits on")
 	flags.BoolVar(&cfg.Diff, "diff", false, "say what has changed since the last walk remembered")
 	flags.Var(&wanted, "expect", "require this of the walk")
 	flags.StringVar(&cfg.From, "from", "", "draw a walk --format json saved")
@@ -995,6 +1010,12 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.CheckDS = false
 	}
+	if cfg.Rollover && !cfg.DNSSEC && cfg.From == "" {
+		if slices.Contains(typed, "rollover") {
+			return nil, fmt.Errorf("%w: --rollover reads the keys the chain of trust records, and only --dnssec follows it", ErrUsage)
+		}
+		cfg.Rollover = false
+	}
 	if cfg.TLSA && (!cfg.Mail || !cfg.DNSSEC) {
 		if slices.Contains(typed, "tlsa") {
 			return nil, fmt.Errorf("%w: --tlsa checks the certificates of the hosts --mail finds and --dnssec proves", ErrUsage)
@@ -1055,6 +1076,13 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 				ErrUsage, cfg.Format, orList(formatNames(propagates)))
 		}
 		cfg.Propagation = false
+	}
+	if cfg.Rollover && !propagates(cfg.Format) {
+		if !fromFile["rollover"] {
+			return nil, fmt.Errorf("%w: %s does not draw what --rollover works out; use %s",
+				ErrUsage, cfg.Format, orList(formatNames(propagates)))
+		}
+		cfg.Rollover = false
 	}
 	if (cfg.Explain || cfg.Diff || cfg.Against != "") && Programs(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
@@ -1320,8 +1348,8 @@ type format struct {
 	// is the whole walk, which is not known until it is over, and a report
 	// because it is pasted whole.
 	once bool
-	// propagates is a format that draws what --propagation works out, and what
-	// --check grades.
+	// propagates is a format that draws what --propagation and --rollover
+	// work out, and what --check grades.
 	propagates bool
 	serves     bool // a page served to a browser
 	programs   bool // read by a program rather than a person

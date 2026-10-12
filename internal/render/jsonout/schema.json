@@ -48,6 +48,7 @@
     "dependencies": { "$ref": "#/$defs/dependencies" },
     "registration": { "$ref": "#/$defs/registration" },
     "propagation": { "$ref": "#/$defs/propagation" },
+    "rollover": { "$ref": "#/$defs/rollover" },
     "check": { "$ref": "#/$defs/check" },
     "report": { "$ref": "#/$defs/report" },
     "trial": { "$ref": "#/$defs/trial" }
@@ -111,6 +112,74 @@
         "ds_only_registry": { "description": "Key tags of DS the registry holds and the parent does not publish.", "type": "array", "items": { "type": "integer" } },
         "ds_only_parent": { "description": "Key tags of DS the parent publishes and the registry does not hold.", "type": "array", "items": { "type": "integer" } },
         "ds_differ": { "description": "Set where one side has DS and the other none, which is compared where the key tags of both are not to hand.", "type": "boolean" }
+      }
+    },
+    "rollover": {
+      "description": "Where a change of keys in the zone the walk ended in stands (RFC 6781, RFC 7583), present only where --rollover asked. One walk sees where the keys are but not which way they are going, so where the CDS --check-ds read does not say which key is new, both readings are given. When each key was first seen comes from --diff, which no format read by a program takes, so the waits here are TTLs and never times. It is worked out from the rest of the document, and not read back by --from.",
+      "type": "object",
+      "required": ["zone", "state"],
+      "properties": {
+        "zone": { "description": "The zone the walk ended in.", "type": "string" },
+        "state": {
+          "description": "none: one key in use, nothing in flight. rolling: a rollover is under way, and readings say where. unrecognised: more in flight than any one rollover has. indeterminate: a DS this build cannot hold against the keys. unchecked: no chain of trust held into the zone, so its keys were not read.",
+          "type": "string",
+          "enum": ["none", "rolling", "unrecognised", "indeterminate", "unchecked"]
+        },
+        "reason": { "description": "Why the state is not known, or what does not fit, absent where nothing needs saying.", "type": "string" },
+        "parent": { "description": "The zone the DS came from.", "type": "string" },
+        "keys_ttl": { "description": "The TTL of the zone's DNSKEY set.", "type": "integer", "minimum": 0 },
+        "ds_ttl": { "description": "The TTL of the parent's DS set.", "type": "integer", "minimum": 0 },
+        "keys": { "type": "array", "items": { "$ref": "#/$defs/rollover_key" } },
+        "readings": { "type": "array", "items": { "$ref": "#/$defs/rollover_reading" } }
+      }
+    },
+    "rollover_key": {
+      "description": "One key of the zone, one DS of its parent, or both, by key tag and algorithm. Revoked keys are left out.",
+      "type": "object",
+      "required": ["tag", "algorithm", "published", "ds"],
+      "properties": {
+        "tag": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "algorithm": { "type": "string" },
+        "sep": { "description": "Flagged as a key signing key.", "type": "boolean" },
+        "published": { "description": "In the zone's DNSKEY set.", "type": "boolean" },
+        "ds": { "description": "The parent holds a DS for it.", "type": "boolean" },
+        "signs_keys": { "description": "A signature over the DNSKEY set names it.", "type": "boolean" },
+        "signs_data": { "description": "It signed the records that answered.", "type": "boolean" }
+      }
+    },
+    "rollover_reading": {
+      "description": "One step of one rollover the keys fit, and the step that comes next.",
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "description": "ksk: the key the DS points at. zsk: a key that signs the zone's records. algorithm: every key, for keys of another algorithm.",
+          "type": "string",
+          "enum": ["ksk", "zsk", "algorithm"]
+        },
+        "method": {
+          "description": "double-ds: the DS first, then the key. double-ksk: the key first, then the DS. double-rrset: the key and its DS together. pre-publish: a zone signing key published before it signs. double-signature: the records signed by both keys. algorithm: every key of the old algorithm replaced. Absent where the keys fit no one method, such as two zone signing keys neither of which signed the answer.",
+          "type": "string",
+          "enum": ["double-ds", "double-ksk", "double-rrset", "pre-publish", "double-signature", "algorithm"]
+        },
+        "new": { "description": "The tag of the key coming in, present with next.", "type": "integer", "minimum": 0, "maximum": 65535 },
+        "old": { "description": "The tag of the key going out, present with next.", "type": "integer", "minimum": 0, "maximum": 65535 },
+        "next": {
+          "description": "swap-key: sign the keys with new in place of old. remove-ds: the parent removes the DS of old. swap-ds: the parent replaces the DS of old with one of new. remove-key: the zone stops publishing old. remove-old: the zone and the parent drop old and its DS. sign-with: the zone signs its records with new. Absent where the next step is not worked out.",
+          "type": "string",
+          "enum": ["swap-key", "remove-ds", "swap-ds", "remove-key", "remove-old", "sign-with"]
+        },
+        "waits": { "description": "What the next step waits on, absent where its wait rests on more than the walk read.", "type": "array", "items": { "$ref": "#/$defs/rollover_wait" } }
+      }
+    },
+    "rollover_wait": {
+      "description": "One cache the next step waits on to run out: the copies of type cached before the record of tag was published, which takes ttl seconds from when every server of the zone serves it.",
+      "type": "object",
+      "required": ["type", "tag", "ttl"],
+      "properties": {
+        "type": { "description": "DS or DNSKEY.", "type": "string" },
+        "tag": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "ttl": { "type": "integer", "minimum": 0 }
       }
     },
     "propagation": {

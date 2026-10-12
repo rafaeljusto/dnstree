@@ -1,10 +1,12 @@
 # DNSSEC
 
-Following the chain of trust, the requests a zone makes of its parent, and what
-DNSSEC is worth to ECH.
+Following the chain of trust, the requests a zone makes of its parent, where a
+key rollover stands, telling a zone it is broken, and what DNSSEC is worth to
+ECH.
 
 - [Following the chain of trust](#following-the-chain-of-trust)
 - [What the zone asks its parent](#what-the-zone-asks-its-parent)
+- [Where a key rollover stands](#where-a-key-rollover-stands)
 - [Telling the zone it is broken](#telling-the-zone-it-is-broken)
 - [ECH, and what makes it worth anything](#ech-and-what-makes-it-worth-anything)
 
@@ -132,7 +134,8 @@ with RSASHA1, which RFC 8624 says zones should no longer sign with and some
 validators already read as unsigned; RSA keys under 2048 bits; a SHA-1 DS at the
 parent; a DS that matches none of the zone's keys; and a key signing key that no
 DS points at and that signs nothing. The last two are how a planned rollover
-looks halfway through, so they are said as what the walk saw, not as mistakes.
+looks halfway through, so they are said as what the walk saw, not as mistakes;
+[`--rollover`](#where-a-key-rollover-stands) says which step it is at.
 Every zone on the way down is read, since a weak link above a zone weakens it
 too:
 
@@ -213,6 +216,87 @@ that runs out says the signals were not all checked. The exit code is left
 alone: the signal zones are the operator's, and one that does not validate is a
 warning. `--format json` carries it as the signal's `bootstrap`, and
 `--format openmetrics` as `dnstree_bootstrap`.
+
+## Where a key rollover stands
+
+Replacing a key is a fixed order of steps (RFC 6781, RFC 7583), and each one
+waits until the copies resolvers cached before the last step have run out.
+Skip a wait and some resolvers can no longer validate the zone. `--rollover`
+reads the keys the zone ended in publishes, the DS its parent holds, and which
+of the keys signed the key set and the answer, and says which method and step
+they fit, what comes next, and the TTL that step waits on:
+
+```
+$ dnstree --rollover --dnssec --no-asn internetstiftelsen.se SOA
+. (root)  [secure RSASHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  109ms  NOERROR  DO  referral → se.  [secure RSASHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  102ms  NOERROR  AA DO  (DNSKEY of .)
+│   ├── f.ns.se. 192.36.134.97  134ms  NOERROR  DO  referral → internetstiftelsen.se.  [secure ECDSAP256SHA256/SHA256]
+...
+rollover: the keys of internetstiftelsen.se., and the DS se. holds for them
+rollover:   5452   key signing key   not published, DS at se.
+rollover:   27221  zone signing key  published
+rollover:   43651  key signing key   published, DS at se., signs the keys
+rollover:   53859  zone signing key  published, signs the answer
+rollover: internetstiftelsen.se. is changing its key signing key, and one walk cannot tell which key is the new one
+rollover:   if 5452 is new, by double DS: next publish key 5452 and sign the keys with it in place of key 43651
+rollover:     wait: 1h after DS 5452 was published, the DS TTL at se.
+rollover:   if 43651 is new, by double DS: next remove DS 5452 from se.
+rollover:     wait: 1h after key 43651 was published, the DNSKEY TTL
+rollover: internetstiftelsen.se. is changing its zone signing key, and one walk cannot tell which key is the new one
+rollover:   if 27221 is new, by pre-publish: next sign the zone with key 27221 in place of key 53859
+rollover:     wait: 1h after key 27221 was published, the DNSKEY TTL
+rollover:   if 53859 is new, by pre-publish: next stop publishing key 27221
+rollover:     wait: the longest TTL of what key 27221 signed, after it stopped; a walk does not read every TTL in the zone, so this is not timed
+rollover:   a key that signs nothing may instead be another operator's, in a zone signed by several (RFC 8901)
+rollover: --check-ds reads the CDS, which names the key coming in
+rollover: --diff remembers when each key is first seen, so a key that appears after a remembered walk is known to be the new one
+✔ answered in 1.3s · resolver in 110ms · 12 queries · 5 servers
+```
+
+One walk sees where the keys are, not which way they are going. A DS no key
+matches is the first step of a double DS, or what one leaves behind; a key
+signing key with no DS is the first step of a double KSK, or the last. Where
+nothing says which key is new, both readings are given. Two things can say:
+
+- `--check-ds` reads the zone's CDS. A key it asks for that the parent does not
+  hold is coming in, and one the parent holds that it no longer asks for is
+  going out.
+- `--diff` remembers each key and DS from the first walk that saw it, so a key
+  that appears after a remembered walk is the new one. It also counts the TTL
+  the next step waits on from that first sighting: `waited` once it has run
+  out, or the time it runs out at.
+
+A first sighting is when dnstree looked, at the one server the walk asked. It
+is not when every server of the zone, or of its parent, had the record, so a
+server that picked it up later adds to the wait, as RFC 7583 adds the time a
+change takes to propagate. So does a TTL lowered for the rollover, which
+leaves the copies cached under the old one, and a record withdrawn and put
+back between two remembered walks, which keeps its first sighting. A resolver
+that serves stale answers (RFC 8767) can hold a key past its TTL during an
+outage. The count is what dnstree measured, not a promise that the step is
+safe, and a signer that automates the rollover waiting longer than it says is
+being careful, not wrong.
+
+A key signing key is timed through both methods and the double RRset, where
+the key and its DS go in together. A zone signing key is timed coming in, but
+not going out: that waits on the longest TTL of everything it signed, which a
+walk does not read. A key that signs nothing may also be another operator's in
+a zone signed by several (RFC 8901), and two key signing keys each with a DS,
+read as a double RRset, may be two operators' too; both say so. More than two
+zone signing keys, more than two key signing keys and DS, or a DS that does
+not digest the key of its tag fit no one rollover and are `unrecognised`, with
+the keys listed. Keys of two algorithms are named as an algorithm rollover and
+not timed. A DS of a digest this build cannot compute leaves the step
+`indeterminate`, never a guess; a revoked key is left out, and the root, rolled
+against the trust anchors, is not read.
+
+It asks nothing more and works with `--from`. It needs `--dnssec`, or a walk
+saved with it read back with `--from`; a file of defaults that sets it is
+heeded only by the runs that check signatures. Tree, ascii, emoji, markdown
+and json draw it, and the other formats refuse it. `--format json` carries it
+as `rollover`, without first-seen times, since `--diff` writes no format a
+program reads.
 
 ## Telling the zone it is broken
 

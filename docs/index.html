@@ -458,6 +458,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--propagation</code> reads the TTLs the walk saw and says how long a new answer, new nameservers, a new DS or new keys take to reach every cache. The parent's NS TTL is the one people forget.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-accent">rollover</span>
+          <h3>A key rollover forgotten halfway</h3>
+          <p><code>--rollover</code> reads the keys and the parent's DS, names the method and the step a key rollover has reached, and says what the next step waits on. With <code>--diff</code> it counts that wait from when each key was first seen.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">disagreeing</span>
           <h3>A delegation the zone does not recognise</h3>
           <p><code>--check-ns</code> holds the zone's own NS records, and its nameservers' addresses, against the ones its parent hands out. Only the parent's view is visible from above, so the two drift apart unnoticed.</p>

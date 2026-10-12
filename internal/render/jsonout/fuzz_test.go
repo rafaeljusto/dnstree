@@ -61,6 +61,9 @@ func FuzzRead(f *testing.F) {
 			t.Errorf("saved twice, it differs:\n%s\n%s", once.String(), twice.String())
 		}
 
+		// Worked out after the round trip, since it is never read back.
+		tr.Rollover = tr.Rolled(nil)
+
 		var out bytes.Buffer
 		for _, render := range []func() error{
 			func() error { return dot.Render(&out, tr) },

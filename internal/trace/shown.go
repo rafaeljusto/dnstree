@@ -70,6 +70,7 @@ func (t *Trace) Shown() *Trace {
 	shown.Dependencies = t.Dependencies.Shown()
 	shown.Registration = t.Registration.Shown()
 	shown.Propagation = t.Propagation.Shown()
+	shown.Rollover = t.Rollover.Shown()
 	shown.Check = t.Check.Shown()
 	return &shown
 }

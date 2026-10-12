@@ -111,6 +111,31 @@ func TestSchemaEnums(t *testing.T) {
 				string(trace.Bogus), string(trace.Indeterminate),
 			},
 		},
+		"what a zone's keys came to": {
+			def: "rollover", property: "state",
+			want: []string{
+				string(trace.RolloverNone), string(trace.RolloverRolling), string(trace.RolloverUnrecognised),
+				string(trace.RolloverIndeterminate), string(trace.RolloverUnchecked),
+			},
+		},
+		"which key a rollover replaces": {
+			def: "rollover_reading", property: "kind",
+			want: []string{string(trace.KindKSK), string(trace.KindZSK), string(trace.KindAlgorithm)},
+		},
+		"how a key is replaced": {
+			def: "rollover_reading", property: "method",
+			want: []string{
+				string(trace.MethodDoubleDS), string(trace.MethodDoubleKSK), string(trace.MethodDoubleRRset),
+				string(trace.MethodPrePublish), string(trace.MethodDoubleSignature), string(trace.MethodAlgorithm),
+			},
+		},
+		"the step of a rollover that comes next": {
+			def: "rollover_reading", property: "next",
+			want: []string{
+				string(trace.NextSwapKey), string(trace.NextRemoveDS), string(trace.NextSwapDS),
+				string(trace.NextRemoveKey), string(trace.NextRemoveOld), string(trace.NextSignWith),
+			},
+		},
 		"how a resolver's answer stood against the walk's": {
 			def: "resolver", property: "match",
 			want: []string{string(trace.MatchSame), string(trace.MatchDiffers)},

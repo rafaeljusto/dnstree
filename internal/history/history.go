@@ -68,6 +68,20 @@ type Zone struct {
 	// followed no chain. An empty state is compared with nothing, so a run
 	// without --dnssec neither learns nor forgets anything about the chain.
 	DNSSEC string `json:"dnssec,omitempty"`
+
+	// Keys are the zone's keys and DS the records its parent holds for it,
+	// where the chain of trust entered the zone and held, each with when a
+	// remembered walk first saw it. That is what times the steps of a key
+	// rollover: a record first seen at a time was published by then.
+	Keys []Record `json:"keys,omitempty"`
+	DS   []Record `json:"ds,omitempty"`
+}
+
+// Record is one key, or one DS, and when it was first seen.
+type Record struct {
+	Tag       uint16    `json:"tag"`
+	Algorithm string    `json:"algorithm"`
+	Since     time.Time `json:"since"`
 }
 
 // Question is what the walk set out to answer, kept so that a file can be held
@@ -94,28 +108,103 @@ func Of(tr *trace.Trace, now time.Time) *Walk {
 		walk.Answer = trace.Answers(result.Records, tr.Question.Type)
 		walk.TTL = trace.TTL(result.Records, tr.Question.Type)
 	}
-	walk.Zones = zones(tr)
+	walk.Zones = zones(tr, walk.Seen)
 	return walk
+}
+
+// Carry keeps when each key and DS still in place was first seen, from the
+// walk remembered before this one. A zone this walk followed no chain into
+// keeps what was remembered of it: a run without --dnssec says nothing about
+// the keys, and is no reason to forget them.
+func (w *Walk) Carry(before *Walk) {
+	if before == nil {
+		return
+	}
+	for i := range w.Zones {
+		zone := &w.Zones[i]
+		j := slices.IndexFunc(before.Zones, func(z Zone) bool { return strings.EqualFold(z.Name, zone.Name) })
+		if j < 0 {
+			continue
+		}
+		earlier := before.Zones[j]
+		if zone.DNSSEC == "" {
+			zone.Keys, zone.DS = earlier.Keys, earlier.DS
+			continue
+		}
+		since(zone.Keys, earlier.Keys)
+		since(zone.DS, earlier.DS)
+	}
+}
+
+func since(now, before []Record) {
+	for i := range now {
+		for _, earlier := range before {
+			if earlier.Tag == now[i].Tag && earlier.Algorithm == now[i].Algorithm &&
+				!earlier.Since.IsZero() && earlier.Since.Before(now[i].Since) {
+				now[i].Since = earlier.Since
+			}
+		}
+	}
+}
+
+// FirstSeen is when the walk, carried forward, first saw each key and DS.
+func (w *Walk) FirstSeen() trace.Seen {
+	return func(name, rrtype string, tag uint16, algorithm string) time.Time {
+		name = trace.Shown(name)
+		for _, zone := range w.Zones {
+			if !strings.EqualFold(zone.Name, name) {
+				continue
+			}
+			records := zone.Keys
+			if rrtype == "DS" {
+				records = zone.DS
+			}
+			for _, record := range records {
+				if record.Tag == tag && record.Algorithm == algorithm {
+					return record.Since
+				}
+			}
+		}
+		return time.Time{}
+	}
 }
 
 // zones is the zone cuts the walk crossed, each with the delegation that
 // pointed at it and the verdict the chain of trust reached there. The root is
 // always the first of them, whether or not anything was checked at it.
-func zones(tr *trace.Trace) []Zone {
+func zones(tr *trace.Trace, seen time.Time) []Zone {
 	// A verdict names the zone it is about, which is not the zone of the step
 	// it sits on: a cut is judged from above. The first verdict for a zone is
-	// the one reached on entering it.
+	// the one reached on entering it, and the first to record its keys is the
+	// one they are kept from.
 	states := make(map[string]string)
+	keyed := make(map[string]*trace.DNSSECStatus)
 	for step := range tr.Steps() {
 		if step.DNSSEC == nil || step.DNSSEC.Zone == "" {
 			continue
 		}
-		if name := strings.ToLower(step.DNSSEC.Zone); states[name] == "" {
+		name := strings.ToLower(step.DNSSEC.Zone)
+		if states[name] == "" {
 			states[name] = string(step.DNSSEC.State)
 		}
+		if keyed[name] == nil && step.DNSSEC.State == trace.Secure && len(step.DNSSEC.Keys) > 0 {
+			keyed[name] = step.DNSSEC
+		}
+	}
+	zone := func(name string, servers []string) Zone {
+		z := Zone{Name: name, NS: servers, DNSSEC: states[strings.ToLower(name)]}
+		if status := keyed[strings.ToLower(name)]; status != nil {
+			for _, key := range status.Keys {
+				z.Keys = add(z.Keys, Record{Tag: key.Tag, Algorithm: key.Algorithm, Since: seen})
+			}
+			for _, ds := range status.DS {
+				z.DS = add(z.DS, Record{Tag: ds.Tag, Algorithm: ds.Algorithm, Since: seen})
+			}
+		}
+		return z
 	}
 
-	crossed := []Zone{{Name: ".", DNSSEC: states["."]}}
+	crossed := []Zone{zone(".", nil)}
 	for step := range tr.Mainline() {
 		if step.Delegation == nil {
 			continue
@@ -129,11 +218,18 @@ func zones(tr *trace.Trace) []Zone {
 
 		servers := slices.Clone(step.Delegation.NS)
 		slices.Sort(servers)
-		crossed = append(crossed, Zone{
-			Name: name, NS: slices.Compact(servers), DNSSEC: states[strings.ToLower(name)],
-		})
+		crossed = append(crossed, zone(name, slices.Compact(servers)))
 	}
 	return crossed
+}
+
+// add is records with one more, where it is not there already: a parent may
+// publish a DS of the same key in more than one digest.
+func add(records []Record, record Record) []Record {
+	if slices.ContainsFunc(records, func(r Record) bool { return r.Tag == record.Tag && r.Algorithm == record.Algorithm }) {
+		return records
+	}
+	return append(records, record)
 }
 
 // Dir is where remembered walks are kept: the directory named by the
@@ -208,6 +304,9 @@ func (w *Walk) plain() bool {
 	texts := append([]string{w.Kind}, w.Answer...)
 	for _, zone := range w.Zones {
 		texts = append(append(texts, zone.Name, zone.DNSSEC), zone.NS...)
+		for _, record := range slices.Concat(zone.Keys, zone.DS) {
+			texts = append(texts, record.Algorithm)
+		}
 	}
 	return !slices.ContainsFunc(texts, func(s string) bool {
 		return strings.ContainsFunc(s, func(r rune) bool { return r < ' ' || r > '~' })

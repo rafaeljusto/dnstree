@@ -44,6 +44,14 @@ func TestParse(t *testing.T) {
 			args: []string{"--propagation", "--format", "json", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "json", Propagation: true},
 		},
+		"where a key rollover stands": {
+			args: []string{"--rollover", "--dnssec", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Rollover: true},
+		},
+		"where a key rollover stood, from a saved walk": {
+			args: []string{"--rollover", "--from", "walk.json"},
+			want: cli.Config{From: "walk.json", Rollover: true},
+		},
 		"a zone checked whole, on a budget of its own": {
 			args: []string{"--check", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Check: true, DNSSEC: true, All: true, CheckNS: true,
@@ -373,6 +381,8 @@ func TestParseRejects(t *testing.T) {
 		"how long a change takes, drawn as dot":     {"--format", "dot", "--propagation", "example.com"},
 		"how long a change takes, as a waterfall":   {"--format", "waterfall", "--propagation", "example.com"},
 		"explained dot":                             {"--format", "dot", "--explain", "example.com"},
+		"a rollover with no signatures checked":     {"--rollover", "example.com"},
+		"a rollover drawn as dot":                   {"--format", "dot", "--rollover", "--dnssec", "example.com"},
 		"a zone graded on no budget at all":         {"--check", "--max-queries", "0", "example.com"},
 		"a zone graded, drawn as dot":               {"--format", "dot", "--check", "example.com"},
 		"a zone graded, measured":                   {"--format", "openmetrics", "--check", "example.com"},

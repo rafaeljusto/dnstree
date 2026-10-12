@@ -154,6 +154,10 @@ walk and the next is not a change. Neither is a fact only one of the two walks
 kept: a run without `--dnssec` follows no chain and remembers no verdict, and
 that is not a zone that stopped being signed.
 
+With `--dnssec` it also keeps the tags of each zone's keys and DS, and when it
+first saw each, which is what [`--rollover`](dnssec.md#where-a-key-rollover-stands)
+counts its waits from. A change of keys is not one of the changes it reports.
+
 > [!NOTE]
 > Besides [`--pcap`](output.md#the-bytes-on-the-wire), which writes the file it
 > is given, `--diff` is the only thing in `dnstree` that writes to the disk,

@@ -301,6 +301,9 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		if err == nil && cfg.Propagation {
 			tr.Propagation = tr.Propagated()
 		}
+		if err == nil && cfg.Rollover {
+			tr.Rollover = tr.Rolled(nil)
+		}
 	} else {
 		tr, err = made(ctx, cfg, log, lookups, registry, rec, replay, live)
 		rec.save(stderr)
@@ -314,6 +317,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	// The last frame stays up until there is something to put in its place.
 	live.Clear()
 	unreported(cfg, tr, stderr)
+	diff := changed(cfg, tr, stderr)
 
 	// A served walk is drawn in a browser rather than here, and the sentences
 	// the run asked for go to the page with it.
@@ -325,7 +329,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			Color:   cfg.Color,
 			Version: version,
 		}
-		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, reference, stderr), options); err != nil {
+		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, reference, diff), options); err != nil {
 			fmt.Fprintln(stderr, err)
 			return exitUsage
 		}
@@ -335,7 +339,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	// A report carries its summary and its sentences inside it, and it always
 	// says what the walk came to, asked to explain or not.
 	if cfg.Format == "markdown" {
-		findings := readings(cfg, tr, reference, stderr)
+		findings := readings(cfg, tr, reference, diff)
 		if !cfg.Explain {
 			findings = append(explain.Findings(tr), findings...)
 		}
@@ -346,7 +350,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		return outcome(cfg, tr, stderr)
 	}
 
-	if err := draw(stdout, stderr, cfg, tr, live, reference); err != nil {
+	if err := draw(stdout, cfg, tr, live, readings(cfg, tr, reference, diff)); err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
@@ -355,7 +359,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 
 // draw writes a walk the way every format written here draws it: the walk,
 // the line that sums it up for a person, and the sentences the run asked for.
-func draw(stdout, stderr io.Writer, cfg *cli.Config, tr *trace.Trace, live *tree.Live, reference *history.Walk) error {
+func draw(stdout io.Writer, cfg *cli.Config, tr *trace.Trace, live *tree.Live, findings []explain.Finding) error {
 	if err := render(stdout, cfg, tr); err != nil {
 		return err
 	}
@@ -364,7 +368,7 @@ func draw(stdout, stderr io.Writer, cfg *cli.Config, tr *trace.Trace, live *tree
 	} else if !cli.Programs(cfg.Format) {
 		tree.Summary(stdout, tr, treeOptions(cfg))
 	}
-	if findings := readings(cfg, tr, reference, stderr); len(findings) > 0 {
+	if len(findings) > 0 {
 		tree.Explain(stdout, findings, treeOptions(cfg))
 	}
 	return nil
@@ -447,6 +451,9 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	}
 	if cfg.Propagation {
 		tr.Propagation = tr.Propagated()
+	}
+	if cfg.Rollover {
+		tr.Rollover = tr.Rolled(nil)
 	}
 	if cfg.Check {
 		tr.Check = explain.Check(tr)
@@ -626,7 +633,8 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		if round == 0 {
 			// The first round is an ordinary run, --diff and all: it is the
 			// tree everything after it is read against.
-			if err := draw(stdout, stderr, cfg, tr, live, reference); err != nil {
+			findings := readings(cfg, tr, reference, changed(cfg, tr, stderr))
+			if err := draw(stdout, cfg, tr, live, findings); err != nil {
 				fmt.Fprintln(stderr, err)
 				return exitUsage
 			}
@@ -651,35 +659,42 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 }
 
 // readings is what is said under the tree: the sentences the trace says about
-// itself, and what has changed since the last walk of the same question or
-// differs from the one --against named.
-func readings(cfg *cli.Config, tr *trace.Trace, reference *history.Walk, stderr io.Writer) []explain.Finding {
+// itself, what has changed since the last walk of the same question, which
+// changed found, or what differs from the one --against named.
+func readings(cfg *cli.Config, tr *trace.Trace, reference *history.Walk, diff []explain.Finding) []explain.Finding {
 	var findings []explain.Finding
 	if cfg.Explain {
 		findings = append(findings, explain.Findings(tr)...)
 	}
-	if cfg.Diff {
-		findings = append(findings, changed(tr, stderr)...)
-	}
+	findings = append(findings, diff...)
 	if reference != nil {
 		findings = append(findings, history.Against(reference, history.Of(tr, tr.Started), source(cfg.Against))...)
 	}
 	return findings
 }
 
-// changed holds this walk against the one remembered for the same question, and
-// remembers this one in its place. Like the origin AS lookups it is metadata: a
-// cache that cannot be read or written costs the comparison, says so in one
-// line, and never the resolution.
-func changed(tr *trace.Trace, stderr io.Writer) []explain.Finding {
+// changed holds this walk against the one remembered for the same question,
+// where --diff asked, and remembers this one in its place. The rollover is
+// timed from when the keys were first seen, so it is worked out again here,
+// before anything is drawn. Like the origin AS lookups it is metadata: a cache
+// that cannot be read or written costs the comparison, says so in one line,
+// and never the resolution.
+func changed(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) []explain.Finding {
+	if !cfg.Diff {
+		return nil
+	}
 	dir, err := history.Dir()
 	if err != nil {
 		fmt.Fprintln(stderr, "nothing to compare with: "+err.Error())
 		return nil
 	}
 
-	now := history.Of(tr, time.Now())
-	findings := history.Changes(history.Load(dir, tr.Question), now)
+	before, now := history.Load(dir, tr.Question), history.Of(tr, time.Now())
+	now.Carry(before)
+	if cfg.Rollover {
+		tr.Rollover = tr.Rolled(now.FirstSeen())
+	}
+	findings := history.Changes(before, now)
 	if err := history.Save(dir, now); err != nil {
 		fmt.Fprintln(stderr, "this walk will not be remembered: "+err.Error())
 	}

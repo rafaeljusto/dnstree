@@ -233,6 +233,28 @@ func TestParseDefaultsCheckDS(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsRollover covers a file that asks where a rollover stands:
+// a default for the walks that check signatures, which the others leave alone.
+func TestParseDefaultsRollover(t *testing.T) {
+	path := write(t, "rollover\n")
+
+	got, err := cli.Parse([]string{"--config", path, "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Rollover {
+		t.Error("got --rollover on a walk that checks no signatures, want it left for one that does")
+	}
+
+	got, err = cli.Parse([]string{"--config", path, "--dnssec", "--format", "dot", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Rollover {
+		t.Error("got --rollover on a format that does not draw it, want it left for one that does")
+	}
+}
+
 // TestParseDefaultsDKIM covers a file that names a DKIM selector: a default
 // for the walks that check mail, which the others leave alone.
 func TestParseDefaultsDKIM(t *testing.T) {

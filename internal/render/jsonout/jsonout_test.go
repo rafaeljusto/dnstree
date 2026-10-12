@@ -261,6 +261,14 @@ func resolution() *trace.Trace {
 			{Change: trace.ChangeNameservers, Seconds: 172800, Type: "NS", Held: []trace.Held{
 				{Zone: "com.", TTL: 172800}, {Zone: "example.com.", TTL: 3600}}},
 		}},
+		Rollover: &trace.Rollover{Zone: "example.com.", Parent: "com.", State: trace.RolloverRolling, KeysTTL: 3600, DSTTL: 86400,
+			Keys: []trace.RolloverKey{
+				{Tag: 2371, Algorithm: "ECDSAP256SHA256", SEP: true, Published: true, DS: true, SignsKeys: true,
+					KeySeen: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC), DSSeen: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)},
+				{Tag: 370, Algorithm: "ECDSAP256SHA256", DS: true, DSSeen: time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)},
+			},
+			Readings: []trace.Reading{{Kind: trace.KindKSK, Method: trace.MethodDoubleDS, New: 370, Old: 2371, Next: trace.NextSwapKey,
+				Waits: []trace.Waiting{{Type: "DS", Tag: 370, TTL: 86400, Since: time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)}}}}},
 	}
 }
 

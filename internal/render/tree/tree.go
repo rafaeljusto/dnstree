@@ -139,6 +139,7 @@ func (r *renderer) render(tr *trace.Trace) {
 	r.writeLines(r.requests(tr))
 	r.writeLines(r.registration(tr.Registration))
 	r.writeLines(r.propagation(tr.Propagation))
+	r.writeLines(r.rollover(tr.Rollover))
 	if line := r.reported(tr.Report); line != "" {
 		r.write(line + "\n")
 	}

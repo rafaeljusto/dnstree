@@ -41,6 +41,17 @@ propagation: how long a change to example.com. takes to reach every cache, at wo
 propagation:   change the answer        5m   A 300 at example.com.
 propagation:   create a missing record  15m  SOA 3600, minimum 900 at example.com.
 propagation:   move the nameservers     2d   NS 172800 at com., 3600 at example.com.
+rollover: the keys of example.com., and the DS com. holds for them
+rollover:   12345  key signing key   published, DS at com., signs the keys
+rollover:   23456  key signing key   published, signs the keys
+rollover:   34567  zone signing key  published, signs the answer
+rollover: example.com. is changing its key signing key, and one walk cannot tell which key is the new one
+rollover:   if 23456 is new, by double KSK: next replace DS 12345 at com. with DS 23456
+rollover:     wait: 1h after key 23456 was published, the DNSKEY TTL
+rollover:   if 12345 is new, by double KSK: next stop publishing key 23456
+rollover:     wait: 1d after DS 12345 was published, the DS TTL at com.
+rollover: --check-ds reads the CDS, which names the key coming in
+rollover: --diff remembers when each key is first seen, so a key that appears after a remembered walk is known to be the new one
 warning: no server answered for com.
 check example.com.
   ok answer      www.example.com. A is 93.184.216.34

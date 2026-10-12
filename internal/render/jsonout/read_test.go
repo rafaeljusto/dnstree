@@ -226,13 +226,13 @@ func TestReadRoundTrip(t *testing.T) {
 				t.Errorf("got the chain broken %v, want %v", read.Broken(), tr.Broken())
 			}
 
-			// What --propagation worked out is worked out again from the rest,
-			// never read back.
-			if read.Propagation != nil {
-				t.Errorf("got %+v, want the propagation left unread", read.Propagation)
+			// What --propagation and --rollover worked out is worked out again
+			// from the rest, never read back.
+			if read.Propagation != nil || read.Rollover != nil {
+				t.Errorf("got %+v and %+v, want the propagation and the rollover left unread", read.Propagation, read.Rollover)
 			}
 			unworked := *tr
-			unworked.Propagation = nil
+			unworked.Propagation, unworked.Rollover = nil, nil
 			var want bytes.Buffer
 			if err := jsonout.Render(&want, &unworked); err != nil {
 				t.Fatalf("Render: %v", err)

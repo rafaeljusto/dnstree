@@ -148,6 +148,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--deps`](docs/guide/zones.md#what-it-depends-on) | list every zone the name depends on: the walk's own, and those the lookups of every nameserver of each go through in turn, with which are unsigned |
 | [`--rdap`](docs/guide/zones.md#whether-its-registration-is-about-to-run-out) | ask the domain's registry when the registration runs out and whether it is held, and compare its nameservers and DS with the TLD's (RFC 9083) |
 | [`--propagation`](docs/guide/zones.md#how-long-a-change-takes-to-reach-everyone) | say how long each kind of change to the zone takes to reach every cache, from the TTLs the walk saw |
+| [`--rollover`](docs/guide/dnssec.md#where-a-key-rollover-stands) | say which step of a key rollover the zone is at, what comes next, and the TTL it waits on (RFC 7583); needs `--dnssec` |
 | [`--check`](docs/guide/zones.md#all-of-it-at-once) | run the checks that grade a zone together, and grade its health one area at a time: passed, worth a look, broken or skipped |
 | [`--nsid`](docs/guide/zones.md#which-machine-answered) | ask each server which of itself answered, and draw it beside the address |
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |

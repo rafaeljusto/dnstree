@@ -200,6 +200,18 @@ func kinds() *trace.Trace {
 			{Change: trace.ChangeNameservers, Seconds: 172800, Type: "NS", Held: []trace.Held{
 				{Zone: "com.", TTL: 172800}, {Zone: "example.com.", TTL: 3600}}},
 		}},
+		Rollover: &trace.Rollover{Zone: "example.com.", Parent: "com.", State: trace.RolloverRolling, KeysTTL: 3600, DSTTL: 86400,
+			Keys: []trace.RolloverKey{
+				{Tag: 12345, Algorithm: "ECDSAP256SHA256", SEP: true, Published: true, DS: true, SignsKeys: true},
+				{Tag: 23456, Algorithm: "ECDSAP256SHA256", SEP: true, Published: true, SignsKeys: true},
+				{Tag: 34567, Algorithm: "ECDSAP256SHA256", Published: true, SignsData: true},
+			},
+			Readings: []trace.Reading{
+				{Kind: trace.KindKSK, Method: trace.MethodDoubleKSK, New: 23456, Old: 12345, Next: trace.NextSwapDS,
+					Waits: []trace.Waiting{{Type: "DNSKEY", Tag: 23456, TTL: 3600}}},
+				{Kind: trace.KindKSK, Method: trace.MethodDoubleKSK, New: 12345, Old: 23456, Next: trace.NextRemoveKey,
+					Waits: []trace.Waiting{{Type: "DS", Tag: 12345, TTL: 86400}}},
+			}},
 	}
 }
 

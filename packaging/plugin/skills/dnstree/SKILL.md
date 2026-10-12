@@ -80,6 +80,7 @@ whole; `dnstree --schema` describes every field.
 | whether the zone is healthy overall | `dnstree --format markdown --check NAME` |
 | whether DNSSEC holds, and signatures are fresh | `dnstree --format markdown --dnssec NAME` |
 | whether a DS or key rollover is ready | `dnstree --format markdown --dnssec --check-ds NAME` |
+| which step a key rollover is at, and what the next one waits on | `dnstree --format markdown --dnssec --check-ds --rollover NAME` |
 | whether all nameservers serve the same zone | `dnstree --format markdown --serial --all NAME` |
 | whether the SOA timers would drop the zone, or keep a new name missing | `dnstree --format markdown --serial NAME` |
 | whether NS and glue match parent and child | `dnstree --format markdown --check-ns NAME` |

@@ -47,6 +47,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.Dependencies = convertDependencies(tr.Dependencies)
 		document.Registration = convertRegistration(tr.Registration)
 		document.Propagation = convertPropagation(tr.Propagation)
+		document.Rollover = convertRollover(tr.Rollover)
 		document.Check = convertCheck(tr.Check)
 		if tr.Report != nil {
 			document.Report = &report{Agent: tr.Report.Agent, Name: tr.Report.Name, Code: tr.Report.Code,
@@ -75,6 +76,7 @@ type document struct {
 	Dependencies  *dependencies `json:"dependencies,omitempty"`
 	Registration  *registration `json:"registration,omitempty"`
 	Propagation   *propagation  `json:"propagation,omitempty"`
+	Rollover      *rollover     `json:"rollover,omitempty"`
 	Check         *check        `json:"check,omitempty"`
 	Report        *report       `json:"report,omitempty"`
 	Trial         *trial        `json:"trial,omitempty"`
