@@ -34,6 +34,12 @@ type signer struct {
 	stray     *dns.DNSKEY
 	strayPriv crypto.Signer
 
+	// next is the key a rollover is bringing in, and rollover which step the
+	// zone is at.
+	next     *dns.DNSKEY
+	nextPriv crypto.Signer
+	rollover Rollover
+
 	// cosigners are the zone signing keys of other servers of the same zone,
 	// published beside this one's own, the way every provider of a zone signed
 	// by several publishes the keys of all of them (RFC 8901).
@@ -59,10 +65,25 @@ func newSigner(tb testing.TB, zone string, behaviour Behaviour) *signer {
 	if behaviour.StrayDNSKEY {
 		signer.stray, signer.strayPriv = generate(tb, zone, dns.FlagZONE|dns.FlagSEP)
 	}
+	signer.rollover = behaviour.Rollover
+	switch behaviour.Rollover {
+	case RolloverNone:
+	case RolloverIdleZSK:
+		signer.next, signer.nextPriv = generate(tb, zone, dns.FlagZONE)
+	case RolloverAlgorithm:
+		signer.next, signer.nextPriv = generateWith(tb, zone, dns.FlagZONE|dns.FlagSEP, dns.ED25519, 256)
+	default:
+		signer.next, signer.nextPriv = generate(tb, zone, dns.FlagZONE|dns.FlagSEP)
+	}
 	return signer
 }
 
 func generate(tb testing.TB, zone string, flags uint16) (*dns.DNSKEY, crypto.Signer) {
+	tb.Helper()
+	return generateWith(tb, zone, flags, dns.ECDSAP256SHA256, 256)
+}
+
+func generateWith(tb testing.TB, zone string, flags uint16, algorithm uint8, bits int) (*dns.DNSKEY, crypto.Signer) {
 	tb.Helper()
 
 	// The library refuses to sign with a key whose tag is 0, which one random
@@ -73,10 +94,10 @@ func generate(tb testing.TB, zone string, flags uint16) (*dns.DNSKEY, crypto.Sig
 	)
 	for key == nil || key.KeyTag() == 0 {
 		key = &dns.DNSKEY{Hdr: dns.Header{Name: zone, Class: dns.ClassINET, TTL: 3600}}
-		key.Flags, key.Protocol, key.Algorithm = flags, 3, dns.ECDSAP256SHA256
+		key.Flags, key.Protocol, key.Algorithm = flags, 3, algorithm
 
 		var err error
-		if private, err = key.Generate(256); err != nil {
+		if private, err = key.Generate(bits); err != nil {
 			tb.Fatalf("fakens: generating a key for %s: %v", zone, err)
 		}
 	}
@@ -98,6 +119,9 @@ func (s *signer) signals(tb testing.TB, which CDS) string {
 	defer s.mu.Unlock()
 
 	next := func() *dns.DNSKEY {
+		if s.next != nil {
+			return s.next
+		}
 		key, _ := generate(tb, s.zone, dns.FlagZONE|dns.FlagSEP)
 		return key
 	}
@@ -131,6 +155,19 @@ func (s *signer) ds() *dns.DS {
 	return s.ksk.ToDS(dns.SHA256)
 }
 
+// published is every DS the parent holds for this zone: the one that vouches
+// for it, and one for the key a rollover brings in where the step calls for it.
+func (s *signer) published() []*dns.DS {
+	published := []*dns.DS{s.ds()}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch s.rollover {
+	case RolloverExtraDS, RolloverLinked, RolloverAlgorithm:
+		published = append(published, s.next.ToDS(dns.SHA256))
+	}
+	return published
+}
+
 // dnskeys is the answer to a DNSKEY query: the key set of the zone, signed by
 // the key signing key.
 func (s *signer) dnskeys() []dns.RR {
@@ -146,7 +183,16 @@ func (s *signer) dnskeys() []dns.RR {
 	for _, key := range s.cosigners {
 		keys = append(keys, key)
 	}
-	return append(keys, s.sign(keys, ksk, priv, s.badKeys))
+	switch s.rollover {
+	case RolloverExtraKSK, RolloverIdleKSK, RolloverLinked, RolloverIdleZSK, RolloverAlgorithm:
+		keys = append(keys, s.next)
+	}
+	signatures := []dns.RR{s.sign(keys, ksk, priv, s.badKeys)}
+	switch s.rollover {
+	case RolloverExtraKSK, RolloverLinked, RolloverAlgorithm:
+		signatures = append(signatures, s.sign(keys, s.next, s.nextPriv, s.badKeys))
+	}
+	return append(keys, signatures...)
 }
 
 // signRRset signs anything else with the zone signing key.

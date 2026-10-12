@@ -73,6 +73,11 @@ type Behaviour struct {
 	// different keys with CDSMismatched. Only a signed zone publishes one.
 	CDS CDS
 
+	// Rollover publishes a second key, or has the parent publish a second DS,
+	// the way a zone looks halfway through replacing a key. With it, CDSNext
+	// asks for that key rather than one made for the purpose.
+	Rollover Rollover
+
 	// DenyEmptyNonTerminal answers NXDOMAIN for a name that owns nothing but
 	// has names below it, which RFC 8020 makes a claim that nothing is below it
 	// either. It is what breaks a resolver that minimises its questions.
@@ -166,6 +171,20 @@ const (
 	CDSNext
 	CDSDelete
 	CDSMismatched
+)
+
+// Rollover is the step of a key rollover a zone is caught at.
+type Rollover int
+
+// The steps a zone can be caught at.
+const (
+	RolloverNone      Rollover = iota
+	RolloverExtraDS            // the parent holds a DS for a key the zone does not publish
+	RolloverExtraKSK           // the zone publishes a second key signing key, signing the keys with it too
+	RolloverIdleKSK            // the zone publishes a second key signing key that signs nothing
+	RolloverLinked             // a second key signing key, signing the keys, with a DS of its own
+	RolloverIdleZSK            // the zone publishes a second zone signing key that signs nothing
+	RolloverAlgorithm          // a second key signing key of another algorithm, signing the keys too
 )
 
 // ExtendedError is what a server says about its own answer (RFC 8914).

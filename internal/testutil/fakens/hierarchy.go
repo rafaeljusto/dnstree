@@ -63,7 +63,9 @@ func (h *Hierarchy) publishDS(added *Server) {
 		if parent == nil || (parent != added && child != added) {
 			continue
 		}
-		parent.publish(child.signer.ds())
+		for _, ds := range child.signer.published() {
+			parent.publish(ds)
+		}
 	}
 }
 
