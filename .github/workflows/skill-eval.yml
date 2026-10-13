@@ -1,0 +1,66 @@
+name: skill-eval
+
+# Runs the shipped dnstree skill through Claude Code against the cases in
+# .agents/evals/dnstree-skill and grades the answers. Every run spends API
+# credit, so it only runs when asked.
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: Comma-separated case ids (empty runs them all)
+        default: ''
+      reps:
+        description: Runs per case
+        default: '1'
+      model:
+        description: Model running the skill
+        default: claude-sonnet-5-5
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-eval
+  cancel-in-progress: false
+
+env:
+  # Pinned so a change in score is the skill's or the model's, not the
+  # harness's.
+  CLAUDE_CODE_VERSION: 2.1.287
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .agents/evals/dnstree-skill/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      - run: go build -o "$RUNNER_TEMP/dnstree" ./cmd/dnstree
+      - name: run the cases
+        working-directory: .agents/evals/dnstree-skill
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ONLY: ${{ inputs.only }}
+          REPS: ${{ inputs.reps }}
+          MODEL: ${{ inputs.model }}
+          DOMAIN: ${{ vars.DNSTREE_EVAL_DOMAIN }}
+        run: >-
+          go run . -repo "$GITHUB_WORKSPACE" -dnstree "$RUNNER_TEMP/dnstree"
+          -only "$ONLY" -reps "$REPS" -model "$MODEL" -domain "$DOMAIN"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: skill-eval
+          path: .claude/hillclimb/dnstree-skill
+          include-hidden-files: true
