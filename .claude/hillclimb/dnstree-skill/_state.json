@@ -1,0 +1,44 @@
+{
+  "harness_sha": "9c6e78c331888b696b8b583469b47e2830cde3de6567634ac61d617dc5221861",
+  "metrics": [
+    {
+      "id": "pass",
+      "kind": "binary",
+      "label": "pass"
+    },
+    {
+      "id": "commands",
+      "kind": "binary",
+      "label": "commands"
+    },
+    {
+      "id": "answer",
+      "kind": "binary",
+      "label": "answer"
+    }
+  ],
+  "perf_fields": [
+    {
+      "id": "cost_usd",
+      "label": "cost",
+      "unit": "$"
+    },
+    {
+      "id": "latency_s",
+      "label": "latency",
+      "unit": "s"
+    },
+    {
+      "id": "dnstree_runs",
+      "label": "dnstree runs"
+    },
+    {
+      "id": "refused",
+      "label": "refused"
+    },
+    {
+      "id": "truncated",
+      "label": "truncated"
+    }
+  ]
+}
