@@ -90,3 +90,14 @@ func TestCasesAreReviewed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestParseStreamAPIError(t *testing.T) {
+	stream := `{"type":"system","subtype":"init","model":"claude-sonnet-5-5"}
+{"type":"assistant","message":{"model":"<synthetic>","stop_reason":"stop_sequence","content":[{"type":"text","text":"Invalid API key · Fix external API key"}]},"error":"authentication_failed"}
+{"type":"result","subtype":"success","is_error":true,"api_error_status":401,"result":"Invalid API key · Fix external API key","total_cost_usd":0}
+`
+	s := parseStream([]byte(stream))
+	if s.model != "claude-sonnet-5-5" || !s.isError || s.apiStatus != 401 || s.answer == "" {
+		t.Errorf("session = %+v", s)
+	}
+}

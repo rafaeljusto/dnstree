@@ -34,6 +34,7 @@ type session struct {
 	usage       map[string]any
 	subtype     string
 	isError     bool
+	apiStatus   int
 	stopReason  string
 	invocations []invocation // dnstree runs, from the wrapper's log
 	version     string
@@ -85,12 +86,14 @@ func runCase(ctx context.Context, o options, judge *judge, c Case, rep int) (*Ro
 	}
 	latency := time.Since(started).Seconds()
 
+	// Claude Code turns a failed API call into a reply of its own, so the
+	// answer is the error.
+	if s.isError {
+		return fail("api-error", fmt.Errorf("claude -p failed (%s, HTTP %d): %s", s.subtype, s.apiStatus, s.answer), s)
+	}
 	// A served model other than the one asked for would grade the wrong thing.
 	if s.model != o.model {
 		return fail("model-mismatch", fmt.Errorf("asked for %s, served %s", o.model, s.model), s)
-	}
-	if s.isError && s.subtype != "success" {
-		return fail("harness", fmt.Errorf("claude -p ended with %s", s.subtype), s)
 	}
 
 	checks := checkCommands(c, s)
@@ -299,6 +302,7 @@ func parseStream(raw []byte) *session {
 			Model   string  `json:"model"`
 			Result  string  `json:"result"`
 			IsError bool    `json:"is_error"`
+			Status  int     `json:"api_error_status"`
 			Cost    float64 `json:"total_cost_usd"`
 			Usage   map[string]any
 			Message struct {
@@ -316,7 +320,9 @@ func parseStream(raw []byte) *session {
 				s.model = ev.Model
 			}
 		case "assistant":
-			if ev.Message.Model != "" {
+			// Claude Code labels the replies it writes itself, such as an API
+			// error, <synthetic>; they name no model.
+			if ev.Message.Model != "" && ev.Message.Model != "<synthetic>" {
 				s.model = ev.Message.Model
 			}
 			if ev.Message.StopReason != "" {
@@ -370,7 +376,7 @@ func parseStream(raw []byte) *session {
 			}
 		case "result":
 			s.answer, s.cost, s.usage = ev.Result, ev.Cost, ev.Usage
-			s.subtype, s.isError = ev.Subtype, ev.IsError
+			s.subtype, s.isError, s.apiStatus = ev.Subtype, ev.IsError, ev.Status
 		}
 	}
 	return s

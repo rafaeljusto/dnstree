@@ -190,7 +190,15 @@ func run(o options) error {
 	close(jobs)
 	wg.Wait()
 
-	return summarise(filepath.Join(dir, "results.jsonl"), o.variant)
+	if err := summarise(filepath.Join(dir, "results.jsonl"), o.variant); err != nil {
+		return err
+	}
+	// A run where cases could not be scored is not a result, whatever the
+	// rest scored.
+	if out.failed > 0 {
+		return fmt.Errorf("%d attempts could not be scored; see errors.jsonl", out.failed)
+	}
+	return nil
 }
 
 func mark(pass int) string {
@@ -365,6 +373,7 @@ type Failure struct {
 
 type writer struct {
 	mu            sync.Mutex
+	failed        int
 	dir           string
 	results, errs *os.File
 }
@@ -399,6 +408,7 @@ func (w *writer) row(r *Row, trace []Turn) {
 func (w *writer) fail(f *Failure) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.failed++
 	f.At = time.Now().UTC().Format(time.RFC3339)
 	line, _ := json.Marshal(f)
 	w.errs.Write(append(line, '\n'))
@@ -459,8 +469,11 @@ func summarise(path, variant string) error {
 			failed = append(failed, r.PromptID)
 		}
 	})
-	if err != nil || n == 0 {
+	if err != nil {
 		return err
+	}
+	if n == 0 {
+		return errors.New("no case was scored")
 	}
 	lo, hi := wilson(pass, n)
 	slices.Sort(failed)
