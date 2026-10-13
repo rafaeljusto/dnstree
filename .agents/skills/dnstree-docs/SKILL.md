@@ -25,7 +25,7 @@ are held to.
 | `AGENTS.md` | agents, maintainers | decisions and invariants the code does not state |
 | `packaging/README.md`, `cmd/next-version/README.md` | maintainers | release mechanics |
 | `.github/pull_request_template.md` | contributors | what a PR is asked for |
-| `.agents/skills/*/SKILL.md` | agents | review and audit checklists |
+| `.agents/skills/*/` | agents | how to commit, review, audit, modernise and run the tool, with their reference files (`cases.md`, `domains.txt`, the ledgers) |
 | `packaging/plugin/skills/dnstree/SKILL.md` | users' models | which flags answer which question, exit codes, what not to run unasked |
 
 Out of scope: `CODE_OF_CONDUCT.md`, the man page (rendered from `cli.Usage`),

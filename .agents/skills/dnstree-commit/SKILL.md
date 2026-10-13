@@ -102,7 +102,7 @@ A server's extended-error text reached --format json raw, so jq -r
 could draw its escapes on the terminal. Escape it whole, as the tree
 does, without the tree's clipping.
 
-Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude <model> <noreply@anthropic.com>
 MSG
 
 ### 2/2 — ...
