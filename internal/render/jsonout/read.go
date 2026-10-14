@@ -570,6 +570,9 @@ func readDelegation(from *delegation) (*trace.Delegation, error) {
 	if to.ZoneAddrs, err = readAddrs("zone_addrs", from.ZoneAddrs); err != nil {
 		return nil, err
 	}
+	if to.Withheld, err = readAddrs("withheld", from.Withheld); err != nil {
+		return nil, err
+	}
 	if to.CSYNC, err = readCSYNC(from.CSYNC); err != nil {
 		return nil, err
 	}

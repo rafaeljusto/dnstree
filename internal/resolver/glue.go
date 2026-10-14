@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"cmp"
 	"context"
 	"net/netip"
 	"slices"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/rafaeljusto/dnstree/v2/internal/dnssec"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // checkNS asks the zone that answered for its own NS RRset and warns when it
@@ -54,6 +56,7 @@ func (r *run) checkNS(ctx context.Context, chain *dnssec.Chain, answer *trace.St
 		}
 	}
 	r.checkGlue(ctx, step, answer.Server, parent.Zone, delegated)
+	r.checkClipped(ctx, step, parent, delegated)
 	r.checkCSYNC(ctx, chain, step, answer.Server, delegated, child)
 }
 
@@ -107,6 +110,89 @@ func (r *run) checkGlue(ctx context.Context, check *trace.Step, server trace.Ser
 	}
 	if budget != nil {
 		r.warnf(trace.AreaDelegation, "the budget ran out before the glue of %s could be checked", delegated.Zone)
+	}
+}
+
+// checkClipped asks the server that referred the walk into the zone the same
+// question again over TCP, and holds the glue it carries against what came
+// over UDP. Glue for a nameserver inside the zone is required (RFC 9471): a
+// server that cannot fit it must set TC, and one that drops some of it
+// instead, usually the IPv6, hands every resolver fewer ways in than the zone
+// has. Glue for a nameserver named anywhere else is optional, and not counted.
+func (r *run) checkClipped(ctx context.Context, check, referred *trace.Step, delegated *trace.Delegation) {
+	if referred.Proto != transport.ProtoUDP || r.cfg.TCP == nil || r.cfg.TCP.Proto() != transport.ProtoTCP {
+		return
+	}
+	var inside []string
+	for _, name := range delegated.NS {
+		if dnsutil.IsBelow(delegated.Zone, name) {
+			inside = append(inside, name)
+		}
+	}
+	qtype, known := dns.StringToType[referred.Asked.Type]
+	if len(inside) == 0 || !known {
+		return
+	}
+	if err := r.counters.query(); err != nil {
+		r.warnf(trace.AreaDelegation, "the budget ran out before the referral to %s could be asked for again over tcp", delegated.Zone)
+		return
+	}
+
+	// The referral's port is the walk's transport's, unless the server was
+	// named with one of its own.
+	port := referred.Server.Port
+	if port == r.cfg.Transport.Port() {
+		port = 0
+	}
+	server := referred.Server
+	server.Port = cmp.Or(port, r.cfg.TCP.Port())
+	step := &trace.Step{
+		Zone:   referred.Zone,
+		Server: server,
+		Proto:  r.cfg.TCP.Proto(),
+		Asked:  referred.Asked,
+		Start:  r.since(),
+		Aside:  true,
+		Notes:  []string{"glue check over tcp"},
+	}
+	// Attached once it is whole, since a watcher draws it as it joins.
+	defer r.attach(check, step)
+	resp, err := r.exchange(ctx, step, r.cfg.TCP, referred.Asked.Name, qtype, r.cfg.UDPSize, port)
+	if err != nil {
+		failed(ctx, step, err)
+		return
+	}
+	step.Rcode = dnsutil.RcodeToString(resp.Rcode)
+	step.Size = len(resp.Data)
+	step.Flags = trace.Flags{AA: resp.Authoritative, EDNS: resp.UDPSize > 0}
+	step.Kind = trace.KindError
+	step.Err = "no referral to " + delegated.Zone + " over tcp"
+	whole := referral(resp, referred.Zone, referred.Asked.Name)
+	if whole == nil || !dns.EqualName(whole.Zone, delegated.Zone) {
+		return // a server that refers elsewhere over tcp says nothing of its glue
+	}
+	step.Kind, step.Err, step.Delegation = trace.KindReferral, "", whole
+
+	var left, all int
+	for _, name := range inside {
+		sent := delegated.Glue[name]
+		carried := slices.Clone(whole.Glue[name])
+		slices.SortFunc(carried, netip.Addr.Compare)
+		for _, addr := range slices.Compact(carried) {
+			all++
+			if slices.Contains(sent, addr) {
+				continue
+			}
+			left++
+			if delegated.Withheld == nil {
+				delegated.Withheld = make(map[string][]netip.Addr)
+			}
+			delegated.Withheld[name] = append(delegated.Withheld[name], addr)
+		}
+	}
+	if left > 0 {
+		r.warnIn(trace.AreaDelegation, delegated.Zone, "%s left %d of the %d addresses of %s's nameservers out of its referral without setting TC, which RFC 9471 forbids; over tcp it carries all of them",
+			at(referred), left, all, delegated.Zone)
 	}
 }
 

@@ -797,6 +797,12 @@ type Delegation struct {
 	// told.
 	ZoneAddrs map[string][]netip.Addr
 
+	// Withheld are the addresses of nameservers inside the delegated zone that
+	// the referral left out over UDP without setting TC, and carried over TCP,
+	// set only where --check-ns asked. RFC 9471 makes that glue required: a
+	// resolver handed the clipped referral never learns of them.
+	Withheld map[string][]netip.Addr
+
 	// NS are the nameserver names, in the order they were received.
 	NS []string
 

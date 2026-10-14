@@ -123,16 +123,17 @@ for the A and AAAA of each such nameserver too, together, under the NS check:
 ```
 $ dnstree --check-ns --no-asn www.isc.org A
 ...
-│   │   │   └── ns1.isc.org. 149.20.2.26  358ms  NOERROR  AA  (parent/child NS check)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  372ms  NOERROR  AA  (glue check: A of ns1.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  366ms  NOERROR  AA  (glue check: AAAA of ns1.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  366ms  NOERROR  AA  (glue check: A of ns2.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  360ms  NOERROR  AA  (glue check: AAAA of ns2.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  360ms  NOERROR  AA  (glue check: A of ns3.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  374ms  NOERROR  AA  (glue check: AAAA of ns3.isc.org.)
-│   │   │       └── ns1.isc.org. 149.20.2.26  350ms  NOERROR  AA  no data  (CSYNC of isc.org.)
+│   │   │   └── ns1.isc.org. 149.20.2.26  331ms  NOERROR  AA  (parent/child NS check)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  135ms  NOERROR  AA  (glue check: A of ns1.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  583ms  NOERROR  AA  (glue check: AAAA of ns1.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  138ms  NOERROR  AA  (glue check: A of ns2.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  138ms  NOERROR  AA  (glue check: AAAA of ns2.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  584ms  NOERROR  AA  (glue check: A of ns3.isc.org.)
+│   │   │       ├── ns1.isc.org. 149.20.2.26  137ms  NOERROR  AA  (glue check: AAAA of ns3.isc.org.)
+│   │   │       ├── a2.org.afilias-nst.info. 199.249.112.1  585ms  NOERROR  referral → isc.org.  (glue check over tcp)
+│   │   │       └── ns1.isc.org. 149.20.2.26  440ms  NOERROR  AA  no data  (CSYNC of isc.org.)
 ...
-✔ answered in 2.2s · resolver in 237ms · 11 queries · 3 servers
+✔ answered in 2.6s · resolver in 287ms · 12 queries · 3 servers
 ```
 
 The addresses are compared a family at a time, as sets, and agreeing costs no
@@ -149,6 +150,23 @@ give an address for, so it is left alone; one named inside with no glue at all
 breaks the delegation, and is warned about where the referral is followed. What
 the zone gave is in `--format json` as the delegation's `zone_addrs`. It costs
 two queries for each nameserver named inside the zone.
+
+The glue a parent hands out can also be cut short on the way. A referral over
+UDP has a size to fit, and glue for a nameserver named inside the zone is not
+optional (RFC 9471): a parent that cannot fit it all has to set TC, so the
+resolver asks again over TCP. One that drops some of it instead, the IPv6
+usually, since it comes last, leaves every resolver fewer ways in than the zone
+has, and an IPv6-only one none. `--check-ns` asks the server that referred the
+walk for the same referral over TCP, the line `(glue check over tcp)` above,
+and compares the addresses of the nameservers inside the zone as sets:
+
+> ns1.test. left 2 of the 4 addresses of example.test.'s nameservers out of its referral without setting TC, which RFC 9471 forbids; over tcp it carries all of them
+
+What it left out is in `--format json` as the delegation's `withheld`. Glue for
+a nameserver named in another zone under the same parent is the parent's to
+leave out, and is not counted. A walk over TCP, DoT or DoH has nothing to
+compare, and is not asked again; under `--all`, only the server whose referral
+the walk followed is.
 
 The zone's own NS set carries a TTL of its own, too, and it is rarely the
 parent's: the parent's is often the registry's to choose. Resolvers differ over

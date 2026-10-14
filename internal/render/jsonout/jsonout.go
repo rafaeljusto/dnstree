@@ -361,6 +361,7 @@ type delegation struct {
 	NS             []string            `json:"ns,omitempty"`
 	Glue           map[string][]string `json:"glue,omitempty"`
 	ZoneAddrs      map[string][]string `json:"zone_addrs,omitempty"`
+	Withheld       map[string][]string `json:"withheld,omitempty"`
 	GlueLess       []string            `json:"glueless,omitempty"`
 	OutOfBailiwick []string            `json:"out_of_bailiwick,omitempty"`
 	DSPresent      bool                `json:"ds_present,omitempty"`
@@ -712,6 +713,7 @@ func convertDelegation(from *trace.Delegation) *delegation {
 	}
 	to.Glue = addrStrings(from.Glue)
 	to.ZoneAddrs = addrStrings(from.ZoneAddrs)
+	to.Withheld = addrStrings(from.Withheld)
 	to.CSYNC = convertCSYNC(from.CSYNC)
 	return to
 }

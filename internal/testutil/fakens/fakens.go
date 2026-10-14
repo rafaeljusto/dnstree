@@ -44,6 +44,10 @@ type Behaviour struct {
 	// that trusts them can be walked off a cliff.
 	OutOfBailiwickGlue bool
 
+	// ClipGlue leaves the IPv6 glue out of a referral over UDP without setting
+	// TC, which RFC 9471 forbids and servers still do to make a reply fit.
+	ClipGlue bool
+
 	// The ways a signed zone can break its own chain of trust.
 	NoDS         bool // the parent vouches for nobody, leaving the zone unsigned
 	NoDenial     bool // and does not sign the claim that it has nobody to vouch for
@@ -554,6 +558,9 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	}
 	if s.behaviour.NoEDNSReply {
 		reply.UDPSize, reply.Pseudo = 0, nil
+	}
+	if s.behaviour.ClipGlue && !reply.Authoritative && dnsutil.Network(w) == "udp" {
+		reply.Extra = slices.DeleteFunc(reply.Extra, func(rr dns.RR) bool { return dns.RRToType(rr) == dns.TypeAAAA })
 	}
 	if s.behaviour.TruncateUDP && dnsutil.Network(w) == "udp" {
 		dnsutil.Truncate(reply)

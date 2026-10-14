@@ -148,7 +148,9 @@ the nameservers named inside it, and holds them against the delegation and its
 glue. It asks for the zone's CSYNC too (RFC 7477), which is how a zone asks its
 parent to copy its NS set and glue, and says what a parent acting on it would
 change. A parent copies only a CSYNC the zone's keys signed, so without --dnssec
-it is reported unchecked.
+it is reported unchecked. The referral into the zone is asked for again over
+TCP, since glue for a nameserver inside the zone is required (RFC 9471), and a
+parent that leaves some out over UDP without setting TC is warned about.
 
 --check-ds asks the zone the walk ends in for the CDS and CDNSKEY records it
 publishes (RFC 7344, RFC 8078), which is how a zone asks its parent to change

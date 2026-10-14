@@ -8,6 +8,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
+	"github.com/rafaeljusto/dnstree/v2/internal/transport"
 )
 
 // TestCheckGlue covers the parent's copy of a nameserver's addresses drifting
@@ -87,6 +88,102 @@ func TestCheckGlue(t *testing.T) {
 			if len(check.Children) != 3 || check.Children[0].Asked.Type != "A" || check.Children[1].Asked.Type != "AAAA" ||
 				check.Children[2].Asked.Type != "CSYNC" {
 				t.Errorf("got %+v under the NS check, want the A and AAAA of the nameserver, then the CSYNC", check.Children)
+			}
+		})
+	}
+}
+
+// TestCheckClippedGlue covers a parent leaving out of a referral over UDP glue
+// it is required to carry, without setting TC (RFC 9471). The walk still gets
+// in through what is left, so only asking again over TCP shows it.
+func TestCheckClippedGlue(t *testing.T) {
+	t.Parallel()
+
+	const (
+		com     = comZone + "ns.example IN AAAA 2001:db8::3\n"
+		example = exampleZone + "ns IN AAAA 2001:db8::3\n"
+		// ns.other.com. is a sibling: named outside example.com., so its glue
+		// is the parent's to leave out.
+		sibling = comZone + "example IN NS ns.other\nns.other IN A 192.0.2.3\nns.other IN AAAA 2001:db8::4\n"
+		clipped = "ns.com. left 1 of the 2 addresses of example.com.'s nameservers out of its referral without setting TC, which RFC 9471 forbids; over tcp it carries all of them"
+	)
+
+	tests := map[string]struct {
+		com      string
+		behave   fakens.Behaviour
+		walk     func(harness) transport.Transport
+		want     string   // the warning, empty for none
+		withheld []string // what the delegation says was left out
+		asked    bool     // whether the referral was asked for again over tcp
+	}{
+		"a parent that leaves the IPv6 glue out is caught": {
+			com: com, behave: fakens.Behaviour{ClipGlue: true},
+			want: clipped, withheld: []string{"2001:db8::3"}, asked: true},
+		"a parent that sends all of it is asked and passes": {
+			com: com, asked: true},
+		"a parent that sets TC instead is not asked again": {
+			com: com, behave: fakens.Behaviour{TruncateUDP: true}},
+		"a sibling's glue left out is not counted": {
+			com: sibling, behave: fakens.Behaviour{ClipGlue: true}, asked: true},
+		"a walk over tcp has nothing to compare": {
+			com: com, behave: fakens.Behaviour{ClipGlue: true},
+			walk: func(h harness) transport.Transport { return h.carry(transport.NewTCP(fast)) }},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			hierarchy := fakens.NewHierarchy(t)
+			root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
+			hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: test.com, Declared: "192.0.2.2", Behaviour: test.behave})
+			hierarchy.Add(fakens.Config{Name: "ns.example.com.", Origin: "example.com.", Zone: example, Declared: "192.0.2.3"})
+			h := harness{hierarchy, root}
+
+			cfg := resolver.Config{CheckNS: true, TCP: h.carry(transport.NewTCP(fast))}
+			if test.walk != nil {
+				cfg.Transport = test.walk(h)
+			}
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+
+			var warned []string
+			for _, warning := range tr.Warnings {
+				if strings.Contains(warning, "RFC 9471") {
+					warned = append(warned, warning)
+				}
+			}
+			switch {
+			case test.want == "" && len(warned) > 0:
+				t.Errorf("got %q, want no warning", warned)
+			case test.want != "" && !slices.Equal(warned, []string{test.want}):
+				t.Errorf("got %q, want %q", warned, test.want)
+			}
+
+			var (
+				withheld []string
+				asked    bool
+			)
+			for step := range tr.Steps() {
+				if step.Aside && slices.Contains(step.Notes, "glue check over tcp") {
+					asked = true
+					if step.Kind != trace.KindReferral || step.Proto != transport.ProtoTCP {
+						t.Errorf("got a %s over %s, want a referral over tcp", step.Kind, step.Proto)
+					}
+				}
+				if !step.Aside && step.Delegation != nil && step.Delegation.Zone == "example.com." {
+					for _, addr := range step.Delegation.Withheld["ns.example.com."] {
+						withheld = append(withheld, addr.String())
+					}
+				}
+			}
+			if asked != test.asked {
+				t.Errorf("got asked again over tcp %t, want %t", asked, test.asked)
+			}
+			if !slices.Equal(withheld, test.withheld) {
+				t.Errorf("got withheld %q, want %q", withheld, test.withheld)
 			}
 		})
 	}

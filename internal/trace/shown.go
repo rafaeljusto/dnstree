@@ -205,6 +205,7 @@ func (s *Step) Shown() *Step {
 		d.OutOfBailiwick = shownAll(d.OutOfBailiwick)
 		d.Glue = shownAddrs(s.Delegation.Glue)
 		d.ZoneAddrs = shownAddrs(s.Delegation.ZoneAddrs)
+		d.Withheld = shownAddrs(s.Delegation.Withheld)
 		d.CSYNC = d.CSYNC.shown()
 		shown.Delegation = &d
 	}
