@@ -4,3 +4,5 @@
 
 # Hide macOS Desktop Services Store (folder preferences)
 .DS_Store
+.claude/hillclimb/*/*/
+.claude/hillclimb/*/report.html
