@@ -13,11 +13,20 @@ import (
 
 // checkCommands returns what the commands the model ran got wrong, or nothing.
 func checkCommands(c Case, s *session) []string {
+	// A run that could not start, or never ended, is not one the skill made:
+	// dnstree itself only exits 0 to 4.
+	var completed []invocation
+	for _, run := range s.invocations {
+		if run.exit >= 0 && run.exit <= 4 {
+			completed = append(completed, run)
+		}
+	}
+
 	var failed []string
 	switch c.Dnstree {
 	case "required":
-		if len(s.invocations) == 0 {
-			failed = append(failed, "dnstree never ran")
+		if len(completed) == 0 {
+			failed = append(failed, fmt.Sprintf("dnstree never completed a run (%d attempts)", len(s.invocations)))
 		}
 	case "forbidden":
 		if len(s.invocations) > 0 {
@@ -28,7 +37,7 @@ func checkCommands(c Case, s *session) []string {
 	for _, need := range c.Need {
 		re := regexp.MustCompile(need)
 		found := false
-		for _, run := range s.invocations {
+		for _, run := range completed {
 			if re.MatchString(run.args) {
 				found = true
 				break
@@ -93,8 +102,8 @@ Rules:
 // The answer is clipped, not the claims: a judge that never sees a claim cannot
 // grade it, and one that sees part of a very long output still can.
 const (
-	maxOutput = 20_000
-	maxTotal  = 80_000
+	maxOutput = 80_000
+	maxTotal  = 200_000
 )
 
 func (j *judge) grade(ctx context.Context, c Case, s *session) ([]verdict, float64, error) {

@@ -17,6 +17,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -47,15 +48,15 @@ type Case struct {
 
 // fidelity is judged on every case that has to run dnstree, so a right-looking
 // answer that contradicts the walk still fails.
-const fidelity = "Every DNS fact the answer states is supported by the dnstree output shown, and none contradicts it."
+const fidelity = "No record, verdict, server, exit code or other finding the answer reports about the zone is missing from the dnstree output shown or contradicts it. Background about a domain or a standard is fine, as long as it does not stand in for what the walk found."
 
 type options struct {
 	repo, dnstree, plugin, flow, variant string
-	model, judge, domain, only            string
-	reps, workers                          int
-	timeout                                time.Duration
-	budget                                 float64
-	approve                                bool
+	model, judge, domain, only           string
+	reps, workers                        int
+	timeout                              time.Duration
+	budget                               float64
+	approve                              bool
 }
 
 func main() {
@@ -134,6 +135,11 @@ func run(o options) error {
 	}
 	if o.dnstree, err = filepath.Abs(o.dnstree); err != nil {
 		return err
+	}
+	// Without a binary that runs, every case falls back to dig and is graded
+	// on something the skill never did.
+	if out, err := exec.Command(o.dnstree, "--version").CombinedOutput(); err != nil {
+		return fmt.Errorf("-dnstree %s does not run: %v %s", o.dnstree, err, strings.TrimSpace(string(out)))
 	}
 	if os.Getenv("ANTHROPIC_API_KEY") == "" {
 		return errors.New("ANTHROPIC_API_KEY is not set; the cases run with a HOME of their own, where no login is stored")

@@ -199,9 +199,7 @@ func converse(ctx context.Context, o options, c Case) (*session, error) {
 
 	path := bin + string(os.PathListSeparator) + os.Getenv("PATH")
 	if c.Fixture == "no-dnstree" {
-		if found, err := lookPathIn("dnstree", path); err == nil {
-			return nil, fmt.Errorf("dnstree is on PATH at %s, so the no-dnstree fixture cannot hold", found)
-		}
+		path = withoutCommand(path, "dnstree")
 	}
 
 	claude, err := exec.LookPath("claude")
@@ -249,14 +247,17 @@ func converse(ctx context.Context, o options, c Case) (*session, error) {
 	return s, nil
 }
 
-func lookPathIn(name, path string) (string, error) {
+// withoutCommand drops from path every directory holding name, so a copy the
+// maintainer installed does not undo the fixture.
+func withoutCommand(path, name string) string {
+	var kept []string
 	for dir := range strings.SplitSeq(path, string(os.PathListSeparator)) {
-		p := filepath.Join(dir, name)
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
-			return p, nil
+		if fi, err := os.Stat(filepath.Join(dir, name)); err == nil && !fi.IsDir() {
+			continue
 		}
+		kept = append(kept, dir)
 	}
-	return "", exec.ErrNotFound
+	return strings.Join(kept, string(os.PathListSeparator))
 }
 
 func readLog(path string) []invocation {

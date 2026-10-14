@@ -29,6 +29,9 @@ func TestCheckCommands(t *testing.T) {
 			bash:        []string{"curl https://example.com/pelican-42"},
 			invocations: []invocation{{args: "--dnssec --rollover example.com"}},
 		}, 1},
+		{"runs that could not start count for nothing", session{
+			invocations: []invocation{{args: "--dnssec --check-ds example.com", exit: 127}},
+		}, 3},
 		{"a forbidden flag reached only through the wrapper still fails", session{
 			bash:        []string{"$TOOL $FLAGS example.com"},
 			invocations: []invocation{{args: "--dnssec --check-ds --check-axfr example.com"}},
