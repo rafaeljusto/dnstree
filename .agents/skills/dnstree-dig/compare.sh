@@ -52,7 +52,7 @@ if [ "${1:-}" = one ]; then
 		{
 			sed -n 's/.*status: \([A-Z]*\).*/\1/p' "$f.raw" | head -1
 			sed -n 's/^;; flags: \([a-z ]*\);.*/\1/p' "$f.raw" | head -1
-			awk -v t="$(echo "$TYPE" | tr a-z A-Z)" '!/^;/ && NF >= 5 && toupper($4) == t { $1=$2=$3=$4=""; sub(/^ +/, ""); print }' "$f.raw" | sort -u
+			awk -v t="$(echo "$TYPE" | tr a-z A-Z)" '!/^;/ && NF >= 5 && toupper($4) == t { sub(/^[^ \t]+[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]+/, ""); print }' "$f.raw" | sort -u
 		} > "$f"
 	}
 	status() { sed -n 1p "$1"; }
