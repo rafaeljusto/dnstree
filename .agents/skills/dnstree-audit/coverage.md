@@ -2,14 +2,14 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `d0eefea`
-- **Date**: 2026-10-09
-- **Scope**: the commits since `8e729b6` (`--tlsa`, `--dkim`, the RFC 9989
-  DMARC walk, `--replay`, `--check-resolver`, `--deps`, `--serial` timers,
-  the fuzz tests, the plugin skill and the refactors); every fuzz test
-  searched for 30 s, nothing found. Fixed in the working tree after it: a bogus
-  mail policy, `--tlsa` private addresses and long refusals, the `--replay`
-  reader's copies and timestamps, SPF after a temperror, `spell()` on 32-bit.
+- **Commit**: `db990d4`
+- **Date**: 2026-10-20
+- **Scope**: the commits since `d0eefea` (DSYNC, key rollover, missing glue,
+  the takeover check below the zone, alias verdicts, a zone with no keys for
+  its DS, DO without EDNS0, the replay clock, nanosecond captures, the skill
+  eval); every fuzz test searched for 30 s, nothing found. Fixed in the
+  working tree after it: DSYNC and SVCB targets said to have no address on a
+  bogus denial, or on a budget that never reached them.
 
 ## Open findings
 
@@ -20,8 +20,8 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   the prose explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
-  bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea`, were
-  clean.
+  bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea` and
+  `db990d4`, were clean.
 
 ## Checked and sound
 
@@ -357,3 +357,36 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   says so on each term left (`TestTempErrorEndsTheCheck`).
 - `spell()` divides in uint32 before converting, so no timer wraps on a 32-bit
   build.
+- `Trust()` takes the first alias on the mainline that is not secure; NS side
+  walks, CAA and Apart lookups are Aside, so another zone's alias never moves
+  it (`TestDNSSECAliasChain`).
+- `enterZone`: only an authoritative NOERROR or NXDOMAIN, untruncated, can say
+  a zone has no keys (bogus); a failed, refused or non-AA reply stays
+  indeterminate, as an unfetched link always was; the root with no keys is
+  indeterminate.
+- The DO bit goes only with EDNS0; the no-EDNS0 reason rewords a bogus verdict
+  and never changes its state.
+- `Replay.Clock` is under `mu` and only grows; `since()` never goes negative;
+  a capture's fraction is checked below a second before it is scaled.
+- DSYNC: every lookup through `look()` under an Apart root, duplicates ignored
+  so at most two endpoints are followed, each target asked once, a bogus set
+  is `DSYNCBogus` and never reaches the exit code; `readDSYNC` checks the
+  state; not in dnstree-web.
+- `checkClipped`: one budgeted query, Aside, attached on the walking
+  goroutine; `Withheld` through `shownAddrs`.
+- `vacant`/`claim`: spends a query, Aside and Apart, a bogus denial or a
+  referral or NODATA below the zone blocks the takeover warning
+  (`TestDanglingForged`).
+- Rollover: `Rolled` indexes only checked lengths, every string through
+  `Rollover.Shown`, extreme times and TTLs clamp; history `FirstSeen` and
+  `Carry` only move a time earlier; `plain()` checks key and DS algorithms;
+  rollover is written to JSON but never read back.
+- The tree's rollover and DSYNC lines are ASCII without icons; openmetrics
+  `dnstree_dsync` takes fixed labels only.
+- The skill-eval workflow runs only on dispatch, with read-only contents.
+- `go test -race -count=2 ./...` is clean at `db990d4`.
+- A DSYNC or SVCB target has no address only when every lookup asked of it
+  was answered and none was bogus (`Lookup.Answered`, `nowhere`); addresses
+  and hints are judged only from those; a target the budget never reached is
+  not one with no address (`TestDSYNC`, `TestServicePath`,
+  `TestDSYNCOutOfBudget`).
