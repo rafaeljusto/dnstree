@@ -1,6 +1,9 @@
 package trace
 
-import "slices"
+import (
+	"net/netip"
+	"slices"
+)
 
 // CSYNC is what a zone's CSYNC record asks its parent to copy from it (RFC
 // 7477): its NS set, the addresses of the nameservers named inside it, or both.
@@ -110,6 +113,79 @@ const (
 	SignalingUnasked  SignalingState = "unasked"  // inside the zone, or a name too long to ask
 )
 
+// DSYNC is where a zone's parent takes a NOTIFY about a change to it (RFC
+// 9859): the zone's operator sends one once its CDS or CSYNC changes, so the
+// parent comes to look now rather than at its next scan. It says where, never
+// whether the parent acts on what it is told.
+type DSYNC struct {
+	State DSYNCState
+
+	// Reason says why there is no set to go by, or why the name for the zone
+	// alone was not asked.
+	Reason string
+
+	// Parent is the zone that delegates, and Name where the set was found,
+	// empty where none was.
+	Parent string
+	Name   string
+
+	// Lookups are the lookups made, the name for the zone alone first and the
+	// parent's default after it.
+	Lookups []Lookup
+
+	Endpoints []DSYNCEndpoint
+}
+
+// DSYNCState is what the search for a parent's DSYNC came to.
+type DSYNCState string
+
+// What the search for a parent's DSYNC can come to.
+const (
+	DSYNCFound     DSYNCState = "found"     // the parent names where it takes notices
+	DSYNCNone      DSYNCState = "none"      // the parent publishes no DSYNC for the zone
+	DSYNCBogus     DSYNCState = "bogus"     // the set, or its denial, did not validate
+	DSYNCUnchecked DSYNCState = "unchecked" // a lookup failed, or was cut short
+)
+
+// DSYNCEndpoint is one DSYNC record, and the addresses of the host it names.
+type DSYNCEndpoint struct {
+	// Type is the kind of change it takes notices of, CDS or CSYNC, and
+	// Scheme how they are delivered, NOTIFY, each a number where unassigned.
+	Type   string
+	Scheme string
+	Port   uint16
+	Target string
+
+	// Ignored says why a notifier passes it over, empty where it does not.
+	Ignored string
+
+	// IPv4 and IPv6 are the lookups of the target's addresses, nil where they
+	// were not asked.
+	IPv4  *Lookup
+	IPv6  *Lookup
+	Addrs []netip.Addr
+}
+
+func (d *DSYNC) shown() *DSYNC {
+	if d == nil {
+		return nil
+	}
+	shown := *d
+	shown.State = DSYNCState(Shown(string(d.State)))
+	shown.Reason, shown.Parent, shown.Name = Shown(d.Reason), Shown(d.Parent), Shown(d.Name)
+	shown.Lookups = slices.Clone(d.Lookups)
+	for i := range shown.Lookups {
+		shown.Lookups[i] = shown.Lookups[i].shown()
+	}
+	shown.Endpoints = slices.Clone(d.Endpoints)
+	for i := range shown.Endpoints {
+		e := &shown.Endpoints[i]
+		e.Type, e.Scheme, e.Target, e.Ignored = Shown(e.Type), Shown(e.Scheme), Shown(e.Target), Shown(e.Ignored)
+		e.IPv4, e.IPv6 = e.IPv4.shownRef(), e.IPv6.shownRef()
+	}
+	return &shown
+}
+
 func (c *CSYNC) shown() *CSYNC {
 	if c == nil {
 		return nil
@@ -141,22 +217,27 @@ func (b *Bootstrap) shown() *Bootstrap {
 }
 
 // Request is what one zone on the walk asks its parent to change: the CSYNC
-// --check-ns found, and the CDS --check-ds found where it asks for a first DS.
+// --check-ns found, and the CDS --check-ds found where it asks for a first DS,
+// with the DSYNC that says where the parent takes notice of either.
 type Request struct {
 	Zone   string
 	CSYNC  *CSYNC
 	Signal *Signal
+	DSYNC  *DSYNC
 }
 
 // Requests are the requests of the zones the walk entered that ask for
-// something a parent would copy or a bootstrap would decide, in the order the
-// walk entered them.
+// something a parent would copy or a bootstrap would decide, or whose parent
+// was asked where it takes notices, in the order the walk entered them.
 func (t *Trace) Requests() []Request {
 	var requests []Request
 	for step := range t.Mainline() {
 		var request Request
 		if step.Delegation != nil && step.Delegation.CSYNC != nil && step.Delegation.CSYNC.State != CSYNCNone {
 			request.Zone, request.CSYNC = step.Delegation.Zone, step.Delegation.CSYNC
+		}
+		if step.Delegation != nil && step.Delegation.DSYNC != nil {
+			request.Zone, request.DSYNC = step.Delegation.Zone, step.Delegation.DSYNC
 		}
 		if step.DNSSEC != nil && step.DNSSEC.Signal != nil && step.DNSSEC.Signal.Bootstrap != nil {
 			request.Signal = step.DNSSEC.Signal
@@ -167,7 +248,7 @@ func (t *Trace) Requests() []Request {
 				request.Zone = step.Delegation.Zone
 			}
 		}
-		if request.CSYNC != nil || request.Signal != nil {
+		if request.CSYNC != nil || request.Signal != nil || request.DSYNC != nil {
 			requests = append(requests, request)
 		}
 	}

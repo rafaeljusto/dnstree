@@ -366,6 +366,7 @@ type delegation struct {
 	OutOfBailiwick []string            `json:"out_of_bailiwick,omitempty"`
 	DSPresent      bool                `json:"ds_present,omitempty"`
 	CSYNC          *csync              `json:"csync,omitempty"`
+	DSYNC          *dsync              `json:"dsync,omitempty"`
 }
 
 type soa struct {
@@ -715,6 +716,7 @@ func convertDelegation(from *trace.Delegation) *delegation {
 	to.ZoneAddrs = addrStrings(from.ZoneAddrs)
 	to.Withheld = addrStrings(from.Withheld)
 	to.CSYNC = convertCSYNC(from.CSYNC)
+	to.DSYNC = convertDSYNC(from.DSYNC)
 	return to
 }
 

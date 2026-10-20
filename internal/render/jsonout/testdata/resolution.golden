@@ -76,6 +76,41 @@
                 "data": "192.0.2.6"
               }
             ]
+          },
+          "dsync": {
+            "state": "found",
+            "parent": ".",
+            "name": "com._dsync.",
+            "lookups": [
+              {
+                "name": "com._dsync.",
+                "dnssec": {
+                  "state": "secure",
+                  "zone": "."
+                }
+              }
+            ],
+            "endpoints": [
+              {
+                "type": "CDS",
+                "scheme": "NOTIFY",
+                "port": 5359,
+                "target": "notify.example.net.",
+                "ipv4": {
+                  "name": "notify.example.net."
+                },
+                "addrs": [
+                  "192.0.2.80"
+                ]
+              },
+              {
+                "type": "CSYNC",
+                "scheme": "NOTIFY",
+                "port": 0,
+                "target": "notify.example.net.",
+                "ignored": "port 0 names no endpoint"
+              }
+            ]
           }
         },
         "dnssec": {

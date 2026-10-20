@@ -122,14 +122,16 @@ func TestRenderMinimised(t *testing.T) {
 }
 
 // TestRenderRequests covers what a zone asks its parent to change: its CSYNC,
-// and whether a parent would bootstrap its first DS.
+// whether a parent would bootstrap its first DS, and where the parent takes
+// notices.
 func TestRenderRequests(t *testing.T) {
 	tr := &trace.Trace{
 		Question: trace.Question{Name: "www.test.", Type: "A"},
 		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
 			Zone: ".", Kind: trace.KindReferral, Rcode: "NOERROR",
-			Server:     trace.Server{Name: "a.root-servers.net.", IP: netip.MustParseAddr("192.0.2.1")},
-			Delegation: &trace.Delegation{Zone: "test.", CSYNC: &trace.CSYNC{State: trace.CSYNCWaiting}},
+			Server: trace.Server{Name: "a.root-servers.net.", IP: netip.MustParseAddr("192.0.2.1")},
+			Delegation: &trace.Delegation{Zone: "test.", CSYNC: &trace.CSYNC{State: trace.CSYNCWaiting},
+				DSYNC: &trace.DSYNC{State: trace.DSYNCNone, Parent: "."}},
 			DNSSEC: &trace.DNSSECStatus{State: trace.Insecure, Signal: &trace.Signal{State: trace.SignalPending,
 				Bootstrap: &trace.Bootstrap{State: trace.BootstrapRefused}}},
 		}}},
@@ -139,7 +141,7 @@ func TestRenderRequests(t *testing.T) {
 	if err := mermaid.Render(&out, tr); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	for _, want := range []string{"cds pending", "bootstrap refused", "csync waiting"} {
+	for _, want := range []string{"cds pending", "bootstrap refused", "csync waiting", "dsync none"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got %q, want it to carry %q", out.String(), want)
 		}

@@ -13,6 +13,7 @@ func TestRequests(t *testing.T) {
 	for name, tt := range map[string]struct {
 		csync   *trace.CSYNC
 		signal  *trace.Signal
+		dsync   *trace.DSYNC
 		want    string
 		unknown bool
 	}{
@@ -53,11 +54,37 @@ func TestRequests(t *testing.T) {
 			want:    "whether a parent would bootstrap the first DS of test. was not checked: the budget ran out",
 			unknown: true,
 		},
+		"a parent that takes notices": {
+			dsync: &trace.DSYNC{State: trace.DSYNCFound, Parent: ".", Name: "test._dsync.", Endpoints: []trace.DSYNCEndpoint{
+				{Type: "CDS", Scheme: "NOTIFY", Port: 5359, Target: "notify.example."},
+				{Type: "CSYNC", Scheme: "NOTIFY", Target: "notify.example.", Ignored: "port 0 names no endpoint"},
+			}},
+			want: ". takes notices about test. (RFC 9859) of CDS at notify.example. port 5359, so its operator can send one",
+		},
+		"a parent whose records a notifier passes over": {
+			dsync: &trace.DSYNC{State: trace.DSYNCFound, Parent: ".", Name: "_dsync.", Endpoints: []trace.DSYNCEndpoint{
+				{Type: "CDS", Scheme: "0", Port: 5359, Target: "notify.example.", Ignored: "scheme 0 names no endpoint"},
+			}},
+			want: ". publishes DSYNC records for test. at _dsync., but none a notifier uses",
+		},
+		"a parent that names nowhere": {
+			dsync: &trace.DSYNC{State: trace.DSYNCNone, Parent: "."},
+			want:  ". names nowhere to send a notice about test. (RFC 9859), so a change to its CDS or CSYNC waits for the parent's next scan",
+		},
+		"a DSYNC that does not validate": {
+			dsync: &trace.DSYNC{State: trace.DSYNCBogus, Parent: ".", Reason: "_dsync. does not validate: signature does not verify"},
+			want:  "where . takes notices about test. does not validate (_dsync. does not validate: signature does not verify)",
+		},
+		"a DSYNC nobody could look up": {
+			dsync:   &trace.DSYNC{State: trace.DSYNCUnchecked, Parent: ".", Reason: "the lookup of _dsync. failed: SERVFAIL"},
+			want:    "where . takes notices about test. was not checked: the lookup of _dsync. failed: SERVFAIL",
+			unknown: true,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			referral := hop(trace.KindReferral, "a.root-servers.net.")
 			referral.Zone = "."
-			referral.Delegation = &trace.Delegation{Zone: "test.", CSYNC: tt.csync}
+			referral.Delegation = &trace.Delegation{Zone: "test.", CSYNC: tt.csync, DSYNC: tt.dsync}
 			referral.DNSSEC = &trace.DNSSECStatus{State: trace.Insecure, Signal: tt.signal}
 			referral.Children = []*trace.Step{answered(300)}
 			tr := walk(referral)

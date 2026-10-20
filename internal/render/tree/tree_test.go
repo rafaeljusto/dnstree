@@ -113,7 +113,14 @@ func kinds() *trace.Trace {
 				{Add: true, Type: "NS", Name: "ns3.com."},
 				{Type: "NS", Name: "ns4.com."},
 				{Add: true, Type: "A", Name: "ns3.com.", Data: "192.0.2.6"},
-			}}},
+			}},
+			DSYNC: &trace.DSYNC{State: trace.DSYNCFound, Parent: ".", Name: "com._dsync.",
+				Lookups: []trace.Lookup{{Name: "com._dsync.", DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "."}}},
+				Endpoints: []trace.DSYNCEndpoint{
+					{Type: "CDS", Scheme: "NOTIFY", Port: 5359, Target: "notify.example.net.", Addrs: []netip.Addr{netip.MustParseAddr("192.0.2.80"), netip.MustParseAddr("2001:db8::80")},
+						IPv4: &trace.Lookup{Name: "notify.example.net."}, IPv6: &trace.Lookup{Name: "notify.example.net."}},
+					{Type: "CSYNC", Scheme: "NOTIFY", Port: 0, Target: "notify.example.net.", Ignored: "port 0 names no endpoint"},
+				}}},
 		DNSSEC: &trace.DNSSECStatus{State: trace.Insecure, Algorithm: "ECDSAP256SHA256", Digest: "SHA256", Signal: &trace.Signal{State: trace.SignalPending, Reason: "the zone asks for key 2371 and the parent holds no key",
 			Requested: []uint16{2371}, Bootstrap: &trace.Bootstrap{State: trace.BootstrapRefused, Reason: "no signal under ns2.provider.net.",
 				Signals: []trace.BootstrapSignal{

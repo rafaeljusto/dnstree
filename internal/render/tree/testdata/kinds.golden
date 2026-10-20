@@ -33,6 +33,10 @@ bootstrap: com. asks for its first ds, for key 2371  refused: no signal under ns
 bootstrap:   ns1.provider.net. matched  [secure]
 bootstrap:   ns2.provider.net. missing: the operator's zone proves there is none  [secure]
 bootstrap:   ns.com. unasked: it is named inside the zone, which is not secure yet
+dsync: . takes notices about com. at com._dsync.  [secure]
+dsync:   CDS NOTIFY notify.example.net. port 5359  192.0.2.80, 2001:db8::80
+dsync:   CSYNC none, so a change to the nameservers waits for the next scan
+dsync:   CSYNC NOTIFY notify.example.net. port 0 ignored: port 0 names no endpoint
 rdap: example.com. is registered; the registry does not say until when
 rdap: example.com. is on server hold: the registry has taken it out of the zone
 rdap: nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.

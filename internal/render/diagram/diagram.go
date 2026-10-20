@@ -75,6 +75,9 @@ func Details(step *trace.Step) []string {
 	if step.Delegation != nil && step.Delegation.CSYNC != nil && step.Delegation.CSYNC.State != trace.CSYNCNone {
 		lines = append(lines, "csync "+string(step.Delegation.CSYNC.State))
 	}
+	if step.Delegation != nil && step.Delegation.DSYNC != nil {
+		lines = append(lines, "dsync "+string(step.Delegation.DSYNC.State))
+	}
 	for _, ede := range step.Extended {
 		lines = append(lines, "ede "+ede.String())
 	}

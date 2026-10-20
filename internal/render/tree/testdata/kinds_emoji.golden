@@ -33,6 +33,10 @@
 🌱   ns1.provider.net. matched  🔒 [secure]
 🌱   ns2.provider.net. missing: the operator's zone proves there is none  🔒 [secure]
 🌱   ns.com. unasked: it is named inside the zone, which is not secure yet
+📮 . takes notices about com. at com._dsync.  🔒 [secure]
+📮   CDS NOTIFY notify.example.net. port 5359  192.0.2.80, 2001:db8::80
+📮   CSYNC none, so a change to the nameservers waits for the next scan
+📮   CSYNC NOTIFY notify.example.net. port 0 ignored: port 0 names no endpoint
 📅 example.com. is registered; the registry does not say until when
 📅 example.com. is on server hold: the registry has taken it out of the zone
 📅 nameservers: only the registry holds b.iana-servers.net.; only com. hands out c.iana-servers.net.

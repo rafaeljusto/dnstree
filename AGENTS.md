@@ -165,10 +165,10 @@ Each of these has been a bug, or would be a silent regression.
   A run of several walks exits with the worst of them, ranked 3, 2, 4, 0 — not
   the highest number.
 - **A check's own lookups are not the run's.** The walks `--mail`, `--dkim`,
-  `--svcb`, `--deps` and the bootstrap signals make start at a step marked
-  `Apart` (`run.look`), and the chain of trust, signature lifetimes and the
-  exit code read only `Trace.judged`, so somebody else's broken zone never
-  exits 3.
+  `--svcb`, `--deps`, the bootstrap signals and the DSYNC lookups make start
+  at a step marked `Apart` (`run.look`), and the chain of trust, signature
+  lifetimes and the exit code read only `Trace.judged`, so somebody else's
+  broken zone never exits 3.
 - **`--format ascii` emits nothing above codepoint 127** — a test asserts it,
   because the format exists for pasting into documents.
 - **`schema_version` in the JSON output** is bumped whenever a field changes

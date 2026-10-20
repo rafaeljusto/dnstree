@@ -207,6 +207,7 @@ func (s *Step) Shown() *Step {
 		d.ZoneAddrs = shownAddrs(s.Delegation.ZoneAddrs)
 		d.Withheld = shownAddrs(s.Delegation.Withheld)
 		d.CSYNC = d.CSYNC.shown()
+		d.DSYNC = d.DSYNC.shown()
 		shown.Delegation = &d
 	}
 	shown.DNSSEC = s.DNSSEC.shown()

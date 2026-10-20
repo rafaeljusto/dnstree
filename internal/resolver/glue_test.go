@@ -84,10 +84,10 @@ func TestCheckGlue(t *testing.T) {
 				t.Errorf("got zone addresses %q, want %q", held, test.held)
 			}
 
-			check := tr.Result().Children[len(tr.Result().Children)-1]
-			if len(check.Children) != 3 || check.Children[0].Asked.Type != "A" || check.Children[1].Asked.Type != "AAAA" ||
+			check := nsCheck(tr.Result())
+			if check == nil || len(check.Children) != 3 || check.Children[0].Asked.Type != "A" || check.Children[1].Asked.Type != "AAAA" ||
 				check.Children[2].Asked.Type != "CSYNC" {
-				t.Errorf("got %+v under the NS check, want the A and AAAA of the nameserver, then the CSYNC", check.Children)
+				t.Errorf("got %+v under the NS check, want the A and AAAA of the nameserver, then the CSYNC", check)
 			}
 		})
 	}
@@ -187,4 +187,15 @@ func TestCheckClippedGlue(t *testing.T) {
 			}
 		})
 	}
+}
+
+// nsCheck is the step --check-ns hangs under the answer, nil where there is
+// none.
+func nsCheck(answer *trace.Step) *trace.Step {
+	for _, child := range answer.Children {
+		if len(child.Notes) > 0 && child.Notes[0] == "parent/child NS check" {
+			return child
+		}
+	}
+	return nil
 }

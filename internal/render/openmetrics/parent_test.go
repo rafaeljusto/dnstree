@@ -13,7 +13,11 @@ func TestRenderRequests(t *testing.T) {
 		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
 			Zone: ".", Kind: trace.KindReferral,
 			Delegation: &trace.Delegation{Zone: "test.", CSYNC: &trace.CSYNC{State: trace.CSYNCReady,
-				Changes: []trace.DelegationChange{{Add: true, Type: "NS", Name: "ns2.test."}}}},
+				Changes: []trace.DelegationChange{{Add: true, Type: "NS", Name: "ns2.test."}}},
+				DSYNC: &trace.DSYNC{State: trace.DSYNCFound, Parent: ".", Name: "_dsync.", Endpoints: []trace.DSYNCEndpoint{
+					{Type: "CDS", Scheme: "NOTIFY", Port: 5359, Target: "notify."},
+					{Type: "CSYNC", Scheme: "NOTIFY", Target: "notify.", Ignored: "port 0 names no endpoint"},
+				}}},
 			DNSSEC: &trace.DNSSECStatus{State: trace.Insecure, Signal: &trace.Signal{State: trace.SignalPending,
 				Requested: []uint16{7}, Bootstrap: &trace.Bootstrap{State: trace.BootstrapRefused}}},
 		}}},
@@ -24,6 +28,8 @@ func TestRenderRequests(t *testing.T) {
 		`dnstree_bootstrap{name="www.test.",type="A",state="refused"} 1`,
 		`dnstree_csync{name="www.test.",type="A",state="ready"} 1`,
 		`dnstree_csync_changes{name="www.test.",type="A"} 1`,
+		`dnstree_dsync{name="www.test.",type="A",state="found"} 1`,
+		`dnstree_dsync_endpoints{name="www.test.",type="A"} 1`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("got\n%s\nwant %s", out, want)
@@ -32,7 +38,8 @@ func TestRenderRequests(t *testing.T) {
 
 	tr.Root.Children[0].Delegation.CSYNC.State = trace.CSYNCNone
 	tr.Root.Children[0].DNSSEC.Signal.Bootstrap = nil
-	if out := render(t, tr); strings.Contains(out, "dnstree_csync") || strings.Contains(out, "dnstree_bootstrap") {
-		t.Errorf("got\n%s\nwant no csync or bootstrap family", out)
+	tr.Root.Children[0].Delegation.DSYNC = nil
+	if out := render(t, tr); strings.Contains(out, "dnstree_csync") || strings.Contains(out, "dnstree_bootstrap") || strings.Contains(out, "dnstree_dsync") {
+		t.Errorf("got\n%s\nwant no csync, bootstrap or dsync family", out)
 	}
 }

@@ -132,8 +132,8 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--fallback`](docs/guide/configuring.md#carrying-the-queries) | let plain DNS pick up a hop the transport could not |
 | `--all` | ask every nameserver of a zone, not just the first that answers |
 | [`--dnssec`](docs/guide/dnssec.md#following-the-chain-of-trust) | ask for signatures and follow the chain of trust |
-| [`--check-ns`](docs/guide/zones.md#whether-the-parent-and-the-child-agree) | ask the zone that answered for its own NS set, its nameservers' addresses and its CSYNC, and compare them with the delegation and its glue; ask for the referral again over TCP to catch glue it left out |
-| [`--check-ds`](docs/guide/dnssec.md#what-the-zone-asks-its-parent) | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS, or, for a zone with none, check the bootstrap signals of RFC 9615 |
+| [`--check-ns`](docs/guide/zones.md#whether-the-parent-and-the-child-agree) | ask the zone that answered for its own NS set, its nameservers' addresses and its CSYNC, and compare them with the delegation and its glue; ask for the referral again over TCP to catch glue it left out; ask the parent where it takes notice of a change (DSYNC) |
+| [`--check-ds`](docs/guide/dnssec.md#what-the-zone-asks-its-parent) | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS, or, for a zone with none, check the bootstrap signals of RFC 9615; ask the parent where it takes notice of a change (DSYNC) |
 | [`--report`](docs/guide/dnssec.md#telling-the-zone-it-is-broken) | tell the agent a zone names that its chain of trust is bogus (RFC 9567) |
 | [`--serial`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of the zone which copy of it they serve, and compare, and judge the SOA's timers |
 | [`--check-axfr`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over |

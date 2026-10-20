@@ -439,9 +439,9 @@ www   IN A    192.0.2.10
 			if answer == nil {
 				t.Fatalf("got no answer: %s", format(steps(tr)))
 			}
-			check := answer.Children[len(answer.Children)-1]
-			if len(check.Notes) == 0 || check.Notes[0] != "parent/child NS check" {
-				t.Errorf("got %+v under the answer, want the NS check", check)
+			check := nsCheck(answer)
+			if check == nil {
+				t.Fatalf("got %+v under the answer, want the NS check", answer.Children)
 			}
 			if len(check.Records) != 0 {
 				t.Errorf("got records %+v on the check, want only its verdict", check.Records)

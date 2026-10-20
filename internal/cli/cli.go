@@ -166,6 +166,14 @@ _dsboot.ZONE._signal.NAMESERVER, in a zone of its own that validates, and each
 is looked up after the walk. A parent that bootstraps adds the DS only when
 every one of them is there and says what the zone does.
 
+--check-ns and --check-ds both ask where the parent takes a NOTIFY about a
+change to the zone (RFC 9859): its DSYNC records at LABELS._dsync.PARENT,
+which a wildcard of the parent's answers too, or else at _dsync.PARENT, and the
+addresses of the hosts they name. They say where, not whether the parent acts
+on what it is told, and no notice is ever sent. With --dnssec the set is
+checked like any answer; one that does not validate is warned about, and
+leaves the exit code alone.
+
 --propagation reads the TTLs the walk saw and says how long each kind of
 change to the zone it ended in takes to reach every cache: the answer, a
 record that did not exist, the nameservers, the DS and the keys. Each is the

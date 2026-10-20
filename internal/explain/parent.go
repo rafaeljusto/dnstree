@@ -19,6 +19,9 @@ func requests(tr *trace.Trace) []Finding {
 		if finding, ok := bootstrap(request.Zone, request.Signal); ok {
 			findings = append(findings, finding)
 		}
+		if finding, ok := dsync(request.Zone, request.DSYNC); ok {
+			findings = append(findings, finding)
+		}
 	}
 	return findings
 }
@@ -81,6 +84,36 @@ func bootstrap(zone string, signal *trace.Signal) (Finding, bool) {
 	}
 	return Finding{Topic: Trust, Level: Note, Unknown: true, Text: fmt.Sprintf(
 		"whether a parent would bootstrap the first DS of %s was not checked: %s", zone, b.Reason)}, true
+}
+
+func dsync(zone string, d *trace.DSYNC) (Finding, bool) {
+	if d == nil {
+		return Finding{}, false
+	}
+	switch d.State {
+	case trace.DSYNCNone:
+		return Finding{Topic: Spread, Level: Note, Text: fmt.Sprintf(
+			"%s names nowhere to send a notice about %s (RFC 9859), so a change to its CDS or CSYNC waits for the parent's next scan", d.Parent, zone)}, true
+	case trace.DSYNCBogus:
+		return Finding{Topic: Spread, Level: Warn, Text: fmt.Sprintf(
+			"where %s takes notices about %s does not validate (%s), so a notifier that validates sends none", d.Parent, zone, d.Reason)}, true
+	case trace.DSYNCUnchecked:
+		return Finding{Topic: Spread, Level: Note, Unknown: true, Text: fmt.Sprintf(
+			"where %s takes notices about %s was not checked: %s", d.Parent, zone, d.Reason)}, true
+	}
+	var takes []string
+	for _, e := range d.Endpoints {
+		if e.Ignored == "" {
+			takes = append(takes, fmt.Sprintf("%s at %s port %d", e.Type, e.Target, e.Port))
+		}
+	}
+	if len(takes) == 0 {
+		return Finding{Topic: Spread, Level: Note, Text: fmt.Sprintf(
+			"%s publishes DSYNC records for %s at %s, but none a notifier uses", d.Parent, zone, d.Name)}, true
+	}
+	return Finding{Topic: Spread, Level: Note, Text: fmt.Sprintf(
+		"%s takes notices about %s (RFC 9859) of %s, so its operator can send one after a change rather than wait for the next scan; whether the parent acts on it is not something a walk can see",
+		d.Parent, zone, strings.Join(takes, ", "))}, true
 }
 
 // keyTags names keys by their tags in a sentence.

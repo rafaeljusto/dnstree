@@ -346,6 +346,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		run.deps(ctx, cmp.Or(end, run.trace.Root))
 	}
 	run.bootstrap(ctx)
+	run.dsync(ctx)
 	run.trace.Elapsed = run.since()
 	return run.trace, nil
 }
@@ -407,6 +408,10 @@ type run struct {
 	// boot is the request for a first DS that --check-ds found, whose signals
 	// are looked up once the walk is over.
 	boot *bootstrapping
+
+	// notice is the zone whose parent --check-ds and --check-ns ask where it
+	// takes notices, once the walk is over.
+	notice *noticing
 
 	// mu guards the warnings and the cookies, which the fanout writes to from
 	// several goroutines.

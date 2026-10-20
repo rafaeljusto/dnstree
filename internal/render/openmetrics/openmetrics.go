@@ -130,6 +130,25 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		m.sample("dnstree_csync_changes", strconv.Itoa(len(csync.Changes)))
 	}
 
+	var dsync *trace.DSYNC
+	for _, request := range tr.Requests() {
+		dsync = cmp.Or(request.DSYNC, dsync)
+	}
+	if dsync != nil {
+		m.family("dnstree_dsync", "", "what the search for where the parent takes notices (RFC 9859 DSYNC) came to")
+		for _, value := range []trace.DSYNCState{trace.DSYNCFound, trace.DSYNCNone, trace.DSYNCBogus, trace.DSYNCUnchecked} {
+			m.sample("dnstree_dsync", flag(value == dsync.State), label{"state", string(value)})
+		}
+		used := 0
+		for _, e := range dsync.Endpoints {
+			if e.Ignored == "" {
+				used++
+			}
+		}
+		m.family("dnstree_dsync_endpoints", "", "how many DSYNC records of the parent a notifier would use")
+		m.sample("dnstree_dsync_endpoints", strconv.Itoa(used))
+	}
+
 	if caa := tr.CAA; caa != nil {
 		state := "open"
 		switch {

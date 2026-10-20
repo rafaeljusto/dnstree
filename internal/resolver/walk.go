@@ -54,7 +54,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 	// for the question, and those the asides make. recorded is whether this
 	// zone has been kept for them.
 	top := side == 0 && (r.aside ||
-		(r.cfg.CAA || r.cfg.Mail || r.cfg.SVCB || r.cfg.Deps) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
+		(r.cfg.CAA || r.cfg.Mail || r.cfg.SVCB || r.cfg.Deps || r.cfg.CheckDS || r.cfg.CheckNS) && !r.climbing && dns.EqualName(qname, r.trace.Question.Name))
 	recorded := from != nil
 
 	// referred is the step that pointed the walk into this zone, which the
@@ -160,6 +160,7 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 				r.checkSubnet(step)
 				r.checkNS(ctx, chain, step, referred)
 				r.checkDS(ctx, chain, step, last)
+				r.noticeAt(step, referred)
 				if len(pending) > 0 && (r.cfg.Serial || r.cfg.CheckTransfer || r.cfg.CheckRecursion || r.cfg.CheckEDNS) {
 					// The probes are about every nameserver, not the one the
 					// walk needed, so the names it never looked up are now.

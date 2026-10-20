@@ -825,6 +825,10 @@ type Delegation struct {
 	// CSYNC is what the zone asks its parent to copy from it, set only where
 	// --check-ns asked.
 	CSYNC *CSYNC
+
+	// DSYNC is where the parent takes notices of a change to the zone, set
+	// only where --check-ds or --check-ns asked.
+	DSYNC *DSYNC
 }
 
 // Dangling is a name left pointing at something that is not there, which

@@ -187,7 +187,9 @@ parent checks it, so `--check-ds` needs `--dnssec` — a file of defaults that s
 it is heeded by the runs that check signatures, and left alone by the rest — and
 a zone the chain did not reach secure reads `cds unchecked`. A zone that crosses into a child served by
 the same machines, with no referral, is checked against the DS fetched to cross
-it. It costs two queries, asked of the server that answered.
+it. It costs two queries, asked of the server that answered, and the lookups
+that say [where the parent takes notice](zones.md#where-the-parent-takes-notice)
+of a new CDS.
 
 ### Asking for a first DS
 

@@ -576,6 +576,9 @@ func readDelegation(from *delegation) (*trace.Delegation, error) {
 	if to.CSYNC, err = readCSYNC(from.CSYNC); err != nil {
 		return nil, err
 	}
+	if to.DSYNC, err = readDSYNC(from.DSYNC); err != nil {
+		return nil, err
+	}
 	return to, nil
 }
 

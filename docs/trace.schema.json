@@ -1078,6 +1078,7 @@
           }
         },
         "csync": { "$ref": "#/$defs/csync" },
+        "dsync": { "$ref": "#/$defs/dsync" },
         "glueless": {
           "description": "Nameservers inside the delegated zone that came with no glue. Nothing can resolve them, so the delegation is broken.",
           "type": "array",
@@ -1325,6 +1326,50 @@
           "description": "What a parent acting on it would add to or remove from the delegation the walk was handed, whether or not one would act on it.",
           "type": "array",
           "items": { "$ref": "#/$defs/delegation_change" }
+        }
+      }
+    },
+    "dsync": {
+      "description": "Where the parent takes a NOTIFY about a change to the zone's CDS or CSYNC, in its DSYNC records (RFC 9859): at <zone labels>._dsync.<parent>, which a wildcard of the parent's answers too, and else at _dsync.<parent>. It says where, not whether the parent acts on what it is told. Present where --check-ds or --check-ns asked.",
+      "type": "object",
+      "required": ["state", "parent"],
+      "properties": {
+        "state": {
+          "description": "found is a set that names at least one record; none is a parent that publishes none for the zone; bogus is a set, or a denial of one, that did not validate; unchecked is a lookup that failed or was cut short.",
+          "type": "string",
+          "enum": ["found", "none", "bogus", "unchecked"]
+        },
+        "reason": { "description": "Why there is no set to go by, or why the name for the zone alone was not asked.", "type": "string" },
+        "parent": { "description": "The zone that delegates.", "type": "string" },
+        "name": { "description": "Where the set was found.", "type": "string" },
+        "lookups": {
+          "description": "The lookups made, the name for the zone alone first and the parent's default after it.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/lookup" }
+        },
+        "endpoints": {
+          "description": "The records of the set, sorted by type and scheme.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/dsync_endpoint" }
+        }
+      }
+    },
+    "dsync_endpoint": {
+      "description": "One DSYNC record, and the addresses of the host it names.",
+      "type": "object",
+      "required": ["type", "scheme", "port", "target"],
+      "properties": {
+        "type": { "description": "The kind of change it takes notices of: CDS or CSYNC, or another type a notifier passes over.", "type": "string" },
+        "scheme": { "description": "How notices are delivered: NOTIFY, or the number of a scheme RFC 9859 does not define.", "type": "string" },
+        "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "target": { "type": "string" },
+        "ignored": { "description": "Why a notifier passes it over, where it does.", "type": "string" },
+        "ipv4": { "$ref": "#/$defs/lookup" },
+        "ipv6": { "$ref": "#/$defs/lookup" },
+        "addrs": {
+          "description": "The addresses of the target.",
+          "type": "array",
+          "items": { "type": "string" }
         }
       }
     },

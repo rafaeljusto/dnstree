@@ -24,6 +24,26 @@ type delegationChange struct {
 	Data string `json:"data,omitempty"`
 }
 
+type dsync struct {
+	State     string          `json:"state"`
+	Reason    string          `json:"reason,omitempty"`
+	Parent    string          `json:"parent"`
+	Name      string          `json:"name,omitempty"`
+	Lookups   []lookup        `json:"lookups,omitempty"`
+	Endpoints []dsyncEndpoint `json:"endpoints,omitempty"`
+}
+
+type dsyncEndpoint struct {
+	Type    string   `json:"type"`
+	Scheme  string   `json:"scheme"`
+	Port    uint16   `json:"port"`
+	Target  string   `json:"target"`
+	Ignored string   `json:"ignored,omitempty"`
+	IPv4    *lookup  `json:"ipv4,omitempty"`
+	IPv6    *lookup  `json:"ipv6,omitempty"`
+	Addrs   []string `json:"addrs,omitempty"`
+}
+
 type bootstrap struct {
 	State   string            `json:"state"`
 	Reason  string            `json:"reason,omitempty"`
@@ -47,6 +67,27 @@ func convertCSYNC(from *trace.CSYNC) *csync {
 		SOAMinimum: from.SOAMinimum, Types: from.Types, ZoneSerial: from.ZoneSerial}
 	for _, change := range from.Changes {
 		to.Changes = append(to.Changes, delegationChange{Add: change.Add, Type: change.Type, Name: change.Name, Data: change.Data})
+	}
+	return to
+}
+
+func convertDSYNC(from *trace.DSYNC) *dsync {
+	if from == nil {
+		return nil
+	}
+	to := &dsync{State: string(from.State), Reason: from.Reason, Parent: from.Parent, Name: from.Name}
+	for _, l := range from.Lookups {
+		to.Lookups = append(to.Lookups, convertLookup(l))
+	}
+	for _, e := range from.Endpoints {
+		each := dsyncEndpoint{Type: e.Type, Scheme: e.Scheme, Port: e.Port, Target: e.Target, Ignored: e.Ignored, Addrs: texts(e.Addrs)}
+		if e.IPv4 != nil {
+			each.IPv4 = new(convertLookup(*e.IPv4))
+		}
+		if e.IPv6 != nil {
+			each.IPv6 = new(convertLookup(*e.IPv6))
+		}
+		to.Endpoints = append(to.Endpoints, each)
 	}
 	return to
 }
@@ -81,6 +122,41 @@ func readCSYNC(from *csync) (*trace.CSYNC, error) {
 		SOAMinimum: from.SOAMinimum, Types: from.Types, ZoneSerial: from.ZoneSerial}
 	for _, change := range from.Changes {
 		to.Changes = append(to.Changes, trace.DelegationChange{Add: change.Add, Type: change.Type, Name: change.Name, Data: change.Data})
+	}
+	return to, nil
+}
+
+func readDSYNC(from *dsync) (*trace.DSYNC, error) {
+	if from == nil {
+		return nil, nil
+	}
+	state := trace.DSYNCState(from.State)
+	switch state {
+	case trace.DSYNCFound, trace.DSYNCNone, trace.DSYNCBogus, trace.DSYNCUnchecked:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not what a DSYNC search can come to", from.State)
+	}
+	to := &trace.DSYNC{State: state, Reason: from.Reason, Parent: from.Parent, Name: from.Name}
+	for _, l := range from.Lookups {
+		read, err := readLookup(l)
+		if err != nil {
+			return nil, err
+		}
+		to.Lookups = append(to.Lookups, read)
+	}
+	for _, e := range from.Endpoints {
+		each := trace.DSYNCEndpoint{Type: e.Type, Scheme: e.Scheme, Port: e.Port, Target: e.Target, Ignored: e.Ignored}
+		var err error
+		if each.IPv4, err = readLookupRef(e.IPv4); err != nil {
+			return nil, err
+		}
+		if each.IPv6, err = readLookupRef(e.IPv6); err != nil {
+			return nil, err
+		}
+		if each.Addrs, err = parseAddrs("dsync addrs", e.Addrs); err != nil {
+			return nil, err
+		}
+		to.Endpoints = append(to.Endpoints, each)
 	}
 	return to, nil
 }

@@ -111,7 +111,8 @@ that cannot name its own nameservers is a stranger thing than a list that has
 drifted.
 
 It costs two queries, the NS set and the CSYNC below, asked of the server that
-answered the question, and it is off unless asked for.
+answered the question, and the DSYNC lookups [below](#where-the-parent-takes-notice),
+and it is off unless asked for.
 
 A nameserver named inside the zone it serves can only be reached through the
 addresses its parent hands out with the referral, the glue. Glue is a copy of
@@ -206,6 +207,50 @@ AAAA, which no parent copies. Whether this parent polls for a CSYNC at all is
 not something a walk can see, and `--explain` says so. `--format json` carries
 it as the delegation's `csync`, and `--format openmetrics` as `dnstree_csync`
 and `dnstree_csync_changes`.
+
+### Where the parent takes notice
+
+A CSYNC, or a CDS, waits in the zone until the parent comes to look, and many
+parents look once a day or less. RFC 9859 lets the zone's operator say "come and
+look now" with a NOTIFY, sent where the parent's DSYNC records say. `--check-ns`
+and `--check-ds` both look them up once the walk is over: at the zone's own
+labels under `_dsync.` and the parent, which a wildcard of the parent's answers
+too, and else at `_dsync.` and the parent alone. Each is a walk of its own,
+drawn where it was made, and so is the address of every host the records name:
+
+```
+$ dnstree --check-ds --dnssec --no-asn switch.ch
+...
+│   │   │   ├── ch.  (DSYNC of switch._dsync.ch. for dsync)
+│   │   │   │   ├── b.nic.ch. 130.59.31.43  248ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+│   │   │   │   │   └── switch._dsync.ch. 3600 DSYNC CDS NOTIFY 5359 nudge.switch.ch.
+...
+dsync: ch. takes notices about switch.ch. at switch._dsync.ch.  [secure ECDSAP256SHA256]
+dsync:   CDS NOTIFY nudge.switch.ch. port 5359  86.119.82.27, 2001:620:6:e02f:f816:3eff:fea8:fa3
+dsync:   CSYNC none, so a change to the nameservers waits for the next scan
+✔ answered in 2.1s · resolver in 222ms · 11 queries · 3 servers
+```
+
+Most parents publish none yet, and that is one line rather than a warning:
+
+```
+$ dnstree --check-ns --no-asn example.com SOA
+...
+dsync: com. names nowhere to send a notice about example.com., so a change waits for its next scan
+```
+
+It says where, never whether the parent acts on what it is told, and it never
+sends a notice: that would ask somebody else's systems to do something. A
+record with scheme 0 or port 0 names no endpoint, and one for a type other than
+CDS and CSYNC or a scheme other than NOTIFY is one a notifier passes over; they
+are listed, marked ignored. A warning says when a notice cannot arrive: the set
+does not validate under `--dnssec`, two records name the same type and scheme,
+which the RFC forbids, or a host has no address. A set that does not validate
+is the parent's to fix, and leaves the exit code alone. Where the zone's name
+leaves no room for the `_dsync` label within 255 octets, only the parent's
+default is asked, and the line says why. `--format json` carries it as the
+delegation's `dsync`, and `--format openmetrics` as `dnstree_dsync` and
+`dnstree_dsync_endpoints`.
 
 ## Records that point where they may not
 
