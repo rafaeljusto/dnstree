@@ -231,29 +231,29 @@ they fit, what comes next, and the TTL that step waits on:
 ```
 $ dnstree --rollover --dnssec --no-asn internetstiftelsen.se SOA
 . (root)  [secure RSASHA256/SHA256]
-├── a.root-servers.net. 198.41.0.4  109ms  NOERROR  DO  referral → se.  [secure RSASHA256/SHA256]
-│   ├── a.root-servers.net. 198.41.0.4  102ms  NOERROR  AA DO  (DNSKEY of .)
-│   ├── f.ns.se. 192.36.134.97  134ms  NOERROR  DO  referral → internetstiftelsen.se.  [secure ECDSAP256SHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  237ms  NOERROR  DO  referral → se.  [secure RSASHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  237ms  NOERROR  AA DO  (DNSKEY of .)
+│   ├── f.ns.se. 192.36.134.97  259ms  NOERROR  DO  referral → internetstiftelsen.se.  [secure ECDSAP256SHA256/SHA256]
 ...
 rollover: the keys of internetstiftelsen.se., and the DS se. holds for them
 rollover:   5452   key signing key   not published, DS at se.
-rollover:   27221  zone signing key  published
+rollover:   23104  zone signing key  published, signs the answer
 rollover:   43651  key signing key   published, DS at se., signs the keys
-rollover:   53859  zone signing key  published, signs the answer
+rollover:   53859  zone signing key  published
 rollover: internetstiftelsen.se. is changing its key signing key, and one walk cannot tell which key is the new one
 rollover:   if 5452 is new, by double DS: next publish key 5452 and sign the keys with it in place of key 43651
 rollover:     wait: 1h after DS 5452 was published, the DS TTL at se.
 rollover:   if 43651 is new, by double DS: next remove DS 5452 from se.
 rollover:     wait: 1h after key 43651 was published, the DNSKEY TTL
 rollover: internetstiftelsen.se. is changing its zone signing key, and one walk cannot tell which key is the new one
-rollover:   if 27221 is new, by pre-publish: next sign the zone with key 27221 in place of key 53859
-rollover:     wait: 1h after key 27221 was published, the DNSKEY TTL
-rollover:   if 53859 is new, by pre-publish: next stop publishing key 27221
-rollover:     wait: the longest TTL of what key 27221 signed, after it stopped; a walk does not read every TTL in the zone, so this is not timed
+rollover:   if 53859 is new, by pre-publish: next sign the zone with key 53859 in place of key 23104
+rollover:     wait: 1h after key 53859 was published, the DNSKEY TTL
+rollover:   if 23104 is new, by pre-publish: next stop publishing key 53859
+rollover:     wait: the longest TTL of what key 53859 signed, after it stopped; a walk does not read every TTL in the zone, so this is not timed
 rollover:   a key that signs nothing may instead be another operator's, in a zone signed by several (RFC 8901)
 rollover: --check-ds reads the CDS, which names the key coming in
 rollover: --diff remembers when each key is first seen, so a key that appears after a remembered walk is known to be the new one
-✔ answered in 1.3s · resolver in 110ms · 12 queries · 5 servers
+✔ answered in 2.9s · resolver in 254ms · 12 queries · 5 servers
 ```
 
 One walk sees where the keys are, not which way they are going. A DS no key
