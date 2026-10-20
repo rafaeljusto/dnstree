@@ -36,7 +36,7 @@ $ dnstree --check --no-compare --expect check:clean example.com
 check example.com.
   ✔ answer        example.com. A is 104.20.23.154 and 172.66.147.243, answered by elliott.ns.cloudflare.com. for example.com.
   ✔ delegation    the parent and example.com. agree on 2 nameservers
-  ✔ consistency   every nameserver asked serves one copy of example.com., serial 2416374680 (2 nameservers, 12 addresses)
+  ✔ consistency   every nameserver asked serves one copy of example.com., serial 2418004112 (2 nameservers, 12 addresses)
   ✔ dnssec        the chain of trust holds from the root to example.com., signed with ECDSAP256SHA256
   ⚠ servers       all 2 nameservers of example.com. are in AS13335, so one operator's outage takes the whole zone with it
   ✔ edns          every nameserver of example.com. that was asked passed the RFC 8906 edns tests
@@ -45,7 +45,7 @@ check example.com.
   ✔ mail          the SPF policy of example.com. takes 0 of the 10 lookups a check is allowed
   ✔ registration  the registration of example.com. runs until 2027-08-13
 1 to look at · 8 passed · 1 skipped
-✔ answered in 9.2s · 161 queries · 64 servers
+✔ answered in 9.8s · 163 queries · 64 servers
 expected check:clean, got servers look
 ```
 
@@ -86,13 +86,14 @@ the two lists against each other:
 ```
 $ dnstree --check-ns --no-asn www.example.com A
 ...
-│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  214ms  NOERROR  AA
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  225ms  NOERROR  AA
 │   │   │   ├── www.example.com. 300 A 172.66.147.243
 │   │   │   ├── www.example.com. 300 A 104.20.23.154
-│   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  217ms  NOERROR  AA  (parent/child NS check)
-│   │   │       └── hera.ns.cloudflare.com. 108.162.192.162  212ms  NOERROR  AA  no data  (CSYNC of example.com.)
+│   │   │   ├── hera.ns.cloudflare.com. 108.162.192.162  228ms  NOERROR  AA  (parent/child NS check)
+│   │   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  221ms  NOERROR  AA  no data  (CSYNC of example.com.)
 ...
-✔ answered in 1.1s · resolver in 229ms · 5 queries · 3 servers
+dsync: com. names nowhere to send a notice about example.com., so a change waits for its next scan
+✔ answered in 1.6s · resolver in 241ms · 7 queries · 3 servers
 ```
 
 The check rides in as a hop of its own, marked for what it is, so the query it
@@ -124,17 +125,17 @@ for the A and AAAA of each such nameserver too, together, under the NS check:
 ```
 $ dnstree --check-ns --no-asn www.isc.org A
 ...
-│   │   │   └── ns1.isc.org. 149.20.2.26  331ms  NOERROR  AA  (parent/child NS check)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  135ms  NOERROR  AA  (glue check: A of ns1.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  583ms  NOERROR  AA  (glue check: AAAA of ns1.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  138ms  NOERROR  AA  (glue check: A of ns2.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  138ms  NOERROR  AA  (glue check: AAAA of ns2.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  584ms  NOERROR  AA  (glue check: A of ns3.isc.org.)
-│   │   │       ├── ns1.isc.org. 149.20.2.26  137ms  NOERROR  AA  (glue check: AAAA of ns3.isc.org.)
-│   │   │       ├── a2.org.afilias-nst.info. 199.249.112.1  585ms  NOERROR  referral → isc.org.  (glue check over tcp)
-│   │   │       └── ns1.isc.org. 149.20.2.26  440ms  NOERROR  AA  no data  (CSYNC of isc.org.)
+│   │   │   ├── ns1.isc.org. 149.20.2.26  361ms  NOERROR  AA  (parent/child NS check)
+│   │   │   │   ├── ns1.isc.org. 149.20.2.26  364ms  NOERROR  AA  (glue check: A of ns1.isc.org.)
+│   │   │   │   ├── ns1.isc.org. 149.20.2.26  368ms  NOERROR  AA  (glue check: AAAA of ns1.isc.org.)
+│   │   │   │   ├── ns1.isc.org. 149.20.2.26  364ms  NOERROR  AA  (glue check: A of ns2.isc.org.)
+│   │   │   │   ├── ns1.isc.org. 149.20.2.26  357ms  NOERROR  AA  (glue check: AAAA of ns2.isc.org.)
+│   │   │   │   ├── ns1.isc.org. 149.20.2.26  360ms  NOERROR  AA  (glue check: A of ns3.isc.org.)
+│   │   │   │   ├── ns1.isc.org. 149.20.2.26  364ms  NOERROR  AA  (glue check: AAAA of ns3.isc.org.)
+│   │   │   │   ├── a2.org.afilias-nst.info. 199.249.112.1  503ms  NOERROR  referral → isc.org.  (glue check over tcp)
+│   │   │   │   └── ns1.isc.org. 149.20.2.26  358ms  NOERROR  AA  no data  (CSYNC of isc.org.)
 ...
-✔ answered in 2.6s · resolver in 287ms · 12 queries · 3 servers
+✔ answered in 3.3s · resolver in 259ms · 14 queries · 3 servers
 ```
 
 The addresses are compared a family at a time, as sets, and agreeing costs no
@@ -177,7 +178,7 @@ the longer of the two to reach everybody. `--explain` says so where they differ:
 ```
 $ dnstree --check-ns --explain --no-asn www.example.com A
 ...
-✔ answered in 1.1s · resolver in 228ms · 5 queries · 3 servers
+✔ answered in 1.6s · resolver in 231ms · 7 queries · 3 servers
 
 ...
 · the parent hands out the nameservers of example.com. for 2 days and the zone gives its own for 1 day, so a change of nameservers takes up to 2 days to reach every resolver
@@ -899,8 +900,9 @@ The registry is found in [IANA's bootstrap file](https://data.iana.org/rdap/dns.
 only requests dnstree makes that are not DNS, which is why it is off unless
 asked for. A TLD whose registry runs no RDAP
 service says so, and so does a registry that could not be reached or did not
-answer in time; either costs the check and never the walk. Each domain is
-asked about once an hour at most, so `--watch` does not hammer the registry.
+answer in time; either costs the check and never the walk. Within a run each
+domain is asked about once an hour at most, so `--watch` does not hammer the
+registry.
 The exit code is left alone unless `--expect registered:30d` asks for that long
 left ([Asking rather than reading](scripting.md#asking-rather-than-reading)).
 `--format json` carries it as `registration`, and `--format openmetrics` as
@@ -923,7 +925,7 @@ propagation:   create a missing record  30m  SOA 1800, minimum 1800 at example.c
 propagation:   move the nameservers     2d   NS 172800 at com., 86400 at example.com.
 propagation:   change the DS            1d   DS 86400 at com.
 propagation:   change the keys          1h   DNSKEY 3600 at example.com.
-✔ answered in 2.7s · 20 queries · 14 servers
+✔ answered in 2.8s · 22 queries · 14 servers
 ```
 
 Each line is the worst case, for a cache filled just before the change; most

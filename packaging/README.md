@@ -68,7 +68,7 @@ nfpm reads the version as semver, which `git describe` on an untagged tree is
 not. A build without a tag packages as `0.0.0`; a release always has one.
 
 The packages depend on nothing. The binary is static and reaches the root
-servers by itself, and `ca-certificates` — read only by `--dot` and `--doh` —
+servers by itself, and `ca-certificates` — read only by `--dot`, `--doh` and `--rdap` —
 is suggested rather than required.
 
 ## The Homebrew formula
@@ -115,7 +115,10 @@ has to sit at the root for `/plugin marketplace add rafaeljusto/dnstree` to
 find it. The plugin carries no version, so an install follows the commit it
 was taken from. `TestSkillFlagsExist` and `TestSkillCommandsParse` hold the
 skill to the usage, the way `TestExampleParses` holds the example file.
-`claude plugin validate .` checks the manifests.
+`claude plugin validate .` checks the manifests. The `skill-eval` workflow runs
+the skill through Claude Code against the cases in
+[`.agents/evals/dnstree-skill`](../.agents/evals/dnstree-skill/cases.md) and
+grades the answers; it spends API credit, so it runs only when dispatched.
 
 ## The release notes
 

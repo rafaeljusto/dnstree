@@ -84,6 +84,7 @@ whole; `dnstree --schema` describes every field.
 | whether all nameservers serve the same zone | `dnstree --format markdown --serial --all NAME` |
 | whether the SOA timers would drop the zone, or keep a new name missing | `dnstree --format markdown --serial NAME` |
 | whether NS and glue match parent and child | `dnstree --format markdown --check-ns NAME` |
+| whether the nameservers handle EDNS the way resolvers need (RFC 8906, DNS Flag Day) | `dnstree --format markdown --check-edns NAME` |
 | whether a nameserver move will work, before it is made | `dnstree --format markdown --dnssec --try-ns ZONE=NEWSERVER NAME` |
 | how long a change takes to reach every cache | `dnstree --format markdown --dnssec --check-ns --serial --propagation NAME` |
 | why mail is refused or delayed | `dnstree --format markdown --dnssec --mail --spf NAME` |

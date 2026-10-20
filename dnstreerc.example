@@ -39,7 +39,8 @@
 
 # Ask the zone for the CDS and CDNSKEY it publishes to ask its parent for a new
 # DS, and compare them with the DS the parent holds: a request nobody acted on is
-# a key rollover stuck halfway. Two queries, and it needs dnssec beside it.
+# a key rollover stuck halfway. Two queries, the lookups that say where the
+# parent takes notice, and it needs dnssec beside it.
 # dnssec = true
 # check-ds = true
 
@@ -59,8 +60,8 @@
 
 # Ask the domain's registry when its registration runs out and whether it is
 # on hold, and compare the nameservers and DS it holds with the TLD's. These
-# are HTTPS requests to the registry IANA names, the only ones that are not
-# DNS, and each domain is asked about once an hour at most.
+# are HTTPS requests to the registry IANA names, which with tlsa are the only
+# ones that are not DNS; under watch each domain is asked once an hour at most.
 # rdap = true
 
 # Ask each zone for no more of the name than it needs, the way resolvers do by

@@ -163,16 +163,19 @@ walk ends in for both, and holds them against the DS its parent handed out:
 ```
 $ dnstree --dnssec --check-ds --no-asn cloudflare.com A
 . (root)  [secure RSASHA256/SHA256]
-├── a.root-servers.net. 198.41.0.4  151ms  1174 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
-│   ├── a.root-servers.net. 198.41.0.4  491ms  NOERROR  AA DO  (truncated over udp; DNSKEY of .)
-│   ├── l.gtld-servers.net. 192.41.162.30  186ms  NOERROR  DO  referral → cloudflare.com.  [secure ECDSAP256SHA256/SHA256]  cds matches the ds
-│   │   ├── l.gtld-servers.net. 192.41.162.30  214ms  NOERROR  AA DO  (DNSKEY of com.)
-│   │   ├── ns3.cloudflare.com. 162.159.0.33  8.2ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+├── a.root-servers.net. 198.41.0.4  238ms  1174 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  236ms  NOERROR  AA DO  (DNSKEY of .)
+│   ├── l.gtld-servers.net. 192.41.162.30  247ms  NOERROR  DO  referral → cloudflare.com.  [secure ECDSAP256SHA256/SHA256]  cds matches the ds
+│   │   ├── l.gtld-servers.net. 192.41.162.30  249ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── ns3.cloudflare.com. 162.159.0.33  217ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
 │   │   │   ├── cloudflare.com. 300 A 104.16.133.229
 │   │   │   ├── cloudflare.com. 300 A 104.16.132.229
-│   │   │   ├── ns3.cloudflare.com. 162.159.0.33  12ms  NOERROR  AA DO  (DNSKEY of cloudflare.com.)
+│   │   │   ├── ns3.cloudflare.com. 162.159.0.33  219ms  NOERROR  AA DO  (DNSKEY of cloudflare.com.)
+│   │   │   ├── ns3.cloudflare.com. 162.159.0.33  218ms  NOERROR  AA DO  (CDS of cloudflare.com.)
+│   │   │   ├── ns3.cloudflare.com. 162.159.0.33  232ms  NOERROR  AA DO  (CDNSKEY of cloudflare.com.)
 ...
-✔ answered in 1.1s · resolver in 14ms · 8 queries · 3 servers
+dsync: com. names nowhere to send a notice about cloudflare.com., so a change waits for its next scan
+✔ answered in 2.4s · resolver in 236ms · 10 queries · 3 servers
 ```
 
 Beside the verdict of the cut it reads `cds matches the ds`, `no cds`, or one of

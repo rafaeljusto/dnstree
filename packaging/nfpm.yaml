@@ -51,8 +51,8 @@ contents:
     packager: apk
 
 # The binary is static and talks to nameservers directly, so a package pulls
-# in nothing. ca-certificates is only read by --dot and --doh, which is why it
-# is suggested rather than required.
+# in nothing. ca-certificates is only read by --dot, --doh and --rdap, which is
+# why it is suggested rather than required.
 suggests:
   - ca-certificates
 

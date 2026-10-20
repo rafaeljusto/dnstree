@@ -330,15 +330,18 @@ many places answers each of them in its own way. It takes the place of
 [OpenMetrics](https://prometheus.io/docs/specs/om/open_metrics_spec/) text
 format, each labelled with the question: how it ended, how long it and each hop
 on the path took, how many queries failed, the chain of trust, the time left on
-the first signature to run out, what `--check-ds` found, which nameservers
+the first signature to run out, what `--check-ns` and `--check-ds` found of
+CDS, CSYNC, DSYNC and the bootstrap signals, which nameservers
 `--check-axfr` and `--check-recursion` found open, which `--check-edns` tests
 passed, who `--caa` found free to
 issue, how many lookups `--spf` counted and what a check comes to, how many MX hosts
-`--mail` found DANE covering and which mail policies it found, how many
+`--mail` found DANE covering and which mail policies it found, the keys `--dkim`
+checked, the addresses whose certificate `--tlsa` matched, how many
 of the servers `--svcb` found have an address and how many of the hints for
 them are stray, how long
-`--rdap` found the registration has left and whether it is held, the TTL the zone gives the answer, and how long each resolver took,
-whether it agreed and the TTL it handed out. Only gauges are used, so the older
+`--rdap` found the registration has left, whether it is held and whether it
+agrees with the TLD, the TTL the zone gives the answer, and how long each
+resolver took, whether it failed, whether it agreed and the TTL it handed out. Only gauges are used, so the older
 Prometheus text format reads it too. A family the walk has nothing to say about
 is left out rather than written as zero: a walk without `--dnssec` says nothing
 about trust.

@@ -64,6 +64,13 @@ Or run it straight from a container:
 docker run --rm ghcr.io/rafaeljusto/dnstree www.example.com A
 ```
 
+[dnstree-web](docs/guide/dnstree-web.md), the same walk behind a form, has an
+image of its own:
+
+```
+docker run --rm -p 8080:8080 ghcr.io/rafaeljusto/dnstree-web
+```
+
 Every [release](https://github.com/rafaeljusto/dnstree/releases) also carries a
 binary for macOS, Linux, FreeBSD and Windows, a Debian, RPM and Alpine package
 for amd64, arm64 and 32-bit arm, and a Homebrew formula. The packages install a man
@@ -130,7 +137,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--udp`](docs/guide/configuring.md#carrying-the-queries), `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
 | [`--dot`](docs/guide/configuring.md#carrying-the-queries), `--doh` | carry them encrypted, over TLS or HTTPS |
 | [`--fallback`](docs/guide/configuring.md#carrying-the-queries) | let plain DNS pick up a hop the transport could not |
-| `--all` | ask every nameserver of a zone, not just the first that answers |
+| [`--all`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of a zone, not just the first that answers |
 | [`--dnssec`](docs/guide/dnssec.md#following-the-chain-of-trust) | ask for signatures and follow the chain of trust |
 | [`--check-ns`](docs/guide/zones.md#whether-the-parent-and-the-child-agree) | ask the zone that answered for its own NS set, its nameservers' addresses and its CSYNC, and compare them with the delegation and its glue; ask for the referral again over TCP to catch glue it left out; ask the parent where it takes notice of a change (DSYNC) |
 | [`--check-ds`](docs/guide/dnssec.md#what-the-zone-asks-its-parent) | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS, or, for a zone with none, check the bootstrap signals of RFC 9615; ask the parent where it takes notice of a change (DSYNC) |
@@ -148,7 +155,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--deps`](docs/guide/zones.md#what-it-depends-on) | list every zone the name depends on: the walk's own, and those the lookups of every nameserver of each go through in turn, with which are unsigned |
 | [`--rdap`](docs/guide/zones.md#whether-its-registration-is-about-to-run-out) | ask the domain's registry when the registration runs out and whether it is held, and compare its nameservers and DS with the TLD's (RFC 9083) |
 | [`--propagation`](docs/guide/zones.md#how-long-a-change-takes-to-reach-everyone) | say how long each kind of change to the zone takes to reach every cache, from the TTLs the walk saw |
-| [`--rollover`](docs/guide/dnssec.md#where-a-key-rollover-stands) | say which step of a key rollover the zone is at, what comes next, and the TTL it waits on (RFC 7583); needs `--dnssec` |
+| [`--rollover`](docs/guide/dnssec.md#where-a-key-rollover-stands) | say which step of a key rollover the zone is at, what comes next, and the TTL it waits on (RFC 7583); needs `--dnssec`, or a walk saved with it |
 | [`--check`](docs/guide/zones.md#all-of-it-at-once) | run the checks that grade a zone together, and grade its health one area at a time: passed, worth a look, broken or skipped |
 | [`--nsid`](docs/guide/zones.md#which-machine-answered) | ask each server which of itself answered, and draw it beside the address |
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |
@@ -265,7 +272,8 @@ $ dnstree -x 8.8.8.8 --no-asn
 
 The tree, the summary, `--explain` and the address `--format web` serves on go
 to stdout; errors, `--debug`, an unmet expectation, a cache `--diff` could not
-use and a report `--report` could not send go to stderr. `-h` prints
+use, a capture `--pcap` could not write and a report `--report` could not send
+go to stderr. `-h` prints
 the usage on stderr and exits 1.
 
 ## The guide
@@ -274,7 +282,7 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
 
 - [Configuring](docs/guide/configuring.md): the file of defaults, pointing a walk
   at servers other than the real root, and the transports.
-- [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, `--report`, and
+- [DNSSEC](docs/guide/dnssec.md): the chain of trust, `--check-ds`, `--rollover`, `--report`, and
   what DNSSEC is worth to ECH.
 - [Checking a zone](docs/guide/zones.md): `--check`, parent and child NS sets,
   serials and SOA timers, zone transfers and open recursion, how they handle
