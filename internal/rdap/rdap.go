@@ -7,17 +7,20 @@ package rdap
 import (
 	"cmp"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -278,7 +281,7 @@ func (c *Client) get(ctx context.Context, address string, into any) (bool, error
 	req.Header.Set("Accept", "application/rdap+json, application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return false, err
+		return false, unreached(req.URL.Host, err)
 	}
 	defer resp.Body.Close()
 
@@ -291,7 +294,7 @@ func (c *Client) get(ctx context.Context, address string, into any) (bool, error
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
-		return false, err
+		return false, unreached(resp.Request.URL.Host, err)
 	}
 	if len(body) > maxBody {
 		return false, fmt.Errorf("%s answered with more than %d MiB", resp.Request.URL.Host, maxBody>>20)
@@ -300,6 +303,30 @@ func (c *Client) get(ctx context.Context, address string, into any) (bool, error
 		return false, fmt.Errorf("%s answered with something that is not rdap", resp.Request.URL.Host)
 	}
 	return true, nil
+}
+
+// unreached says why host could not be asked the way a user reads it, rather
+// than the socket's own words. Anything else, a redirect refused among them,
+// already says so in its own.
+func unreached(host string, err error) error {
+	_, certificate := errors.AsType[*tls.CertificateVerificationError](err)
+	_, lookup := errors.AsType[*net.DNSError](err)
+	netErr, isNet := errors.AsType[net.Error](err)
+	switch {
+	case errors.Is(err, syscall.ECONNRESET):
+		return fmt.Errorf("%s reset the connection", host)
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return fmt.Errorf("%s refused the connection", host)
+	case certificate:
+		return fmt.Errorf("%s has a certificate that does not verify", host)
+	case lookup:
+		return fmt.Errorf("%s could not be looked up", host)
+	case isNet && netErr.Timeout():
+		return fmt.Errorf("%s did not answer in time", host)
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return fmt.Errorf("%s closed the connection", host)
+	}
+	return err
 }
 
 // reason is an error said without the URL a request error repeats, which the

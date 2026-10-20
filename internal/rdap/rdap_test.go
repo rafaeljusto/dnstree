@@ -2,7 +2,9 @@ package rdap_test
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -231,6 +233,42 @@ func TestCheckSaysWhatFailed(t *testing.T) {
 			t.Errorf("got %s: %q", got.State, got.Why)
 		}
 	})
+
+	// The socket's own words name both ends of the connection and the
+	// syscall; the line only needs the host and what it did.
+	for name, test := range map[string]struct {
+		reset bool
+		want  string
+	}{
+		"a registry that resets the connection": {reset: true, want: "reset the connection"},
+		"a registry that hangs up":              {want: "closed the connection"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reg := newRegistry(t, map[string]func(http.ResponseWriter, *http.Request){
+				"example.test": func(w http.ResponseWriter, _ *http.Request) {
+					conn, _, err := http.NewResponseController(w).Hijack()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					// Closing the TLS side says close_notify first, which
+					// reads as a hang-up however the socket goes.
+					if !test.reset {
+						conn.Close()
+						return
+					}
+					tcp := conn.(*tls.Conn).NetConn().(*net.TCPConn)
+					_ = tcp.SetLinger(0)
+					tcp.Close()
+				},
+			})
+			got := reg.client().Check(t.Context(), walk("example.test.", "example.test.", nil, nil))
+			want := "could not ask the registry: " + strings.TrimPrefix(reg.server.URL, "https://") + " " + test.want
+			if got.State != trace.Unreached || got.Why != want {
+				t.Errorf("got %s: %q, want %q", got.State, got.Why, want)
+			}
+		})
+	}
 
 	t.Run("a bootstrap file nobody serves", func(t *testing.T) {
 		server := httptest.NewTLSServer(http.NotFoundHandler())
