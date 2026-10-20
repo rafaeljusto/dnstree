@@ -178,7 +178,7 @@ func (r *run) dsyncTargets(ctx context.Context, under *trace.Step, d *trace.DSYN
 			if stopped {
 				return
 			}
-			if lookup.Err != "" {
+			if !lookup.Answered() {
 				continue
 			}
 			for _, record := range result.Records {
@@ -204,16 +204,10 @@ func (r *run) warnDSYNC(d *trace.DSYNC, zone string) {
 				d.Parent, e.Type, e.Scheme, d.Name)
 		}
 		target := dnsutil.Canonical(e.Target)
-		if e.Ignored == "" && len(e.Addrs) == 0 && answered(e.IPv4) && answered(e.IPv6) && !warned[target] {
+		if e.Nowhere() && !warned[target] {
 			warned[target] = true
 			r.warnf(trace.AreaDelegation, "the DSYNC target %s that %s names for notices about %s has no address, so they go nowhere; give it one, or name another",
 				e.Target, d.Parent, zone)
 		}
 	}
-}
-
-// answered reports whether a lookup was answered, if only with nothing, or was
-// never asked.
-func answered(lookup *trace.Lookup) bool {
-	return lookup == nil || lookup.Err == ""
 }

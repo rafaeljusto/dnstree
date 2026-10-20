@@ -59,6 +59,13 @@ type Lookup struct {
 	DNSSEC *DNSSECStatus
 }
 
+// Answered reports whether the lookup came back with something to read, if
+// only that there is nothing. One that does not validate says nothing either
+// way: anyone able to forge an answer could deny what is there.
+func (l *Lookup) Answered() bool {
+	return l.Err == "" && (l.DNSSEC == nil || l.DNSSEC.State != Bogus)
+}
+
 // MailHost is one MX host, and what a sender that checks DANE makes of it.
 type MailHost struct {
 	Name       string

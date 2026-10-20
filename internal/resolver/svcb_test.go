@@ -148,6 +148,7 @@ func TestServicePath(t *testing.T) {
 		none     bool
 		stopped  string // a part of Stopped, empty for none
 		warning  string // a part of a warning that has to be there
+		unsaid   string // a part of a warning that must not be there
 	}{
 		"an alias is followed into another zone, to the target and its addresses": {
 			qname: "example.com", qtype: "HTTPS",
@@ -235,6 +236,11 @@ func TestServicePath(t *testing.T) {
 			targets: []string{"missing.provider.com."},
 			warning: "has no address, so a client has nothing to connect to",
 		},
+		"a target denied without a proof is not said to have no address": {
+			qname: "gone.example.com", qtype: "HTTPS", behaviour: fakens.Behaviour{NoDenialFor: "missing.provider.com."},
+			targets: []string{"missing.provider.com."},
+			unsaid:  "has no address",
+		},
 		"every record of a set is followed, best priority first": {
 			qname: "many.example.com", qtype: "HTTPS",
 			targets: []string{"many.example.com. 192.0.2.86", "edge.provider.com. 192.0.2.7"},
@@ -315,6 +321,9 @@ func TestServicePath(t *testing.T) {
 			}
 			if tt.warning != "" && !slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, tt.warning) }) {
 				t.Errorf("no warning with %q in %q", tt.warning, tr.Warnings)
+			}
+			if tt.unsaid != "" && slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, tt.unsaid) }) {
+				t.Errorf("a warning with %q in %q", tt.unsaid, tr.Warnings)
 			}
 			for _, set := range p.Chain {
 				if set.Lookup.Err == "" && set.Lookup.DNSSEC == nil {

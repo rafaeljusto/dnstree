@@ -166,6 +166,12 @@ type DSYNCEndpoint struct {
 	Addrs []netip.Addr
 }
 
+// Nowhere is an endpoint a notifier uses whose target's every address lookup
+// was answered, with none.
+func (e DSYNCEndpoint) Nowhere() bool {
+	return e.Ignored == "" && nowhere(e.Addrs, e.IPv4, e.IPv6)
+}
+
 func (d *DSYNC) shown() *DSYNC {
 	if d == nil {
 		return nil

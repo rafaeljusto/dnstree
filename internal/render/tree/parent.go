@@ -158,7 +158,7 @@ func (r *renderer) dsync(zone string, d *trace.DSYNC) []string {
 				addrs[i] = addr.String()
 			}
 			lines = append(lines, join(r.paint.dim(text), strings.Join(addrs, ", ")))
-		case answered(e.IPv4) && answered(e.IPv6):
+		case e.Nowhere():
 			lines = append(lines, r.paint.paint(text+" has no address", yellow))
 		default:
 			lines = append(lines, r.paint.dim(text+" address unknown"))
@@ -178,10 +178,4 @@ func notified(kind string) string {
 		return "the keys"
 	}
 	return "the nameservers"
-}
-
-// answered reports whether a lookup was answered, if only with nothing, or was
-// never asked.
-func answered(lookup *trace.Lookup) bool {
-	return lookup == nil || lookup.Err == ""
 }

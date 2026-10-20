@@ -66,8 +66,10 @@ func (r *renderer) servicePath(p *trace.ServicePath) []string {
 			text += "not looked up"
 		case target.Failed() != "":
 			text += "address lookup failed: " + target.Failed()
-		default:
+		case target.Nowhere():
 			text += "no address"
+		default:
+			text += "address unknown"
 		}
 		var stray []string
 		for _, hint := range target.Stray {

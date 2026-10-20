@@ -206,7 +206,7 @@ func (r *run) addresses(ctx context.Context, under *trace.Step, target *trace.Se
 		if stopped {
 			return
 		}
-		if lookup.Err != "" {
+		if !lookup.Answered() {
 			continue
 		}
 		judged[f.family] = true

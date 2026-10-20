@@ -67,17 +67,23 @@ type ServiceTarget struct {
 
 // Nowhere is a target whose every address lookup was answered, with none.
 func (t ServiceTarget) Nowhere() bool {
+	return nowhere(t.Addrs, t.IPv4, t.IPv6)
+}
+
+// nowhere reports whether a host has no address, by lookups that were asked,
+// and answered, every one of them.
+func nowhere(addrs []netip.Addr, lookups ...*Lookup) bool {
 	asked := 0
-	for _, lookup := range []*Lookup{t.IPv4, t.IPv6} {
+	for _, lookup := range lookups {
 		if lookup == nil {
 			continue
 		}
-		if lookup.Err != "" {
+		if !lookup.Answered() {
 			return false
 		}
 		asked++
 	}
-	return asked > 0 && len(t.Addrs) == 0
+	return asked > 0 && len(addrs) == 0
 }
 
 // Failed is why the address lookups of a target failed, where every one asked

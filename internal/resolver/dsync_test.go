@@ -95,6 +95,14 @@ _dsync IN DSYNC CDS NOTIFY 5360 notify`,
 			endpoints: []string{"CDS NOTIFY 5359 nowhere.com."},
 			warning:   "the DSYNC target nowhere.com. that com. names for notices about example.com. has no address",
 		},
+		"a target denied without a proof": {
+			dsync:     `_dsync IN DSYNC CDS NOTIFY 5359 gone`,
+			dnssec:    true,
+			behaviour: fakens.Behaviour{NoDenialFor: "gone.com."},
+			state:     trace.DSYNCFound,
+			name:      "_dsync.com.",
+			endpoints: []string{"CDS NOTIFY 5359 gone.com."},
+		},
 		"a parent that fails the lookup": {
 			dsync:     `_dsync IN DSYNC CDS NOTIFY 5359 notify`,
 			behaviour: fakens.Behaviour{ServFailType: 66},
@@ -176,6 +184,35 @@ _dsync IN DSYNC TXT   NOTIFY 53   notify`,
 				t.Errorf("got the run's chain bogus at %s, want the DSYNC kept apart", chain.Zone)
 			}
 		})
+	}
+}
+
+// TestDSYNCOutOfBudget runs out of budget at every point of the address
+// lookups: a target the budget never reached is not one with no address.
+func TestDSYNCOutOfBudget(t *testing.T) {
+	t.Parallel()
+
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
+	hierarchy.Add(fakens.Config{
+		Name: "ns.com.", Origin: "com.", Declared: "192.0.2.2", Zone: dsyncComZone + `
+other  IN A     192.0.2.81
+_dsync IN DSYNC CDS   NOTIFY 5359 notify
+_dsync IN DSYNC CSYNC NOTIFY 5360 other`,
+	})
+	hierarchy.Add(fakens.Config{Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3"})
+
+	for budget := 1; budget <= 30; budget++ {
+		cfg := resolver.Config{CheckDS: true, Budget: resolver.Budget{MaxQueries: budget}}
+		tr, err := newResolver(t, harness{hierarchy, root}, cfg).Resolve(t.Context(), "example.com", "SOA")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		for _, w := range tr.Warnings {
+			if strings.Contains(w, "has no address") {
+				t.Errorf("budget %d: got %q, want no target said to have no address", budget, w)
+			}
+		}
 	}
 }
 
