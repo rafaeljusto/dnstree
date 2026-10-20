@@ -273,6 +273,236 @@ func TestDNSSECHiddenCutReferral(t *testing.T) {
 	}
 }
 
+// unsignedHostedZone is hostedZone left unsigned, the way detrannet.sc.gov.br.
+// sits on the servers of its signed parent.
+const unsignedHostedZone = `
+@   IN SOA ns.com. hostmaster 1 7200 3600 1209600 3600
+@   IN NS  ns.com.
+www IN A   192.0.2.11
+`
+
+// TestDNSSECHiddenUnsignedCut covers an unsigned zone served by the machines
+// of its signed parent. Its answers carry no signature to name the cut, only
+// the zone's own SOA or NS set, and checked against the parent's keys an
+// insecure delegation reads as bogus.
+func TestDNSSECHiddenUnsignedCut(t *testing.T) {
+	t.Parallel()
+
+	const delegating = comZone + `
+hosted IN NS ns.com.
+`
+	tests := map[string]struct {
+		com    string
+		hosted fakens.Behaviour
+		name   string
+		qtype  string
+		kind   trace.StepKind
+		state  trace.DNSSECState
+	}{
+		"an answer naming its zone in authority": {
+			com: delegating, hosted: fakens.Behaviour{ApexNS: true},
+			name: "www.hosted.com", qtype: "A", kind: trace.KindAnswer, state: trace.Insecure,
+		},
+		"the zone's own SOA": {
+			com: delegating, name: "hosted.com", qtype: "SOA", kind: trace.KindAnswer, state: trace.Insecure,
+		},
+		"a NODATA": {
+			com: delegating, name: "www.hosted.com", qtype: "AAAA", kind: trace.KindNoData, state: trace.Insecure,
+		},
+		// The zone is only the server's word: a parent that never delegated it
+		// cannot prove it holds no DS for it. The parents here sign their gaps
+		// with NSEC, as sc.gov.br. does; under opt-out any name in a span may
+		// be an insecure delegation (RFC 5155 6).
+		"a zone the parent never delegated": {
+			com: comZone, hosted: fakens.Behaviour{ApexNS: true},
+			name: "www.hosted.com", qtype: "A", kind: trace.KindAnswer, state: trace.Bogus,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			hierarchy := fakens.NewHierarchy(t)
+			root := hierarchy.Add(fakens.Config{
+				Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1", DNSSEC: true,
+			})
+			hierarchy.Add(fakens.Config{
+				Name: "ns.com.", Origin: "com.", Zone: test.com, Declared: "192.0.2.2", DNSSEC: true,
+				Denial: fakens.DenialNSEC,
+			})
+			hierarchy.Add(fakens.Config{
+				Name: "ns.com.", Origin: "hosted.com.", Zone: unsignedHostedZone, Declared: "192.0.2.2",
+				Behaviour: test.hosted,
+			})
+			cfg := resolver.Config{DNSSEC: true, Anchors: root.Anchors(t)}
+
+			tr, err := newResolver(t, harness{hierarchy, root}, cfg).Resolve(t.Context(), test.name, test.qtype)
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			answer := tr.Result()
+			if answer == nil || answer.Kind != test.kind {
+				t.Fatalf("got %+v, want %s: %s", answer, test.kind, format(steps(tr)))
+			}
+			if answer.DNSSEC == nil || answer.DNSSEC.State != test.state {
+				t.Fatalf("got %+v on the answer, want %s: %s", answer.DNSSEC, test.state, format(steps(tr)))
+			}
+		})
+	}
+}
+
+// TestDNSSECHiddenCutBelowParent covers a server holding a zone two cuts down
+// and not the one in between, the way the root servers serve
+// root-servers.net. and not net.: asked for the DS, the server can only refer
+// to the zone that has it.
+func TestDNSSECHiddenCutBelowParent(t *testing.T) {
+	t.Parallel()
+
+	const rootServing = `
+@                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                   IN NS   a.root-servers.net.
+a.root-servers.net. IN A    192.0.2.1
+net.                IN NS   ns.net.
+ns.net.             IN A    192.0.2.6
+`
+	const netZone = `
+@  IN SOA ns hostmaster 1 7200 3600 1209600 3600
+@  IN NS  ns
+ns IN A   192.0.2.6
+`
+	const serversZone = `
+@ IN SOA a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@ IN NS  a.root-servers.net.
+`
+
+	tests := map[string]struct {
+		net   string
+		state trace.DNSSECState
+	}{
+		"the zone in between delegates it insecurely": {
+			net: netZone + "servers IN NS a.root-servers.net.\n", state: trace.Insecure,
+		},
+		"the zone in between never delegated it": {
+			net: netZone, state: trace.Bogus,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			hierarchy := fakens.NewHierarchy(t)
+			root := hierarchy.Add(fakens.Config{
+				Name: "a.root-servers.net.", Origin: ".", Zone: rootServing, Declared: "192.0.2.1", DNSSEC: true,
+			})
+			hierarchy.Add(fakens.Config{
+				Name: "ns.net.", Origin: "net.", Zone: test.net, Declared: "192.0.2.6", DNSSEC: true,
+				Denial: fakens.DenialNSEC,
+			})
+			hierarchy.Add(fakens.Config{
+				Name: "a.root-servers.net.", Origin: "servers.net.", Zone: serversZone, Declared: "192.0.2.1",
+			})
+			cfg := resolver.Config{DNSSEC: true, Anchors: root.Anchors(t)}
+
+			tr, err := newResolver(t, harness{hierarchy, root}, cfg).Resolve(t.Context(), "servers.net", "SOA")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			answer := tr.Result()
+			if answer == nil || answer.Kind != trace.KindAnswer {
+				t.Fatalf("got %+v, want an answer: %s", answer, format(steps(tr)))
+			}
+			if answer.DNSSEC == nil || answer.DNSSEC.State != test.state {
+				t.Fatalf("got %+v on the answer, want %s: %s", answer.DNSSEC, test.state, format(steps(tr)))
+			}
+
+			// The root refers the DS query to net., and net. is entered on the
+			// way, from its own server.
+			var entered *trace.Step
+			for step := range tr.Steps() {
+				if step.Kind == trace.KindReferral && step.Delegation.Zone == "net." && slices.Contains(step.Notes, "DS of servers.net.") {
+					entered = step
+				}
+			}
+			if entered == nil || entered.DNSSEC == nil || entered.DNSSEC.State != trace.Secure {
+				t.Errorf("got %+v, want the referral to net. secure: %s", entered, format(steps(tr)))
+			}
+		})
+	}
+}
+
+// TestDNSSECHiddenCutTwoDeep covers a server holding three zones in a row, the
+// way t.au. serves au., edu.au. and nsw.edu.au. Its referral is signed two
+// cuts below the zone the walk holds, and the DS of the first is signed by
+// the zone in between, which has to be crossed before it.
+func TestDNSSECHiddenCutTwoDeep(t *testing.T) {
+	t.Parallel()
+
+	const midZone = `
+@    IN SOA ns.com. hostmaster 1 7200 3600 1209600 3600
+@    IN NS  ns.com.
+leaf IN NS  ns.com.
+`
+	const leafZone = `
+@        IN SOA ns.com. hostmaster 1 7200 3600 1209600 3600
+@        IN NS  ns.com.
+tip      IN NS  ns.tip
+ns.tip   IN A   192.0.2.5
+`
+	const tipZone = `
+@   IN SOA ns hostmaster 1 7200 3600 1209600 3600
+@   IN NS  ns
+ns  IN A   192.0.2.5
+www IN A   192.0.2.13
+`
+
+	tests := map[string]struct {
+		tip   fakens.Behaviour
+		state trace.DNSSECState
+	}{
+		"the delegation is signed":   {state: trace.Secure},
+		"the delegation is insecure": {tip: fakens.Behaviour{NoDS: true}, state: trace.Insecure},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := signed(t, fakens.Behaviour{}, fakens.Behaviour{}, fakens.Behaviour{})
+			h.hierarchy.Add(fakens.Config{
+				Name: "ns.com.", Origin: "mid.com.", Zone: midZone, Declared: "192.0.2.2", DNSSEC: true,
+			})
+			h.hierarchy.Add(fakens.Config{
+				Name: "ns.com.", Origin: "leaf.mid.com.", Zone: leafZone, Declared: "192.0.2.2", DNSSEC: true,
+			})
+			h.hierarchy.Add(fakens.Config{
+				Name: "ns.tip.leaf.mid.com.", Origin: "tip.leaf.mid.com.", Zone: tipZone, Declared: "192.0.2.5",
+				DNSSEC: true, Behaviour: test.tip,
+			})
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.tip.leaf.mid.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			answer := tr.Result()
+			if answer == nil || answer.Kind != trace.KindAnswer {
+				t.Fatalf("got %+v, want an answer: %s", answer, format(steps(tr)))
+			}
+			if answer.DNSSEC == nil || answer.DNSSEC.State != test.state {
+				t.Fatalf("got %+v on the answer, want %s: %s", answer.DNSSEC, test.state, format(steps(tr)))
+			}
+
+			// Both hidden cuts are crossed, and hold.
+			for _, zone := range []string{"mid.com.", "leaf.mid.com."} {
+				var ds *trace.Step
+				for step := range tr.Steps() {
+					if slices.Contains(step.Notes, "DS of "+zone) {
+						ds = step
+					}
+				}
+				if ds == nil || ds.DNSSEC == nil || ds.DNSSEC.State != trace.Secure {
+					t.Errorf("got %+v for the DS of %s, want it asked and secure: %s", ds, zone, format(steps(tr)))
+				}
+			}
+		})
+	}
+}
+
 // TestDNSSECBroken covers one broken link at a time, each of which has its own
 // verdict: a missing DS is not a failure, a key set nobody handed over is not a
 // forgery, and a zone that says it has no keys for its DS, or a signature that

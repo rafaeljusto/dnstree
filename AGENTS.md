@@ -110,7 +110,12 @@ Each of these has been a bug, or would be a silent regression.
   refers, with the child's keys. The chain crosses into the signer's zone first,
   with its DS asked of the same server and proved like any other, and only for a
   signer between the answering zone and the name. Checked against the zone the
-  walk was referred to, every delegation below `net.br.` came out bogus.
+  walk was referred to, every delegation below `net.br.` came out bogus. An
+  unsigned answer names its zone by its SOA or apex NS set instead, and is
+  believed only as far as the parent's signed denial of a DS. A DS signed
+  from further down crosses that zone first, and a DS query referred elsewhere
+  is asked of the zone it was referred to: `root-servers.net.` is served by
+  the root, `nsw.edu.au.` by the servers of `au.`.
 - **What a zone does not say is checked like what it does.** An insecure
   delegation, an NXDOMAIN, a NODATA and a wildcard all rest on a proof the zone
   signed, never on an absence: an absence is what anyone able to drop records

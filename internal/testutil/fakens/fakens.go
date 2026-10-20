@@ -87,6 +87,11 @@ type Behaviour struct {
 	// either. It is what breaks a resolver that minimises its questions.
 	DenyEmptyNonTerminal bool
 
+	// ApexNS puts the zone's own NS set in the authority section of an answer,
+	// the way BIND does. It is what names the zone an unsigned answer came
+	// from.
+	ApexNS bool
+
 	// Extended attaches an RFC 8914 extended error to every answer, which is
 	// how a server says why it answered as it did. Paired with Refuse it is a
 	// filtering resolver; on its own it is a server explaining itself.
@@ -744,6 +749,9 @@ func (s *Server) respond(reply *dns.Msg, name string, qtype uint16) {
 	switch {
 	case len(answer) > 0:
 		reply.Answer = answer
+		if s.behaviour.ApexNS {
+			reply.Ns = s.apexNS()
+		}
 	case len(owned) > 0 || s.hasChildren(name) && !s.behaviour.DenyEmptyNonTerminal:
 		// NODATA, including the empty non-terminal: the name is there and the
 		// type is not, and a signed zone says so rather than only implying it.
@@ -849,6 +857,16 @@ func (s *Server) soa() []dns.RR {
 		}
 	}
 	return nil
+}
+
+func (s *Server) apexNS() []dns.RR {
+	var ns []dns.RR
+	for _, rr := range s.records() {
+		if dns.RRToType(rr) == dns.TypeNS && dns.EqualName(rr.Header().Name, s.origin) {
+			ns = append(ns, rr)
+		}
+	}
+	return ns
 }
 
 // hasChildren reports whether name is an empty non-terminal: it owns no record

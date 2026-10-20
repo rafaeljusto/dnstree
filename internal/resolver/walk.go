@@ -271,7 +271,11 @@ func (r *run) verify(ctx context.Context, chain *dnssec.Chain, hop *hop, qname s
 	if chain == nil || hop.resp == nil {
 		return nil
 	}
-	crossed := r.crossCut(ctx, chain, hop, signerOf(hop.resp, qname), qname)
+	cut := signerOf(hop.resp, qname)
+	if cut == "" && hop.resp.Authoritative {
+		cut = apexOf(hop.resp, qname)
+	}
+	crossed := r.crossCut(ctx, chain, hop, cut, qname)
 	// The authority section comes too: an answer with no records is denied
 	// there rather than answered, and the denial is what makes it checkable.
 	hop.step.DNSSEC = chain.Verify(hop.resp.Answer, hop.resp.Ns, hop.resp.Rcode, qname, qtype)
@@ -326,16 +330,26 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, cut, 
 	if !dnsutil.IsBelow(cut, qname) {
 		return nil
 	}
+	ds := r.askDS(ctx, chain, hop.step, zone, hop.step.Server, cut)
+	if ds == nil {
+		return nil
+	}
+	return r.settleCut(ctx, chain, hop.step, zone, ds, cut)
+}
+
+// askDS asks server, which serves zone, for the DS of cut, and hangs the query
+// under the step it explains.
+func (r *run) askDS(ctx context.Context, chain *dnssec.Chain, under *trace.Step, zone string, server trace.Server, cut string) *hop {
 	if err := r.counters.query(); err != nil {
 		chain.Unchecked(cut, "the budget ran out before the DS of "+cut+" could be fetched")
 		return nil
 	}
 
-	ds := r.query(ctx, zone, hop.step.Server, cut, dns.TypeDS)
+	ds := r.query(ctx, zone, server, cut, dns.TypeDS)
 	ds.step.Aside = true
 	ds.step.Records = nil // the verdict is what the DS is worth reading for
 	ds.step.Notes = append(ds.step.Notes, "DS of "+cut)
-	r.attach(hop.step, ds.step)
+	r.attach(under, ds.step)
 
 	// A DS that never arrived is not a DS the parent does not publish, so the
 	// cut is left unchecked rather than called insecure.
@@ -343,14 +357,90 @@ func (r *run) crossCut(ctx context.Context, chain *dnssec.Chain, hop *hop, cut, 
 		ds.step.DNSSEC = chain.Unchecked(cut, "the DS of "+cut+" could not be fetched")
 		return nil
 	}
+	return ds
+}
+
+// settleCut enters cut, from zone, with what was said about its DS. reached is
+// the step whose server serves cut, which its keys are asked of.
+//
+// The DS can sit further down than zone. A server that also serves a zone in
+// between answers from it, signed with its keys, and that zone is crossed
+// first; one that does not serve it refers to it, and its servers are asked.
+// Each turn stands strictly closer to cut, so the descent ends.
+func (r *run) settleCut(ctx context.Context, chain *dnssec.Chain, reached *trace.Step, zone string, ds *hop, cut string) *zoneCut {
+	// A DS that is not there is denied in the authority section rather than
+	// answered, so both are handed over.
+	authority := append(append([]dns.RR{}, ds.resp.Answer...), ds.resp.Ns...)
+
+	if delegation := ds.step.Delegation; ds.step.Kind == trace.KindReferral && between(zone, delegation.Zone, cut) {
+		servers := glueServers(delegation)
+		if len(servers) == 0 {
+			ds.step.DNSSEC = chain.Unchecked(delegation.Zone, "the referral to "+delegation.Zone+" came with no address to ask for the DS of "+cut)
+			return nil
+		}
+		next := r.askDS(ctx, chain, ds.step, delegation.Zone, servers[0], cut)
+		if next == nil {
+			return nil
+		}
+		ds.step.DNSSEC = r.enterZone(ctx, chain, delegation.Zone, next.step, authority)
+		return r.settleCut(ctx, chain, reached, delegation.Zone, next, cut)
+	}
+	if signer := dsSigner(ds.resp); between(zone, signer, cut) {
+		if hosted := r.askDS(ctx, chain, ds.step, zone, ds.step.Server, signer); hosted != nil {
+			r.settleCut(ctx, chain, ds.step, zone, hosted, signer)
+		}
+	}
 
 	// The verdict belongs on the step that published the DS, the way a
-	// referral's does: it is the same zone cut, crossed without one. A DS that
-	// is not there is denied in the authority section rather than answered, so
-	// both are handed over.
-	authority := append(append([]dns.RR{}, ds.resp.Answer...), ds.resp.Ns...)
-	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, hop.step, authority)
+	// referral's does: it is the same zone cut, crossed without one.
+	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, reached, authority)
 	return &zoneCut{zone: cut, step: ds.step, authority: authority}
+}
+
+// between reports whether name is strictly below zone and strictly above cut.
+func between(zone, name, cut string) bool {
+	return name != "" && !dns.EqualName(name, zone) && !dns.EqualName(name, cut) &&
+		dnsutil.IsBelow(zone, name) && dnsutil.IsBelow(name, cut)
+}
+
+// dsSigner is the zone that answered for a DS, as its signatures name it: over
+// the DS itself, or over the denial of one.
+func dsSigner(resp *dns.Msg) string {
+	for _, rr := range slices.Concat(resp.Answer, resp.Ns) {
+		if signature, ok := rr.(*dns.RRSIG); ok {
+			switch signature.TypeCovered {
+			case dns.TypeDS, dns.TypeNSEC, dns.TypeNSEC3, dns.TypeSOA:
+				return dnsutil.Fqdn(signature.SignerName)
+			}
+		}
+	}
+	return ""
+}
+
+// apexOf is the zone an unsigned answer says it comes from, for want of a
+// signature to name it: the owner of the SOA, or of the NS set in authority,
+// that a server puts beside what it serves. It is only the server's word, and
+// crossCut believes it no further than the parent's signed denial of a DS.
+func apexOf(resp *dns.Msg, qname string) string {
+	apex := ""
+	claim := func(rr dns.RR) {
+		owner := rr.Header().Name
+		if dnsutil.IsBelow(owner, qname) && (apex == "" || dnsutil.Labels(owner) > dnsutil.Labels(apex)) {
+			apex = owner
+		}
+	}
+	// An NS set in the answer is what was asked for, not a claim of the apex.
+	for _, rr := range resp.Answer {
+		if dns.RRToType(rr) == dns.TypeSOA {
+			claim(rr)
+		}
+	}
+	for _, rr := range resp.Ns {
+		if rrtype := dns.RRToType(rr); rrtype == dns.TypeSOA || rrtype == dns.TypeNS {
+			claim(rr)
+		}
+	}
+	return apex
 }
 
 // signerOf is the zone that signed a response, as its signatures name it. It is
