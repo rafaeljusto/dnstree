@@ -166,7 +166,8 @@ stall a resolution.
 ## Severity
 
 - **Critical**: attacker-controlled validation bypass (`secure` for forged
-  data, or an exit code other than 3 for a broken chain), or code execution or
+  data, or an exit code other than 3 for a broken chain the run itself
+  judged), or code execution or
   file write outside the history directory and the `--pcap` file.
 - **High**: a crafted response crashes the process or hangs it past the budget
   and timeouts. Terminal or HTML injection that can forge output.
