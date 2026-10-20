@@ -20,6 +20,9 @@ for years:
 | `one.one.one.one@1.1.1.1` | speaks DoT and DoH, answers DDR |
 | `münchen.de` | a name outside ASCII |
 | `freebsd.org` | signed, two MX hosts: one with a TLSA set, one with a signed proof of none |
+| `internetstiftelsen.se` | keeps a spare KSK's DS at `se.` and a spare ZSK published, so `--rollover` has changes to read |
+| `switch.ch` | `ch.` publishes DSYNC for it |
+| `isc.org` | nameservers inside the zone, so its referral carries glue |
 
 When a target drifts, replace it and update this table. Don't loosen the
 expectation.
@@ -112,6 +115,13 @@ These need no network: every one exits before a query goes out.
 | check-ds | `$D $B --dnssec --check-ds cloudflare.com` | exit 0, `cds matches the ds` |
 | bogus-expect | `$D $B --dnssec --expect 1.2.3.4 dnssec-failed.org` | exit 3, not 4: the broken chain wins |
 | report-no-agent | `$D $B --dnssec --report dnssec-failed.org` | exit 3, and `report: not sent: dnssec-failed.org. names no agent to report to` on stderr: the zone names none |
+| rollover-alone | `$D --rollover example.com` | exit 1, `--rollover reads the keys the chain of trust records, and only --dnssec follows it` |
+| rollover | `$D $B --rollover --dnssec internetstiftelsen.se SOA` | exit 0, `rollover: the keys of internetstiftelsen.se., and the DS se. holds for them`, a line per key, both readings of each change (`if N is new, by …`) with a `wait:`, then the `--check-ds` and `--diff` hints |
+| rollover-none | `$D $B --rollover --dnssec --check-ds cloudflare.com` | exit 0, `rollover: cloudflare.com. is not rolling its keys` |
+| rollover-insecure | `$D $B --rollover --dnssec google.com` | exit 0, `rollover: nothing to read: the parent holds no DS for google.com., so there is no key to roll` |
+| rollover-diff | the `rollover` run twice with `--diff` | the second says `first seen <time>` on each key and gives each wait as the time it runs out; one file in the cache |
+| rollover-formats | `--format json` of `rollover`, then `--from` it with and without `--rollover`, then `--format openmetrics` | `.rollover` in the JSON; the same lines drawn back with the flag, none without; exit 1 for openmetrics, `does not draw what --rollover works out` |
+| rollover-file | `rollover` in the file of defaults, then `$D $B example.com` | exit 0 and no `rollover:` line: heeded only by runs that check signatures |
 
 ## transport
 
@@ -141,7 +151,9 @@ cached, not a bug. Run it again.
 
 | id | run | expect |
 | --- | --- | --- |
-| check-ns | `$D $B --check-ns example.com` | exit 0, a `(parent/child NS check)` hop with a `(CSYNC of example.com.)` hop under it, and no `csync:` line, since example.com. publishes none |
+| check-ns | `$D $B --check-ns example.com` | exit 0, a `(parent/child NS check)` hop with a `(CSYNC of example.com.)` hop under it, and no `csync:` line, since example.com. publishes none. Two `(DSYNC of … for dsync)` lookups at `com.`, and `dsync: com. names nowhere to send a notice about example.com., so a change waits for its next scan` |
+| dsync | `$D $B --check-ns --dnssec switch.ch` | exit 0, `dsync: ch. takes notices about switch.ch. at switch._dsync.ch.  [secure …]`, then a `CDS NOTIFY nudge.switch.ch. port 5359` line with its addresses |
+| glue | `$D $B --check-ns isc.org` | exit 0, a `(glue check: A of …)` and `AAAA` hop per nameserver inside the zone, a `(glue check over tcp)` referral, and no warning: org. leaves none out |
 | serial | `$D $B --serial example.com` | exit 0, a `(SOA of example.com.: N)` per nameserver |
 | serial-glueless | `$D $B --serial zonetransfer.me SOA` | exit 0, a serial from both `nsztm1` and `nsztm2` |
 | try-ns | `$D $B --try-ns example.com=hera.ns.cloudflare.com@108.162.192.162 example.com` | exit 0, the referral marked `(replaced by --try-ns)`, the summary `as though delegated to hera.ns.cloudflare.com.` |
