@@ -51,7 +51,7 @@ one after another, each from the root servers down.
   --serial                ask every nameserver of the zone which copy it serves
   --check-axfr            ask each nameserver of the zone to hand over all of it
   --check-recursion       ask each nameserver of the zone to resolve another name
-  --check-edns            ask each nameserver of the zone the RFC 8906 edns tests
+  --check-edns            ask each nameserver of the zone the RFC 8906 tests
   --caa                   say which certificate authorities may issue for NAME
   --spf                   draw NAME's SPF policy and count the lookups it costs
   --mail                  check NAME's MX hosts for DANE, and its mail policies
@@ -388,7 +388,12 @@ BADVERS and ignore the option and the flag, and one that drops them instead, or
 a firewall in front of it that does, is unreachable for resolvers that stopped
 working around it on DNS Flag Day 2019. Only a server that passed the first is
 asked the rest: one that fails EDNS0, or does not serve the zone, would fail
-them all for the same reason. It costs up to four queries per nameserver address.
+them all for the same reason. One that passed it over udp is asked it again
+over tcp, which every server has to answer (RFC 7766): an answer too big for one
+packet is fetched over tcp, so a server closed to it fails the day the zone
+grows. A server that fails it is asked over udp once more, to tell a server
+closed to tcp from one gone quiet, and what tcp reaches is only ever seen from
+here. It costs up to six queries per nameserver address.
 
 --caa says which certificate authorities may issue a certificate for NAME, and
 which CAA set decides it (RFC 8659). An authority looks at the name, then at
@@ -831,7 +836,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Serial, "serial", false, "ask every nameserver of the zone which copy it serves")
 	flags.BoolVar(&cfg.CheckAXFR, "check-axfr", false, "ask every nameserver of the zone for all of it")
 	flags.BoolVar(&cfg.CheckRecursion, "check-recursion", false, "ask every nameserver of the zone to look up somebody else's name")
-	flags.BoolVar(&cfg.CheckEDNS, "check-edns", false, "ask every nameserver of the zone the RFC 8906 edns tests")
+	flags.BoolVar(&cfg.CheckEDNS, "check-edns", false, "ask every nameserver of the zone the RFC 8906 tests")
 	flags.BoolVar(&cfg.CAA, "caa", false, "say which certificate authorities may issue for the name")
 	flags.BoolVar(&cfg.SPF, "spf", false, "draw the name's SPF policy and count the lookups it costs")
 	flags.BoolVar(&cfg.Mail, "mail", false, "check the name's MX hosts for DANE, and its mail policies")

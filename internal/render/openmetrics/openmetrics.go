@@ -310,7 +310,7 @@ func ednsTests(m *metrics, tr *trace.Trace) {
 	if len(found) == 0 {
 		return
 	}
-	m.family("dnstree_edns_ok", "", "whether a nameserver of the zone answered an RFC 8906 test as EDNS says it must: EDNS0 alone (edns), version 1 (version), an unknown option (option) or an unknown flag (flag)")
+	m.family("dnstree_edns_ok", "", "whether a nameserver of the zone answered an RFC 8906 test as EDNS says it must: EDNS0 alone (edns), version 1 (version), an unknown option (option), an unknown flag (flag) or EDNS0 alone over TCP (tcp)")
 	for _, step := range found {
 		m.sample("dnstree_edns_ok", flag(step.EDNS.State == trace.EDNSOK),
 			label{"test", string(step.EDNS.Kind)},

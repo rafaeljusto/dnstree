@@ -138,7 +138,8 @@ type Config struct {
 	// CheckEDNS asks every nameserver of the zone the walk ends in for the
 	// zone's SOA in the shapes RFC 8906 tests: EDNS0 alone, then an EDNS
 	// version, an option and a flag nobody has defined yet, which it has to
-	// answer politely. It costs up to four queries per nameserver address.
+	// answer politely, and EDNS0 alone again over TCP. It costs up to six
+	// queries per nameserver address.
 	CheckEDNS bool
 
 	// NSID asks every server which of itself is answering (RFC 5001). An

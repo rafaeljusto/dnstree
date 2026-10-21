@@ -1263,7 +1263,32 @@ func TestEDNSTests(t *testing.T) {
 				test("ns1.test.", trace.EDNSPlain, trace.EDNSOK), test("ns1.test.", trace.EDNSVersion, trace.EDNSOK),
 				test("ns1.test.", trace.EDNSOption, trace.EDNSOK), test("ns1.test.", trace.EDNSFlag, trace.EDNSOK),
 			},
-			want: []string{"every nameserver of test. that was asked passed the RFC 8906 edns tests"},
+			want: []string{"every nameserver of test. that was asked passed the RFC 8906 tests"},
+		},
+		"a server that answers over udp but not over tcp": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSTCP, trace.EDNSOK),
+				test("ns2.test.", trace.EDNSTCP, trace.EDNSBroken),
+			},
+			want:   []string{"ns2.test. (192.0.2.5) answered over udp but not over tcp, from here", "allow tcp on port 53 to them (RFC 7766, RFC 9210)"},
+			unsaid: []string{"ns1.test.", "passed the", "fix the server, or the firewall"},
+		},
+		"a server silent over tcp, which has not stopped answering": {
+			tests: []*trace.Step{func() *trace.Step {
+				step := test("ns1.test.", trace.EDNSTCP, trace.EDNSBroken)
+				step.Kind, step.EDNS.Fault = trace.KindTimeout, trace.EDNSSilent
+				return step
+			}()},
+			want:   []string{"answered over udp but not over tcp"},
+			unsaid: []string{"did not answer in time"},
+		},
+		"a server silent over tcp that went silent over udp too": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSPlain, trace.EDNSOK),
+				test("ns1.test.", trace.EDNSTCP, trace.EDNSUnchecked),
+			},
+			want:   []string{"ns1.test. (192.0.2.5) did not answer over tcp, nor over udp when asked again"},
+			unsaid: []string{"passed the", "could not be asked the tcp test"},
 		},
 		"a server the budget left with the baseline alone": {
 			tests:  []*trace.Step{test("ns1.test.", trace.EDNSPlain, trace.EDNSOK)},

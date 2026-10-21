@@ -126,6 +126,12 @@ type Behaviour struct {
 	// answering it, the way Route 53 refuses a transfer.
 	ResetTransfer bool
 
+	// DropTCP never answers over TCP, and ResetTCP resets the connection a
+	// query arrives on: a firewall that lets DNS through over UDP alone, and
+	// one that refuses it over TCP, the faults RFC 9210 is written against.
+	DropTCP  bool
+	ResetTCP bool
+
 	// OpenRecursion answers a question outside the zone that asks for
 	// recursion, the way an open resolver does: the root's NS set, with RA
 	// and without AA. Without it such a question is refused.
@@ -489,7 +495,10 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		}
 	}
 
-	if s.behaviour.ResetTransfer && qtype == dns.TypeAXFR {
+	if s.behaviour.DropTCP && dnsutil.Network(w) == "tcp" {
+		return
+	}
+	if s.behaviour.ResetTCP || s.behaviour.ResetTransfer && qtype == dns.TypeAXFR {
 		if conn, ok := w.Conn().(*net.TCPConn); ok {
 			w.Hijack()
 			_ = conn.SetLinger(0) // close with RST

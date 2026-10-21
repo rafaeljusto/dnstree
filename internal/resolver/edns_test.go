@@ -2,6 +2,7 @@ package resolver_test
 
 import (
 	"maps"
+	"slices"
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/testutil/fakens"
@@ -28,7 +29,7 @@ func TestEDNS(t *testing.T) {
 	}
 	ok := verdict{trace.EDNSOK, ""}
 	passes := map[trace.EDNSKind]verdict{
-		trace.EDNSPlain: ok, trace.EDNSVersion: ok, trace.EDNSOption: ok, trace.EDNSFlag: ok,
+		trace.EDNSPlain: ok, trace.EDNSVersion: ok, trace.EDNSOption: ok, trace.EDNSFlag: ok, trace.EDNSTCP: ok,
 	}
 	// but is the second server passing every test except the one named.
 	but := func(kind trace.EDNSKind, got verdict) map[trace.EDNSKind]verdict {
@@ -65,6 +66,14 @@ func TestEDNS(t *testing.T) {
 			behaviour: fakens.Behaviour{EchoEDNSFlags: true},
 			want:      but(trace.EDNSFlag, verdict{trace.EDNSBroken, trace.EDNSEchoed}),
 		},
+		"a firewall that drops dns over tcp": {
+			behaviour: fakens.Behaviour{DropTCP: true},
+			want:      but(trace.EDNSTCP, verdict{trace.EDNSBroken, trace.EDNSSilent}),
+		},
+		"a firewall that resets dns over tcp": {
+			behaviour: fakens.Behaviour{ResetTCP: true},
+			want:      but(trace.EDNSTCP, verdict{trace.EDNSBroken, trace.EDNSClosed}),
+		},
 		"a server that answers FORMERR to EDNS0 itself": {
 			behaviour: fakens.Behaviour{FormErrEDNS: true},
 			want:      map[trace.EDNSKind]verdict{trace.EDNSPlain: {trace.EDNSBroken, trace.EDNSRcode}},
@@ -95,8 +104,8 @@ func TestEDNS(t *testing.T) {
 			}
 
 			got := ednsTests(tr)
-			if len(got) != 4+len(tt.want) {
-				t.Fatalf("got %d tests, want four of the first server and %d of the second: %s", len(got), len(tt.want), format(steps(tr)))
+			if len(got) != len(passes)+len(tt.want) {
+				t.Fatalf("got %d tests, want %d of the first server and %d of the second: %s", len(got), len(passes), len(tt.want), format(steps(tr)))
 			}
 			for server, want := range map[string]map[trace.EDNSKind]verdict{"ns1.test.": passes, "ns2.test.": tt.want} {
 				for kind, want := range want {
@@ -114,6 +123,12 @@ func TestEDNS(t *testing.T) {
 			}
 			if step := got["ns1.test. version"]; step.Rcode != "BADVERS" {
 				t.Errorf("got %q, want the version test answered BADVERS", step.Rcode)
+			}
+			if step := got["ns1.test. tcp"]; step.Proto != "tcp" {
+				t.Errorf("got the tcp test over %s, want it over tcp", step.Proto)
+			}
+			if step := got["ns2.test. tcp"]; step != nil && step.EDNS.State == trace.EDNSBroken && !slices.Contains(step.Notes, "answered over udp again") {
+				t.Errorf("got notes %q, want a failed tcp test confirmed over udp", step.Notes)
 			}
 		})
 	}
@@ -138,7 +153,29 @@ func TestEDNSTruncated(t *testing.T) {
 	}
 }
 
-// TestEDNSNotByDefault covers the cost: four queries a nameserver are asked
+// TestEDNSOverTCP covers a walk already carried over TCP, whose baseline has
+// asked everything the TCP test would.
+func TestEDNSOverTCP(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{})
+	cfg.Transport = cfg.TCP
+	cfg.CheckEDNS = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	got := ednsTests(tr)
+	if step := got["ns2.test. tcp"]; step != nil {
+		t.Errorf("got %+v, want no tcp test of a walk over tcp", step)
+	}
+	if step := got["ns2.test. flag"]; step == nil || step.EDNS.State != trace.EDNSOK {
+		t.Errorf("got %+v, want the rest of the tests asked", step)
+	}
+}
+
+// TestEDNSNotByDefault covers the cost: up to five queries a nameserver are asked
 // only when they are asked for.
 func TestEDNSNotByDefault(t *testing.T) {
 	t.Parallel()
@@ -190,17 +227,39 @@ func TestEDNSSpendsTheBudget(t *testing.T) {
 
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.CheckEDNS = true
-	cfg.Budget.MaxQueries = 7 // the walk takes two, the baselines two more
+	cfg.Budget.MaxQueries = 9 // the walk takes two, the baselines two more
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	got := ednsTests(tr)
-	if len(got) != 5 || got["ns2.test. edns"] == nil || got["ns1.test. flag"] == nil {
+	if len(got) != 6 || got["ns2.test. edns"] == nil || got["ns1.test. tcp"] == nil {
 		t.Errorf("got %d tests, want both baselines and the rest of one server: %s", len(got), format(steps(tr)))
 	}
 	if !warned(tr, "the budget ran out before every nameserver of test. could be checked for how it handles edns; raise --max-queries") {
+		t.Errorf("got %q, want the budget said", tr.Warnings)
+	}
+}
+
+// TestEDNSTCPUnconfirmed covers a failed tcp test the budget left no room to
+// confirm over udp: it stands, and says it was not confirmed.
+func TestEDNSTCPUnconfirmed(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{DropTCP: true})
+	cfg.CheckEDNS = true
+	cfg.Budget.MaxQueries = 12 // the walk, both baselines and both servers' rest
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	step := ednsTests(tr)["ns2.test. tcp"]
+	if step == nil || step.EDNS.State != trace.EDNSBroken || !slices.Contains(step.Notes, "the budget left it unasked over udp again") {
+		t.Fatalf("got %+v, want the tcp test broken and said to be unconfirmed: %s", step, format(steps(tr)))
+	}
+	if !warned(tr, "the budget ran out before every nameserver of test. could be checked") {
 		t.Errorf("got %q, want the budget said", tr.Warnings)
 	}
 }

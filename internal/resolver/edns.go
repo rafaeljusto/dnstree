@@ -21,9 +21,11 @@ const (
 // checkEDNS puts the questions of RFC 8906 to every nameserver of the zone the
 // walk ended in. Every server is asked the baseline first, and only one that
 // passed it is asked the rest: a server that cannot answer EDNS0, or does not
-// serve the zone, would fail them all for the same reason. The servers are
-// asked side by side and join the trace afterwards, from the goroutine doing
-// the walking.
+// serve the zone, would fail them all for the same reason. One that passed it
+// over UDP is asked it again over TCP, and asked over UDP once more if TCP
+// fails, so that a server gone quiet is not taken for one closed to TCP. The
+// servers are asked side by side and join the trace afterwards, from the
+// goroutine doing the walking.
 func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, servers []trace.Server) {
 	if !r.cfg.CheckEDNS {
 		return
@@ -47,23 +49,29 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 		steps[i] = []*trace.Step{r.askEDNS(ctx, zone, server, trace.EDNSPlain)}
 	})
 
-	// The rest cost three queries a server, spent whole or not at all.
+	// The rest are spent whole or not at all: three queries a server, and a
+	// fourth where TCP tells something the baseline did not.
+	rest := make([][]trace.EDNSKind, len(steps))
 	var passed []int
 	for i, hops := range steps {
 		if budget != nil || hops[0].EDNS.State != trace.EDNSOK {
 			continue
 		}
-		for range 3 {
+		kinds := []trace.EDNSKind{trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag}
+		if r.cfg.TCP != nil && hops[0].Proto == "udp" {
+			kinds = append(kinds, trace.EDNSTCP)
+		}
+		for range kinds {
 			if budget = r.counters.query(); budget != nil {
 				break
 			}
 		}
 		if budget == nil {
-			passed = append(passed, i)
+			passed, rest[i] = append(passed, i), kinds
 		}
 	}
 	askEach(passed, func(_ int, i int) {
-		for _, kind := range []trace.EDNSKind{trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag} {
+		for _, kind := range rest[i] {
 			step := r.askEDNS(ctx, zone, asked[i], kind)
 			if step.Kind == trace.KindTimeout {
 				// The baseline got through, so silence here is the answer.
@@ -71,6 +79,31 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 			}
 			steps[i] = append(steps[i], step)
 		}
+	})
+
+	var failing []*trace.Step
+	for _, hops := range steps {
+		last := hops[len(hops)-1]
+		if last.EDNS.Kind != trace.EDNSTCP || last.EDNS.State != trace.EDNSBroken {
+			continue
+		}
+		if budget == nil {
+			budget = r.counters.query()
+		}
+		if budget != nil {
+			last.Notes = append(last.Notes, "the budget left it unasked over udp again")
+			continue
+		}
+		failing = append(failing, last)
+	}
+	askEach(failing, func(_ int, step *trace.Step) {
+		again := r.askEDNS(ctx, zone, step.Server, trace.EDNSPlain)
+		if again.EDNS.State == trace.EDNSOK {
+			step.Notes = append(step.Notes, "answered over udp again")
+			return
+		}
+		step.EDNS.State, step.EDNS.Fault = trace.EDNSUnchecked, ""
+		step.Notes = append(step.Notes, "did not answer over udp again either")
 	})
 
 	for _, hops := range steps {
@@ -85,7 +118,8 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 
 // askEDNS asks one server for the zone's SOA in one of the shapes checkEDNS
 // tests, and reads the reply against RFC 8906. It never asks again without
-// EDNS0, which would hide the very thing being tested.
+// EDNS0, which would hide the very thing being tested, nor the TCP test over
+// anything but TCP.
 func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kind trace.EDNSKind) *trace.Step {
 	carrier := r.cfg.Transport
 	port := server.Port
@@ -115,9 +149,14 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 		}
 	}
 
+	if kind == trace.EDNSTCP {
+		carrier = r.cfg.TCP
+		step.Proto, step.Server.Port = carrier.Proto(), cmp.Or(port, carrier.Port())
+	}
+
 	udpSize := r.cfg.UDPSize
 	resp, err := r.exchange(ctx, step, carrier, zone, dns.TypeSOA, udpSize, port, shape)
-	if err != nil && r.cfg.Fallback != nil {
+	if err != nil && r.cfg.Fallback != nil && kind != trace.EDNSTCP {
 		if retry, fallbackErr := r.exchange(ctx, step, r.cfg.Fallback, zone, dns.TypeSOA, udpSize, port, shape); fallbackErr == nil {
 			step.Notes = append(step.Notes, carrier.Proto()+" did not get through, asked over "+r.cfg.Fallback.Proto())
 			carrier = r.cfg.Fallback
@@ -136,6 +175,9 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 	switch {
 	case err != nil:
 		failed(ctx, step, err)
+		if kind == trace.EDNSTCP && step.Kind == trace.KindError && !outOfTime(ctx) {
+			step.EDNS.State, step.EDNS.Fault = trace.EDNSBroken, trace.EDNSClosed
+		}
 		return step
 	case resp.Truncated:
 		// What a truncated reply leaves out is no fault of the server's.

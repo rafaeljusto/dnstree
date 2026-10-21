@@ -10,7 +10,7 @@ const (
 	AreaConsistency  Area = "consistency"  // every nameserver serves the same copy and the same answer
 	AreaDNSSEC       Area = "dnssec"       // the chain of trust, and what the zone asks its parent
 	AreaServers      Area = "servers"      // every nameserver answers, with authority and room to spare
-	AreaEDNS         Area = "edns"         // EDNS and DNS cookies are handled as they should be
+	AreaEDNS         Area = "edns"         // EDNS, TCP and DNS cookies are handled as they should be
 	AreaStrangers    Area = "strangers"    // no zone transfer or recursion for strangers
 	AreaCAA          Area = "caa"          // who may issue certificates for the name
 	AreaMail         Area = "mail"         // mail to and as the name

@@ -830,7 +830,7 @@ func serversOf(tr *trace.Trace, zone string) []Finding {
 	for step := range tr.Steps() {
 		// A probe that went unanswered is said by the probe, and a server
 		// that dropped an odd EDNS query has not stopped answering.
-		if zone != "" && (!strings.EqualFold(step.Zone, zone) || step.EDNS != nil || step.Probe != nil) {
+		if step.EDNS != nil || step.Probe != nil || zone != "" && !strings.EqualFold(step.Zone, zone) {
 			continue
 		}
 		switch step.Kind {
@@ -972,7 +972,7 @@ func exposure(tr *trace.Trace) []Finding {
 // could not be asked, one for the servers the budget left with the baseline
 // alone, and one to say so when every server was asked everything and passed.
 func ednsTests(tr *trace.Trace) []Finding {
-	kinds := []trace.EDNSKind{trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag}
+	kinds := []trace.EDNSKind{trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag, trace.EDNSTCP}
 	type held struct {
 		addresses []string
 		states    map[string]map[trace.EDNSKind]trace.EDNSState
@@ -1001,10 +1001,12 @@ func ednsTests(tr *trace.Trace) []Finding {
 
 	const fix = "; fix the server, or the firewall in front of it (RFC 8906)"
 	broken := map[trace.EDNSKind]string{
-		trace.EDNSPlain:   "did not answer EDNS0 as RFC 6891 says, which every validating resolver sends",
-		trace.EDNSVersion: "did not answer EDNS version 1 with BADVERS and nothing else, which leaves a resolver that tries a newer version no way back",
-		trace.EDNSOption:  "did not ignore an EDNS option nobody has defined, which breaks resolvers the day they send a new one",
-		trace.EDNSFlag:    "did not ignore an EDNS flag nobody has defined, which breaks resolvers the day they set a new one",
+		trace.EDNSPlain:   "did not answer EDNS0 as RFC 6891 says, which every validating resolver sends" + fix,
+		trace.EDNSVersion: "did not answer EDNS version 1 with BADVERS and nothing else, which leaves a resolver that tries a newer version no way back" + fix,
+		trace.EDNSOption:  "did not ignore an EDNS option nobody has defined, which breaks resolvers the day they send a new one" + fix,
+		trace.EDNSFlag:    "did not ignore an EDNS flag nobody has defined, which breaks resolvers the day they set a new one" + fix,
+		// An anycast site that drops TCP is seen only from where it is reached.
+		trace.EDNSTCP: "answered over udp but not over tcp, from here, so any answer from them too big for one packet fails; allow tcp on port 53 to them (RFC 7766, RFC 9210)",
 	}
 	var findings []Finding
 	for _, name := range order {
@@ -1029,7 +1031,7 @@ func ednsTests(tr *trace.Trace) []Finding {
 			if servers := found[kind][trace.EDNSBroken]; len(servers) > 0 {
 				everything = false
 				findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: fmt.Sprintf(
-					"%s %s%s", list(servers), broken[kind], fix)})
+					"%s %s", list(servers), broken[kind])})
 			}
 		}
 		if servers := found[trace.EDNSPlain][trace.EDNSUnchecked]; len(servers) > 0 {
@@ -1038,11 +1040,18 @@ func ednsTests(tr *trace.Trace) []Finding {
 				"%s could not be tested: they gave no usable answer to EDNS0 alone, so how they handle the rest of EDNS is unknown", list(servers))})
 		}
 		for _, kind := range kinds[1:] {
-			if servers := found[kind][trace.EDNSUnchecked]; len(servers) > 0 {
-				everything = false
+			servers := found[kind][trace.EDNSUnchecked]
+			switch {
+			case len(servers) == 0:
+				continue
+			case kind == trace.EDNSTCP:
+				findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
+					"%s did not answer over tcp, nor over udp when asked again, so whether tcp reaches them is unknown", list(servers))})
+			default:
 				findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
 					"%s answered EDNS0 but could not be asked the %s test, so whether they handle it is unknown", list(servers), kind)})
 			}
+			everything = false
 		}
 		if len(unasked) > 0 {
 			findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
@@ -1050,7 +1059,7 @@ func ednsTests(tr *trace.Trace) []Finding {
 		}
 		if everything {
 			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(
-				"every nameserver of %s that was asked passed the RFC 8906 edns tests", name)})
+				"every nameserver of %s that was asked passed the RFC 8906 tests", name)})
 		}
 	}
 	return findings

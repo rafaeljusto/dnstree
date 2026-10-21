@@ -227,6 +227,7 @@ func TestRenderEDNS(t *testing.T) {
 		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
 			test("192.0.2.5", trace.EDNSPlain, trace.EDNSOK, trace.KindAnswer),
 			test("192.0.2.5", trace.EDNSFlag, trace.EDNSBroken, trace.KindTimeout),
+			test("192.0.2.5", trace.EDNSTCP, trace.EDNSBroken, trace.KindError),
 			test("192.0.2.6", trace.EDNSPlain, trace.EDNSUnchecked, trace.KindTimeout),
 		}},
 	}
@@ -236,6 +237,7 @@ func TestRenderEDNS(t *testing.T) {
 	for _, want := range []string{
 		`dnstree_edns_ok{name="www.test.",type="A",test="edns",zone="test.",server="ns.test.",address="192.0.2.5"} 1`,
 		`dnstree_edns_ok{name="www.test.",type="A",test="flag",zone="test.",server="ns.test.",address="192.0.2.5"} 0`,
+		`dnstree_edns_ok{name="www.test.",type="A",test="tcp",zone="test.",server="ns.test.",address="192.0.2.5"} 0`,
 		`dnstree_failed_queries{name="www.test.",type="A"} 1`,
 	} {
 		if !strings.Contains(out, want) {

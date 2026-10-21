@@ -415,7 +415,7 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">unreachable</span>
           <h3>Nameservers that choke on EDNS</h3>
-          <p><code>--check-edns</code> asks every nameserver the RFC 8906 tests: a version, an option and a flag nobody has defined. A server that drops them is unreachable for resolvers since DNS Flag Day 2019.</p>
+          <p><code>--check-edns</code> asks every nameserver the RFC 8906 tests: a version, an option and a flag nobody has defined, and the same question over TCP. A server that drops them is unreachable for resolvers since DNS Flag Day 2019, and one closed to TCP fails once an answer stops fitting in a packet.</p>
         </div>
         <div class="finding">
           <span class="tag tag-accent">certificates</span>

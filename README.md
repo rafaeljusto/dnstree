@@ -145,7 +145,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--serial`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of the zone which copy of it they serve, and compare, and judge the SOA's timers |
 | [`--check-axfr`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over |
 | [`--check-recursion`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone to look up somebody else's name, and say which do |
-| [`--check-edns`](docs/guide/zones.md#how-they-handle-edns) | ask every nameserver of the zone the RFC 8906 EDNS tests, and say which fail them |
+| [`--check-edns`](docs/guide/zones.md#how-they-handle-edns) | ask every nameserver of the zone the RFC 8906 EDNS tests and the same over TCP, and say which fail them |
 | [`--caa`](docs/guide/zones.md#who-may-issue-certificates-for-it) | say which certificate authorities may issue for the name, and which CAA set decides it (RFC 8659) |
 | [`--spf`](docs/guide/zones.md#what-a-check-of-its-mail-costs) | draw the name's SPF policy as the tree of lookups a mail server makes, and count them against the limit of ten (RFC 7208) |
 | [`--mail`](docs/guide/zones.md#whether-its-mail-can-be-sent-verified) | check the name's MX hosts the way a sender that checks DANE does, and its MTA-STS, TLS-RPT and DMARC records (RFC 7672) |

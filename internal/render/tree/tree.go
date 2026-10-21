@@ -593,6 +593,7 @@ func (r *renderer) edns(test *trace.EDNSTest) string {
 		trace.EDNSVersion: "edns version 1",
 		trace.EDNSOption:  "edns option 100",
 		trace.EDNSFlag:    "edns flag 0x40",
+		trace.EDNSTCP:     "tcp",
 	}[test.Kind] + " " + string(test.State)
 	switch test.State {
 	case trace.EDNSBroken:
@@ -624,6 +625,8 @@ func ednsFault(test *trace.EDNSTest) string {
 		return "copied back"
 	case trace.EDNSAnswer:
 		return "answered anyway"
+	case trace.EDNSClosed:
+		return "connection closed"
 	}
 	return string(test.Fault)
 }

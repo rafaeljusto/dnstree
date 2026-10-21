@@ -154,7 +154,7 @@ func TestSchemaEnums(t *testing.T) {
 		"the shapes --check-edns asks in": {
 			def: "edns", property: "kind",
 			want: []string{
-				string(trace.EDNSPlain), string(trace.EDNSVersion), string(trace.EDNSOption), string(trace.EDNSFlag),
+				string(trace.EDNSPlain), string(trace.EDNSVersion), string(trace.EDNSOption), string(trace.EDNSFlag), string(trace.EDNSTCP),
 			},
 		},
 		"what can come of an edns test": {
@@ -165,7 +165,7 @@ func TestSchemaEnums(t *testing.T) {
 			def: "edns", property: "fault",
 			want: []string{
 				string(trace.EDNSSilent), string(trace.EDNSRcode), string(trace.EDNSNoOPT), string(trace.EDNSBadVers),
-				string(trace.EDNSNoSOA), string(trace.EDNSEchoed), string(trace.EDNSAnswer),
+				string(trace.EDNSNoSOA), string(trace.EDNSEchoed), string(trace.EDNSAnswer), string(trace.EDNSClosed),
 			},
 		},
 	}

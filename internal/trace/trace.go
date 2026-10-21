@@ -890,7 +890,7 @@ const (
 )
 
 // EDNSTest is a nameserver asked a question that EDNS lets grow (RFC 6891),
-// in one of the shapes RFC 8906 tests for.
+// in one of the shapes RFC 8906 tests for, or asked it again over TCP.
 type EDNSTest struct {
 	Kind  EDNSKind
 	State EDNSState
@@ -906,6 +906,7 @@ const (
 	EDNSVersion EDNSKind = "version" // a version it should answer BADVERS to
 	EDNSOption  EDNSKind = "option"  // an option it should ignore
 	EDNSFlag    EDNSKind = "flag"    // a flag it should ignore and not copy back
+	EDNSTCP     EDNSKind = "tcp"     // the baseline over TCP (RFC 8906 8.1.5)
 )
 
 // EDNSState is what came of it. Unchecked is a server that did not answer even
@@ -931,6 +932,7 @@ const (
 	EDNSNoSOA   EDNSFault = "no-soa"  // NOERROR without the SOA it was asked for
 	EDNSEchoed  EDNSFault = "echoed"  // the unknown option or flag copied back
 	EDNSAnswer  EDNSFault = "answer"  // BADVERS carrying the answer anyway
+	EDNSClosed  EDNSFault = "closed"  // the connection refused, reset or closed unanswered
 )
 
 // DNSSECState is how far the chain of trust got.
