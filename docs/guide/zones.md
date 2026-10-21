@@ -274,6 +274,30 @@ the addresses instead is answering correctly, and nothing on the wire shows it
 was ever an alias. None of them is a failure, so none of them changes the
 result or the exit code.
 
+## Addresses nobody can reach
+
+A nameserver handed out at a private, loopback, link-local, documentation or
+otherwise reserved address cannot answer anyone on the internet, and from
+outside it looks like a server that stopped answering. It is usually a record
+from an internal view of the zone gone public, or a placeholder nobody
+replaced. The walk still asks it, since from inside that network it may
+answer, notes the kind of address on the hop, and says where the address came
+from and who can fix it:
+
+> com. gives 10.0.0.53 for ns.example.com., a private address no resolver on the internet can reach, usually a record from an internal view of the zone; have the registrar replace it with the server's public address
+
+> outside.net. gives 192.0.2.53 for ns.example.outside.net., an address kept for documentation that no resolver on the internet can reach, usually an example never replaced; publish the server's public address in outside.net.
+
+The first is the parent's glue, the second a lookup of a nameserver named in
+another zone, and under `--check-ns` the zone's own copy of its nameservers'
+addresses is held to the same rule. An address in the space carriers number
+their customers from (RFC 6598) is said to be out of reach of resolvers outside
+that carrier, which is as much as is certain. One such address among good ones
+costs every resolver a timeout; all of them leave the zone unreachable, and the
+walk's result shows which. It is only said of a walk that starts from public
+root servers, so a lab on `--root 127.0.0.1` or an address `--try-ns` was given
+is left alone.
+
 ## Whether they all have the same zone
 
 A walk stops at the first nameserver that answers, which is what a resolver

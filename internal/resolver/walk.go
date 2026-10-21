@@ -496,6 +496,7 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 		if r.cfg.Family != 0 && family(server.IP) != r.cfg.Family {
 			skipped := skipped(zone, server)
 			skipped.Notes = []string{fmt.Sprintf("left out by -%d", r.cfg.Family)}
+			r.markReach(skipped)
 			r.attach(parent, skipped)
 			continue
 		}
@@ -503,6 +504,7 @@ func (r *run) queryZone(ctx context.Context, zone string, servers []trace.Server
 			if why := r.cfg.Down(server); why != "" {
 				skipped := skipped(zone, server)
 				skipped.Notes = []string{why}
+				r.markReach(skipped)
 				r.attach(parent, skipped)
 				continue
 			}
@@ -525,6 +527,7 @@ func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Serve
 
 		hop := r.query(ctx, zone, server, qname, qtype)
 		minimise(hop.step, minimised)
+		r.markReach(hop.step)
 		r.attach(parent, hop.step)
 		switch hop.step.Kind {
 		case trace.KindLame, trace.KindTimeout, trace.KindError:
@@ -533,7 +536,9 @@ func (r *run) queryFirst(ctx context.Context, zone string, servers []trace.Serve
 
 		rest := servers[i+1:]
 		for _, server := range rest[:min(len(rest), maxSkipped)] {
-			r.attach(parent, skipped(zone, server))
+			skipped := skipped(zone, server)
+			r.markReach(skipped)
+			r.attach(parent, skipped)
 		}
 		if more := len(rest) - maxSkipped; more > 0 {
 			summary := &trace.Step{Zone: zone, Kind: trace.KindSkipped,
@@ -553,6 +558,7 @@ func (r *run) queryAll(ctx context.Context, zone string, servers []trace.Server,
 
 	for _, hop := range hops {
 		minimise(hop.step, minimised)
+		r.markReach(hop.step)
 		r.attach(parent, hop.step)
 	}
 	if budget != nil {
@@ -651,6 +657,9 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]tr
 			delegation.Zone, strings.Join(delegation.GlueLess, ", "))
 	}
 	servers, pending := glueServers(delegation), delegation.OutOfBailiwick
+	for _, server := range servers {
+		r.checkReach(delegation.Zone, step.Zone, server.Name, server.IP, "have the registrar replace it with the server's public address")
+	}
 	if len(pending) == 0 {
 		return servers, nil
 	}
@@ -742,6 +751,7 @@ func (r *run) resolveNames(ctx context.Context, step *trace.Step, names []string
 			}
 			// The model keeps rdata as text, and an address is its own text.
 			if addr, err := netip.ParseAddr(record.Data); err == nil {
+				r.checkReach(step.Delegation.Zone, result.Zone, name, addr, "publish the server's public address in "+result.Zone)
 				servers = append(servers, trace.Server{Name: name, IP: addr})
 			}
 		}

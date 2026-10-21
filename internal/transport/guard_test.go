@@ -52,6 +52,43 @@ func TestPublic(t *testing.T) {
 	}
 }
 
+func TestUnroutable(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		addr string
+		want string
+	}{
+		"a root server":                        {"198.41.0.4", ""},
+		"a root server over IPv6":              {"2001:503:ba3e::2:30", ""},
+		"a private network":                    {"10.0.0.53", "private"},
+		"the middle private network":           {"172.20.1.1", "private"},
+		"a unique local IPv6 address":          {"fd00::53", "private"},
+		"loopback":                             {"127.0.0.1", "loopback"},
+		"loopback over IPv6":                   {"::1", "loopback"},
+		"loopback mapped into IPv6":            {"::ffff:127.0.0.1", "loopback"},
+		"carrier-grade NAT":                    {"100.64.0.1", "shared"},
+		"the metadata service of a cloud":      {"169.254.169.254", "link-local"},
+		"the documentation range":              {"203.0.113.53", "documentation"},
+		"the newer IPv6 documentation range":   {"3fff::53", "documentation"},
+		"the benchmarking range":               {"198.19.0.1", "benchmarking"},
+		"nothing at all":                       {"0.0.0.0", "reserved"},
+		"the unspecified IPv6 address":         {"::", "reserved"},
+		"multicast":                            {"224.0.0.251", "reserved"},
+		"the broadcast address":                {"255.255.255.255", "reserved"},
+		"a private network behind NAT64":       {"64:ff9b::a00:1", ""},
+		"a public address just past a private": {"172.32.0.1", ""},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := transport.Unroutable(netip.MustParseAddr(test.addr)); got != test.want {
+				t.Errorf("Unroutable(%s) = %q, want %q", test.addr, got, test.want)
+			}
+		})
+	}
+}
+
 func TestGuard(t *testing.T) {
 	t.Parallel()
 

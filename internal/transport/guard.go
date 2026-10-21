@@ -76,6 +76,49 @@ func Public(addr netip.Addr) bool {
 	return true
 }
 
+// unroutable are the ranges no nameserver on the internet can be reached at,
+// each with what it is. They are fewer than the ones Public refuses: NAT64,
+// 6to4 and Teredo reach somebody, from somewhere.
+var unroutable = []struct {
+	prefix netip.Prefix
+	what   string
+}{
+	{netip.MustParsePrefix("0.0.0.0/8"), "reserved"},
+	{netip.MustParsePrefix("127.0.0.0/8"), "loopback"},
+	{netip.MustParsePrefix("::1/128"), "loopback"},
+	{netip.MustParsePrefix("10.0.0.0/8"), "private"},
+	{netip.MustParsePrefix("172.16.0.0/12"), "private"},
+	{netip.MustParsePrefix("192.168.0.0/16"), "private"},
+	{netip.MustParsePrefix("fc00::/7"), "private"},
+	{netip.MustParsePrefix("100.64.0.0/10"), "shared"},
+	{netip.MustParsePrefix("169.254.0.0/16"), "link-local"},
+	{netip.MustParsePrefix("fe80::/10"), "link-local"},
+	{netip.MustParsePrefix("192.0.2.0/24"), "documentation"},
+	{netip.MustParsePrefix("198.51.100.0/24"), "documentation"},
+	{netip.MustParsePrefix("203.0.113.0/24"), "documentation"},
+	{netip.MustParsePrefix("2001:db8::/32"), "documentation"},
+	{netip.MustParsePrefix("3fff::/20"), "documentation"},
+	{netip.MustParsePrefix("198.18.0.0/15"), "benchmarking"},
+	{netip.MustParsePrefix("224.0.0.0/3"), "reserved"}, // multicast, then 240/4
+	{netip.MustParsePrefix("ff00::/8"), "reserved"},
+	{netip.MustParsePrefix("::/128"), "reserved"},
+}
+
+// Unroutable says what kind of address addr is when no nameserver on the
+// internet can be reached at it — private, loopback, link-local, shared,
+// documentation, benchmarking or reserved — and is empty when one can.
+// Shared is the space carriers number their own customers from (RFC 6598),
+// which only that carrier's network reaches.
+func Unroutable(addr netip.Addr) string {
+	addr = addr.Unmap()
+	for _, r := range unroutable {
+		if r.prefix.Contains(addr) {
+			return r.what
+		}
+	}
+	return ""
+}
+
 // ErrDown is what Without answers for a server it keeps a query from.
 var ErrDown = errors.New("left out")
 

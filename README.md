@@ -317,6 +317,10 @@ anything is followed:
   walk of its own, drawn as a branch.
 - A nameserver **inside the zone it serves, with no glue**, cannot be reached by
   anything: the delegation is broken, and the walk says so rather than looping.
+- A nameserver handed out at an address **nobody on the internet can reach**, a
+  private, loopback or documentation one, is asked anyway and marked, with a
+  warning that says where the address came from and who can fix it
+  ([guide](docs/guide/zones.md#addresses-nobody-can-reach)).
 - **Aliases** start again from the root for the target, bounded and cycle
   checked. **Truncation** brings the answer back over TCP, and a server that
   cannot parse EDNS0 is asked again without it; both stay on the hop that needed

@@ -320,6 +320,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 
 	run.trace.Trial = r.cfg.Try
+	run.internet = !slices.ContainsFunc(r.cfg.Roots, func(root trace.Server) bool { return !transport.Public(root.IP) })
 	run.began = time.Now()
 	run.trace.Started = cmp.Or(r.cfg.At, run.began)
 	if r.cfg.Clock != nil {
@@ -413,8 +414,14 @@ type run struct {
 	// takes notices, once the walk is over.
 	notice *noticing
 
-	// mu guards the warnings and the cookies, which the fanout writes to from
-	// several goroutines.
+	// internet is whether the walk started from public roots, and so whether
+	// an address nobody on the internet can reach is worth a word. unreached
+	// are the ones that were, with the note their hops carry.
+	internet  bool
+	unreached map[netip.Addr]string
+
+	// mu guards the warnings, the cookies and unreached, which the fanout
+	// writes to from several goroutines.
 	mu sync.Mutex
 }
 

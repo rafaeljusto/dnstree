@@ -104,6 +104,9 @@ func (r *run) checkGlue(ctx context.Context, check *trace.Step, server trace.Ser
 			delegated.ZoneAddrs = make(map[string][]netip.Addr)
 		}
 		delegated.ZoneAddrs[q.name] = append(delegated.ZoneAddrs[q.name], held...)
+		for _, addr := range held {
+			r.checkReach(delegated.Zone, delegated.Zone, q.name, addr, "publish the server's public address in "+delegated.Zone)
+		}
 		glue := delegated.Glue[q.name]
 		r.compareGlue(parent, delegated.Zone, q.name,
 			ofFamily(glue, q.rrtype), ofFamily(glue, otherFamily(q.rrtype)), held, q.rrtype)

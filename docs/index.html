@@ -393,6 +393,11 @@ footer a:hover{color:var(--ink)}
           <p>A nameserver inside the zone it serves, with no glue, can only be found by asking itself. That is reported, not looped on.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">unreachable</span>
+          <h3>Addresses nobody can reach</h3>
+          <p>Glue or a lookup that hands out a private, loopback or documentation address looks like a server that went quiet. The hop says what kind of address it is, and the warning says who can fix it.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-accent">bailiwick</span>
           <h3>Glue a server had no right to give</h3>
           <p>A server may vouch for names at or below its own zone and no further. Anything else is dropped and resolved separately, drawn as a branch of its own.</p>
