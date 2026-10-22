@@ -25,7 +25,6 @@ import (
 	"codeberg.org/miekg/dns/dnshttp"
 	"codeberg.org/miekg/dns/dnstest"
 	"codeberg.org/miekg/dns/dnsutil"
-	"codeberg.org/miekg/dns/rdata"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -604,7 +603,7 @@ func (s *Server) version(reply *dns.Msg, name string, qtype uint16) {
 	reply.Authoritative = true
 	reply.Answer = []dns.RR{&dns.TXT{
 		Hdr: dns.Header{Name: name, Class: dns.ClassCHAOS},
-		TXT: rdata.TXT{Txt: []string{said}},
+		Txt: []string{said},
 	}}
 }
 
