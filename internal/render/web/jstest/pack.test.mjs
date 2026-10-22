@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { KINDS, TONES, flatten, resultOf, layout, schedule, trailOf, landingOf } from "../assets/scene/walk.js";
+import {
+  KINDS, TONES, GHOST, flatten, resultOf, layout, schedule, trailOf, landingOf, lifeOf, networksOf, changesOf,
+} from "../assets/scene/walk.js";
 import { STRIDE, nodesOf, wiresOf } from "../assets/scene/pack.js";
 import { golden, zone, step } from "./fixtures.mjs";
 
@@ -93,4 +95,93 @@ test("a dangling name snaps a thread in two, and an open server throws sparks", 
   const b = wiresOf(plain.hops, plain);
   assert.equal((a.edges.length - b.edges.length) / STRIDE.edge, 2);
   assert.equal((a.packets.length - b.packets.length) / STRIDE.packet, 7);
+});
+
+// The fields of each instance of a shape, one array apiece.
+const instances = (data, stride) => Array.from({ length: data.length / stride }, (_, i) => data.slice(i * stride, (i + 1) * stride));
+const ARC = 12, GHOSTLY = 13, RIPPLE = 14;
+
+test("a signed hop's ring is left as much unburnt as its signatures had life", () => {
+  const document = golden();
+  const walk = prepared(document.root);
+  for (const hop of walk.hops) hop.life = lifeOf(hop.step.dnssec, document.started)?.share ?? null;
+  const rings = instances(nodesOf(walk.hops, () => 0).byShape.ring, STRIDE.node);
+  const signed = walk.hops.filter((hop) => hop.step.dnssec);
+  assert.equal(rings.length, signed.length);
+  rings.forEach((ring, i) => assert.equal(ring[ARC], signed[i].life ?? 1));
+  assert.ok(rings.some((ring) => Math.abs(ring[ARC] - 6 / 14) < 1e-9), "the golden walk has one six days from fourteen");
+  for (const shape of ["ico", "octa", "sphere"]) {
+    for (const node of instances(nodesOf(walk.hops, () => 0).byShape[shape], STRIDE.node)) {
+      assert.deepEqual(node.slice(ARC), [1, 0, 0, 0], `${shape} is whole, solid and still`);
+    }
+  }
+});
+
+// A walk whose servers answer from two networks, three of them from one.
+const networked = () => {
+  const as = (number) => ({ server: { name: `ns.as${number}.`, ip: "192.0.2.1", asn: { number } } });
+  const walk = prepared(zone(step("referral", as(64500), step("answer", as(64501)), step("answer", as(64501)), step("answer", as(64501)))));
+  return { ...walk, networks: networksOf(walk.hops) };
+};
+
+test("every server stands on the floor in its network's colour", () => {
+  const walk = networked();
+  const bare = nodesOf(walk.hops, () => 0);
+  const { byShape, halos } = nodesOf(walk.hops, () => 0, walk);
+  const feet = instances(byShape.ring, STRIDE.node).slice(instances(bare.byShape.ring ?? [], STRIDE.node).length);
+  assert.equal(feet.length, 2 * 4, "two rings for each of the four servers");
+  for (const foot of feet) assert.equal(foot[1], walk.floor);
+  assert.deepEqual(feet[0].slice(4, 7), walk.networks[0].color);
+  assert.equal((halos.length - bare.halos.length) / STRIDE.halo, 4);
+});
+
+test("a network's footprints are tied together, each under a thread from its server", () => {
+  const walk = networked();
+  const bare = wiresOf(walk.hops, { ...walk, networks: [] }).edges;
+  const edges = instances(wiresOf(walk.hops, walk).edges, STRIDE.edge).slice(bare.length / STRIDE.edge);
+  // Four plumb lines, and two lines joining the three of the crowded network.
+  assert.equal(edges.length, 4 + 2);
+  for (const edge of edges) assert.equal(edge[5], walk.floor, "every one ends on the floor");
+});
+
+test("the network looked at is the one lit", () => {
+  const walk = networked();
+  const crowded = walk.networks[0];
+  const { byShape } = nodesOf(walk.hops, () => 0, { ...walk, lit: (network) => (network === crowded ? 0.9 : 0) });
+  const glows = instances(byShape.ring, STRIDE.node).map((ring) => [ring.slice(4, 7).join(), ring[7]]);
+  assert.ok(glows.some(([color, glow]) => color === crowded.color.join() && glow > 1));
+  assert.ok(!glows.some(([color, glow]) => color === walk.networks[1].color.join() && glow > 1));
+});
+
+test("a ghost is drawn as an outline, hung by a dashed thread", () => {
+  const walk = prepared(golden().root);
+  const changes = changesOf(walk.hops, {
+    zones: [{ name: "com.", ns_went: ["gone.example."] }, { name: "example.com.", ns_came: ["new.example."], dnssec_was: "insecure" }],
+  }, walk.result);
+  const bare = nodesOf(walk.hops, () => 0);
+  const { byShape } = nodesOf(walk.hops, () => 0, { ...walk, changes });
+  const ghost = instances(byShape.octa, STRIDE.node).find((node) => node[GHOSTLY] === 1);
+  assert.deepEqual(ghost.slice(0, 3), changes.ghosts[0].pos);
+  assert.deepEqual(ghost.slice(4, 7), GHOST);
+
+  const added = instances(byShape.ring, STRIDE.node).slice(bare.byShape.ring.length / STRIDE.node);
+  assert.equal(added.length, 2, "the chain as it read then, and the cut with something new in it");
+  assert.deepEqual(added.map((ring) => [ring[GHOSTLY], ring[RIPPLE]]), [[1, 1], [0, 1]]);
+  assert.deepEqual(added[0].slice(4, 7), TONES.warn, "in the colour the chain read then");
+
+  const threads = instances(wiresOf(walk.hops, { ...walk, changes }).edges, STRIDE.edge)
+    .slice(wiresOf(walk.hops, walk).edges.length / STRIDE.edge);
+  assert.equal(threads.length, 1);
+  assert.ok(threads[0][14] < 0, "dashed");
+});
+
+test("the whole scene with every new thing in it is still whole instances", () => {
+  const walk = networked();
+  const changes = changesOf(walk.hops, { was: { kind: "nxdomain" }, zones: [{ name: ".", dnssec_was: "secure" }] }, walk.result);
+  const { byShape, halos } = nodesOf(walk.hops, () => 0.5, { ...walk, changes });
+  const { edges, packets } = wiresOf(walk.hops, { ...walk, changes });
+  for (const [shape, data] of Object.entries(byShape)) assert.ok(whole(data, STRIDE.node), shape);
+  assert.ok(whole(halos, STRIDE.halo));
+  assert.ok(whole(edges, STRIDE.edge));
+  assert.ok(whole(packets, STRIDE.packet));
 });

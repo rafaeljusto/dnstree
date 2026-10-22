@@ -6,7 +6,7 @@
 import {
   TONES, KINDS, kindOf, trustTone, took, clamp, flatten, asked, resultOf, verdictOf, chainState,
   layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom, leaks,
-  trailOf, rideAt, behind, around, landingOf,
+  trailOf, rideAt, behind, around, landingOf, lifeOf, networksOf, changesOf, viewToHash, viewFromHash, changeCount, GHOST, FRESH,
 } from "./walk.js";
 import { STRIDE, nodesOf, wiresOf } from "./pack.js";
 import { formatFor, framed, filmLength, filmName } from "./film.js";
@@ -69,26 +69,40 @@ layout(location = 2) in vec3 aBary;
 layout(location = 3) in vec4 iPlace;
 layout(location = 4) in vec4 iColor;
 layout(location = 5) in vec4 iMotion;
+layout(location = 6) in vec4 iLook;
 uniform vec3 uEye;
-out vec3 vNormal; out vec3 vBary; out vec3 vColor; out vec3 vView; out float vGlow;
+out vec3 vNormal; out vec3 vBary; out vec3 vColor; out vec3 vView; out float vGlow; out float vAround; out float vHeight;
+flat out float vArc; flat out float vGhost; flat out float vPhase;
 mat3 turn(float yaw, float tilt) {
   float cy = cos(yaw), sy = sin(yaw), ct = cos(tilt), st = sin(tilt);
   return mat3(cy, 0.0, -sy, 0.0, 1.0, 0.0, sy, 0.0, cy) * mat3(1.0, 0.0, 0.0, 0.0, ct, st, 0.0, -st, ct);
 }
 void main() {
   mat3 r = turn(uTime * iMotion.y * uMotion + iMotion.x, iMotion.w);
-  vec3 world = drift(iPlace.xyz, iMotion.x) + r * aPos * iPlace.w * grow(iMotion.z);
+  // A ripple grows and fades over and over, from where the walk left it.
+  float wave = iLook.z > 0.0 ? fract(uTime * 0.32 * uMotion + iMotion.x * 0.159) : 0.0;
+  float size = iPlace.w * grow(iMotion.z) * (1.0 + wave * 0.8);
+  vec3 world = drift(iPlace.xyz, iMotion.x) + r * aPos * size;
   vNormal = r * aNormal;
   vBary = aBary;
   vColor = iColor.rgb;
   vView = uEye - world;
-  vGlow = iColor.a + flash(iMotion.z);
+  vGlow = (iColor.a + flash(iMotion.z)) * (iLook.z > 0.0 ? 1.0 - wave * wave : 1.0);
+  vAround = fract(atan(aPos.z, aPos.x) / 6.2831853 + 1.0);
+  vHeight = world.y;
+  // A ring is lit whole when it arrives and burns down to what was left.
+  vArc = iLook.x >= 1.0 ? 1.0 : mix(1.0, iLook.x, smoothstep(iMotion.z + 0.35, iMotion.z + 2.2, uReplay));
+  vGhost = iLook.y;
+  vPhase = iMotion.x;
   gl_Position = uViewProj * vec4(world, 1.0);
 }`;
 
 const NODE_FS = `#version 300 es
 precision highp float;
-in vec3 vNormal; in vec3 vBary; in vec3 vColor; in vec3 vView; in float vGlow;
+uniform float uTime;
+uniform float uMotion;
+in vec3 vNormal; in vec3 vBary; in vec3 vColor; in vec3 vView; in float vGlow; in float vAround; in float vHeight;
+flat in float vArc; flat in float vGhost; flat in float vPhase;
 out vec4 outColor;
 void main() {
   vec3 n = normalize(vNormal);
@@ -98,6 +112,19 @@ void main() {
   float edge = 1.0 - min(min(a.x, a.y), a.z);
   float light = 0.5 + 0.5 * abs(dot(n, normalize(vec3(0.4, 0.9, 0.3))));
   vec3 c = vColor * (0.05 + 0.1 * light + rim * 0.5) + vColor * edge * (0.85 + vGlow) + vec3(edge * vGlow * 0.3);
+  // A ghost is its outline alone, flickering, with a scanline running up it.
+  if (vGhost > 0.5) {
+    float flicker = 0.72 + 0.28 * sin(uTime * 11.0 + vPhase * 7.0) * sin(uTime * 3.1 + vPhase) * uMotion;
+    float scan = 0.55 + 0.45 * smoothstep(0.35, 0.5, fract(vHeight * 3.0 - uTime * 0.7 * uMotion));
+    c = vColor * (edge * (0.55 + vGlow) + rim * 0.18) * flicker * scan;
+  }
+  // What is burnt of a ring is ash; the ember is where it is burning now.
+  if (vArc < 1.0) {
+    float d = vAround - vArc;
+    c *= d > 0.0 ? 0.1 : 1.0;
+    float ember = exp(-abs(d) * 70.0) * (0.85 + 0.15 * sin(uTime * 23.0 + vPhase * 5.0) * uMotion);
+    c += vec3(1.0, 0.72, 0.42) * ember * 2.2;
+  }
   outColor = vec4(c, 1.0);
 }`;
 
@@ -135,7 +162,7 @@ layout(location = 3) in vec4 iColor;
 layout(location = 4) in vec4 iTiming;
 uniform vec2 uHalf;
 out float vT; out float vSide; out vec3 vColor;
-flat out float vProgress; flat out float vStrength; flat out float vPulse;
+flat out float vProgress; flat out float vStrength; flat out float vPulse; flat out float vDash;
 void main() {
   vec4 ca = uViewProj * vec4(drift(iA.xyz, iA.w), 1.0);
   vec4 cb = uViewProj * vec4(drift(iB.xyz, iB.w), 1.0);
@@ -143,7 +170,8 @@ void main() {
   float len = length(d);
   vec2 dir = len > 1e-4 ? d / len : vec2(1.0, 0.0);
   vec4 c = mix(ca, cb, aCorner.x);
-  c.xy += vec2(-dir.y, dir.x) * aCorner.y * iTiming.z * uDpr / uHalf * c.w;
+  c.xy += vec2(-dir.y, dir.x) * aCorner.y * abs(iTiming.z) * uDpr / uHalf * c.w;
+  vDash = iTiming.z < 0.0 ? max(4.0, len / (9.0 * uDpr)) : 0.0;
   gl_Position = c;
   float k = clamp((uReplay - iTiming.x) / max(iTiming.y, 1e-3), 0.0, 1.0);
   vProgress = uReplay < iTiming.x ? -1.0 : k * k * (3.0 - 2.0 * k);
@@ -158,10 +186,11 @@ const EDGE_FS = `#version 300 es
 precision highp float;
 uniform float uTime;
 in float vT; in float vSide; in vec3 vColor;
-flat in float vProgress; flat in float vStrength; flat in float vPulse;
+flat in float vProgress; flat in float vStrength; flat in float vPulse; flat in float vDash;
 out vec4 outColor;
 void main() {
   if (vT > vProgress) discard;
+  if (vDash > 0.0 && fract(vT * vDash) > 0.45) discard;
   float core = 1.0 - abs(vSide);
   core *= core;
   float tip = vProgress < 1.0 ? exp(-abs(vProgress - vT) * 28.0) : 0.0;
@@ -285,6 +314,7 @@ class Renderer {
       this.#attrib(3, 4, STRIDE.node * 4, 0, 1);
       this.#attrib(4, 4, STRIDE.node * 4, 16, 1);
       this.#attrib(5, 4, STRIDE.node * 4, 32, 1);
+      this.#attrib(6, 4, STRIDE.node * 4, 48, 1);
       this.#shapes[name] = { vao, instances, vertices: data.length / 9, count: 0 };
     }
 
@@ -673,9 +703,12 @@ for (const hop of hops) {
   hop.phase = (hop.id * 2.399963) % (Math.PI * 2);
   hop.size = kind.size * (hop.step.aside ? 0.6 : 1) * (hop === result ? 1.3 : 1);
   hop.dim = hop.step.kind === "skipped" ? 0.5 : hop.step.aside ? 0.65 : 1;
+  hop.life = lifeOf(hop.step.dnssec, walk.started)?.share ?? null;
 }
 
 const bounds = layout(hops);
+const networks = networksOf(hops);
+const changes = page.changes ? changesOf(hops, page.changes, result) : null;
 
 // A name left pointing at nothing hangs a snapped thread off the hop that
 // showed it, down and out, clear of the ring below.
@@ -722,7 +755,8 @@ const stat = (tone, ...kids) => el("li", { class: tone ? `tone-${tone}` : null }
 $("stats").append(...[
   stat(null, "walked in ", el("b", { text: took(walk.elapsed_ms) })),
   stat(null, el("b", { text: String(askedHops.length) }), " queries"),
-  stat(null, el("b", { text: String(servers) }), " servers"),
+  stat(null, el("b", { text: String(servers) }), servers === 1 ? " server" : " servers",
+    networks.length ? ` in ${networks.length === 1 ? "one network" : `${networks.length} networks`}` : ""),
   resolvers.length === 1
     ? stat(differing ? "warn" : null, "a resolver in ", el("b", { text: took(resolvers[0].elapsed_ms) }), differing ? " · answers differently" : "")
     : resolvers.length
@@ -730,7 +764,15 @@ $("stats").append(...[
         differing ? ` · ${differing} answer differently` : " · all agree")
       : null,
   chain ? stat(trustTone(chain), el("b", { text: chain }), " chain") : null,
+  changes ? changed() : null,
 ].filter(Boolean));
+
+// How much is not what it was, against the walk it was held against.
+function changed() {
+  const count = changeCount(page.changes);
+  return stat(count ? "warn" : null, count ? el("b", { text: count === 1 ? "1 change" : `${count} changes` }) : "unchanged",
+    ` since the walk ${page.changes.when}`);
+}
 
 $("built").textContent = `dnstree ${page.page.version} · walked ${new Date(page.page.generated).toLocaleString()}`;
 if (walk.warnings?.length) {
@@ -748,6 +790,14 @@ $("legend").append(...[
     el("span", { class: "dim", text: "dangling" })) : null,
   hops.some(leaks) ? el("li", { style: `color:${toCss(TONES.bad)}` }, el("i", { style: "width:4px;height:4px;border-radius:50%" }),
     el("span", { class: "dim", text: "open to strangers" })) : null,
+  hops.some((hop) => hop.life !== null && hop.life < 1) ? el("li", { style: "color:rgb(255 184 108)" },
+    el("i", { class: "fuse" }), el("span", { class: "dim", text: "signature life left" })) : null,
+  networks.length ? el("li", { style: `color:${toCss(networks[0].color)}` }, el("i", { style: "border-radius:50%;rotate:0deg;height:4px" }),
+    el("span", { class: "dim", text: "origin network" })) : null,
+  changes?.ghosts.length ? el("li", { style: `color:${toCss(GHOST)}` }, el("i", { class: "ghost" }),
+    el("span", { class: "dim", text: "gone since" })) : null,
+  changes?.fresh.size ? el("li", { style: `color:${toCss(FRESH)}` }, el("i", { style: "border-radius:50%;rotate:0deg;background:none;border:1px solid" }),
+    el("span", { class: "dim", text: "new since" })) : null,
 ].filter(Boolean));
 
 if (page.findings?.length) {
@@ -769,9 +819,37 @@ for (const hop of hops) {
   tagLayer.append(hop.tag);
 }
 
+// The things that are not hops but say something: what the other walk had that
+// this one does not, and the networks on the floor. They are labelled like the
+// hops, and come after them when there is not room for all. They arrive with
+// the hops they belong to, which are timed only once the walk is played.
+const extras = [
+  ...(changes?.ghosts ?? []).map((ghost) => ({
+    pos: ghost.pos, phase: ghost.phase, get at() { return ghost.anchor.at + 0.6; }, size: 0.5, rank: 6, color: GHOST,
+    title: ghost.title, text: ghost.text, class: "tag ghost",
+  })),
+  ...networks.map((network) => {
+    const feet = network.hops.map((hop) => hop.pos);
+    const middle = [0, 2].map((axis) => feet.reduce((sum, pos) => sum + pos[axis], 0) / feet.length);
+    const many = network.hops.length;
+    return {
+      pos: [middle[0], bounds.floor, middle[1]], phase: -1, get at() { return Math.min(...network.hops.map((hop) => hop.at)) + 0.6; },
+      size: 0.3, rank: 7, color: network.color, title: `AS${network.number}`,
+      text: [many === 1 ? "1 query" : `${many} queries`, network.country].filter(Boolean).join(" · "), class: "tag floor",
+    };
+  }),
+];
+extras.forEach((extra, i) => {
+  extra.id = hops.length + i;
+  extra.tag = el("div", { class: extra.class, style: `--tone:${toCss(extra.color)}` },
+    el("b", { text: extra.title }), el("span", { text: extra.text }));
+  extra.shown = { x: -1, y: -1, o: -1 };
+  tagLayer.append(extra.tag);
+});
+
 /* ── the inspector ─────────────────────────────────────────────────────── */
 
-const facts = (step) => factsOf(step).flatMap(([term, value, tone]) =>
+const facts = (step) => factsOf(step, walk.started).flatMap(([term, value, tone]) =>
   [el("dt", { text: term }), el("dd", { class: tone ? `tone-${tone}` : null, text: value })]);
 
 function inspect(hop) {
@@ -786,7 +864,8 @@ function inspect(hop) {
   $("i-title").textContent = titleOf(step);
   $("i-sub").textContent = step.server?.ip ? `${step.server.ip}${step.server.port && step.server.port !== 53 ? `:${step.server.port}` : ""}` : "";
   $("i-says").textContent = hop.kind.says;
-  $("i-facts").replaceChildren(...facts(step));
+  $("i-facts").replaceChildren(...facts(step),
+    ...(changes?.marks.get(hop) ?? []).flatMap((text) => [el("dt", { text: "since then" }), el("dd", { class: "tone-fresh", text })]));
   $("i-records").replaceChildren(...(step.records ?? []).map((rr) =>
     el("li", {}, el("span", { text: rr.name }), el("span", { class: "t", text: rr.type }), el("span", { class: "ttl", text: `${rr.ttl} ` }), rr.data)));
   panel.hidden = false;
@@ -826,17 +905,20 @@ function glowOf(hop) {
   return onPath.has(hop) ? 0.25 : 0;
 }
 
+// A network lights up on the floor while one of its servers is looked at.
+const lit = (network) => (state.hovered?.network === network || state.picked?.network === network ? 0.9 : 0);
+
 // The instances are rebuilt whenever what is lit changes; the positions,
 // the floating and the arrival are worked out on the card.
 function upload() {
   stale = true;
-  const { byShape, halos } = nodesOf(hops, glowOf);
+  const { byShape, halos } = nodesOf(hops, glowOf, { networks, floor: bounds.floor, lit, changes });
   renderer.nodes(byShape);
   renderer.halos(halos);
 }
 
 function wire() {
-  const { edges, packets } = wiresOf(hops, { onPath, result, floor: bounds.floor, landing });
+  const { edges, packets } = wiresOf(hops, { onPath, result, floor: bounds.floor, landing, networks, changes });
   renderer.edges(edges);
   renderer.packets(packets);
 }
@@ -1029,6 +1111,7 @@ function hopAt(x, y) {
 
 function pick(hop, { quiet = false } = {}) {
   if (state.picked === hop) return;
+  lastInput = clock();
   state.picked?.tag.classList.remove("picked");
   state.picked = hop;
   hop?.tag.classList.add("picked");
@@ -1127,7 +1210,7 @@ canvas.addEventListener("wheel", (event) => {
 
 const controls = {
   replay: $("c-replay"), orbit: $("c-orbit"), ride: $("c-ride"), sound: $("c-sound"), film: $("c-film"),
-  reset: $("c-reset"), findings: $("c-findings"),
+  reset: $("c-reset"), findings: $("c-findings"), link: $("c-link"),
 };
 controls.ride.hidden = !motion || !trail.length;
 // A click leaves the focus where it was, so that the keys go on meaning what
@@ -1156,6 +1239,7 @@ controls.sound.addEventListener("click", async () => {
   }
 });
 controls.film.addEventListener("click", () => filming(!film.recorder));
+controls.link.addEventListener("click", () => share());
 controls.findings.addEventListener("click", () => {
   const panel = $("findings");
   panel.hidden = !panel.hidden;
@@ -1194,6 +1278,7 @@ addEventListener("keydown", (event) => {
     f: () => !controls.ride.hidden && controls.ride.click(),
     m: () => controls.sound.click(),
     c: () => !controls.film.hidden && controls.film.click(),
+    l: () => controls.link.click(),
     r: () => reset(),
     e: () => !controls.findings.hidden && controls.findings.click(),
     "?": () => $("help").togglePopover(),
@@ -1222,6 +1307,48 @@ reduced.addEventListener("change", () => {
   orbiting = orbiting && !reduced.matches;
   controls.orbit.setAttribute("aria-pressed", String(orbiting));
 });
+
+/* ── the view, in the address ──────────────────────────────────────────── */
+
+// The address follows the view once somebody has moved it and it has come to
+// rest, so that what is in the address bar opens on what is on the screen. A
+// view the camera only drifted into on its own is not written down.
+let written = clock();
+function remember() {
+  history.replaceState(null, "", `#${viewToHash(camera, state.picked)}`);
+  written = clock();
+}
+
+function look(view) {
+  riding(false);
+  orbiting = false;
+  controls.orbit.setAttribute("aria-pressed", "false");
+  follow = null;
+  pick(view.hop, { quiet: true });
+  spin.yaw = spin.pitch = 0;
+  goal.yaw = goal.pitch = null;
+  Object.assign(camera, { yaw: view.yaw, pitch: view.pitch, dist: view.dist, target: [...view.target] });
+  Object.assign(goal, { dist: view.dist, target: [...view.target] });
+  written = lastInput = clock();
+  stale = true;
+}
+
+addEventListener("hashchange", () => {
+  const view = viewFromHash(location.hash, hops);
+  if (view) look(view);
+});
+
+async function share() {
+  remember();
+  const label = controls.link.lastElementChild;
+  try {
+    await navigator.clipboard.writeText(location.href);
+    label.textContent = "copied";
+  } catch {
+    label.textContent = "in the address";
+  }
+  setTimeout(() => { label.textContent = "link"; }, 1600);
+}
 
 /* ── filming ───────────────────────────────────────────────────────────── */
 
@@ -1283,12 +1410,12 @@ function shoot() {
   pen.save();
   pen.scale(frame.width / sized.w, frame.height / sized.h);
   pen.textBaseline = "middle";
-  for (const hop of hops) {
+  for (const hop of [...hops, ...extras]) {
     if (!hop.place || hop.place.o < 0.03) continue;
     const { x, y, o } = hop.place;
     pen.globalAlpha = o;
     pen.font = "600 12px ui-monospace, Menlo, monospace";
-    pen.fillStyle = toCss(TONES[hop.tone]);
+    pen.fillStyle = toCss(hop.color ?? TONES[hop.tone]);
     pen.fillText(hop.tag.firstChild.textContent, x, y - 7);
     pen.font = "11px ui-monospace, Menlo, monospace";
     pen.fillStyle = "rgb(150 165 190)";
@@ -1353,35 +1480,43 @@ function rankOf(hop) {
 // room for it.
 function placeTags(viewProj, now, width, height, pixels) {
   const showing = [];
+  const spot = (thing, pos, reach, o, rank) => {
+    const [cx, cy, w] = project(viewProj, pos);
+    if (w <= 0.5) return;
+    const x = (cx / w * 0.5 + 0.5) * width + reach * pixels / dpr / w + 16;
+    const y = (0.5 - cy / w * 0.5) * height;
+    if (x > width || y < -20 || y > height + 20) return;
+    thing.box ??= { w: thing.tag.offsetWidth, h: thing.tag.offsetHeight };
+    thing.place = { x, y, o: o ?? clamp(1.5 - w / (camera.dist * 1.25), 0.2, 1), rank };
+    showing.push(thing);
+  };
   for (const hop of hops) {
     hop.place = null;
     const wanted = hop.at <= replay.at && (hop.step.kind !== "skipped" || hop === state.hovered || hop === state.picked);
     if (!wanted) continue;
-    const [cx, cy, w] = project(viewProj, drift(hop.pos, hop.phase, now, motion));
-    if (w <= 0.5) continue;
-    const reach = hop.size * (hop.step.dnssec ? 1.8 : 1.2) * pixels / dpr / w;
-    const x = (cx / w * 0.5 + 0.5) * width + reach + 16;
-    const y = (0.5 - cy / w * 0.5) * height;
-    if (x > width || y < -20 || y > height + 20) continue;
-    hop.box ??= { w: hop.tag.offsetWidth, h: hop.tag.offsetHeight };
-    let o = clamp(1.5 - w / (camera.dist * 1.25), 0.2, 1) * (hop.step.aside ? 0.75 : 1);
-    if (hop === state.picked || hop === state.hovered) o = 1;
-    hop.place = { x, y, o, rank: rankOf(hop) };
-    showing.push(hop);
+    const near = hop === state.picked || hop === state.hovered;
+    spot(hop, drift(hop.pos, hop.phase, now, motion), hop.size * (hop.step.dnssec ? 1.8 : 1.2), near ? 1 : null, rankOf(hop));
+    if (hop.place && !near && hop.step.aside) hop.place.o *= 0.75;
+  }
+  for (const extra of extras) {
+    extra.place = null;
+    if (extra.at > replay.at) continue;
+    spot(extra, extra.phase < 0 ? extra.pos : drift(extra.pos, extra.phase, now, motion), extra.size, null, extra.rank);
+    if (extra.place) extra.place.o *= 0.8;
   }
   declutter(showing);
 
-  for (const hop of hops) {
-    const tag = hop.tag;
-    const { x, y, o } = hop.place ?? { x: hop.shown.x, y: hop.shown.y, o: 0 };
-    if (Math.abs(x - hop.shown.x) > 0.3 || Math.abs(y - hop.shown.y) > 0.3) {
+  for (const thing of [...hops, ...extras]) {
+    const tag = thing.tag;
+    const { x, y, o } = thing.place ?? { x: thing.shown.x, y: thing.shown.y, o: 0 };
+    if (Math.abs(x - thing.shown.x) > 0.3 || Math.abs(y - thing.shown.y) > 0.3) {
       tag.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translateY(-50%)`;
-      hop.shown.x = x;
-      hop.shown.y = y;
+      thing.shown.x = x;
+      thing.shown.y = y;
     }
-    if (Math.abs(o - hop.shown.o) > 0.02) {
+    if (Math.abs(o - thing.shown.o) > 0.02) {
       tag.style.opacity = o.toFixed(2);
-      hop.shown.o = o;
+      thing.shown.o = o;
     }
   }
 }
@@ -1410,6 +1545,7 @@ function tick() {
   }
   if (resize()) stale = true;
   step(dt, now);
+  if (lastInput > written && now - lastInput > 0.8 && !ride.on && settled()) remember();
   if (!motion && !stale && settled() && now - lastInput > 0.5) return;
   stale = false;
 
@@ -1448,4 +1584,12 @@ function tick() {
 }
 
 play();
+// A link opens on the shot it was taken of, with the walk already standing.
+const linked = viewFromHash(location.hash, hops);
+if (linked) {
+  wind(replay.end);
+  heard = arrivals.length;
+  landed = true;
+  look(linked);
+}
 requestAnimationFrame(tick);

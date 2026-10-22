@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import {
   KINDS, TONES, kindOf, took, flatten, asked, resultOf, verdictOf, chainState, widthOf,
   layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom,
-  trailOf, rideAt, behind, around, landingOf,
+  trailOf, rideAt, behind, around, landingOf, lifeOf, lasted, networksOf, spanning, cutOf, changesOf,
+  viewToHash, viewFromHash, changeCount, NETWORKS,
 } from "../assets/scene/walk.js";
 import { golden, zone, step, chain } from "./fixtures.mjs";
 
@@ -461,4 +462,174 @@ test("stepping through the hops goes round at either end", () => {
   assert.equal(stepFrom(stops, "c", 1), "a");
   assert.equal(stepFrom(stops, "a", -1), "c");
   assert.equal(stepFrom(stops, "gone", 1), "a", "a hop that is not a stop starts over");
+});
+
+test("a ring burns down to the share of life its stalest signature had left", () => {
+  const signed = (...spans) => ({ signatures: spans.map(([inception, expiration]) => ({ inception, expiration })) });
+  const cases = {
+    "six days of fourteen left": [signed(["2026-09-16T12:00:00Z", "2026-09-30T12:00:00Z"]), "2026-09-24T12:00:00Z", 6 / 14],
+    "the stalest of two is the smaller share, not the first to run out": [
+      signed(["2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z"], ["2026-09-20T00:00:00Z", "2026-09-30T00:00:00Z"]),
+      "2026-09-28T00:00:00Z", 0.1,
+    ],
+    "an expired signature has nothing left": [signed(["2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z"]), "2026-09-03T00:00:00Z", 0],
+    "a signature made after the walk has all of it": [signed(["2026-09-10T00:00:00Z", "2026-09-20T00:00:00Z"]), "2026-09-01T00:00:00Z", 1],
+  };
+  for (const [name, [dnssec, started, want]] of Object.entries(cases)) {
+    assert.ok(Math.abs(lifeOf(dnssec, started).share - want) < 1e-9, name);
+  }
+  const nothing = {
+    "no signatures": [{}, "2026-09-24T12:00:00Z"],
+    "no verdict": [undefined, "2026-09-24T12:00:00Z"],
+    "a walk that does not say when it was made": [signed(["2026-09-16T12:00:00Z", "2026-09-30T12:00:00Z"]), undefined],
+    "a signature that ends before it starts": [signed(["2026-09-30T12:00:00Z", "2026-09-16T12:00:00Z"]), "2026-09-24T12:00:00Z"],
+  };
+  for (const [name, [dnssec, started]] of Object.entries(nothing)) assert.equal(lifeOf(dnssec, started), null, name);
+});
+
+test("the life left is read in days, or hours when it is short", () => {
+  assert.equal(lasted(6 * 86_400_000), "6 days");
+  assert.equal(lasted(30 * 3_600_000), "30 h");
+  assert.equal(lasted(-1), "expired");
+});
+
+test("the inspector says how much life the signatures had left", () => {
+  const { hops } = walked(golden().root);
+  const signed = hops.find((hop) => hop.step.dnssec?.signatures);
+  const rows = Object.fromEntries(factsOf(signed.step, golden().started).map(([term, value]) => [term, value]));
+  assert.equal(rows["life left"], "43% · 6 days");
+  assert.ok(!factsOf(signed.step).some(([term]) => term === "life left"), "not without knowing when the walk was made");
+});
+
+test("servers are grouped by the network they answer from, most crowded first", () => {
+  const as = (number) => ({ server: { name: `ns${number}.`, ip: "192.0.2.1", asn: { number, country_code: "NL" } } });
+  const { hops } = walked(zone(
+    step("referral", as(64500), step("answer", as(64501)), step("answer", as(64501))),
+    step("skipped", as(64502)),
+    step("timeout"),
+  ));
+  const networks = networksOf(hops);
+  assert.deepEqual(networks.map((n) => [n.number, n.hops.length]), [[64501, 2], [64500, 1]]);
+  assert.deepEqual(networks.map((n) => n.color), NETWORKS.slice(0, 2));
+  assert.equal(hops[2].network, networks[0]);
+  assert.equal(hops.find((hop) => hop.step.kind === "timeout").network, undefined);
+  assert.equal(networksOf(walked(zone(step("answer"))).hops).length, 0);
+});
+
+test("the footprints of a network are joined by the shortest lines", () => {
+  const points = [[0, 0, 0], [10, 0, 0], [1, 0, 0], [11, 0, 0]];
+  assert.deepEqual(spanning(points), [[0, 2], [2, 1], [1, 3]]);
+  assert.deepEqual(spanning([[0, 0, 0]]), []);
+  assert.deepEqual(spanning([]), []);
+});
+
+test("a zone is found at the referral that sent the walk into it", () => {
+  const { hops } = walked(golden().root);
+  assert.equal(cutOf(hops, "."), hops[0]);
+  assert.equal(cutOf(hops, "COM").step.delegation.zone, "com.");
+  assert.equal(cutOf(hops, "example.com.").step.delegation.zone, "example.com.");
+  assert.equal(cutOf(hops, "nowhere."), null);
+});
+
+// The golden walk, laid out, with a comparison held against it.
+function compared(changes) {
+  const { hops, result } = walked(golden().root);
+  layout(hops);
+  schedule(hops);
+  return { hops, result, ...changesOf(hops, changes, result) };
+}
+
+test("what the other walk had and this one does not hangs on as a ghost", () => {
+  const { hops, result, ghosts } = compared({
+    when: "1 day ago",
+    was: { kind: "answer", answer: ["192.0.2.9", "192.0.2.10"] },
+    zones: [{ name: "com.", ns_went: ["old.gtld-servers.net."] }, { name: "gone.example.com.", went: true }],
+  });
+  assert.deepEqual(ghosts.map((g) => [g.title, g.shape]),
+    [["old.gtld-servers.net.", "octa"], ["gone.example.com.", "ico"], ["192.0.2.9 +1", "sphere"]]);
+  assert.equal(ghosts[0].anchor, cutOf(hops, "com."));
+  assert.equal(ghosts[1].anchor, cutOf(hops, "example.com."), "a gone cut hangs off the nearest one above it");
+  assert.equal(ghosts[2].anchor, result);
+  for (const ghost of ghosts) {
+    assert.ok(ghost.pos.every(Number.isFinite));
+    assert.ok(ghost.pos[1] < ghost.anchor.pos[1], "beneath what it hangs from");
+  }
+});
+
+test("an answer that was not there before says what was", () => {
+  const { ghosts } = compared({ when: "moments ago", was: { kind: "nxdomain" } });
+  assert.deepEqual(ghosts.map((g) => [g.title, g.shape]), [["nxdomain", "cube"]]);
+  assert.equal(compared({ when: "moments ago", was: {} }).ghosts[0].title, "no answer");
+});
+
+test("what is new is marked where it is, and a chain that read otherwise ripples", () => {
+  const { hops, marks, fresh, rings } = compared({
+    when: "2 days ago",
+    zones: [
+      { name: "example.com.", came: true, ns_came: ["nowhere.example."], dnssec_was: "insecure", dnssec: "secure" },
+    ],
+  });
+  const cut = cutOf(hops, "example.com.");
+  const judged = hops.find((hop) => hop.step.dnssec?.zone === "example.com.");
+  assert.deepEqual(marks.get(cut), ["a zone cut that was not there", "nowhere.example. is new among its nameservers"]);
+  assert.deepEqual(marks.get(judged), ["the chain of trust read insecure then"]);
+  assert.deepEqual(rings, [{ hop: judged, was: "insecure" }]);
+  assert.deepEqual([...fresh], [cut], "a chain that reads otherwise is not new, it ripples on its own");
+});
+
+test("a new nameserver the walk asked is marked itself", () => {
+  const { hops } = walked(golden().root);
+  const cut = cutOf(hops, "example.com.");
+  const asked = cut.kids.find((kid) => kid.step.server?.name);
+  const { marks } = changesOf(hops, { zones: [{ name: "example.com.", ns_came: [asked.step.server.name.toUpperCase()] }] });
+  assert.deepEqual([...marks.keys()], [asked]);
+});
+
+test("no comparison draws nothing", () => {
+  const { marks, fresh, ghosts, rings } = changesOf(walked(golden().root).hops, undefined, null);
+  assert.equal(marks.size + fresh.size + ghosts.length + rings.length, 0);
+});
+
+test("a view written into the address reads back as the same view", () => {
+  const { hops } = walked(golden().root);
+  const view = { yaw: 0.6 + Math.PI * 4, pitch: 0.32, dist: 24.5, target: [1.25, -2, 0] };
+  const back = viewFromHash(`#${viewToHash(view, hops[4])}`, hops);
+  assert.ok(Math.abs(back.yaw - 0.6) < 1e-3, "turned the short way round");
+  assert.equal(back.pitch, 0.32);
+  assert.equal(back.dist, 24.5);
+  assert.deepEqual(back.target, [1.25, -2, 0]);
+  assert.equal(back.hop, hops[4]);
+  assert.equal(viewFromHash(viewToHash(view, null), hops).hop, null);
+});
+
+test("an address anyone could write is held to what the controls allow", () => {
+  const { hops } = walked(golden().root);
+  const cases = {
+    "no view at all": ["", null],
+    "something else in the hash": ["#top", null],
+    "too few numbers": ["#v=1,2,3", null],
+    "a number that is not one": ["#v=1,2,3,4,5,NaN", null],
+    "infinity": ["#v=1,2,3,4,5,Infinity", null],
+    "a target out in the stars": ["#v=0,0,10,9999,0,0", null],
+  };
+  for (const [name, [hash, want]] of Object.entries(cases)) assert.equal(viewFromHash(hash, hops), want, name);
+
+  const wild = viewFromHash("#v=0,9,99999,0,0,0&h=999", hops);
+  assert.equal(wild.pitch, 1.35);
+  assert.equal(wild.dist, 140);
+  assert.equal(wild.hop, null, "a hop the walk does not have");
+  assert.equal(viewFromHash("#v=0,0,10,0,0,0&h=1.5", hops).hop, null);
+  assert.equal(viewFromHash("#v=0,0,10,0,0,0&h=-1", hops).hop, null);
+});
+
+test("changes are counted the way the sentences say them", () => {
+  const cases = {
+    "nothing compared": [undefined, 0],
+    "nothing changed": [{ when: "1 day ago" }, 0],
+    "an answer": [{ was: { kind: "answer" } }, 1],
+    "nameservers that came and went are one change": [{ zones: [{ name: "a.", ns_came: ["x."], ns_went: ["y."] }] }, 1],
+    "a cut's nameservers and its chain are two": [{ zones: [{ name: "a.", ns_went: ["y."], dnssec_was: "secure" }] }, 2],
+    "a cut that came and one that went": [{ was: {}, zones: [{ name: "a.", came: true }, { name: "b.", went: true }] }, 3],
+  };
+  for (const [name, [changes, want]] of Object.entries(cases)) assert.equal(changeCount(changes), want, name);
 });

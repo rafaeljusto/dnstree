@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -61,6 +62,10 @@ type Options struct {
 	// Now is when the walk was made, for a trace that does not say. The clock
 	// is read when both are zero.
 	Now time.Time
+
+	// Changes is what --diff or --against found different, for the scene to
+	// draw where it happened. Nil draws no comparison.
+	Changes *history.Delta
 }
 
 // Serve draws nothing itself: it hands the trace to a browser and waits. It

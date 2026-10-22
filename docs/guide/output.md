@@ -386,14 +386,23 @@ The hops float in a cone that opens downwards, one ring a zone cut, and the walk
 assembles in the order it was made, each query taking as long in the replay as
 its server took. The shape of a hop says what it came to, the rings round it are
 the chain of trust at that cut, and the brighter trail is the way to the answer;
-clicking a hop says what the server said. Queries the walk had out at once are
+clicking a hop says what the server said. Each ring burns down to the share of
+its life the stalest signature under it had left when the walk was made, read
+against when the walk began, so a walk drawn again with `--from` burns the same.
+Every server asked stands on the floor in the colour of the network it answers
+from, tied to the others of that network, so a zone whose nameservers all sit
+in one network is plain to see. With `--diff` or `--against`, what the other
+walk had and this one does not hangs on as a ghost where it was: a nameserver
+dropped, a cut no longer crossed, the answer as it was. What is new ripples, and
+a chain of trust that read otherwise ripples in the colour it read then. Queries the walk had out at once are
 in flight at once, and the line over the controls holds the replay or winds it
 back. A name left pointing at nothing hangs a snapped thread, and a server that
 hands its zone or its recursion to strangers throws off sparks. `f` rides along
 with the question, from the root down to the answer. When the answer arrives, a
 bead runs back up the trail to the root. `c` films the replay, the name and the
 labels with it, and saves the film: it is made in the browser and goes nowhere
-else. Sound is off until asked for, and is placed where the hops are, so that
+else. Once the scene has been turned, the address follows it, and `l` copies a
+link that opens on the same view, the hop picked with it. Sound is off until asked for, and is placed where the hops are, so that
 turning the scene turns it too. It is WebGL2 and nothing else: a browser without
 it is pointed back at `--format web`, and one asking for reduced motion gets the
 walk already assembled and standing still.

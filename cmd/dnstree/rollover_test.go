@@ -62,7 +62,7 @@ func TestChangedTimesTheRollover(t *testing.T) {
 func TestChangedWithoutDiff(t *testing.T) {
 	tr := keyed(1, 2)
 	var stderr bytes.Buffer
-	if findings := changed(&cli.Config{Rollover: true}, tr, &stderr); findings != nil || tr.Rollover != nil {
+	if findings, delta := changed(&cli.Config{Rollover: true}, tr, &stderr); findings != nil || delta != nil || tr.Rollover != nil {
 		t.Errorf("got %v and %+v, want nothing remembered or worked out without --diff", findings, tr.Rollover)
 	}
 }

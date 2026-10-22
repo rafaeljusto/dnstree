@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -137,6 +138,35 @@ func TestBuild(t *testing.T) {
 	var alone map[string]any
 	if err := json.Unmarshal(traceDoc, &alone); err != nil {
 		t.Fatalf("the trace is not JSON on its own: %v", err)
+	}
+}
+
+// TestBuildChanges covers the comparison the scene draws: carried whole when
+// there is one, and absent rather than empty when there is not.
+func TestBuildChanges(t *testing.T) {
+	delta := &history.Delta{When: "1 day ago", Zones: []history.ZoneDelta{{Name: "example.com.", NSWent: []string{"b.ns.example."}}}}
+
+	page, _, err := build(walked(), nil, Options{Changes: delta})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	var document struct {
+		Changes *history.Delta `json:"changes"`
+	}
+	if err := json.Unmarshal(page, &document); err != nil {
+		t.Fatalf("the page is not JSON: %v", err)
+	}
+	if document.Changes == nil || document.Changes.When != "1 day ago" || len(document.Changes.Zones) != 1 ||
+		document.Changes.Zones[0].NSWent[0] != "b.ns.example." {
+		t.Errorf("got %+v, want the comparison carried whole", document.Changes)
+	}
+
+	page, _, err = build(walked(), nil, Options{})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if strings.Contains(string(page), `"changes"`) {
+		t.Errorf("got %s, want no comparison on a page that made none", page)
 	}
 }
 

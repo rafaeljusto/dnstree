@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/explain"
+	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -19,6 +20,7 @@ type payload struct {
 	Page     pageInfo        `json:"page"`
 	Trace    json.RawMessage `json:"trace"`
 	Findings []finding       `json:"findings,omitempty"`
+	Changes  *history.Delta  `json:"changes,omitempty"`
 }
 
 // pageInfo is what the page says about itself, which is what made it and when.
@@ -68,8 +70,9 @@ func build(tr *trace.Trace, findings []explain.Finding, opts Options) (page, tra
 	traceDoc = bytes.TrimRight(document.Bytes(), "\n")
 
 	body := payload{
-		Page:  pageInfo{Version: version, Generated: when.Format(time.RFC3339)},
-		Trace: traceDoc,
+		Page:    pageInfo{Version: version, Generated: when.Format(time.RFC3339)},
+		Trace:   traceDoc,
+		Changes: opts.Changes,
 	}
 	for _, found := range findings {
 		body.Findings = append(body.Findings, finding{

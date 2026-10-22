@@ -315,6 +315,15 @@
       border: 1px solid currentColor;
       box-shadow: 0 0 8px currentColor;
     }
+    /* A ring two-thirds burnt, with its ember. */
+    i.fuse {
+      rotate: 0deg;
+      border-radius: 50%;
+      border-color: currentColor transparent transparent currentColor;
+      box-shadow: none;
+      background: radial-gradient(circle at 15% 50%, rgb(255 230 200) 0 1px, transparent 2px);
+    }
+    i.ghost { border-style: dashed; box-shadow: none; opacity: 0.8; }
   }
 
   /* The labels ride on the scene. They are placed with a transform alone, so
@@ -357,6 +366,18 @@
       opacity: 0.7;
     }
     &.aside { font-size: 10px; b { font-weight: 500; } }
+    /* What was there then: struck through, and flickering with the outline. */
+    &.ghost {
+      b { font-weight: 500; text-decoration: line-through; text-decoration-color: color-mix(in oklch, var(--tone) 60%, transparent); }
+      &::before { background: none; border-top: 1px dashed var(--tone); }
+    }
+    /* A network's name lies on the floor, smaller and spaced out. */
+    &.floor {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      b { font-weight: 500; }
+      &::before { width: 6px; height: 6px; left: -12px; margin-top: -3px; border-radius: 50%; background: none; border: 1px solid var(--tone); }
+    }
     &.picked b { text-decoration: underline; text-underline-offset: 3px; }
   }
 
@@ -445,6 +466,7 @@
     .tone-ok { color: var(--tone-ok); }
     .tone-warn { color: var(--tone-warn); }
     .tone-bad { color: var(--tone-bad); }
+    .tone-fresh { color: oklch(0.93 0.05 290); }
 
     @container (width < 280px) {
       grid-template-columns: 1fr;

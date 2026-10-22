@@ -317,7 +317,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	// The last frame stays up until there is something to put in its place.
 	live.Clear()
 	unreported(cfg, tr, stderr)
-	diff := changed(cfg, tr, stderr)
+	diff, delta := changed(cfg, tr, stderr)
 
 	// A served walk is drawn in a browser rather than here, and the sentences
 	// the run asked for go to the page with it.
@@ -328,6 +328,10 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			Scene:   cfg.Format == "web-3d",
 			Color:   cfg.Color,
 			Version: version,
+			Changes: delta,
+		}
+		if reference != nil {
+			options.Changes = history.CompareAgainst(reference, history.Of(tr, tr.Started))
 		}
 		if err := web.Serve(ctx, stdout, tr, readings(cfg, tr, reference, diff), options); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -633,7 +637,8 @@ func watch(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		if round == 0 {
 			// The first round is an ordinary run, --diff and all: it is the
 			// tree everything after it is read against.
-			findings := readings(cfg, tr, reference, changed(cfg, tr, stderr))
+			diff, _ := changed(cfg, tr, stderr)
+			findings := readings(cfg, tr, reference, diff)
 			if err := draw(stdout, cfg, tr, live, findings); err != nil {
 				fmt.Fprintln(stderr, err)
 				return exitUsage
@@ -678,15 +683,16 @@ func readings(cfg *cli.Config, tr *trace.Trace, reference *history.Walk, diff []
 // timed from when the keys were first seen, so it is worked out again here,
 // before anything is drawn. Like the origin AS lookups it is metadata: a cache
 // that cannot be read or written costs the comparison, says so in one line,
-// and never the resolution.
-func changed(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) []explain.Finding {
+// and never the resolution. The difference comes back as data too, for a page
+// to draw.
+func changed(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) ([]explain.Finding, *history.Delta) {
 	if !cfg.Diff {
-		return nil
+		return nil, nil
 	}
 	dir, err := history.Dir()
 	if err != nil {
 		fmt.Fprintln(stderr, "nothing to compare with: "+err.Error())
-		return nil
+		return nil, nil
 	}
 
 	before, now := history.Load(dir, tr.Question), history.Of(tr, time.Now())
@@ -698,7 +704,7 @@ func changed(cfg *cli.Config, tr *trace.Trace, stderr io.Writer) []explain.Findi
 	if err := history.Save(dir, now); err != nil {
 		fmt.Fprintln(stderr, "this walk will not be remembered: "+err.Error())
 	}
-	return findings
+	return findings, history.Compare(before, now)
 }
 
 // resolve builds the resolution the flags asked for and runs it.

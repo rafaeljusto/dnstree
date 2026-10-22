@@ -28,6 +28,22 @@ export const KINDS = {
 };
 export const kindOf = (kind) => KINDS[kind] ?? { shape: "tetra", size: 0.5, tone: "quiet", says: kind };
 
+// The origin networks the servers sit in, told apart from each other on the
+// floor in hues the tones above do not use, so a network is never read as a
+// verdict.
+export const NETWORKS = [
+  [0.62, 0.46, 1.00],
+  [0.98, 0.45, 0.85],
+  [0.36, 0.92, 0.90],
+  [0.55, 0.66, 1.00],
+  [0.86, 0.62, 1.00],
+  [0.80, 0.90, 1.00],
+];
+
+// What a comparison draws: what was there and is gone, and what is new.
+export const GHOST = [0.72, 0.64, 1.00];
+export const FRESH = [0.92, 0.88, 1.00];
+
 const TRUST = { secure: "ok", insecure: "warn", bogus: "bad", indeterminate: "quiet" };
 export const trustTone = (state) => TRUST[state] ?? "quiet";
 
@@ -46,6 +62,14 @@ export const took = (ms) => {
   if (ms >= 1000) return `${(ms / 1000).toFixed(2)} s`;
   if (ms >= 10) return `${Math.round(ms)} ms`;
   return `${ms.toFixed(ms < 1 ? 2 : 1)} ms`;
+};
+
+// A span of days or hours, coarsely: how long a signature had to run.
+export const lasted = (ms) => {
+  const hours = ms / 3_600_000;
+  if (hours < 0) return "expired";
+  if (hours < 48) return `${Math.floor(hours)} h`;
+  return `${Math.floor(hours / 24)} days`;
 };
 
 const flagsOf = (flags) => Object.entries(flags ?? {}).filter(([, on]) => on).map(([f]) => f.toUpperCase());
@@ -93,6 +117,183 @@ export function verdictOf(hops, result) {
 export function chainState(hops) {
   const states = hops.map((hop) => hop.step.dnssec?.state).filter(Boolean);
   return ["bogus", "indeterminate", "insecure", "secure"].find((state) => states.includes(state));
+}
+
+/* ── how long the signatures had ──────────────────────────────────────── */
+
+// The share of the life it was made for that the stalest signature under a
+// verdict had left, and how long that was, when the walk was made. It is read
+// against when the walk began rather than the clock, so a walk drawn again
+// says what it said then. Null where either is not known.
+export function lifeOf(dnssec, started) {
+  const at = Date.parse(started);
+  if (Number.isNaN(at)) return null;
+  let least = null;
+  for (const signature of dnssec?.signatures ?? []) {
+    const from = Date.parse(signature.inception);
+    const to = Date.parse(signature.expiration);
+    if (!(to > from)) continue;
+    const share = (to - at) / (to - from);
+    if (!least || share < least.share) least = { share, ms: to - at };
+  }
+  return least && { share: clamp(least.share, 0, 1), ms: least.ms };
+}
+
+/* ── the networks the servers sit in ─────────────────────────────────── */
+
+// The origin networks of the servers asked, most crowded first, each with the
+// hops in it and a hue of its own. A server whose AS was not found is in none.
+export function networksOf(hops) {
+  const byNumber = new Map();
+  for (const hop of hops) {
+    const as = asked(hop.step) ? hop.step.server?.asn : null;
+    if (!as) continue;
+    if (!byNumber.has(as.number)) byNumber.set(as.number, { number: as.number, country: as.country_code, hops: [] });
+    byNumber.get(as.number).hops.push(hop);
+  }
+  const networks = [...byNumber.values()].sort((a, b) => b.hops.length - a.hops.length || a.number - b.number);
+  networks.forEach((network, i) => {
+    network.color = NETWORKS[i % NETWORKS.length];
+    for (const hop of network.hops) hop.network = network;
+  });
+  return networks;
+}
+
+// The shortest set of lines that joins points on the floor, as pairs of
+// indices: what ties the footprints of one network together. Prim's, since a
+// network has a handful of servers.
+export function spanning(points) {
+  if (points.length < 2) return [];
+  const joined = [0];
+  const pairs = [];
+  const far = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
+  while (joined.length < points.length) {
+    let best = null;
+    for (const from of joined) {
+      for (let to = 0; to < points.length; to++) {
+        if (joined.includes(to)) continue;
+        const d = far(points[from], points[to]);
+        if (!best || d < best.d) best = { from, to, d };
+      }
+    }
+    pairs.push([best.from, best.to]);
+    joined.push(best.to);
+  }
+  return pairs;
+}
+
+/* ── what changed since another walk ───────────────────────────────────── */
+
+const named = (name) => {
+  const lower = String(name ?? "").toLowerCase();
+  return lower.endsWith(".") ? lower : `${lower}.`;
+};
+
+// The hop where the walk crossed into a zone: the referral that sent it
+// there, or the start for the root.
+export function cutOf(hops, zone) {
+  const name = named(zone);
+  if (name === ".") return hops[0];
+  return hops.find((hop) => !hop.step.aside && named(hop.step.delegation?.zone) === name) ?? null;
+}
+
+// The cut nearest above a zone the walk no longer crosses, which is where the
+// ghost of it hangs.
+function above(hops, zone) {
+  let name = named(zone);
+  while (name !== ".") {
+    name = name.slice(name.indexOf(".") + 1) || ".";
+    const cut = cutOf(hops, name);
+    if (cut) return cut;
+  }
+  return hops[0];
+}
+
+// What --diff or --against found, put where it happened. Each mark is a hop
+// with what changed about it, and the fresh ones are those with something new
+// in them; each ghost is something the other walk had that
+// this one does not, hung off the hop nearest to where it was; each ring is a
+// chain of trust that read differently then. The comparison itself is made
+// when the walk is remembered: this only finds where to draw it.
+export function changesOf(hops, changes, result) {
+  const marks = new Map();
+  const fresh = new Set();
+  const ghosts = [];
+  const rings = [];
+  if (!changes) return { marks, fresh, ghosts, rings };
+  const mark = (hop, text) => hop && marks.set(hop, [...(marks.get(hop) ?? []), text]);
+  const anew = (hop, text) => hop && fresh.add(hop) && mark(hop, text);
+
+  for (const zone of changes.zones ?? []) {
+    if (zone.went) {
+      ghosts.push({ anchor: above(hops, zone.name), shape: "ico", title: zone.name, text: "a cut the walk crosses no longer" });
+      continue;
+    }
+    const cut = cutOf(hops, zone.name);
+    if (zone.came) anew(cut, "a zone cut that was not there");
+    for (const ns of zone.ns_came ?? []) {
+      const server = cut?.kids.find((kid) => named(kid.step.server?.name) === named(ns));
+      anew(server ?? cut, server ? `new among the nameservers of ${zone.name}` : `${ns} is new among its nameservers`);
+    }
+    for (const ns of zone.ns_went ?? []) {
+      if (cut) ghosts.push({ anchor: cut, shape: "octa", title: ns, text: `dropped from the nameservers of ${zone.name}` });
+    }
+    if (zone.dnssec_was) {
+      const judged = hops.find((hop) => named(hop.step.dnssec?.zone) === named(zone.name));
+      if (judged) rings.push({ hop: judged, was: zone.dnssec_was });
+      mark(judged ?? cut, `the chain of trust read ${zone.dnssec_was} then`);
+    }
+  }
+
+  if (changes.was) {
+    const { kind, answer = [] } = changes.was;
+    const said = answer.length ? `${answer[0]}${answer.length > 1 ? ` +${answer.length - 1}` : ""}` : kind || "no answer";
+    const anchor = result ?? hops.findLast((hop) => !hop.step.aside) ?? hops[0];
+    ghosts.push({ anchor, shape: kindOf(kind || "timeout").shape, title: said, text: "the answer then" });
+  }
+
+  // Ghosts sharing a hop fan out beneath it, away from the middle of the cone.
+  const byAnchor = Map.groupBy(ghosts, (ghost) => ghost.anchor);
+  for (const [anchor, group] of byAnchor) {
+    const out = Math.hypot(anchor.pos[0], anchor.pos[2]) > 0.1 ? Math.atan2(anchor.pos[2], anchor.pos[0]) : 0;
+    group.forEach((ghost, i) => {
+      const a = out + (i - (group.length - 1) / 2) * 0.55;
+      ghost.pos = [anchor.pos[0] + Math.cos(a) * 1.7, anchor.pos[1] - 1.3 - (i % 2) * 0.35, anchor.pos[2] + Math.sin(a) * 1.7];
+    });
+  }
+  ghosts.forEach((ghost, i) => { ghost.phase = ((i + 1000) * 2.399963) % (Math.PI * 2); });
+  return { marks, fresh, ghosts, rings };
+}
+
+// How many things changed, counted the way the sentences under the walk say
+// them: a cut that came or went, its nameservers, its chain, and the answer.
+export const changeCount = (changes) => (changes?.was ? 1 : 0) + (changes?.zones ?? []).reduce((sum, zone) =>
+  sum + (zone.came || zone.went ? 1 : 0) + (zone.ns_came?.length || zone.ns_went?.length ? 1 : 0) + (zone.dnssec_was ? 1 : 0), 0);
+
+/* ── the view, in the address ──────────────────────────────────────────── */
+
+// Where the camera is and which hop is picked, written into the part of the
+// address after the #, which never leaves the browser, so a link opens on the
+// same shot.
+export function viewToHash({ yaw, pitch, dist, target }, picked) {
+  const view = [around(yaw), pitch, dist, ...target].map((n) => n.toFixed(3)).join(",");
+  return `v=${view}${picked ? `&h=${picked.id}` : ""}`;
+}
+
+// The view a hash names, or null for one that names none. Anyone can write an
+// address, so every number is checked and held within what the controls
+// allow.
+export function viewFromHash(hash, hops) {
+  const params = new URLSearchParams(String(hash ?? "").replace(/^#/, ""));
+  const numbers = (params.get("v") ?? "").split(",").map(Number);
+  if (numbers.length !== 6 || !numbers.every(Number.isFinite)) return null;
+  const [yaw, pitch, dist, ...target] = numbers;
+  if (target.some((n) => Math.abs(n) > 500)) return null;
+  const id = Number(params.get("h") ?? NaN);
+  return {
+    yaw: around(yaw), pitch: clamp(pitch, -1.25, 1.35), dist: clamp(dist, 4, 140), target,
+    hop: Number.isInteger(id) && id >= 0 && id < hops.length ? hops[id] : null,
+  };
 }
 
 /* ── where each hop floats ─────────────────────────────────────────────── */
@@ -275,7 +476,7 @@ export function subtitleOf(hop, result) {
 
 // The rows the inspector shows for a hop, as [term, value, tone]. A row with
 // nothing to say is left out.
-export function factsOf(step) {
+export function factsOf(step, started) {
   const rows = [];
   const row = (term, value, tone) => value && rows.push([term, value, tone ?? null]);
   row("zone", step.zone);
@@ -299,6 +500,8 @@ export function factsOf(step) {
     if (s.key_tags?.length) row("key tags", s.key_tags.join(", "));
     const expires = s.signatures?.map((sig) => sig.expiration).sort()[0];
     if (expires) row("signed until", new Date(expires).toLocaleString());
+    const life = lifeOf(s, started);
+    if (life) row("life left", `${Math.round(life.share * 100)}% · ${lasted(life.ms)}`);
     row("because", s.reason);
   }
   if (step.server?.asn) {
