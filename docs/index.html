@@ -369,7 +369,8 @@ footer a:hover{color:var(--ink)}
         <code>-x 8.8.8.8</code> walks to the PTR of an address instead, the way
         <code>dig -x</code> does: down <code>in-addr.arpa.</code> or <code>ip6.arpa.</code>,
         whose nameservers are usually named somewhere else entirely, so every side walk to
-        find one is drawn as a branch of its own.
+        find one is drawn as a branch of its own. Then it looks each name up again, to say
+        whether it points back to the address, the way a mail receiver checks a sender.
       </p>
     </section>
 

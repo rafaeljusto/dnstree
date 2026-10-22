@@ -142,6 +142,10 @@ takes --web-addr and --no-browser as well.
 asked as 1.2.0.192.in-addr.arpa. and an IPv6 address under ip6.arpa. It takes
 the place of NAME and TYPE. The reverse tree is delegated like any other, and
 a delegation below a /24 (RFC 2317) arrives as an alias, which is followed.
+Each name the PTR set gives is then looked up for an address of the same
+family, to say whether it points back: forward-confirmed reverse DNS, which
+mail receivers judge a sending server by. Those lookups never change the exit
+code.
 
 --check-ns asks the zone that answered for its own NS set, and the addresses of
 the nameservers named inside it, and holds them against the delegation and its
@@ -605,6 +609,10 @@ type Config struct {
 	Propagation    bool
 	Rollover       bool
 
+	// Confirm is the address -x asked about, whose PTR names are looked up
+	// to see whether they point back to it.
+	Confirm netip.Addr
+
 	// Check grades the zone's health one area at a time, and turns on every
 	// check that grades one, bar the probes a zone's owner is the one to run.
 	Check bool
@@ -963,7 +971,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: -x %q is not an address", ErrUsage, reverse)
 		}
-		cfg.Name, cfg.Type = reverseName(addr.Unmap()), "PTR"
+		cfg.Name, cfg.Type, cfg.Confirm = reverseName(addr.Unmap()), "PTR", addr.Unmap()
 	case n == 0:
 		fmt.Fprint(output, Usage)
 		return nil, fmt.Errorf("%w: no name to resolve", ErrUsage)

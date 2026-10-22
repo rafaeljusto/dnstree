@@ -160,15 +160,15 @@ func TestParse(t *testing.T) {
 		},
 		"the PTR of an IPv4 address": {
 			args: []string{"-x", "192.0.2.1"},
-			want: cli.Config{Name: "1.2.0.192.in-addr.arpa.", Type: "PTR"},
+			want: cli.Config{Name: "1.2.0.192.in-addr.arpa.", Type: "PTR", Confirm: netip.MustParseAddr("192.0.2.1")},
 		},
 		"the PTR of an IPv6 address, nibble by nibble": {
 			args: []string{"-x", "2001:db8::1"},
-			want: cli.Config{Name: "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.", Type: "PTR"},
+			want: cli.Config{Name: "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.", Type: "PTR", Confirm: netip.MustParseAddr("2001:db8::1")},
 		},
 		"an IPv4 address written the IPv6 way is asked under in-addr.arpa.": {
 			args: []string{"-x", "::ffff:192.0.2.1"},
-			want: cli.Config{Name: "1.2.0.192.in-addr.arpa.", Type: "PTR"},
+			want: cli.Config{Name: "1.2.0.192.in-addr.arpa.", Type: "PTR", Confirm: netip.MustParseAddr("192.0.2.1")},
 		},
 		"a signed zone's request of its parent": {
 			args: []string{"--dnssec", "--check-ds", "example.com"},

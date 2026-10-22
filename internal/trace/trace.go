@@ -72,6 +72,10 @@ type Trace struct {
 	// records connects, nil where --svcb did not ask.
 	ServicePath *ServicePath
 
+	// Reverse is whether the names the PTR set gives point back to the
+	// address -x asked about, nil for any other question.
+	Reverse *Reverse
+
 	// Dependencies are the zones the name depends on, nil where --deps did
 	// not ask.
 	Dependencies *Dependencies

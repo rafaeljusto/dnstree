@@ -338,7 +338,8 @@ issue, how many lookups `--spf` counted and what a check comes to, how many MX h
 `--mail` found DANE covering and which mail policies it found, the keys `--dkim`
 checked, the addresses whose certificate `--tlsa` matched, how many
 of the servers `--svcb` found have an address and how many of the hints for
-them are stray, how long
+them are stray, whether a name the PTR of an address `-x` asked about points
+back to it, how long
 `--rdap` found the registration has left, whether it is held and whether it
 agrees with the TLD, the TTL the zone gives the answer, and how long each
 resolver took, whether it failed, whether it agreed and the TTL it handed out. Only gauges are used, so the older

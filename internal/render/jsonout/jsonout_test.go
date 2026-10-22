@@ -235,6 +235,17 @@ func resolution() *trace.Trace {
 				Addrs: []netip.Addr{netip.MustParseAddr("203.0.113.7")},
 				Hints: []netip.Addr{netip.MustParseAddr("192.0.2.1")}, Stray: []netip.Addr{netip.MustParseAddr("192.0.2.1")}}},
 		},
+		Reverse: &trace.Reverse{
+			Addr: netip.MustParseAddr("192.0.2.40"),
+			PTR:  trace.Lookup{Name: "40.2.0.192.in-addr.arpa.", Alias: "40.32/27.2.0.192.in-addr.arpa."},
+			Names: []trace.ReverseName{
+				{Name: "mail.example.com.", Lookup: trace.Lookup{Name: "mail.example.com."}, Addrs: []netip.Addr{netip.MustParseAddr("192.0.2.40")}},
+				{Name: "old.example.com.", Lookup: trace.Lookup{Name: "old.example.com.", Alias: "host.example.net."},
+					Addrs: []netip.Addr{netip.MustParseAddr("198.51.100.7")}},
+				{Name: "gone.example.com.", Lookup: trace.Lookup{Name: "gone.example.com.", Err: "the budget ran out before it was made"}},
+			},
+			Cut: true,
+		},
 		Dependencies: &trace.Dependencies{
 			Name: "www.example.com.",
 			Zones: []trace.DependencyZone{

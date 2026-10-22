@@ -681,6 +681,46 @@
       }
     ]
   },
+  "reverse": {
+    "addr": "192.0.2.40",
+    "ptr": {
+      "name": "40.2.0.192.in-addr.arpa.",
+      "alias": "40.32/27.2.0.192.in-addr.arpa."
+    },
+    "names": [
+      {
+        "name": "mail.example.com.",
+        "lookup": {
+          "name": "mail.example.com."
+        },
+        "addrs": [
+          "192.0.2.40"
+        ],
+        "back": true
+      },
+      {
+        "name": "old.example.com.",
+        "lookup": {
+          "name": "old.example.com.",
+          "alias": "host.example.net."
+        },
+        "addrs": [
+          "198.51.100.7"
+        ],
+        "back": false
+      },
+      {
+        "name": "gone.example.com.",
+        "lookup": {
+          "name": "gone.example.com.",
+          "error": "the budget ran out before it was made"
+        },
+        "back": false
+      }
+    ],
+    "confirmed": true,
+    "cut": true
+  },
   "dependencies": {
     "name": "www.example.com.",
     "zones": [

@@ -191,6 +191,12 @@ type Config struct {
 	// like the mail check's.
 	SVCB bool
 
+	// Confirm is the address a PTR question stands for. The names its PTR set
+	// gives are each looked up for an address of its family, to say which of
+	// them point back to it: forward-confirmed reverse DNS. Each lookup is a
+	// walk of its own, like the mail check's. The zero value looks up none.
+	Confirm netip.Addr
+
 	// Deps follows every nameserver of every zone the walk was referred to,
 	// and of every zone those lookups are referred to in turn, to find all the
 	// zones the name depends on. Each lookup is a walk of its own, like the
@@ -343,6 +349,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 	if r.cfg.SVCB {
 		run.svcb(ctx, cmp.Or(end, run.trace.Root), end)
+	}
+	if r.cfg.Confirm.IsValid() && rrtype == dns.TypePTR {
+		run.confirm(ctx, cmp.Or(end, run.trace.Root), end)
 	}
 	if r.cfg.Deps {
 		run.deps(ctx, cmp.Or(end, run.trace.Root))

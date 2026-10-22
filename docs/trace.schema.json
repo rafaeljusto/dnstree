@@ -45,6 +45,7 @@
     "spf": { "$ref": "#/$defs/spf" },
     "mail": { "$ref": "#/$defs/mail" },
     "service_path": { "$ref": "#/$defs/service_path" },
+    "reverse": { "$ref": "#/$defs/reverse" },
     "dependencies": { "$ref": "#/$defs/dependencies" },
     "registration": { "$ref": "#/$defs/registration" },
     "propagation": { "$ref": "#/$defs/propagation" },
@@ -365,6 +366,33 @@
         "none": { "description": "Present where an alias to . says the service does not exist (RFC 9460 2.5.1).", "type": "boolean" },
         "stopped": { "description": "Why the chain was left before its end: a lookup failed or did not validate, the aliases looped or went on past --max-cname, or a budget ran out.", "type": "string" },
         "cut": { "description": "Present where a budget cut the address lookups short, which leaves the hints unjudged.", "type": "boolean" }
+      }
+    },
+    "reverse": {
+      "description": "Whether the names the PTR set gives point back to the address -x asked about: forward-confirmed reverse DNS, which mail receivers judge a sender by. Present only for a walk -x asked for. Every name is looked up for an address of the family of addr, each with a walk of its own, in the tree as an aside.",
+      "type": "object",
+      "required": ["addr", "ptr", "confirmed"],
+      "properties": {
+        "addr": { "type": "string" },
+        "ptr": { "description": "The walk's own PTR lookup, whose alias is where a delegation below a /24 (RFC 2317) sent it. Where it carries an error or does not validate, names is absent.", "$ref": "#/$defs/lookup" },
+        "names": {
+          "description": "The names the PTR set gives, each once, in the order of the set. Absent where the address has none.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/reverse_name" }
+        },
+        "confirmed": { "description": "Whether a name points back.", "type": "boolean" },
+        "cut": { "description": "Present where a budget cut the lookups of the names short.", "type": "boolean" }
+      }
+    },
+    "reverse_name": {
+      "description": "One name the PTR set gives, and the addresses it has.",
+      "type": "object",
+      "required": ["name", "lookup", "back"],
+      "properties": {
+        "name": { "type": "string" },
+        "lookup": { "$ref": "#/$defs/lookup" },
+        "addrs": { "description": "Its addresses in the family of the address asked about.", "type": "array", "items": { "type": "string" } },
+        "back": { "description": "Whether its addresses, from a lookup that was answered and validated where checked, hold the address asked about.", "type": "boolean" }
       }
     },
     "dependencies": {

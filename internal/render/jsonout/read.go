@@ -89,6 +89,9 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	if tr.ServicePath, err = readServicePath(doc.ServicePath); err != nil {
 		return nil, err
 	}
+	if tr.Reverse, err = readReverse(doc.Reverse); err != nil {
+		return nil, err
+	}
 	if tr.Dependencies, err = readDependencies(doc.Dependencies); err != nil {
 		return nil, err
 	}

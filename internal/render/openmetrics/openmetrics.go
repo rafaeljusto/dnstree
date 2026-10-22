@@ -244,6 +244,13 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		}
 	}
 
+	// A budget that stopped the names short leaves a no unsaid rather than
+	// said; a walk with no PTR set to read has nothing to be confirmed.
+	if c := tr.Reverse; c != nil && c.PTR.Answered() && (c.Confirmed() || !c.Cut) {
+		m.family("dnstree_ptr_confirmed", "", "whether a name the address's PTR records give points back to it: forward-confirmed reverse DNS")
+		m.sample("dnstree_ptr_confirmed", flag(c.Confirmed()))
+	}
+
 	if reg := tr.Registration; reg != nil {
 		m.family("dnstree_registration", "", "what the registry said about the domain over RDAP: registered, unregistered, unpublished where the TLD runs no RDAP service, or unreached")
 		for _, value := range []trace.RegistrationState{trace.Registered, trace.Unregistered, trace.Unpublished, trace.Unreached} {

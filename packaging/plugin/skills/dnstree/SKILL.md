@@ -98,7 +98,7 @@ whole; `dnstree --schema` describes every field.
 | whether the zone survives losing a server | `dnstree --format markdown --without SERVER NAME` |
 | what public resolvers answer | `dnstree --format markdown --resolver 1.1.1.1 --resolver 8.8.8.8 NAME` |
 | whether a resolver validates DNSSEC, rewrites NXDOMAIN, sends the client subnet (ECS) or minimises queries | `dnstree --format markdown --check-resolver --resolver 1.1.1.1 NAME` |
-| the name of an address | `dnstree --format markdown -x 192.0.2.1` |
+| the name of an address, and whether it points back (forward-confirmed reverse DNS) | `dnstree --format markdown -x 192.0.2.1` |
 
 `TYPE` defaults to `A`; give `AAAA`, `MX`, `TXT` and so on after the name.
 `--all` asks every nameserver rather than the first, and finds the one that is

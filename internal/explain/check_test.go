@@ -47,6 +47,18 @@ func TestCheck(t *testing.T) {
 					Text: "not asked; --check-axfr and --check-recursion probe the nameservers, which is for your own zone"},
 			},
 		},
+		"an address whose name points back passes mail": {
+			tr: func() *trace.Trace {
+				tr := walk(answer())
+				addr := netip.MustParseAddr("192.0.2.25")
+				tr.Reverse = &trace.Reverse{Addr: addr, PTR: trace.Lookup{Name: "25.2.0.192.in-addr.arpa."},
+					Names: []trace.ReverseName{{Name: "mail.test.", Lookup: trace.Lookup{Name: "mail.test."}, Addrs: []netip.Addr{addr}}}}
+				return tr
+			}(),
+			want: map[trace.Area]trace.Graded{
+				trace.AreaMail: {Grade: trace.GradePassed, Text: "mail.test. points back to 192.0.2.25, so the address is forward-confirmed"},
+			},
+		},
 		"a walk that reached nothing breaks the answer": {
 			tr: walk(hop(trace.KindTimeout, "ns.test.")),
 			want: map[trace.Area]trace.Graded{

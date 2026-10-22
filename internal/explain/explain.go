@@ -140,6 +140,9 @@ func Findings(tr *trace.Trace) []Finding {
 		findings = append(findings, finding)
 	}
 	findings = append(findings, delivery(tr)...)
+	if finding, ok := reverse(tr); ok {
+		findings = append(findings, finding)
+	}
 	if finding, ok := service(tr); ok {
 		findings = append(findings, finding)
 	}

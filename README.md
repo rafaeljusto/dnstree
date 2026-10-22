@@ -131,7 +131,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 
 | Flag | What it does |
 | --- | --- |
-| [`-x`](#reverse-lookups) | resolve the PTR of this address, in place of a name and a type |
+| [`-x`](#reverse-lookups) | resolve the PTR of this address, in place of a name and a type, and say whether its names point back to it |
 | [`--names`](docs/guide/scripting.md#several-questions-in-one-run) | walk every `NAME [TYPE...]` line of a file, or of `-` for the standard input, one after another |
 | `-4`, `-6` | ask only IPv4 or only IPv6 servers; the others are drawn unqueried |
 | [`--udp`](docs/guide/configuring.md#carrying-the-queries), `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
@@ -202,19 +202,25 @@ nameservers are usually named somewhere else entirely, so a reverse walk is
 where the side walks that resolve a nameserver's own name are most often seen.
 A delegation below a /24 (RFC 2317) arrives as an alias, and is followed.
 
+Each name the PTR set gives is then looked up for an address of the same
+family, from the root, to say whether it points back: forward-confirmed reverse
+DNS, which mail receivers judge a sending server by. Those lookups are drawn
+as asides and never change the exit code; a `ptr:` line under the tree says
+which names point back, and which do not and why.
+
 <details>
 <summary>The walk to the PTR of 8.8.8.8</summary>
 
 ```
 $ dnstree -x 8.8.8.8 --no-asn
 . (root)
-├── a.root-servers.net. 198.41.0.4  164ms  NOERROR  referral → in-addr.arpa.
-│   ├── f.in-addr-servers.arpa. 193.0.9.1  244ms  NOERROR  referral → 8.in-addr.arpa.
-│   │   ├── . (root)  (resolving r.arin.net.)
-│   │   │   ├── a.root-servers.net. 198.41.0.4  178ms  NOERROR  referral → net.
-│   │   │   │   ├── m.gtld-servers.net. 192.55.83.30  178ms  NOERROR  referral → arin.net.
-│   │   │   │   │   ├── ns1.arin.net. 199.212.0.108  149ms  NOERROR  AA
-│   │   │   │   │   │   └── r.arin.net. 43200 A 199.180.180.63
+├── a.root-servers.net. 198.41.0.4  235ms  NOERROR  referral → in-addr.arpa.
+│   ├── f.in-addr-servers.arpa. 193.0.9.1  227ms  NOERROR  referral → 8.in-addr.arpa.
+│   │   ├── . (root)  (resolving u.arin.net.)
+│   │   │   ├── a.root-servers.net. 198.41.0.4  234ms  NOERROR  referral → net.
+│   │   │   │   ├── m.gtld-servers.net. 192.55.83.30  238ms  NOERROR  referral → arin.net.
+│   │   │   │   │   ├── ns1.arin.net. 199.212.0.108  306ms  NOERROR  AA
+│   │   │   │   │   │   └── u.arin.net. 43200 A 204.61.216.50
 │   │   │   │   │   ├── ns1.arin.net. 2001:500:13::108  (not queried)
 │   │   │   │   │   ├── ns2.arin.net. 199.71.0.108  (not queried)
 │   │   │   │   │   ├── ns2.arin.net. 2001:500:31::108  (not queried)
@@ -227,12 +233,12 @@ $ dnstree -x 8.8.8.8 --no-asn
 │   │   │   ├── b.root-servers.net. 170.247.170.2  (not queried)
 │   │   │   ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
 │   │   │   └── (and 22 more not queried)
-│   │   └── r.arin.net. 199.180.180.63  172ms  NOERROR  referral → 8.8.8.in-addr.arpa.
-│   │       ├── . (root)  (resolving ns1.google.com.)
-│   │       │   ├── a.root-servers.net. 198.41.0.4  150ms  NOERROR  referral → com.
-│   │       │   │   ├── l.gtld-servers.net. 192.41.162.30  191ms  NOERROR  referral → google.com.
-│   │       │   │   │   ├── ns2.google.com. 2001:4860:4802:34::a  63ms  NOERROR  AA
-│   │       │   │   │   │   └── ns1.google.com. 345600 A 216.239.32.10
+│   │   └── u.arin.net. 204.61.216.50  219ms  NOERROR  referral → 8.8.8.in-addr.arpa.
+│   │       ├── . (root)  (resolving ns3.google.com.)
+│   │       │   ├── a.root-servers.net. 198.41.0.4  235ms  NOERROR  referral → com.
+│   │       │   │   ├── l.gtld-servers.net. 192.41.162.30  236ms  NOERROR  referral → google.com.
+│   │       │   │   │   ├── ns2.google.com. 2001:4860:4802:34::a  57ms  NOERROR  AA
+│   │       │   │   │   │   └── ns3.google.com. 345600 A 216.239.36.10
 │   │       │   │   │   ├── ns2.google.com. 216.239.34.10  (not queried)
 │   │       │   │   │   ├── ns1.google.com. 2001:4860:4802:32::a  (not queried)
 │   │       │   │   │   ├── ns1.google.com. 216.239.32.10  (not queried)
@@ -245,8 +251,26 @@ $ dnstree -x 8.8.8.8 --no-asn
 │   │       │   ├── b.root-servers.net. 170.247.170.2  (not queried)
 │   │       │   ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
 │   │       │   └── (and 22 more not queried)
-│   │       └── ns1.google.com. 216.239.32.10  58ms  NOERROR  AA
-│   │           └── 8.8.8.8.in-addr.arpa. 86400 PTR dns.google.
+│   │       └── ns3.google.com. 216.239.36.10  237ms  NOERROR  AA
+│   │           ├── 8.8.8.8.in-addr.arpa. 86400 PTR dns.google.
+│   │           └── . (root)  (A of dns.google. for the reverse check)
+│   │               ├── a.root-servers.net. 198.41.0.4  234ms  NOERROR  referral → google.
+│   │               │   ├── ns-tld2.charlestonroadregistry.com. 216.239.34.105  240ms  NOERROR  referral → dns.google.
+│   │               │   │   ├── ns2.zdns.google. 216.239.34.114  245ms  NOERROR  AA
+│   │               │   │   │   ├── dns.google. 900 A 8.8.8.8
+│   │               │   │   │   └── dns.google. 900 A 8.8.4.4
+│   │               │   │   ├── ns2.zdns.google. 2001:4860:4802:34::72  (not queried)
+│   │               │   │   ├── ns3.zdns.google. 216.239.36.114  (not queried)
+│   │               │   │   ├── ns3.zdns.google. 2001:4860:4802:36::72  (not queried)
+│   │               │   │   └── (and 4 more not queried)
+│   │               │   ├── ns-tld2.charlestonroadregistry.com. 2001:4860:4802:34::69  (not queried)
+│   │               │   ├── ns-tld4.charlestonroadregistry.com. 216.239.38.105  (not queried)
+│   │               │   ├── ns-tld4.charlestonroadregistry.com. 2001:4860:4802:38::69  (not queried)
+│   │               │   └── (and 6 more not queried)
+│   │               ├── a.root-servers.net. 2001:503:ba3e::2:30  (not queried)
+│   │               ├── b.root-servers.net. 170.247.170.2  (not queried)
+│   │               ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
+│   │               └── (and 22 more not queried)
 │   ├── f.in-addr-servers.arpa. 2a13:27c0:30::1  (not queried)
 │   ├── b.in-addr-servers.arpa. 199.253.183.183  (not queried)
 │   ├── b.in-addr-servers.arpa. 2001:500:87::87  (not queried)
@@ -255,7 +279,8 @@ $ dnstree -x 8.8.8.8 --no-asn
 ├── b.root-servers.net. 170.247.170.2  (not queried)
 ├── b.root-servers.net. 2801:1b8:10::b  (not queried)
 └── (and 22 more not queried)
-✔ answered in 1.5s · resolver in 9ms · 10 queries · 8 servers
+ptr: dns.google. points back to 8.8.8.8
+✔ answered in 2.9s · resolver in 222ms · 13 queries · 10 servers
 ```
 
 </details>

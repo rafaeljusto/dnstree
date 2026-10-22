@@ -168,7 +168,10 @@ func about(tr *trace.Trace, area trace.Area) (findings []Finding, ran bool, pass
 			findings = append(findings, finding)
 		}
 		findings = append(findings, delivery(tr)...)
-		return findings, tr.Mail != nil || tr.SPF != nil, cmp.Or(first(texts(findings)), "nothing to look at in the mail records")
+		if finding, ok := reverse(tr); ok {
+			findings = append(findings, finding)
+		}
+		return findings, tr.Mail != nil || tr.SPF != nil || tr.Reverse != nil, cmp.Or(first(texts(findings)), "nothing to look at in the mail records")
 
 	case trace.AreaRegistration:
 		reg := tr.Registration
