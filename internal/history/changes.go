@@ -78,7 +78,8 @@ func Differences(before, now *Walk) []explain.Finding {
 	if before == nil || now == nil {
 		return nil
 	}
-	return slices.Concat(answer(before, now), cuts(before, now), signing(before, now))
+	zones := compare(before, now).Zones
+	return slices.Concat(answer(before, now), cuts(zones), signing(zones))
 }
 
 // answer is what became of the answer itself: the thing the question was asked
@@ -128,49 +129,26 @@ func answer(before, now *Walk) []explain.Finding {
 
 // cuts is what became of the zones on the way down: one that was not there
 // before, one that is gone, and the nameservers each of them is delegated to.
-func cuts(before, now *Walk) []explain.Finding {
+func cuts(zones []ZoneDelta) []explain.Finding {
 	var findings []explain.Finding
-	for _, zone := range now.Zones {
-		was, known := find(before.Zones, zone.Name)
-		if !known {
-			findings = append(findings, explain.Finding{
-				Topic: explain.Change, Level: explain.Note,
-				Text: fmt.Sprintf("there is a zone cut at %s now, and there was none then", zone.Name),
-			})
+	for _, zone := range zones {
+		var text string
+		switch {
+		case zone.Came:
+			text = fmt.Sprintf("there is a zone cut at %s now, and there was none then", zone.Name)
+		case zone.Went:
+			text = fmt.Sprintf("the zone cut at %s is gone, and the walk crosses it no longer", zone.Name)
+		case len(zone.NSCame) > 0 && len(zone.NSWent) > 0:
+			text = fmt.Sprintf("the nameservers of %s changed: %s came in and %s went",
+				zone.Name, list(zone.NSCame), list(zone.NSWent))
+		case len(zone.NSCame) > 0:
+			text = fmt.Sprintf("%s was added to the nameservers of %s", list(zone.NSCame), zone.Name)
+		case len(zone.NSWent) > 0:
+			text = fmt.Sprintf("%s was dropped from the nameservers of %s", list(zone.NSWent), zone.Name)
+		default:
 			continue
 		}
-		if len(was.NS) == 0 || len(zone.NS) == 0 {
-			continue // the root is not delegated to, so there is nothing to hold against it
-		}
-
-		came, went := apart(was.NS, zone.NS)
-		switch {
-		case len(came) > 0 && len(went) > 0:
-			findings = append(findings, explain.Finding{
-				Topic: explain.Change, Level: explain.Note,
-				Text: fmt.Sprintf("the nameservers of %s changed: %s came in and %s went",
-					zone.Name, list(came), list(went)),
-			})
-		case len(came) > 0:
-			findings = append(findings, explain.Finding{
-				Topic: explain.Change, Level: explain.Note,
-				Text: fmt.Sprintf("%s was added to the nameservers of %s", list(came), zone.Name),
-			})
-		case len(went) > 0:
-			findings = append(findings, explain.Finding{
-				Topic: explain.Change, Level: explain.Note,
-				Text: fmt.Sprintf("%s was dropped from the nameservers of %s", list(went), zone.Name),
-			})
-		}
-	}
-
-	for _, zone := range before.Zones {
-		if _, known := find(now.Zones, zone.Name); !known {
-			findings = append(findings, explain.Finding{
-				Topic: explain.Change, Level: explain.Note,
-				Text: fmt.Sprintf("the zone cut at %s is gone, and the walk crosses it no longer", zone.Name),
-			})
-		}
+		findings = append(findings, explain.Finding{Topic: explain.Change, Level: explain.Note, Text: text})
 	}
 	return findings
 }
@@ -178,11 +156,10 @@ func cuts(before, now *Walk) []explain.Finding {
 // signing is what became of the chain of trust over each zone. Only a zone both
 // walks checked is read: a walk that followed no chain remembers no state, and
 // nothing about it says the zone changed.
-func signing(before, now *Walk) []explain.Finding {
+func signing(zones []ZoneDelta) []explain.Finding {
 	var findings []explain.Finding
-	for _, zone := range now.Zones {
-		was, known := find(before.Zones, zone.Name)
-		if !known || was.DNSSEC == "" || zone.DNSSEC == "" || was.DNSSEC == zone.DNSSEC {
+	for _, zone := range zones {
+		if zone.DNSSECWas == "" {
 			continue
 		}
 
@@ -193,16 +170,111 @@ func signing(before, now *Walk) []explain.Finding {
 		switch {
 		case zone.DNSSEC == "bogus":
 			level = explain.Fault
-		case was.DNSSEC == "secure" && zone.DNSSEC == "insecure":
+		case zone.DNSSECWas == "secure" && zone.DNSSEC == "insecure":
 			level = explain.Warn
 		}
 		findings = append(findings, explain.Finding{
 			Topic: explain.Change, Level: level,
 			Text: fmt.Sprintf("the chain of trust over %s read %s then and reads %s now",
-				zone.Name, was.DNSSEC, zone.DNSSEC),
+				zone.Name, zone.DNSSECWas, zone.DNSSEC),
 		})
 	}
 	return findings
+}
+
+// Delta is what [Differences] says, kept as data for a page to draw rather
+// than as sentences to read. The sentences are made from it, so the two cannot
+// disagree.
+type Delta struct {
+	// When is how far apart the two walks were made, in the words the
+	// sentences use.
+	When string `json:"when"`
+
+	// Was is the answer as it was, where it is not what it is now.
+	Was *Answer `json:"was,omitempty"`
+
+	// Zones is every cut that changed, those this walk crossed first, in the
+	// order it crossed them, and then those it crosses no longer.
+	Zones []ZoneDelta `json:"zones,omitempty"`
+}
+
+// Answer is what ended a remembered walk.
+type Answer struct {
+	Kind   string   `json:"kind,omitempty"`
+	Answer []string `json:"answer,omitempty"`
+}
+
+// ZoneDelta is what became of one zone cut.
+type ZoneDelta struct {
+	Name string `json:"name"`
+
+	// Came is a cut that was not there before, and Went one that is gone.
+	Came bool `json:"came,omitempty"`
+	Went bool `json:"went,omitempty"`
+
+	// NSCame and NSWent are the nameservers its parent delegates to now and
+	// did not then, and the other way round.
+	NSCame []string `json:"ns_came,omitempty"`
+	NSWent []string `json:"ns_went,omitempty"`
+
+	// DNSSECWas is the chain of trust as it read then, and DNSSEC as it reads
+	// now, set only where both walks checked it and the two differ.
+	DNSSECWas string `json:"dnssec_was,omitempty"`
+	DNSSEC    string `json:"dnssec,omitempty"`
+}
+
+// Compare is the difference [Changes] describes, nil with nothing to compare.
+func Compare(before, now *Walk) *Delta {
+	if before == nil || now == nil {
+		return nil
+	}
+	delta := compare(before, now)
+	delta.When = ago(now.Seen.Sub(before.Seen))
+	return delta
+}
+
+// CompareAgainst is the difference [Against] describes.
+func CompareAgainst(before, now *Walk) *Delta {
+	if before == nil || now == nil {
+		return nil
+	}
+	delta := compare(before, now)
+	delta.When = "at a time it does not say"
+	if !before.Seen.IsZero() && !now.Seen.IsZero() {
+		delta.When = made(now.Seen.Sub(before.Seen))
+	}
+	return delta
+}
+
+func compare(before, now *Walk) *Delta {
+	delta := &Delta{}
+	if before.Kind != now.Kind || !slices.Equal(before.Answer, now.Answer) {
+		delta.Was = &Answer{Kind: before.Kind, Answer: before.Answer}
+	}
+	for _, zone := range now.Zones {
+		was, known := find(before.Zones, zone.Name)
+		if !known {
+			delta.Zones = append(delta.Zones, ZoneDelta{Name: zone.Name, Came: true})
+			continue
+		}
+		change := ZoneDelta{Name: zone.Name}
+		// The root is not delegated to, so there is nothing to hold against it.
+		if len(was.NS) > 0 && len(zone.NS) > 0 {
+			change.NSCame, change.NSWent = apart(was.NS, zone.NS)
+		}
+		if was.DNSSEC != "" && zone.DNSSEC != "" && was.DNSSEC != zone.DNSSEC {
+			change.DNSSECWas, change.DNSSEC = was.DNSSEC, zone.DNSSEC
+		}
+		if len(change.NSCame)+len(change.NSWent) > 0 || change.DNSSECWas != "" {
+			delta.Zones = append(delta.Zones, change)
+		}
+	}
+	for _, zone := range before.Zones {
+		if _, known := find(now.Zones, zone.Name); !known {
+			delta.Zones = append(delta.Zones, ZoneDelta{Name: zone.Name, Went: true})
+		}
+	}
+	return delta
 }
 
 // find is a zone as the other walk remembered it.

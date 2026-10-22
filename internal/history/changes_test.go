@@ -1,6 +1,7 @@
 package history_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -297,5 +298,81 @@ func TestChangesAge(t *testing.T) {
 				t.Errorf("got %q, want it to say %q", got, test.want)
 			}
 		})
+	}
+}
+
+// TestCompare covers the difference as a page draws it: the same one the
+// sentences say, kept as data.
+func TestCompare(t *testing.T) {
+	tests := map[string]struct {
+		before, now *history.Walk
+		want        *history.Delta
+	}{
+		"nothing to compare with": {
+			before: nil,
+			now:    later(nil),
+		},
+		"two walks that came out the same": {
+			before: remembered(nil),
+			now:    later(nil),
+			want:   &history.Delta{When: "1 day ago"},
+		},
+		"an answer that moved, its TTL with it": {
+			before: remembered(nil),
+			now:    later(func(walk *history.Walk) { walk.Answer, walk.TTL = []string{"192.0.2.2"}, 60 }),
+			want:   &history.Delta{When: "1 day ago", Was: &history.Answer{Kind: "answer", Answer: []string{"192.0.2.1"}}},
+		},
+		"a TTL alone is not a different answer": {
+			before: remembered(nil),
+			now:    later(func(walk *history.Walk) { walk.TTL = 60 }),
+			want:   &history.Delta{When: "1 day ago"},
+		},
+		"a nameserver swapped and a chain broken": {
+			before: remembered(nil),
+			now: later(func(walk *history.Walk) {
+				walk.Zones[1].NS = []string{"a.ns.test.", "c.ns.test."}
+				walk.Zones[1].DNSSEC = "bogus"
+			}),
+			want: &history.Delta{When: "1 day ago", Zones: []history.ZoneDelta{{
+				Name: "test.", NSCame: []string{"c.ns.test."}, NSWent: []string{"b.ns.test."},
+				DNSSECWas: "secure", DNSSEC: "bogus",
+			}}},
+		},
+		"a chain only one walk checked has not changed": {
+			before: remembered(nil),
+			now:    later(func(walk *history.Walk) { walk.Zones[1].DNSSEC = "" }),
+			want:   &history.Delta{When: "1 day ago"},
+		},
+		"a cut that came, ahead of one that went": {
+			before: remembered(func(walk *history.Walk) {
+				walk.Zones = append(walk.Zones, history.Zone{Name: "old.test.", NS: []string{"ns.old.test."}})
+			}),
+			now: later(func(walk *history.Walk) {
+				walk.Zones = append(walk.Zones, history.Zone{Name: "www.test.", NS: []string{"ns.www.test."}})
+			}),
+			want: &history.Delta{When: "1 day ago", Zones: []history.ZoneDelta{
+				{Name: "www.test.", Came: true}, {Name: "old.test.", Went: true},
+			}},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := history.Compare(test.before, test.now)
+			if !reflect.DeepEqual(got, test.want) {
+				t.Errorf("got %+v, want %+v", got, test.want)
+			}
+		})
+	}
+}
+
+// TestCompareAgainst covers the framing a file is held against with.
+func TestCompareAgainst(t *testing.T) {
+	got := history.CompareAgainst(remembered(func(walk *history.Walk) { walk.Seen = time.Time{} }), later(nil))
+	if got.When != "at a time it does not say" {
+		t.Errorf("got %q for a file that does not say when it was made", got.When)
+	}
+	if got := history.CompareAgainst(remembered(nil), later(nil)); got.When != "1 day before this one" {
+		t.Errorf("got %q, want how far apart the two were made", got.When)
 	}
 }
