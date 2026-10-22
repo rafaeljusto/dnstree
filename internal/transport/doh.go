@@ -100,5 +100,5 @@ func (d *DoH) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPort,
 	if err := answers(req, resp); err != nil {
 		return nil, rtt, fmt.Errorf("doh %s: %w", server, err)
 	}
-	return inClass(resp), rtt, nil
+	return inClass(req, resp), rtt, nil
 }

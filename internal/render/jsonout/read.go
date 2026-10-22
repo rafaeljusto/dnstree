@@ -432,6 +432,9 @@ func readServer(from *server) (trace.Server, error) {
 			Allocated:   from.ASN.Allocated,
 		}
 	}
+	if from.Software != nil {
+		to.Software = &trace.Software{Version: from.Software.Version}
+	}
 	return to, nil
 }
 

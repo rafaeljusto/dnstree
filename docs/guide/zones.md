@@ -18,6 +18,7 @@ server says about its own answer.
 - [How long a change takes to reach everyone](#how-long-a-change-takes-to-reach-everyone)
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
 - [Which machine answered](#which-machine-answered)
+- [Which software a server runs](#which-software-a-server-runs)
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
 - [Asking only what each zone needs](#asking-only-what-each-zone-needs)
 - [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
@@ -1057,6 +1058,32 @@ names into them, and those are drawn as names; anything else is drawn as the
 hex it arrived as, and an identifier longer than a line has room for is cut.
 A server that publishes none says nothing, which is most of them below the
 root, and its hop reads as it would without the flag.
+
+## Which software a server runs
+
+When one nameserver misbehaves, the next question is what it runs: the same
+fault usually belongs to one product, or to one old version of it. `--software`
+asks every server that answered which software it runs, the way
+`dig CH TXT version.bind` does, and draws what it said beside the address:
+
+```
+$ dnstree --software --no-asn www.google.com A
+. (root)
+├── a.root-servers.net. 198.41.0.4  version "ATLAS"  235ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  version "ATLAS"  239ms  NOERROR  referral → google.com.
+│   │   ├── ns2.google.com. 2001:4860:4802:34::a  version hidden  64ms  NOERROR  AA
+│   │   │   ├── www.google.com. 300 A 142.251.154.119
+...
+✔ answered in 864ms · resolver in 221ms · 3 queries · 3 servers
+```
+
+`version.bind` is asked first, in the CHAOS class, and `version.server` where
+that gets nothing, which costs a query a server and a second for some. Many
+operators hide the version on purpose, since an old one tells an attacker what
+to try; `version hidden` is that choice, and not a fault. What a server says is
+its own words, often a joke or a lie, and is drawn quoted, escaped and cut to a
+line's room, never judged. With `--check-edns`, a server that fails a test is
+named with what it says it runs, for the fix to start from.
 
 ## Which servers support DNS cookies
 

@@ -4,11 +4,11 @@ title: "dnstree www.example.com. A"
 flowchart LR
     subgraph z0 ["."]
         n0([". (root)"])
-        n1["a.root-servers.net.<br/>198.41.0.4<br/>NOERROR referral to com.<br/>[insecure]<br/>@fra2<br/>cookie supported"]
+        n1["a.root-servers.net.<br/>198.41.0.4<br/>NOERROR referral to com.<br/>[insecure]<br/>@fra2<br/>version #quot;9.18.24#quot;<br/>cookie supported"]
     end
     subgraph z1 ["com."]
         n2["b.gtld-servers.net.<br/>192.33.14.30<br/>timeout<br/>udp 192.33.14.30:53: i/o timeout"]
-        n3["a.gtld-servers.net.<br/>192.5.6.30<br/>NOERROR referral to example.com.<br/>[secure]<br/>(truncated over udp)"]
+        n3["a.gtld-servers.net.<br/>192.5.6.30<br/>NOERROR referral to example.com.<br/>[secure]<br/>version hidden<br/>(truncated over udp)"]
     end
     subgraph z2 ["example.com."]
         n4["a.iana-servers.net.<br/>199.43.135.53<br/>AS10745<br/>NOERROR answer<br/>[secure]<br/>www.example.com. A 93.184.216.34"]

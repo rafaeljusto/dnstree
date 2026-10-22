@@ -111,11 +111,20 @@ export function chainState(hops) {
   return "indeterminate";
 }
 
+// softwareOf is what a server said it runs, in the words the tree uses, and
+// nothing for a server that was not asked.
+export function softwareOf(server) {
+  const said = server?.software;
+  if (!said) return "";
+  return said.version ? `version "${said.version}"` : "version hidden";
+}
+
 // haystack is everything about a hop worth finding it by.
 export function haystack(step) {
   return [
     step.zone, step.kind, step.server?.name, step.server?.ip, step.rcode, step.proto,
     step.server?.asn && `AS${step.server.asn.number}`, step.delegation?.zone, step.nsid,
+    softwareOf(step.server),
     step.cookie && cookieOf(step.cookie).text,
     step.dnssec?.state, step.error, ...(step.notes ?? []),
     ...(step.records ?? []).flatMap((rr) => [rr.name, rr.type, rr.data]),
@@ -148,6 +157,7 @@ export function chipsOf(step) {
   if (flags.length) chip(flags.join(" "), "quiet", "the header bits that are set");
   if (step.subnet) chip(`ecs /${step.subnet.scope}`, "quiet", `answered for ${step.subnet.prefix}`);
   if (step.nsid) chip(`@${step.nsid}`, "quiet", "the instance behind this address, as it names itself");
+  if (softwareOf(step.server)) chip(softwareOf(step.server), "quiet", "the software the server says it runs, in its own words");
   if (step.cookie) {
     const cookie = cookieOf(step.cookie);
     chip(cookie.text, cookie.tone, cookie.says);

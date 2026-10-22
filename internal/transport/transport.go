@@ -375,7 +375,7 @@ func roundTrip(ctx context.Context, proto string, timeout time.Duration, tlsConf
 	if err := answers(req, resp); err != nil {
 		return nil, err
 	}
-	return inClass(resp), nil
+	return inClass(req, resp), nil
 }
 
 // datagrams are the buffers replies are read into. A reply has to fit the
@@ -415,7 +415,7 @@ func readDatagrams(conn net.Conn, timeout time.Duration, req *dns.Msg) (*dns.Msg
 				ignored = err
 				continue
 			}
-			return inClass(resp), nil
+			return inClass(req, resp), nil
 		}
 	}
 }
@@ -440,11 +440,16 @@ func answers(req, resp *dns.Msg) error {
 	return nil
 }
 
-// inClass drops every record that is not of the Internet class, which is the
-// only one asked about. Nothing downstream looks at the class, so a record of
-// another one would otherwise pass for an answer.
-func inClass(resp *dns.Msg) *dns.Msg {
-	keep := func(rr dns.RR) bool { return rr.Header().Class != dns.ClassINET }
+// inClass drops every record that is not of the class asked about, which is
+// the Internet's everywhere but the question of which software a server runs.
+// Nothing downstream looks at the class, so a record of another one would
+// otherwise pass for an answer.
+func inClass(req, resp *dns.Msg) *dns.Msg {
+	class := uint16(dns.ClassINET)
+	if len(req.Question) == 1 {
+		class = req.Question[0].Header().Class
+	}
+	keep := func(rr dns.RR) bool { return rr.Header().Class != class }
 	resp.Answer = slices.DeleteFunc(resp.Answer, keep)
 	resp.Ns = slices.DeleteFunc(resp.Ns, keep)
 	resp.Extra = slices.DeleteFunc(resp.Extra, keep)

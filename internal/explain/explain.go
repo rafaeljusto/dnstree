@@ -979,6 +979,7 @@ func ednsTests(tr *trace.Trace) []Finding {
 	type held struct {
 		addresses []string
 		states    map[string]map[trace.EDNSKind]trace.EDNSState
+		runs      map[string]string // what --software heard each say it runs
 	}
 	var (
 		order []string
@@ -991,7 +992,7 @@ func ednsTests(tr *trace.Trace) []Finding {
 		zone := zones[step.Zone]
 		if zone == nil {
 			order = append(order, step.Zone)
-			zone = &held{states: make(map[string]map[trace.EDNSKind]trace.EDNSState)}
+			zone = &held{states: make(map[string]map[trace.EDNSKind]trace.EDNSState), runs: make(map[string]string)}
 			zones[step.Zone] = zone
 		}
 		who := addressed(step)
@@ -1000,6 +1001,9 @@ func ednsTests(tr *trace.Trace) []Finding {
 			zone.states[who] = make(map[trace.EDNSKind]trace.EDNSState)
 		}
 		zone.states[who][step.EDNS.Kind] = step.EDNS.State
+		if said := step.Server.Software; said != nil && said.Version != "" {
+			zone.runs[who] = said.Version
+		}
 	}
 
 	const fix = "; fix the server, or the firewall in front of it (RFC 8906)"
@@ -1034,7 +1038,7 @@ func ednsTests(tr *trace.Trace) []Finding {
 			if servers := found[kind][trace.EDNSBroken]; len(servers) > 0 {
 				everything = false
 				findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: fmt.Sprintf(
-					"%s %s", list(servers), broken[kind])})
+					"%s %s%s", list(servers), broken[kind], running(servers, zone.runs))})
 			}
 		}
 		if servers := found[trace.EDNSPlain][trace.EDNSUnchecked]; len(servers) > 0 {
@@ -1066,6 +1070,21 @@ func ednsTests(tr *trace.Trace) []Finding {
 		}
 	}
 	return findings
+}
+
+// running is what the servers named said they run, for the fix to start from,
+// quoted as the servers' own words and never judged. Empty where none said.
+func running(servers []string, runs map[string]string) string {
+	var said []string
+	for _, who := range servers {
+		if version, ok := runs[who]; ok {
+			said = append(said, who+` says it runs "`+version+`"`)
+		}
+	}
+	if len(said) == 0 {
+		return ""
+	}
+	return "; " + strings.Join(said, ", ")
 }
 
 // comparison is worth a line only where the two disagree. Agreement is what the

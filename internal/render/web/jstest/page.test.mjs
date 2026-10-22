@@ -70,6 +70,8 @@ test("a hop is found by what the trace says of it", () => {
   assert.deepEqual(found("93.184.216.34"), [4]);
   assert.deepEqual(found("i/o timeout"), [2]);
   assert.deepEqual(found("fra2"), [1]);
+  assert.deepEqual(found("9.18.24"), [1]);
+  assert.deepEqual(found("version hidden"), [3]);
   assert.deepEqual(found("dnskey"), [5]);
   assert.deepEqual(found("cookie"), [1], "a cookie is found by the word shown for it");
   assert.equal(haystack(hops[4].step), haystack(hops[4].step).toLowerCase());
@@ -78,7 +80,7 @@ test("a hop is found by what the trace says of it", () => {
 test("the chips a hop wears", () => {
   const hops = flatten(golden().root);
   const texts = (hop) => chipsOf(hop.step).map((chip) => chip.text);
-  assert.deepEqual(texts(hops[1]), ["→ com.", "12 ms", "@fra2", "cookie", "insecure"]);
+  assert.deepEqual(texts(hops[1]), ["→ com.", "12 ms", "@fra2", 'version "9.18.24"', "cookie", "insecure"]);
   assert.deepEqual(texts(hops[2]), ["timeout", "2.00 s"]);
   assert.deepEqual(texts(hops[4]), ["9.4 ms", "1187 of 1232 bytes", "AS10745", "AA DO", "secure"]);
   assert.deepEqual(texts(hops[5]), ["8.0 ms", "AA", "aside", "DNSKEY of example.com."]);

@@ -317,6 +317,15 @@ type server struct {
 	IP   string `json:"ip,omitempty"`
 	Port uint16 `json:"port,omitempty"`
 	ASN  *asn   `json:"asn,omitempty"`
+
+	Software *software `json:"software,omitempty"`
+}
+
+// software says hidden outright for a server that would not say, rather than
+// leave a reader to tell an empty version from a missing one.
+type software struct {
+	Version string `json:"version,omitempty"`
+	Hidden  bool   `json:"hidden,omitempty"`
 }
 
 type asn struct {
@@ -681,6 +690,9 @@ func convertServer(from trace.Server) *server {
 			Registry:    from.ASN.Registry,
 			Allocated:   from.ASN.Allocated,
 		}
+	}
+	if from.Software != nil {
+		to.Software = &software{Version: from.Software.Version, Hidden: from.Software.Version == ""}
 	}
 	return to
 }

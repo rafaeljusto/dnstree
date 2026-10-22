@@ -950,7 +950,16 @@
           "minimum": 0,
           "maximum": 65535
         },
-        "asn": { "$ref": "#/$defs/asn" }
+        "asn": { "$ref": "#/$defs/asn" },
+        "software": { "$ref": "#/$defs/software" }
+      }
+    },
+    "software": {
+      "description": "What the server said when --software asked it which software it runs, under version.bind or version.server in the CHAOS class. The text is the server's own, escaped as the text of a record and clipped, and is often a joke or a lie. hidden is a server that refused or answered with nothing, which is its operator's choice. Absent where the server was not asked or did not answer.",
+      "type": "object",
+      "properties": {
+        "version": { "type": "string" },
+        "hidden": { "type": "boolean" }
       }
     },
     "asn": {

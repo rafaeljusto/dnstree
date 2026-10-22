@@ -725,6 +725,29 @@ type Server struct {
 	// ports. A step of a finished trace always names the port it used.
 	Port uint16
 	ASN  *ASNInfo
+
+	// Software is what the server says it runs, nil where --software did not
+	// ask or it did not answer.
+	Software *Software
+}
+
+// Software is what a server answered when asked which software it runs, in
+// its own words and escaped as the text of a record. An empty Version is a
+// server that declined to say, which is its operator's choice to make.
+type Software struct {
+	Version string
+}
+
+// SaidSoftware is the words every renderer draws a server's software in,
+// empty for a server that was not asked.
+func SaidSoftware(s *Software) string {
+	switch {
+	case s == nil:
+		return ""
+	case s.Version == "":
+		return "version hidden"
+	}
+	return `version "` + s.Version + `"`
 }
 
 // ASNInfo is the origin AS of a server address. A prefix announced by more

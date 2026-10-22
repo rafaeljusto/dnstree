@@ -5,7 +5,7 @@
 
 import {
   KINDS, kindOf, cookieOf, trustOf, took, plural, flagsOf, flatten, asked, verdictOf, chainState,
-  haystack, chipsOf, timeline, ticks,
+  haystack, chipsOf, timeline, ticks, softwareOf,
 } from "./walk.js";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -406,6 +406,7 @@ class DnsInspector extends HTMLElement {
       ["flags", flagsOf(step.flags).join(" ")],
       ["subnet", step.subnet && `${step.subnet.prefix} scope /${step.subnet.scope}`],
       ["instance", step.nsid],
+      ["software", softwareOf(step.server)],
       ["cookie", step.cookie && cookieOf(step.cookie).says],
       ["origin", as && `AS${as.number} ${as.prefix ?? ""}`.trim()],
       ["registry", as && [as.country_code, as.registry, as.allocated].filter(Boolean).join(" · ")],

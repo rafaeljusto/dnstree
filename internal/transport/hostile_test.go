@@ -109,17 +109,38 @@ func TestOnlySpoofedDatagrams(t *testing.T) {
 func TestOtherClassesAreDropped(t *testing.T) {
 	t.Parallel()
 
-	server := datagrams(t, func(req *dns.Msg) []*dns.Msg {
-		return []*dns.Msg{reply(req, "www.example.com. 60 CH A 192.0.2.66")}
-	})
-
-	resp, _, err := transport.NewUDP(transport.Config{Timeout: 2 * time.Second}).
-		Exchange(t.Context(), dns.NewMsg("www.example.com.", dns.TypeA), server, "")
-	if err != nil {
-		t.Fatalf("Exchange: %v", err)
+	tests := map[string]struct {
+		query *dns.Msg
+		want  string
+	}{
+		"a question in the internet class drops a CHAOS record": {
+			query: dns.NewMsg("version.bind.", dns.TypeTXT),
+			want:  "IN",
+		},
+		"a question in the CHAOS class drops an internet record": {
+			query: dns.NewMsg("version.bind.", dns.TypeTXT, dns.ClassCHAOS),
+			want:  "CH",
+		},
 	}
-	if len(resp.Answer) != 0 {
-		t.Errorf("got %v, want the CHAOS record dropped", resp.Answer)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			server := datagrams(t, func(req *dns.Msg) []*dns.Msg {
+				resp := reply(req, `version.bind. 0 CH TXT "9.18.24"`, `version.bind. 0 IN TXT "lie"`)
+				resp.Question[0].Header().Class = req.Question[0].Header().Class
+				return []*dns.Msg{resp}
+			})
+
+			resp, _, err := transport.NewUDP(transport.Config{Timeout: 2 * time.Second}).
+				Exchange(t.Context(), tt.query, server, "")
+			if err != nil {
+				t.Fatalf("Exchange: %v", err)
+			}
+			if len(resp.Answer) != 1 || dns.ClassToString[resp.Answer[0].Header().Class] != tt.want {
+				t.Errorf("got %v, want the %s record alone", resp.Answer, tt.want)
+			}
+		})
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 	"codeberg.org/miekg/dns/dnshttp"
 	"codeberg.org/miekg/dns/dnstest"
 	"codeberg.org/miekg/dns/dnsutil"
+	"codeberg.org/miekg/dns/rdata"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -108,6 +109,14 @@ type Behaviour struct {
 	// encoded. A server with none published answers a query that asks with
 	// nothing, which is the other case worth testing.
 	NSID string
+
+	// Version is what the server says it runs when asked version.bind in the
+	// CHAOS class, and VersionServer what it says when asked version.server,
+	// having refused version.bind, the way servers other than BIND do. Both
+	// are written as record text, escapes and all. A server with neither
+	// refuses both, the way operators who hide the version have it.
+	Version       string
+	VersionServer string
 
 	// ReportAgent is the agent the server asks DNS failures in its zone to be
 	// reported to (RFC 9567), sent with every answer that carries EDNS0,
@@ -528,6 +537,8 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		reply.Rcode = dns.RcodeFormatError
 	case s.behaviour.Refuse:
 		reply.Rcode = dns.RcodeRefused
+	case req.Question[0].Header().Class == dns.ClassCHAOS:
+		s.version(reply, name, qtype)
 	case s.behaviour.ServFailType != 0 && qtype == s.behaviour.ServFailType:
 		reply.Rcode = dns.RcodeServerFailure
 	case s.behaviour.ServFailUnlessCD && !req.CheckingDisabled:
@@ -580,6 +591,21 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		dnsutil.Truncate(reply)
 	}
 	_, _ = reply.WriteTo(w)
+}
+
+// version answers which software the server runs, as Version and
+// VersionServer have it, and refuses whatever it has nothing to say to.
+func (s *Server) version(reply *dns.Msg, name string, qtype uint16) {
+	said := map[string]string{"version.bind.": s.behaviour.Version, "version.server.": s.behaviour.VersionServer}[dnsutil.Canonical(name)]
+	if said == "" || qtype != dns.TypeTXT {
+		reply.Rcode = dns.RcodeRefused
+		return
+	}
+	reply.Authoritative = true
+	reply.Answer = []dns.RR{&dns.TXT{
+		Hdr: dns.Header{Name: name, Class: dns.ClassCHAOS},
+		TXT: rdata.TXT{Txt: []string{said}},
+	}}
 }
 
 // transfer answers an AXFR the way a server does in one message: the SOA, the

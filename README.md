@@ -158,6 +158,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--rollover`](docs/guide/dnssec.md#where-a-key-rollover-stands) | say which step of a key rollover the zone is at, what comes next, and the TTL it waits on (RFC 7583); needs `--dnssec`, or a walk saved with it |
 | [`--check`](docs/guide/zones.md#all-of-it-at-once) | run the checks that grade a zone together, and grade its health one area at a time: passed, worth a look, broken or skipped |
 | [`--nsid`](docs/guide/zones.md#which-machine-answered) | ask each server which of itself answered, and draw it beside the address |
+| [`--software`](docs/guide/zones.md#which-software-a-server-runs) | ask each server which software it runs (`version.bind`), and draw what it says beside the address |
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |
 | [`--qmin`](docs/guide/zones.md#asking-only-what-each-zone-needs) | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
 | [`--without`](docs/guide/zones.md#whether-it-still-answers-with-a-server-down) | walk as though this nameserver, address or prefix were down, and see whether the name still answers; repeat it |

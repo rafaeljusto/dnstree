@@ -254,6 +254,9 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if step.NSID != "" {
 		fields = append(fields, r.paint.dim("@"+step.NSID))
 	}
+	if said := trace.SaidSoftware(step.Server.Software); said != "" {
+		fields = append(fields, r.paint.dim(said))
+	}
 	if step.Server.ASN != nil {
 		fields = append(fields, r.paint.dim(fmt.Sprintf("AS%d", step.Server.ASN.Number)))
 	}

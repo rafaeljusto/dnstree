@@ -743,6 +743,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		Deps:           cfg.Deps,
 
 		NSID:     cfg.NSID,
+		Software: cfg.Software,
 		Cookie:   cfg.Cookie,
 		Minimise: cfg.Minimise,
 		Subnet:   cfg.Subnet,

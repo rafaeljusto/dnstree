@@ -147,6 +147,12 @@ type Config struct {
 	// reply that tells them apart. It costs no query of its own.
 	NSID bool
 
+	// Software asks every server that answered a hop which software it runs,
+	// with version.bind and then version.server in the CHAOS class, and keeps
+	// what each said on its hops. It costs a query per server, and a second
+	// where the first name got nothing.
+	Software bool
+
 	// Cookie sends a DNS cookie to every server (RFC 7873) and records how it
 	// answered. Like a client that supports them, the walk sends each server
 	// back the cookie it handed out. It costs no query of its own, except a
@@ -358,6 +364,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 	run.bootstrap(ctx)
 	run.dsync(ctx)
+	run.software(ctx)
 	run.trace.Elapsed = run.since()
 	return run.trace, nil
 }

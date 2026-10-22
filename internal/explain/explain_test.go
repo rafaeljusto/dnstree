@@ -1258,6 +1258,17 @@ func TestEDNSTests(t *testing.T) {
 			},
 			want: []string{"ns1.test. (192.0.2.5) and ns2.test. (192.0.2.5) did not ignore an EDNS flag nobody has defined"},
 		},
+		"failing servers named with the software they say they run, where they say": {
+			tests: func() []*trace.Step {
+				said := test("ns1.test.", trace.EDNSTCP, trace.EDNSBroken)
+				said.Server.Software = &trace.Software{Version: `9.18.24 \"lts\"`}
+				hidden := test("ns2.test.", trace.EDNSTCP, trace.EDNSBroken)
+				hidden.Server.Software = &trace.Software{}
+				return []*trace.Step{said, hidden}
+			}(),
+			want:   []string{`allow tcp on port 53 to them (RFC 7766, RFC 9210); ns1.test. (192.0.2.5) says it runs "9.18.24 \"lts\""`},
+			unsaid: []string{"ns2.test. (192.0.2.5) says"},
+		},
 		"every server answers as it should": {
 			tests: []*trace.Step{
 				test("ns1.test.", trace.EDNSPlain, trace.EDNSOK), test("ns1.test.", trace.EDNSVersion, trace.EDNSOK),

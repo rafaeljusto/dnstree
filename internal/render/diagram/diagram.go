@@ -87,6 +87,9 @@ func Details(step *trace.Step) []string {
 	if step.NSID != "" {
 		lines = append(lines, "@"+step.NSID)
 	}
+	if said := trace.SaidSoftware(step.Server.Software); said != "" {
+		lines = append(lines, said)
+	}
 	if step.Cookie != "" {
 		lines = append(lines, "cookie "+string(step.Cookie))
 	}

@@ -247,8 +247,8 @@ func (q Question) Shown() Question {
 	return q
 }
 
-// Shown is the server with its name, and what the AS lookup said of it, safe
-// to draw.
+// Shown is the server with its name, what the AS lookup said of it and what it
+// says it runs, safe to draw.
 func (s Server) Shown() Server {
 	s.Name = Shown(s.Name)
 	if s.ASN != nil {
@@ -258,6 +258,9 @@ func (s Server) Shown() Server {
 		asn.Registry = Shown(asn.Registry)
 		asn.Allocated = Shown(asn.Allocated)
 		s.ASN = &asn
+	}
+	if s.Software != nil {
+		s.Software = &Software{Version: Shown(s.Software.Version)}
 	}
 	return s
 }

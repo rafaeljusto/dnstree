@@ -67,6 +67,8 @@ func resolution() *trace.Trace {
 		Children:   []*trace.Step{timeout, tld},
 	}
 
+	root.Server.Software = &trace.Software{Version: "9.18.24"}
+	tld.Server.Software = &trace.Software{}
 	return &trace.Trace{
 		Question: trace.Question{Name: "www.example.com.", Type: "A", Class: "IN"},
 		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{root}},

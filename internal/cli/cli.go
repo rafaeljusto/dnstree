@@ -64,6 +64,7 @@ one after another, each from the root servers down.
   --rollover              say where a key rollover stands and what it waits on
   --check                 run the checks that grade a zone, and grade its health
   --nsid                  ask each server which of itself answered (RFC 5001)
+  --software              ask each server which software it runs (version.bind)
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
   --without SERVER        treat a nameserver, address or prefix as down; repeat it
@@ -529,6 +530,13 @@ rides along on queries that are being made anyway and costs none of its own. A
 server that publishes no identifier says nothing, and its hop reads as it would
 without the flag.
 
+--software asks every server that answered which software it runs, the way
+dig CH TXT version.bind does, and draws what it said beside the address:
+version "9.18.24", or version hidden for a server that would not say. Hiding it
+is a choice, not a fault. The text is the server's own, often a joke or a lie,
+and is quoted, never judged. It costs a query a server, and a second where
+version.bind gets nothing and version.server is asked instead.
+
 --cookie sends every server a DNS cookie (RFC 7873) and says on each hop how it
 answered: cookie, no cookie, cookie not ours, cookie malformed or cookie
 rejected. A server that supports cookies is sent back the one it handed out, the
@@ -618,6 +626,7 @@ type Config struct {
 	Check bool
 
 	NSID     bool
+	Software bool
 	Cookie   bool
 	Minimise bool
 	ASN      bool
@@ -855,6 +864,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
 	flags.BoolVar(&cfg.Check, "check", false, "run the checks that grade a zone, and grade its health")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
+	flags.BoolVar(&cfg.Software, "software", false, "ask each server which software it runs")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
@@ -1356,7 +1366,7 @@ var askOutside = map[string]bool{
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

@@ -131,7 +131,7 @@ func (t *replay) Exchange(ctx context.Context, req *dns.Msg, server netip.AddrPo
 	if err := answers(req, resp); err != nil {
 		return nil, saved.took, fmt.Errorf("%s %s: %w", t.proto, server, err)
 	}
-	return inClass(resp), saved.took, nil
+	return inClass(req, resp), saved.took, nil
 }
 
 // echoCookie gives the answer the client half of the cookie the query carries
