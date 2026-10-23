@@ -287,6 +287,9 @@ func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 	default:
 		return nil, fmt.Errorf("jsonout: %q is not what a resolver's TTL can say", from.Kept)
 	}
+	if from.Synthesised && match != "" {
+		return nil, errors.New("jsonout: an answer made up where the zone has none, matched against the zone's")
+	}
 	failed := trace.Failure(from.Failed)
 	switch failed {
 	case "", trace.FailedBogus, trace.FailedValidation, trace.FailedCached, trace.FailedUnreachable:
@@ -307,7 +310,8 @@ func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 		Kept:     kept,
 		Failed:   failed,
 
-		Authentic: from.Authentic,
+		Synthesised: from.Synthesised,
+		Authentic:   from.Authentic,
 	}
 	if to.Elapsed, err = duration("elapsed_ms", from.ElapsedMS); err != nil {
 		return nil, err
@@ -339,6 +343,7 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 	to := &trace.Behaviour{
 		Validates: trace.Observed(from.Validates), Rewrites: trace.Observed(from.Rewrites),
 		Subnet: trace.Observed(from.Subnet), Minimises: trace.Observed(from.Minimises),
+		Synthesises: trace.Observed(from.Synthesises),
 	}
 	for _, seen := range []trace.Observed{to.Validates, to.Rewrites} {
 		if !observed(seen) {
@@ -346,10 +351,18 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 		}
 	}
 	// Absent from a walk saved before they were asked.
-	for _, seen := range []trace.Observed{to.Subnet, to.Minimises} {
+	for _, seen := range []trace.Observed{to.Subnet, to.Minimises, to.Synthesises} {
 		if seen != "" && !observed(seen) {
 			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
 		}
+	}
+	for _, text := range from.Prefixes {
+		prefix, err := netip.ParsePrefix(text)
+		if err != nil || !prefix.Addr().Is6() || prefix.Addr().Is4In6() ||
+			!slices.Contains(trace.DNS64Lengths, prefix.Bits()) || prefix != prefix.Masked() {
+			return nil, fmt.Errorf("jsonout: %q is no prefix AAAA records can be made up under", text)
+		}
+		to.Prefixes = append(to.Prefixes, prefix)
 	}
 	for _, seen := range from.Echoes {
 		sent := trace.Observed(seen.Sent)
@@ -367,6 +380,7 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 	}{
 		{from.Broken, &to.Broken}, {from.Root, &to.Root}, {from.Missing, &to.Missing},
 		{from.Google, &to.Google}, {from.Akamai, &to.Akamai}, {from.Minimisation, &to.Minimisation},
+		{from.DNS64, &to.DNS64},
 	} {
 		if answer.from == nil {
 			continue

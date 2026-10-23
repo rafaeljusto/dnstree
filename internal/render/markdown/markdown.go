@@ -100,6 +100,8 @@ func said(tr *trace.Trace, answer *trace.Resolver) string {
 		return "did not answer"
 	case answer.Match == trace.MatchSame:
 		return "agrees"
+	case answer.Synthesised:
+		return "made up from A records (DNS64)"
 	case answer.Failed != "":
 		return "answered SERVFAIL: " + failure(answer.Failed)
 	}

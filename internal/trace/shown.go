@@ -113,6 +113,8 @@ func (b *Behaviour) Shown() *Behaviour {
 	shown := *b
 	shown.Broken, shown.Root, shown.Missing = b.Broken.Shown(), b.Root.Shown(), b.Missing.Shown()
 	shown.Google, shown.Akamai, shown.Minimisation = b.Google.Shown(), b.Akamai.Shown(), b.Minimisation.Shown()
+	shown.DNS64 = b.DNS64.Shown()
+	shown.Prefixes = slices.Clone(b.Prefixes)
 	shown.Echoes = slices.Clone(b.Echoes)
 	for i := range shown.Echoes {
 		shown.Echoes[i].Operator = Shown(shown.Echoes[i].Operator)

@@ -453,6 +453,7 @@ func behaving() *trace.Trace {
 				{Operator: "google", Sent: trace.ObservedNo},
 				{Operator: "akamai", Sent: trace.ObservedYes, Bits: 24},
 			},
+			Synthesises: trace.ObservedYes, Prefixes: []netip.Prefix{netip.MustParsePrefix("64:ff9b::/96")},
 		},
 	}, {
 		Server: at("192.0.2.54"), Rcode: "NOERROR",
@@ -463,6 +464,7 @@ func behaving() *trace.Trace {
 				{Operator: "google", Sent: trace.ObservedNo},
 				{Operator: "akamai", Sent: trace.ObservedNo},
 			},
+			Synthesises: trace.ObservedNo,
 		},
 	}, {
 		Server: at("192.0.2.55"), Err: "i/o timeout",
@@ -486,10 +488,15 @@ func TestRenderBehaviours(t *testing.T) {
 		"resolver: 192.0.2.55 may or may not validate DNSSEC and may or may not rewrite NXDOMAIN\n",
 		"resolver: 192.0.2.53 sends ECS (/24) to akamai but not google and minimises queries\n",
 		"resolver: 192.0.2.54 sends no ECS to google or akamai and does not minimise queries\n",
+		"resolver: 192.0.2.53 makes up AAAA records from A records under 64:ff9b::/96 (DNS64)\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("got no %q in:\n%s", want, got)
 		}
+	}
+	// A resolver that makes nothing up has no habit to draw.
+	if strings.Count(got, "192.0.2.54") != 2 {
+		t.Errorf("got a line for a resolver that makes no AAAA up:\n%s", got)
 	}
 	// A walk saved before ECS and minimisation were asked draws no line for them.
 	if strings.Count(got, "192.0.2.55") != 1 {

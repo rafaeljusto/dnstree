@@ -25,7 +25,42 @@ func Behave(tr *trace.Trace) {
 		answer.Behaviour.Rewrites = rewrites(answer.Behaviour)
 		answer.Behaviour.Subnet, answer.Behaviour.Echoes = subnet(answer.Behaviour)
 		answer.Behaviour.Minimises = minimises(answer.Behaviour.Minimisation)
+		answer.Behaviour.Synthesises, answer.Behaviour.Prefixes = synthesises(answer.Behaviour.DNS64)
 	}
+}
+
+// wellKnown are the addresses of ipv4only.arpa. (RFC 7050): where
+// one of them sits in a made-up AAAA is where the prefix ends.
+var wellKnown = []netip.Addr{netip.AddrFrom4([4]byte{192, 0, 0, 170}), netip.AddrFrom4([4]byte{192, 0, 0, 171})}
+
+// synthesises is whether the resolver made up an AAAA for a name that has
+// none, and the prefixes it made them under. An AAAA that carries neither
+// known address at any length RFC 6052 allows is still made up, but names no
+// prefix: guessing one would pass a real address off as synthesised.
+func synthesises(answer *trace.Resolver) (trace.Observed, []netip.Prefix) {
+	if answer == nil || answer.Err != "" || answer.Rcode != "NOERROR" {
+		return trace.ObservedUnknown, nil
+	}
+	made := trace.Answers(answer.Records, "AAAA")
+	if len(made) == 0 {
+		return trace.ObservedNo, nil
+	}
+	var prefixes []netip.Prefix
+	for _, data := range made {
+		addr, err := netip.ParseAddr(data)
+		if err != nil {
+			continue
+		}
+		for _, bits := range trace.DNS64Lengths {
+			if inside, ok := trace.Embedded(addr, bits); ok && slices.Contains(wellKnown, inside) {
+				if prefix := netip.PrefixFrom(addr, bits).Masked(); !slices.Contains(prefixes, prefix) {
+					prefixes = append(prefixes, prefix)
+				}
+				break
+			}
+		}
+	}
+	return trace.ObservedYes, prefixes
 }
 
 // validates is whether the resolver refused the broken name. One that fails

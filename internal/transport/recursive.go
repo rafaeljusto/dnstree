@@ -160,9 +160,13 @@ const (
 	MinimisationEcho = "qnamemintest.internet.nl."
 )
 
+// DNS64Name has IPv4 addresses and no IPv6 one (RFC 7050), so a resolver that
+// answers its AAAA made the answer up.
+const DNS64Name = "ipv4only.arpa."
+
 // Probe asks server the questions whose right answers are known beforehand:
 // BrokenName and the root's SOA with DNSSEC, missing, a name that cannot
-// exist, and the TXT of each echo. A SERVFAIL for BrokenName is asked again
+// exist, the TXT of each echo, and the AAAA of DNS64Name. A SERVFAIL for BrokenName is asked again
 // with checking disabled, which tells a failed validation from a failure to
 // get there. What the answers say of the resolver is left to the reading of
 // them.
@@ -192,6 +196,7 @@ func Probe(ctx context.Context, carrier Transport, server netip.AddrPort, missin
 	wait.Go(func() { found.Google = asked(GoogleEcho, "TXT", false, false) })
 	wait.Go(func() { found.Akamai = asked(AkamaiEcho, "TXT", false, false) })
 	wait.Go(func() { found.Minimisation = asked(MinimisationEcho, "TXT", false, false) })
+	wait.Go(func() { found.DNS64 = asked(DNS64Name, "AAAA", false, false) })
 	wait.Wait()
 	return &found
 }

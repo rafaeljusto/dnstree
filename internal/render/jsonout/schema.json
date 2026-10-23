@@ -689,6 +689,10 @@
           "type": "string",
           "enum": ["same", "differs"]
         },
+        "synthesised": {
+          "description": "An AAAA answer the resolver made up under one of the DNS64 prefixes --check-resolver saw it use, where the zone publishes none (RFC 6147). It has nothing of the zone's to be compared with, so match is absent.",
+          "type": "boolean"
+        },
         "kept": {
           "description": "What its TTL says of the copy it is serving, absent where it says nothing either way: longer, the walk's answer kept past the TTL the zone gives it; stale, an answer no server of the zone gave the walk, carrying the 30 seconds or less serve-stale hands out (RFC 8767). A reading, not a verdict.",
           "type": "string",
@@ -763,6 +767,20 @@
         },
         "minimisation": {
           "description": "qnamemintest.internet.nl. TXT, which says in words whether the name was asked a label at a time.",
+          "$ref": "#/$defs/resolver"
+        },
+        "synthesises": {
+          "description": "yes, it answered an AAAA for ipv4only.arpa., which has IPv4 addresses alone, so it makes AAAA records up out of A records (DNS64, RFC 6147); no, it answered none; unknown, it said neither. Absent from a walk saved before it was asked.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "prefixes": {
+          "description": "The prefixes it makes AAAA records up under, read from where ipv4only.arpa.'s known addresses sit in what it answered (RFC 7050, RFC 6052). Absent where none could be read.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dns64": {
+          "description": "ipv4only.arpa. AAAA, which a resolver that does not make addresses up answers with none.",
           "$ref": "#/$defs/resolver"
         }
       }

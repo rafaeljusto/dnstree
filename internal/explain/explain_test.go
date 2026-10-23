@@ -1072,9 +1072,21 @@ func TestBehaviours(t *testing.T) {
 			}}),
 		resolver("192.0.2.56", nil),
 	}
+	made := resolver("192.0.2.58", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+		Synthesises: trace.ObservedYes, Prefixes: []netip.Prefix{netip.MustParsePrefix("64:ff9b::/96")}})
+	made.Synthesised = true
+	made.Records = []trace.RR{{Name: "www.test.", Type: "AAAA", Data: "64:ff9b::c000:219"}}
+	tr.Resolvers = append(tr.Resolvers, made)
+	// Read back from a file that says so without a prefix that holds it.
+	claimed := resolver("192.0.2.59", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo})
+	claimed.Synthesised = true
+	claimed.Records = []trace.RR{{Name: "www.test.", Type: "AAAA", Data: "2001:db8::1"}}
+	tr.Resolvers = append(tr.Resolvers, claimed)
 
 	got := said(tr)
 	for _, want := range []string{
+		"192.0.2.58 answered www.test. AAAA with 64:ff9b::c000:219, made up from the A record 192.0.2.25: the zone publishes no AAAA",
+		"192.0.2.59 answered www.test. AAAA with 2001:db8::1: the zone publishes no AAAA",
 		"192.0.2.53 does not validate DNSSEC: it answered dnssec-failed.org",
 		"192.0.2.53 rewrites NXDOMAIN: a made-up name came back as 198.51.100.1",
 		"192.0.2.57 sends ECS: google's servers were told the /24 the question came from",

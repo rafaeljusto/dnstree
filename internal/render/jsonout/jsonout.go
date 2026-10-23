@@ -187,6 +187,10 @@ type resolver struct {
 	// "differs", or absent where there was nothing to compare.
 	Match string `json:"match,omitempty"`
 
+	// Synthesised is an AAAA answer the resolver made up under one of its
+	// DNS64 prefixes where the zone publishes none, so it has no match.
+	Synthesised bool `json:"synthesised,omitempty"`
+
 	// Kept is what its TTL says of its copy: "longer" than the zone allows,
 	// "stale", or absent where it says nothing either way.
 	Kept string `json:"kept,omitempty"`
@@ -208,8 +212,9 @@ type resolver struct {
 }
 
 // behaviour is what --check-resolver saw the resolver do, and the answers
-// that rest on. Validates, Rewrites, Subnet and Minimises are "yes", "no" or
-// "unknown"; the last two are absent from a walk saved before they were asked.
+// that rest on. Validates, Rewrites, Subnet, Minimises and Synthesises are
+// "yes", "no" or "unknown"; the last three are absent from a walk saved before
+// they were asked. Prefixes are where it puts the AAAA records it makes up.
 type behaviour struct {
 	Validates    string    `json:"validates"`
 	Rewrites     string    `json:"rewrites"`
@@ -222,6 +227,9 @@ type behaviour struct {
 	Google       *resolver `json:"google,omitempty"`
 	Akamai       *resolver `json:"akamai,omitempty"`
 	Minimisation *resolver `json:"minimisation,omitempty"`
+	Synthesises  string    `json:"synthesises,omitempty"`
+	Prefixes     []string  `json:"prefixes,omitempty"`
+	DNS64        *resolver `json:"dns64,omitempty"`
 }
 
 type echo struct {
@@ -537,20 +545,21 @@ func convertResolver(from *trace.Resolver) *resolver {
 		return nil
 	}
 	return &resolver{
-		Server:    convertServer(from.Server),
-		ElapsedMS: milliseconds(from.Elapsed),
-		Rcode:     from.Rcode,
-		Error:     from.Err,
-		Records:   convertRecords(from.Records),
-		Extended:  convertExtended(from.Extended),
-		Subnet:    convertSubnet(from.Subnet),
-		Match:     string(from.Match),
-		Kept:      string(from.Kept),
-		Unchecked: convertResolver(from.Unchecked),
-		Failed:    string(from.Failed),
-		DDR:       convertDiscovery(from.DDR),
-		Authentic: from.Authentic,
-		Behaviour: convertBehaviour(from.Behaviour),
+		Server:      convertServer(from.Server),
+		ElapsedMS:   milliseconds(from.Elapsed),
+		Rcode:       from.Rcode,
+		Error:       from.Err,
+		Records:     convertRecords(from.Records),
+		Extended:    convertExtended(from.Extended),
+		Subnet:      convertSubnet(from.Subnet),
+		Match:       string(from.Match),
+		Synthesised: from.Synthesised,
+		Kept:        string(from.Kept),
+		Unchecked:   convertResolver(from.Unchecked),
+		Failed:      string(from.Failed),
+		DDR:         convertDiscovery(from.DDR),
+		Authentic:   from.Authentic,
+		Behaviour:   convertBehaviour(from.Behaviour),
 	}
 }
 
@@ -569,6 +578,11 @@ func convertBehaviour(from *trace.Behaviour) *behaviour {
 		Google:       convertResolver(from.Google),
 		Akamai:       convertResolver(from.Akamai),
 		Minimisation: convertResolver(from.Minimisation),
+		Synthesises:  string(from.Synthesises),
+		DNS64:        convertResolver(from.DNS64),
+	}
+	for _, prefix := range from.Prefixes {
+		to.Prefixes = append(to.Prefixes, prefix.String())
 	}
 	for _, seen := range from.Echoes {
 		to.Echoes = append(to.Echoes, echo{Operator: seen.Operator, Sent: string(seen.Sent), Bits: seen.Bits})

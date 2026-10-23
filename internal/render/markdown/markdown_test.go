@@ -148,3 +148,26 @@ func TestRenderFailure(t *testing.T) {
 		t.Errorf("got\n%s\nwant %q in it", got.String(), want)
 	}
 }
+
+// TestRenderSynthesised covers an AAAA a resolver made up under its DNS64
+// prefix: the cell says so instead of a bare rcode.
+func TestRenderSynthesised(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "example.", Type: "AAAA"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: ".", Kind: trace.KindNoData, Rcode: "NOERROR", Server: trace.Server{IP: netip.MustParseAddr("192.0.2.1")},
+		}}},
+		Resolvers: []*trace.Resolver{{
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53")}, Rcode: "NOERROR", Synthesised: true,
+			Records: []trace.RR{{Name: "example.", Type: "AAAA", Data: "64:ff9b::c000:20a"}},
+		}},
+	}
+
+	var got bytes.Buffer
+	if err := markdown.Render(&got, tr, nil); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if want := "| 192.0.2.53 | made up from A records (DNS64) |"; !strings.Contains(got.String(), want) {
+		t.Errorf("got\n%s\nwant %q in it", got.String(), want)
+	}
+}

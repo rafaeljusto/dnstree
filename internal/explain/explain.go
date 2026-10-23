@@ -1240,8 +1240,33 @@ func behaviours(tr *trace.Trace) []Finding {
 				"%s does not minimise queries: internet.nl's test zone was asked the whole name where a part would do, so the root and the top-level domains see every name its clients look up (RFC 9156)",
 				who)})
 		}
+		if answer.Synthesised {
+			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s answered %s AAAA with %s: the zone publishes no AAAA, and the resolver makes them up for IPv6-only networks (DNS64, RFC 6147)",
+				who, tr.Question.Name, madeUp(trace.Answers(answer.Records, "AAAA"), seen.Prefixes))})
+		}
 	}
 	return findings
+}
+
+// madeUp names each address a resolver made up beside the A record it was
+// made from. A walk read back with --from may say an answer was made up under
+// prefixes that do not hold it; the addresses are then named alone.
+func madeUp(addresses []string, prefixes []netip.Prefix) string {
+	var said []string
+	for _, data := range addresses {
+		addr, err := netip.ParseAddr(data)
+		if err != nil {
+			continue
+		}
+		if from, ok := trace.Synthesised(addr, prefixes); ok {
+			said = append(said, data+", made up from the A record "+from.String())
+		}
+	}
+	if len(said) == 0 {
+		return list(addresses)
+	}
+	return list(said)
 }
 
 // aliases is how many times the walk followed an alias before it answered.

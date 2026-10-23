@@ -309,6 +309,7 @@ o-o.myaddr.l.google.com.   IN TXT "192.0.2.53"
 o-o.myaddr.l.google.com.   IN TXT "edns0-client-subnet 198.51.100.0/24"
 whoami.ds.akahelp.net.     IN TXT "ns" "192.0.2.53"
 qnamemintest.internet.nl.  IN TXT "HOORAY - QNAME minimisation is enabled on your resolver :)!"
+ipv4only.arpa.             IN AAAA 64:ff9b::c000:aa
 `
 
 func TestProbe(t *testing.T) {
@@ -338,6 +339,14 @@ func TestProbe(t *testing.T) {
 					if answer == nil || answer.Rcode != "NOERROR" || len(trace.Answers(answer.Records, "TXT")) == 0 {
 						t.Errorf("got %+v for %s, want its TXT", answer, name)
 					}
+				}
+			},
+		},
+		"the name with IPv4 addresses alone is asked for its AAAA": {
+			zone: probeZone,
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if found.DNS64 == nil || !slices.Equal(trace.Answers(found.DNS64.Records, "AAAA"), []string{"64:ff9b::c000:aa"}) {
+					t.Errorf("got %+v, want the AAAA made up for it", found.DNS64)
 				}
 			},
 		},

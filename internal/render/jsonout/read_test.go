@@ -156,6 +156,21 @@ func TestReadRoundTrip(t *testing.T) {
 				Behaviour: &trace.Behaviour{Validates: trace.ObservedUnknown, Rewrites: trace.ObservedUnknown},
 			}},
 		},
+		"a resolver that makes AAAA records up": {
+			Question: trace.Question{Name: "example.", Type: "AAAA", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+				Rcode:  "NOERROR", Synthesised: true,
+				Records: []trace.RR{{Name: "example.", TTL: 60, Type: "AAAA", Data: "64:ff9b::c000:20a"}},
+				Behaviour: &trace.Behaviour{
+					Validates: trace.ObservedYes, Rewrites: trace.ObservedNo, Synthesises: trace.ObservedYes,
+					Prefixes: []netip.Prefix{netip.MustParsePrefix("64:ff9b::/96")},
+					DNS64: &trace.Resolver{Rcode: "NOERROR",
+						Records: []trace.RR{{Name: "ipv4only.arpa.", TTL: 60, Type: "AAAA", Data: "64:ff9b::c000:aa"}}},
+				},
+			}},
+		},
 		"resolvers whose TTLs said something of their copies": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -501,6 +516,16 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "sometimes", "rewrites": "no"}}]}`,
 			want: `"sometimes"`,
+		},
+		"a prefix no AAAA record can be made up under": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no", "prefixes": ["64:ff9b::/80"]}}]}`,
+			want: `"64:ff9b::/80"`,
+		},
+		"a made-up answer matched against the zone's": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "AAAA", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "match": "differs", "synthesised": true}]}`,
+			want: "made up",
 		},
 		"a behaviour inside the answers another rests on": {
 			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

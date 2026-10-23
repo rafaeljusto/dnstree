@@ -560,9 +560,12 @@ of trust is broken on purpose, and answers once told not to check; it does not
 if it answers that name and marks nothing authentic, not even the root. It
 rewrites NXDOMAIN if a made-up name under com comes back with an address. It
 sends ECS if Google's or Akamai's test zone reports a client subnet arriving
-with the question, and minimises queries if internet.nl's test zone says so.
+with the question, and minimises queries if internet.nl's test zone says so. It
+makes up AAAA records (DNS64) if it answers one for ipv4only.arpa, which has
+none, and the prefix is read from where the known address sits in it; a
+resolver's AAAA under that prefix is then not counted as a difference.
 Whatever the answers leave open is said as "may or may not", never guessed. It
-costs up to seven queries per resolver, sets no exit code, and needs the
+costs up to eight queries per resolver, sets no exit code, and needs the
 comparison that --no-compare turns off.
 
 What the command line leaves out is taken from a file of defaults: the one named

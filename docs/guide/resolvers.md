@@ -254,10 +254,27 @@ resolver: 4.2.2.2 sends no ECS to google or akamai and minimises queries
 - **QNAME minimisation** ([RFC 9156](https://www.rfc-editor.org/rfc/rfc9156))
   rests on `qnamemintest.internet.nl`, whose servers say in words whether the
   name reached them a label at a time.
+- **DNS64** ([RFC 6147](https://www.rfc-editor.org/rfc/rfc6147)) rests on
+  `ipv4only.arpa`, which has IPv4 addresses and no IPv6 one
+  ([RFC 7050](https://www.rfc-editor.org/rfc/rfc7050)). A resolver that
+  answers its AAAA made it up, as IPv6-only networks need, and where the known
+  address sits in it says which prefix it uses. That is said only where it
+  happens, without a warning: it is on purpose. With the prefix known, an AAAA
+  the resolver hands out under it for a name whose zone publishes none is not
+  a difference, and `--explain` names the A record it was made from:
+
+  ```
+  $ dnstree --check-resolver --resolver 2001:4860:4860::6464 --explain github.com AAAA
+  ...
+  resolver: 2001:4860:4860::6464 makes up AAAA records from A records under 64:ff9b::/96 (DNS64)
+  ✔ answered in 1.4s · resolver in 22ms · 6 queries · 3 servers
+  ...
+  · 2001:4860:4860::6464 answered github.com. AAAA with 64:ff9b::4e4:1f96, made up from the A record 4.228.31.150: the zone publishes no AAAA, and the resolver makes them up for IPv6-only networks (DNS64, RFC 6147)
+  ```
 
 Whatever the answers leave open is said as "may or may not", never guessed:
 a resolver that forwards to another, or treats these names specially, is
-something the questions cannot see past. It costs up to seven queries per
+something the questions cannot see past. It costs up to eight queries per
 resolver, and sets no exit code: a resolver is not the name being asked about.
 
 > [!NOTE]

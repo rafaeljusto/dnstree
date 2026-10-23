@@ -251,6 +251,11 @@ type Resolver struct {
 	// nothing to compare.
 	Match Match
 
+	// Synthesised is an AAAA answer the resolver made up under one of its
+	// DNS64 prefixes where the zone publishes none. It has nothing of the
+	// zone's to be compared with, so Match stays empty.
+	Synthesised bool
+
 	// Kept is how long the resolver means to go on serving its copy against how
 	// long the zone allows, empty where the TTLs say nothing either way.
 	Kept Kept
@@ -299,6 +304,11 @@ type Behaviour struct {
 	Akamai       *Resolver
 	Minimisation *Resolver
 
+	// DNS64 is the AAAA of ipv4only.arpa., a name with IPv4 addresses alone
+	// (RFC 7050): any IPv6 one is made up. Nil in a walk saved before it was
+	// asked.
+	DNS64 *Resolver
+
 	Validates Observed
 	Rewrites  Observed
 
@@ -308,6 +318,12 @@ type Behaviour struct {
 	Subnet    Observed
 	Echoes    []Echo
 	Minimises Observed
+
+	// Synthesises is whether it makes up AAAA records out of A records
+	// (RFC 6147), and Prefixes the prefixes it puts them under, read from
+	// where the known address sits in what it made up (RFC 6052).
+	Synthesises Observed
+	Prefixes    []netip.Prefix
 }
 
 // Echo is what one zone saw of the client subnet: Bits is the prefix length

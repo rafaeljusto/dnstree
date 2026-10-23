@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -833,8 +834,24 @@ func (r *renderer) behaviours(tr *trace.Trace) []string {
 		if exposure := exposed(seen); exposure != "" {
 			lines = append(lines, r.paint.dim(mark+who+" "+exposure))
 		}
+		if seen.Synthesises == trace.ObservedYes {
+			lines = append(lines, r.paint.dim(mark+who+" "+synthesises(seen.Prefixes)))
+		}
 	}
 	return lines
+}
+
+// synthesises says a resolver makes up AAAA records, which it does on purpose
+// for IPv6-only networks: a habit to know of, not a fault.
+func synthesises(prefixes []netip.Prefix) string {
+	if len(prefixes) == 0 {
+		return "makes up AAAA records from A records (DNS64), under a prefix that could not be read"
+	}
+	under := make([]string, 0, len(prefixes))
+	for _, prefix := range prefixes {
+		under = append(under, prefix.String())
+	}
+	return "makes up AAAA records from A records under " + strings.Join(under, ", ") + " (DNS64)"
 }
 
 // exposed is what a resolver tells the servers it asks: the client subnet,

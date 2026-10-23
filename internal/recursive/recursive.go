@@ -5,6 +5,7 @@
 package recursive
 
 import (
+	"net/netip"
 	"slices"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
@@ -77,6 +78,10 @@ func compare(tr *trace.Trace, result *trace.Step, answer *trace.Resolver) {
 	if len(ours) == 0 && len(theirs) == 0 {
 		return
 	}
+	if len(ours) == 0 && synthesised(tr.Question.Type, theirs, answer.Behaviour) {
+		answer.Synthesised = true
+		return
+	}
 	if slices.Equal(ours, theirs) {
 		answer.Match = trace.MatchSame
 		if trace.TTL(answer.Records, tr.Question.Type) > tr.Allowed() {
@@ -88,6 +93,24 @@ func compare(tr *trace.Trace, result *trace.Step, answer *trace.Resolver) {
 	if stale(tr, answer, theirs) {
 		answer.Kept = trace.KeptStale
 	}
+}
+
+// synthesised is whether every AAAA a resolver answered with, where the zone
+// publishes none, sits under a prefix it was seen making AAAA records up
+// under (RFC 6147). Without --check-resolver no prefix is known, and the
+// answer is a difference like any other.
+func synthesised(qtype string, theirs []string, seen *trace.Behaviour) bool {
+	if qtype != "AAAA" || seen == nil || len(seen.Prefixes) == 0 {
+		return false
+	}
+	return !slices.ContainsFunc(theirs, func(data string) bool {
+		addr, err := netip.ParseAddr(data)
+		if err != nil {
+			return true
+		}
+		_, ok := trace.Synthesised(addr, seen.Prefixes)
+		return !ok
+	})
 }
 
 // failed is what a SERVFAIL most likely came of, where the walk found an

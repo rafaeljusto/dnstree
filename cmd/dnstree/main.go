@@ -447,8 +447,9 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	}
 	if timed != nil {
 		tr.Resolvers = <-timed
-		recursive.Compare(tr)
+		// Behave first: the comparison reads the DNS64 prefixes it finds.
 		recursive.Behave(tr)
+		recursive.Compare(tr)
 	}
 	if cfg.Report {
 		report(ctx, cfg, tr)

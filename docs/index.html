@@ -999,7 +999,8 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
       trust is broken on purpose, and whether a made-up name comes back NXDOMAIN or as the
       address of a page of its own. It also asks zones that report what reaches them whether
       it passes your subnet on (ECS) and whether it asks a name a label at a time (QNAME
-      minimisation). What the answers leave open is said as "may or may not", never
+      minimisation), and whether it makes up IPv6 addresses for names that have only IPv4 ones
+      (DNS64), so its answer is not taken for one the zone gave. What the answers leave open is said as "may or may not", never
       guessed.</p>
 
       <h3 style="margin-top:2.2rem">Leave it running</h3>
