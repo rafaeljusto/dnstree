@@ -49,6 +49,10 @@ type Chain struct {
 	// nsec3 is the hashing of the last NSEC3 whose signature held since the
 	// chain was last asked for a verdict.
 	nsec3 *trace.NSEC3
+
+	// supposed is the DS set taken for the parent's at supposedZone.
+	supposed     []*dns.DS
+	supposedZone string
 }
 
 // New starts a chain at the root, trusting anchors and nothing else.
@@ -60,6 +64,14 @@ func New(anchors roothints.Anchors) *Chain {
 // is how a walk replayed from a capture reads as it did when it was made.
 func (c *Chain) At(moment time.Time) *Chain {
 	c.now = func() time.Time { return moment }
+	return c
+}
+
+// Suppose takes ds for the DS set the parent of zone holds, as though it had
+// signed it: what --try-ds checks before the set is handed to the registry.
+// Whatever the parent says of the zone's DS, signed or not, is set aside.
+func (c *Chain) Suppose(zone string, ds []*dns.DS) *Chain {
+	c.supposedZone, c.supposed = dnsutil.Fqdn(zone), ds
 	return c
 }
 
@@ -117,8 +129,12 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR, answered bool) *
 	}
 
 	delegated := dsRecords(authority, zone)
-	if zone == "." {
+	supposed := c.supposed != nil && dns.EqualName(zone, c.supposedZone)
+	switch {
+	case zone == ".":
 		delegated = anchorDS(c.anchors, c.now())
+	case supposed:
+		delegated = supposedDS(c.supposed, authority, zone)
 	}
 	if len(delegated) == 0 {
 		// The root has no parent to prove anything: without an anchor there is
@@ -154,7 +170,7 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR, answered bool) *
 	// A DS is the parent's word for the child, and worth no more than the
 	// parent's signature over it. The anchors are the one thing trusted on
 	// sight.
-	if zone != "." {
+	if zone != "." && !supposed {
 		signed := dsSignatures(authority, zone)
 		if len(signed) == 0 {
 			return c.settleAs(status, trace.Bogus, "the parent published a DS it did not sign", nil)
@@ -197,6 +213,8 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR, answered bool) *
 		case zone == ".":
 			// The root's DS is the anchors, not anything a parent published.
 			reason = "no DNSKEY of the root matches a trust anchor"
+		case supposed:
+			reason = c.supposedReason(usable, keys, signatures)
 		}
 		return c.settleAs(status, state, reason, nil)
 	}
@@ -208,6 +226,9 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR, answered bool) *
 	if err != nil {
 		if zone == "." {
 			return c.settleAs(status, trace.Bogus, "the DNSKEY set of the root is not signed by a key a trust anchor points at", nil)
+		}
+		if supposed {
+			return c.settleAs(status, trace.Bogus, c.supposedReason(usable, keys, signatures), nil)
 		}
 		return c.settleAs(status, trace.Bogus, "the DNSKEY set is not signed by a key the DS points at", nil)
 	}
@@ -667,6 +688,68 @@ func dsRecords(authority []dns.RR, zone string) []*dns.DS {
 		}
 	}
 	return delegated
+}
+
+// supposedDS is the set Suppose was given, owned by zone and kept for as long
+// as the parent keeps its own DS, or its delegation where it has none.
+func supposedDS(set []*dns.DS, authority []dns.RR, zone string) []*dns.DS {
+	var ttl uint32 = 3600
+	if held := dsRecords(authority, zone); len(held) > 0 {
+		ttl = shortest(held)
+	} else if i := slices.IndexFunc(authority, func(rr dns.RR) bool {
+		return dns.RRToType(rr) == dns.TypeNS && dns.EqualName(rr.Header().Name, zone)
+	}); i >= 0 {
+		ttl = authority[i].Header().TTL
+	}
+	owned := make([]*dns.DS, 0, len(set))
+	for _, ds := range set {
+		copied := *ds
+		copied.Hdr = dns.Header{Name: zone, Class: dns.ClassINET, TTL: ttl}
+		owned = append(owned, &copied)
+	}
+	return owned
+}
+
+// supposedReason says what is wrong with a DS set Suppose was given, in the
+// terms of the form it is handed over on: the key it points at, and the one it
+// should. A DS that digests a key comes first, since it is the likeliest to be
+// the one meant.
+func (c *Chain) supposedReason(set []*dns.DS, keys []*dns.DNSKEY, signatures []*dns.RRSIG) string {
+	var pointed, misdigested, missing string
+	for _, ds := range set {
+		named := slices.IndexFunc(keys, func(key *dns.DNSKEY) bool {
+			return key.KeyTag() == ds.KeyTag && key.Algorithm == ds.Algorithm
+		})
+		switch {
+		case named < 0:
+			missing = cmp.Or(missing, fmt.Sprintf("the zone publishes no key %d of algorithm %s", ds.KeyTag, algorithm(ds.Algorithm)))
+		case !digests(keys[named], ds):
+			misdigested = cmp.Or(misdigested, fmt.Sprintf("the DS names key %d, but its digest is not that key's; check the digest type, and that the digest was copied whole", ds.KeyTag))
+		case keys[named].Flags&dns.FlagSEP == 0:
+			pointed = cmp.Or(pointed, fmt.Sprintf("the DS points at key %d, which signs the zone's data, not its keys", ds.KeyTag))
+		default:
+			pointed = cmp.Or(pointed, fmt.Sprintf("the DS points at key %d, which does not sign the zone's keys", ds.KeyTag))
+		}
+	}
+	reason := cmp.Or(pointed, misdigested, missing)
+
+	var signers []string
+	for _, key := range keys {
+		if _, err := c.verify(asRRs(keys), signatures, []*dns.DNSKEY{key}); err == nil {
+			signers = append(signers, fmt.Sprint(key.KeyTag()))
+		}
+	}
+	if len(signers) > 0 {
+		reason += "; give the parent the DS of key " + strings.Join(signers, " or ")
+	}
+	return reason
+}
+
+// digests reports whether ds is the digest of key, false for a digest type
+// this build cannot make.
+func digests(key *dns.DNSKEY, ds *dns.DS) bool {
+	digested := key.ToDS(ds.DigestType)
+	return digested != nil && strings.EqualFold(digested.Digest, ds.Digest)
 }
 
 // anchorDS turns the trust anchors into the DS records the root is checked

@@ -4,6 +4,7 @@ package cli
 
 import (
 	"cmp"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -69,6 +70,7 @@ one after another, each from the root servers down.
   --qmin                  ask each zone for no more of the name than it needs
   --without SERVER        treat a nameserver, address or prefix as down; repeat it
   --try-ns ZONE=SERVER    walk as though ZONE were delegated to SERVER; repeat it
+  --try-ds ZONE=DS        walk as though ZONE's parent held this DS; repeat it
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
@@ -522,6 +524,16 @@ parent really gave is drawn, marked as replaced, and the walk goes on to the
 new servers, with the parent's DS still checked against them. One zone is tried
 at a time, never the root, and neither --diff nor the file of defaults takes it.
 
+--try-ds walks as though the parent of ZONE already held the DS given, which is
+how to check a DS before it is handed to the registrar. The DS is written as
+the registrar's form takes it and dnssec-dsfromkey prints it, key tag,
+algorithm, digest type and digest: example.com='12345 13 2 3F1C...9AB0'. The
+set given replaces the parent's, whether the parent holds one or not, so a
+rollover that keeps the old DS beside a new one names both. The chain of trust is checked against it as
+though the parent had signed it, and a DS that does not hold says which key it
+points at and which it should. It needs --dnssec, takes the same zone as
+--try-ns, and the two together try a whole move to a provider that signs.
+
 --nsid asks every server for the name it goes by (RFC 5001), and draws it
 beside the address. One anycast address is a great many machines in a great many
 places, and the identifier is the only thing in a reply that says which of them
@@ -873,6 +885,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
 	flags.Var(&without, "without", "walk as though this server or network were down")
 	flags.Var(&trial, "try-ns", "walk as though ZONE were delegated to this nameserver")
+	flags.Var(&trialDS{&trial}, "try-ds", "walk as though ZONE's parent held this DS")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
@@ -1203,7 +1216,10 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		cfg.Behave = false
 	}
 	if cfg.Try != nil && cfg.Diff {
-		return nil, fmt.Errorf("%w: --diff remembers the DNS as it is, and --try-ns walks it as it is not", ErrUsage)
+		return nil, fmt.Errorf("%w: --diff remembers the DNS as it is, and --try-ns and --try-ds walk it as it is not", ErrUsage)
+	}
+	if cfg.Try != nil && len(cfg.Try.DS) > 0 && !cfg.DNSSEC {
+		return nil, fmt.Errorf("%w: --try-ds tries a DS, which only --dnssec checks", ErrUsage)
 	}
 	if cfg.Report && !cfg.DNSSEC {
 		return nil, fmt.Errorf("%w: --report tells a zone its chain of trust is bogus, which only --dnssec can find", ErrUsage)
@@ -1370,7 +1386,7 @@ var askOutside = map[string]bool{
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "cookie": true, "qmin": true,
-	"subnet": true, "without": true, "try-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
+	"subnet": true, "without": true, "try-ns": true, "try-ds": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
 	"tls-ca": true, "tls-insecure": true, "replay": true,
@@ -1638,9 +1654,9 @@ func parseDown(text string) (transport.Down, error) {
 	return transport.Down{Name: fqdn(strings.ToLower(name))}, nil
 }
 
-// trialList collects the --try-ns flags into the one delegation they stand in
-// for. Several of them name the nameservers of one zone, the way a referral
-// does; a run tries one move at a time.
+// trialList collects the --try-ns and --try-ds flags into the one delegation
+// they stand in for. Several of them name the nameservers and DS records of one
+// zone, the way a referral does; a run tries one move at a time.
 type trialList struct{ trial *trace.Trial }
 
 func (l *trialList) String() string {
@@ -1657,18 +1673,9 @@ func (l *trialList) Set(value string) error {
 	if !ok || zone == "" || server == "" {
 		return fmt.Errorf("%q is not ZONE=SERVER", value)
 	}
-	zone, err := idn.ASCII(zone)
+	zone, err := l.zone(zone)
 	if err != nil {
 		return err
-	}
-	zone = fqdn(strings.ToLower(zone))
-	if zone == "." {
-		return errors.New("the root has no parent to delegate it, so it cannot be moved; use --root")
-	}
-	if l.trial == nil {
-		l.trial = &trace.Trial{Zone: zone, Addrs: map[string][]netip.Addr{}}
-	} else if l.trial.Zone != zone {
-		return fmt.Errorf("--try-ns names %s and %s, and a walk tries one zone at a time", l.trial.Zone, zone)
 	}
 
 	name, written, named := strings.Cut(server, "@")
@@ -1703,6 +1710,78 @@ func (l *trialList) Set(value string) error {
 		if !slices.Contains(l.trial.Addrs[name], addr.Unmap()) {
 			l.trial.Addrs[name] = append(l.trial.Addrs[name], addr.Unmap())
 		}
+	}
+	return nil
+}
+
+// zone reads the zone a --try-ns or --try-ds names, which every one of them in
+// a run has to agree on.
+func (l *trialList) zone(written string) (string, error) {
+	zone, err := idn.ASCII(written)
+	if err != nil {
+		return "", err
+	}
+	zone = fqdn(strings.ToLower(zone))
+	if zone == "." {
+		return "", errors.New("the root has no parent to delegate it, so it cannot be moved; use --root or --trust-anchors")
+	}
+	if l.trial == nil {
+		l.trial = &trace.Trial{Zone: zone, Addrs: map[string][]netip.Addr{}}
+	} else if l.trial.Zone != zone {
+		return "", fmt.Errorf("%s and %s are both tried, and a walk tries one zone at a time", l.trial.Zone, zone)
+	}
+	return zone, nil
+}
+
+// trialDS reads --try-ds into the trial --try-ns builds.
+type trialDS struct{ *trialList }
+
+func (l trialDS) String() string {
+	if l.trialList == nil || l.trial == nil || len(l.trial.DS) == 0 {
+		return ""
+	}
+	return l.trial.Zone + "=" + strconv.Itoa(int(l.trial.DS[0].Tag))
+}
+
+// digestSizes are the octets each digest type makes (RFC 4509, 5933, 6605),
+// which a digest cut short in the copying falls short of.
+var digestSizes = map[uint8]int{1: 20, 2: 32, 3: 32, 4: 48}
+
+// Set reads one --try-ds: the zone, and a DS for it as its record data, the
+// hex digest in as many pieces as it was printed in.
+func (l trialDS) Set(value string) error {
+	zone, data, ok := strings.Cut(value, "=")
+	fields := strings.Fields(data)
+	if !ok || zone == "" || len(fields) < 4 {
+		return fmt.Errorf("%q is not ZONE='TAG ALGORITHM DIGEST-TYPE DIGEST'", value)
+	}
+	tag, err := strconv.ParseUint(fields[0], 10, 16)
+	if err != nil {
+		return fmt.Errorf("%q is not a key tag", fields[0])
+	}
+	algorithm, err := strconv.ParseUint(fields[1], 10, 8)
+	if err != nil {
+		return fmt.Errorf("%q is not an algorithm number", fields[1])
+	}
+	digestType, err := strconv.ParseUint(fields[2], 10, 8)
+	if err != nil {
+		return fmt.Errorf("%q is not a digest type number", fields[2])
+	}
+	digest := strings.ToUpper(strings.Join(fields[3:], ""))
+	raw, err := hex.DecodeString(digest)
+	if err != nil {
+		return fmt.Errorf("%q is not a digest in hex", digest)
+	}
+	if size, known := digestSizes[uint8(digestType)]; known && len(raw) != size {
+		return fmt.Errorf("%q is %d octets, and digest type %d makes %d; copy it whole", digest, len(raw), digestType, size)
+	}
+
+	if _, err := l.zone(zone); err != nil {
+		return err
+	}
+	ds := trace.TrialDS{Tag: uint16(tag), Algorithm: uint8(algorithm), DigestType: uint8(digestType), Digest: digest}
+	if !slices.Contains(l.trial.DS, ds) {
+		l.trial.DS = append(l.trial.DS, ds)
 	}
 	return nil
 }

@@ -37,6 +37,9 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 		if !r.cfg.At.IsZero() {
 			chain.At(r.cfg.At)
 		}
+		if r.supposed != nil {
+			chain.Suppose(r.cfg.Try.Zone, r.supposed)
+		}
 	}
 	var delegation []dns.RR // the authority section that led into this zone
 
@@ -181,7 +184,11 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 		}
 		var next []trace.Server
 		var rest []string
-		if r.cfg.Try != nil && dns.EqualName(step.Delegation.Zone, r.cfg.Try.Zone) {
+		trial := r.cfg.Try != nil && dns.EqualName(step.Delegation.Zone, r.cfg.Try.Zone)
+		if trial {
+			r.suppose(chain, step, step.Delegation.Zone)
+		}
+		if trial && len(r.cfg.Try.NS) > 0 {
 			next, rest = r.trialServers(ctx, step, side)
 		} else {
 			next, rest = r.nextServers(ctx, step, side)
@@ -393,6 +400,9 @@ func (r *run) settleCut(ctx context.Context, chain *dnssec.Chain, reached *trace
 
 	// The verdict belongs on the step that published the DS, the way a
 	// referral's does: it is the same zone cut, crossed without one.
+	if r.cfg.Try != nil && dns.EqualName(cut, r.cfg.Try.Zone) {
+		r.suppose(chain, ds.step, cut)
+	}
 	ds.step.DNSSEC = r.enterZone(ctx, chain, cut, reached, authority)
 	return &zoneCut{zone: cut, step: ds.step, authority: authority}
 }
@@ -683,7 +693,6 @@ func (r *run) nextServers(ctx context.Context, step *trace.Step, side int) ([]tr
 // its zone is.
 func (r *run) trialServers(ctx context.Context, step *trace.Step, side int) ([]trace.Server, []string) {
 	trial := r.cfg.Try
-	r.tried = true
 	step.Notes = append(step.Notes, "replaced by --try-ns")
 
 	var (

@@ -376,12 +376,16 @@ func trust(tr *trace.Trace) []Finding {
 		findings := []Finding{{Topic: Trust, Level: Fault, Text: fmt.Sprintf(
 			"the chain of trust breaks at %s%s, so a resolver that validates answers SERVFAIL for this name",
 			zone, because(status.Reason))}}
-		// A broken chain at the zone --try-ns moved is the move's doing: the
-		// parent still vouches for the keys the zone is moving away from.
+		// A broken chain at the zone tried is the trial's doing: the DS it
+		// gave, or the parent still vouching for the keys a move leaves.
 		if tr.Trial != nil && strings.EqualFold(zoneOf(step), tr.Trial.Zone) {
-			findings = append(findings, Finding{Topic: Trust, Level: Fault, Text: fmt.Sprintf(
-				"this walk went to the nameservers --try-ns named, so moving %s to them as it stands breaks it for every resolver that validates; have the parent publish a DS for their keys first, or move it unsigned",
-				tr.Trial.Zone)})
+			text := fmt.Sprintf("this walk went to the nameservers --try-ns named, so moving %s to them as it stands breaks it for every resolver that validates; have the parent publish a DS for their keys first, or move it unsigned",
+				tr.Trial.Zone)
+			if len(tr.Trial.DS) > 0 {
+				text = fmt.Sprintf("this walk read the DS --try-ds gave for %s, so handing it to the parent as it stands breaks the zone for every resolver that validates; fix it before the registrar is given it",
+					tr.Trial.Zone)
+			}
+			findings = append(findings, Finding{Topic: Trust, Level: Fault, Text: text})
 		}
 		// What --report did is under the tree already; what it would have
 		// done is only said here.
@@ -407,6 +411,11 @@ func trust(tr *trace.Trace) []Finding {
 			text += ", signed with " + status.Algorithm
 		}
 		findings := []Finding{{Topic: Trust, Level: Note, Text: text}}
+		if trial := tr.Trial; trial != nil && len(trial.DS) > 0 && within(zone, trial.Zone) {
+			findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+				"the DS --try-ds gave for %s points at a key that signs the zone's keys, so the parent can be given it",
+				trial.Zone)})
+		}
 		if finding, ok := expiring(tr); ok {
 			findings = append(findings, finding)
 		}
@@ -1531,4 +1540,10 @@ func issuers(issuers *trace.Issuers) string {
 		return "only " + issuers.CAs[0]
 	}
 	return "only " + strings.Join(issuers.CAs[:len(issuers.CAs)-1], ", ") + " and " + issuers.CAs[len(issuers.CAs)-1]
+}
+
+// within reports whether name is zone or below it.
+func within(name, zone string) bool {
+	name, zone = strings.ToLower(name), strings.ToLower(zone)
+	return name == zone || strings.HasSuffix(name, "."+zone)
 }

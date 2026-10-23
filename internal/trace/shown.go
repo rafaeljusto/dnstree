@@ -51,6 +51,10 @@ func (t *Trace) Shown() *Trace {
 		trial := *t.Trial
 		trial.Zone, trial.NS = Shown(trial.Zone), shownAll(trial.NS)
 		trial.Addrs = shownAddrs(t.Trial.Addrs)
+		trial.DS = slices.Clone(t.Trial.DS)
+		for i := range trial.DS {
+			trial.DS[i].Digest = Shown(trial.DS[i].Digest)
+		}
 		shown.Trial = &trial
 	}
 	if t.Report != nil {

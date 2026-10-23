@@ -210,6 +210,19 @@ func TestParse(t *testing.T) {
 				},
 			}},
 		},
+		"a DS tried, its digest in pieces, beside new nameservers": {
+			args: []string{"--dnssec", "--try-ds", "example.com=12345 13 2 3f1c0a9b 1df8dc30cdb2de5f3561fd5e19fd4635704aa3fd2d1b3bb6ad2a2530",
+				"--try-ns", "example.com=ns1.new.net", "--try-ds", "Example.com.=23456 8 1 1DF8DC30CDB2DE5F3561FD5E19FD4635704AA3FD", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", DNSSEC: true, Try: &trace.Trial{
+				Zone:  "example.com.",
+				NS:    []string{"ns1.new.net."},
+				Addrs: map[string][]netip.Addr{},
+				DS: []trace.TrialDS{
+					{Tag: 12345, Algorithm: 13, DigestType: 2, Digest: "3F1C0A9B1DF8DC30CDB2DE5F3561FD5E19FD4635704AA3FD2D1B3BB6AD2A2530"},
+					{Tag: 23456, Algorithm: 8, DigestType: 1, Digest: "1DF8DC30CDB2DE5F3561FD5E19FD4635704AA3FD"},
+				},
+			}},
+		},
 		"a walk saved as a packet capture": {
 			args: []string{"--pcap", "walk.pcap", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Pcap: "walk.pcap"},
@@ -438,6 +451,13 @@ func TestParseRejects(t *testing.T) {
 		"a trial remembered as the DNS as it is":    {"--try-ns", "example.com=ns1.new.net", "--diff", "example.com"},
 		"a trial on a server that is not one":       {"--try-ns", "example.com=ns1/new", "example.com"},
 		"a trial on a server inside it, unglued":    {"--try-ns", "example.com=ns1.example.com", "example.com"},
+		"a DS tried without checking signatures":    {"--try-ds", "example.com=12345 13 2 " + strings.Repeat("ab", 32), "example.com"},
+		"a DS tried for another zone than the move": {"--dnssec", "--try-ns", "example.com=ns1.new.net", "--try-ds", "example.org=12345 13 2 " + strings.Repeat("ab", 32), "example.com"},
+		"a DS tried for the root":                   {"--dnssec", "--try-ds", ".=12345 13 2 " + strings.Repeat("ab", 32), "example.com"},
+		"a DS tried and remembered":                 {"--dnssec", "--try-ds", "example.com=12345 13 2 " + strings.Repeat("ab", 32), "--diff", "example.com"},
+		"a DS with no digest":                       {"--dnssec", "--try-ds", "example.com=12345 13 2", "example.com"},
+		"a DS whose tag is not a number":            {"--dnssec", "--try-ds", "example.com=KSK 13 2 " + strings.Repeat("ab", 32), "example.com"},
+		"a DS whose digest is not hex":              {"--dnssec", "--try-ds", "example.com=12345 13 2 " + strings.Repeat("zz", 32), "example.com"},
 		"a report every time a walk is watched":     {"--report", "--dnssec", "--watch", "30s", "example.com"},
 		"a walk already made, asked for a report":   {"--from", "walk.json", "--report", "--dnssec"},
 		"a capture of queries carried in tls":       {"--dot", "--pcap", "walk.pcap", "example.com"},
@@ -605,6 +625,7 @@ func TestParseSaysWhatIsWrong(t *testing.T) {
 		"a length of time that is not one":    {[]string{"--timeout", "x", "example.com"}, `--timeout "x" is not a length of time, such as 2s`},
 		"a switch set to something else":      {[]string{"--dnssec=maybe", "example.com"}, `--dnssec "maybe" is neither true nor false`},
 		"a value the flag gives a reason for": {[]string{"--try-ns", "nonsense", "example.com"}, `--try-ns "nonsense" is not ZONE=SERVER`},
+		"a digest cut short in the copying":   {[]string{"--dnssec", "--try-ds", "example.com=12345 13 2 3f1c", "example.com"}, `--try-ds "3F1C" is 2 octets, and digest type 2 makes 32; copy it whole`},
 		"a value missing at the very end":     {[]string{"--names"}, "--names needs a value"},
 	}
 	for name, test := range tests {

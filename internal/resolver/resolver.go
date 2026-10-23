@@ -217,8 +217,9 @@ type Config struct {
 
 	// Try replaces the delegation of one zone, wherever the walk comes to
 	// it, with nameservers of the run's choosing, so that a zone can be walked
-	// as it would be once moved to them. The referral is kept as the parent
-	// gave it, DS included. Nil walks the DNS as it is.
+	// as it would be once moved to them, and its DS with a set the chain of
+	// trust takes as the parent's. What it does not replace is kept as the
+	// parent gave it. Nil walks the DNS as it is.
 	Try *trace.Trial
 
 	// At is the moment the walk is read as made at: its start, and the clock
@@ -333,6 +334,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 
 	run.trace.Trial = r.cfg.Try
+	if r.cfg.Try != nil {
+		run.supposed = supposedDS(r.cfg.Try)
+	}
 	run.internet = !slices.ContainsFunc(r.cfg.Roots, func(root trace.Server) bool { return !transport.Public(root.IP) })
 	run.began = time.Now()
 	run.trace.Started = cmp.Or(r.cfg.At, run.began)
@@ -344,8 +348,8 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	run.trace.Timed = true
 	end := run.walk(ctx, qname, rrtype, run.trace.Root, 0)
 	if r.cfg.Try != nil && !run.tried {
-		run.warnf("", "the walk never came to a delegation of %s, so --try-ns changed nothing; name the zone a referral on the way delegates",
-			r.cfg.Try.Zone)
+		run.warnf("", "the walk never came to a delegation of %s, so %s changed nothing; name the zone a referral on the way delegates",
+			r.cfg.Try.Zone, trialFlags(r.cfg.Try))
 	}
 	if r.cfg.CAA {
 		run.climb(ctx, cmp.Or(end, run.trace.Root))
@@ -420,8 +424,10 @@ type run struct {
 	// asideStopped once a budget of the run has cut one of them short.
 	aside, asideStopped bool
 
-	// tried is whether the walk came to the delegation --try-ns replaces.
-	tried bool
+	// tried is whether the walk came to the delegation --try-ns and --try-ds
+	// replace, and supposed the DS set --try-ds gave.
+	tried    bool
+	supposed []*dns.DS
 
 	// boot is the request for a first DS that --check-ds found, whose signals
 	// are looked up once the walk is over.

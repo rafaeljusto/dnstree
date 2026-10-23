@@ -1148,7 +1148,7 @@ func TestRunAgainst(t *testing.T) {
 	// A question whose type carries an escape, which only its escaped copy may
 	// be compared by or drawn as.
 	hostile := filepath.Join(t.TempDir(), "hostile.json")
-	if err := os.WriteFile(hostile, []byte(`{"schema_version": 4,
+	if err := os.WriteFile(hostile, []byte(`{"schema_version": 5,
 		"question": {"name": "www.test.", "type": "A\u001b[41m", "class": "IN"}, "elapsed_ms": 1,
 		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "rcode": "NXDOMAIN",
 		"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53}}]}}`), 0o644); err != nil {
@@ -1221,7 +1221,7 @@ func TestRunAgainst(t *testing.T) {
 // fields a walk fills with this build's own words. Whoever hands over a saved
 // walk chooses every byte of it, so no format may draw one raw.
 func TestRunFromHostile(t *testing.T) {
-	const hostile = `{"schema_version": 4,
+	const hostile = `{"schema_version": 5,
 		"question": {"name": "x.", "type": "A\n---\nflowchart LR\n\u001b]0;pwned\u0007", "class": "IN\u001b[8m"},
 		"started": "2026-09-24T12:00:00Z", "elapsed_ms": 1,
 		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer",
@@ -1285,7 +1285,7 @@ func TestRunFromHostile(t *testing.T) {
 func TestRunFromStdin(t *testing.T) {
 	previous := stdin
 	t.Cleanup(func() { stdin = previous })
-	stdin = strings.NewReader(`{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+	stdin = strings.NewReader(`{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 		"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "rcode": "NXDOMAIN",
 		"server": {"name": "a.root-servers.net.", "ip": "192.0.2.1", "port": 53}}]}}`)
 
@@ -1574,7 +1574,7 @@ func TestRunReplayRefuses(t *testing.T) {
 		t.Fatalf("writing the capture: %v", err)
 	}
 	walk := filepath.Join(dir, "walk.json")
-	if err := os.WriteFile(walk, []byte(`{"schema_version":4,"question":{"name":"www.test.","type":"A","class":"IN"}}`), 0o600); err != nil {
+	if err := os.WriteFile(walk, []byte(`{"schema_version": 5,"question":{"name":"www.test.","type":"A","class":"IN"}}`), 0o600); err != nil {
 		t.Fatalf("writing the walk: %v", err)
 	}
 

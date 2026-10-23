@@ -39,6 +39,7 @@ var (
 	// placeholders stand in for what a model fills in, with values Parse takes.
 	placeholders = strings.NewReplacer(
 		"ZONE=NEWSERVER", "example.com=ns1.example.net",
+		"ZONE=DS", "example.com=2371 13 2 C988EC423E3880EB8DD8A46FE06CA230EE23F35B578D64E78B29C3E1C83D245A",
 		"SERVER", "ns1.example.net",
 		"NAME", "example.com",
 		"TYPE", "MX",
@@ -70,15 +71,29 @@ func TestSkillCommandsParse(t *testing.T) {
 			// Redirections and pipes belong to the shell, not to dnstree.
 			line, _, _ := strings.Cut(command, " >")
 			line, _, _ = strings.Cut(line, " |")
-			if strings.ContainsAny(line, `"'$`) {
-				t.Fatal("write the example without quotes or variables, so it can be read as arguments")
+			if strings.ContainsAny(line, `"$`) || strings.Count(line, "'")%2 != 0 {
+				t.Fatal("write the example without double quotes or variables, so it can be read as arguments")
 			}
-			args := append([]string{"--no-config"}, strings.Fields(line)[1:]...)
+			args := append([]string{"--no-config"}, words(line)[1:]...)
 			if _, err := cli.Parse(args, io.Discard); err != nil {
 				t.Errorf("Parse: %v", err)
 			}
 		})
 	}
+}
+
+// words splits a command line the way a shell would one that quotes only
+// with single quotes, which a value holding spaces, such as a DS, needs.
+func words(line string) []string {
+	var split []string
+	for i, part := range strings.Split(line, "'") {
+		if i%2 == 1 {
+			split = append(split, part)
+			continue
+		}
+		split = append(split, strings.Fields(part)...)
+	}
+	return split
 }
 
 // prose is a markdown text without the lines of its code blocks that run some

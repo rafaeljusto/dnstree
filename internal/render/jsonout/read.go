@@ -69,6 +69,9 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	tr.Timed = timed(doc.Root)
 	if doc.Trial != nil {
 		tr.Trial = &trace.Trial{Zone: doc.Trial.Zone, NS: doc.Trial.NS}
+		for _, ds := range doc.Trial.DS {
+			tr.Trial.DS = append(tr.Trial.DS, trace.TrialDS{Tag: ds.KeyTag, Algorithm: ds.Algorithm, DigestType: ds.DigestType, Digest: ds.Digest})
+		}
 		if tr.Trial.Addrs, err = readAddrs("trial", doc.Trial.Addrs); err != nil {
 			return nil, err
 		}

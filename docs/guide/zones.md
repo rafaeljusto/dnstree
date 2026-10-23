@@ -23,6 +23,7 @@ server says about its own answer.
 - [Asking only what each zone needs](#asking-only-what-each-zone-needs)
 - [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
 - [Whether it will answer on new nameservers](#whether-it-will-answer-on-new-nameservers)
+- [Whether a DS will hold before the parent has it](#whether-a-ds-will-hold-before-the-parent-has-it)
 - [How much room an answer had](#how-much-room-an-answer-had)
 
 ## All of it at once
@@ -1270,13 +1271,71 @@ break it for every resolver that validates. The exit code is the walk's, so a
 script can hold a move to `--expect` before making it. To see what the new
 servers say differently, save a walk of the zone as it is with `--format json`
 and hold the trial against it with `--against`; `--names` tries a whole list
-of names in one run.
+of names in one run. The DS the parent should be given for the new provider's
+keys can be tried in the same walk with [`--try-ds`](#whether-a-ds-will-hold-before-the-parent-has-it).
 
 The summary says the walk was a simulation, and so does `--format json`, as
 `trial`. A walk that never comes to a referral for the zone named changes
 nothing and says so. One zone is tried at a time, the root cannot be, since it
 has no parent to delegate it; `--diff`, which remembers the DNS as it is, will
 not take it, and nor will the file of defaults.
+
+## Whether a DS will hold before the parent has it
+
+A signed zone is tied into the chain of trust by a DS at its parent: the digest
+of one of the zone's keys, pasted into a form at the registrar. That form is
+where it usually goes wrong. The zone has two kinds of key and the digest of the
+one that signs the data goes in instead of the one that signs the keys, the
+digest loses a piece in the copying, or a move leaves the DS for the old
+provider's keys behind. Any of those makes the zone bogus for every resolver
+that validates, and the parent's DS is cached for as long as its TTL, a day
+or more, so undoing it is slow.
+
+`--try-ds ZONE=DS` walks as though the parent already held the DS given, written
+as the form takes it and `dnssec-dsfromkey` prints it: key tag, algorithm,
+digest type and digest, the digest in as many pieces as it was printed in. The
+set given replaces whatever the parent says of the zone's DS, a DS of its own or
+the proof it has none, which is what a first DS for an unsigned zone needs. A
+rollover that keeps the old DS beside a new one names both, one `--try-ds` for
+each. The chain of trust is checked against the set as though the parent had
+signed it, and where it does not hold, the reason names the key the DS points
+at and the one it should:
+
+```
+$ dnstree --dnssec --no-asn --explain --try-ds 'example.com=36315 13 2 8BFB580E619B109CB4A2F1B7DA655403ED2A4E6800531DE1F37326180340E692' www.example.com A
+. (root)  [secure RSASHA256/SHA256]
+├── a.root-servers.net. 198.41.0.4  235ms  1175 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   ├── a.root-servers.net. 198.41.0.4  232ms  NOERROR  AA DO  (DNSKEY of .)
+│   ├── l.gtld-servers.net. 192.41.162.30  243ms  NOERROR  DO  referral → example.com.  [bogus ECDSAP256SHA256/SHA256: the DS points at key 36315, which signs the zone's data, not its keys; give the parent the DS of key 2371]  (DS replaced by --try-ds)
+│   │   ├── l.gtld-servers.net. 192.41.162.30  248ms  NOERROR  AA DO  (DNSKEY of com.)
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  234ms  NOERROR  AA DO  [bogus: the DS points at key 36315, which signs the zone's data, not its keys; give the parent the DS of key 2371]
+│   │   │   ├── www.example.com. 300 A 104.20.23.154
+│   │   │   ├── www.example.com. 300 A 172.66.147.243
+│   │   │   └── hera.ns.cloudflare.com. 108.162.192.162  219ms  NOERROR  AA DO  (DNSKEY of example.com.)
+...
+✘ bogus in 1.4s · as though the parent held the DS --try-ds gave · resolver in 245ms · 6 queries · 3 servers
+
+· www.example.com. A is 104.20.23.154 and 172.66.147.243, answered by hera.ns.cloudflare.com. for example.com.
+· a cache may hold this answer for 5 minutes, and the delegation to example.com. for 2 days
+· the chain of trust breaks at example.com.: the DS points at key 36315, which signs the zone's data, not its keys; give the parent the DS of key 2371, so a resolver that validates answers SERVFAIL for this name
+· this walk read the DS --try-ds gave for example.com., so handing it to the parent as it stands breaks the zone for every resolver that validates; fix it before the registrar is given it
+...
+```
+
+Given the DS of key 2371 instead, the same walk ends `✔ answered` and says the
+DS points at a key that signs the zone's keys, so the parent can be given it.
+The exit code is the walk's, 3 for a DS that breaks the chain, so a script can
+check a DS before it submits one. A digest whose length is wrong for its type is
+refused before anything is asked.
+
+Only the fingerprint is checked: whether the registrar takes the algorithm, and
+copies the record faithfully, is beyond any walk. A DS is read only where the
+chain above it held, and a walk that finds it already broken or unsigned higher
+up says so. `--try-ds` needs `--dnssec`, names the same zone as `--try-ns` where
+both are given, and together they try a whole move to a provider that signs
+with keys of its own. The summary and `--format json`, as `trial.ds`, say the
+walk was a simulation; like `--try-ns`, it is tried one zone at a time, never
+the root, and neither `--diff` nor the file of defaults takes it.
 
 ## How much room an answer had
 

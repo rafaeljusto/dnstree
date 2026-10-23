@@ -246,6 +246,37 @@ func TestFindings(t *testing.T) {
 			}(),
 			want: []string{"moving test. to them as it stands breaks it for every resolver that validates"},
 		},
+		"a DS tried that breaks the chain says to fix it before it is handed over": {
+			trace: func() *trace.Trace {
+				step := answer()
+				step.DNSSEC = &trace.DNSSECStatus{State: trace.Bogus, Zone: "test.", Reason: "the DS points at key 12345, which signs the zone's data, not its keys; give the parent the DS of key 23456"}
+				tr := walk(step)
+				tr.Trial = &trace.Trial{Zone: "test.", NS: []string{"ns1.new.example."}, DS: []trace.TrialDS{{Tag: 12345, Algorithm: 13, DigestType: 2, Digest: "3F1C"}}}
+				return tr
+			}(),
+			want:  []string{"give the parent the DS of key 23456", "this walk read the DS --try-ds gave for test., so handing it to the parent as it stands breaks the zone"},
+			avoid: []string{"have the parent publish a DS for their keys first"},
+		},
+		"a DS tried that holds says the parent can be given it": {
+			trace: func() *trace.Trace {
+				step := answer()
+				step.DNSSEC = &trace.DNSSECStatus{State: trace.Secure, Zone: "test."}
+				tr := walk(step)
+				tr.Trial = &trace.Trial{Zone: "test.", DS: []trace.TrialDS{{Tag: 12345, Algorithm: 13, DigestType: 2, Digest: "3F1C"}}}
+				return tr
+			}(),
+			want: []string{"the DS --try-ds gave for test. points at a key that signs the zone's keys, so the parent can be given it"},
+		},
+		"a DS tried for a zone the chain never reached says nothing of it": {
+			trace: func() *trace.Trace {
+				step := answer()
+				step.DNSSEC = &trace.DNSSECStatus{State: trace.Secure, Zone: "test."}
+				tr := walk(step)
+				tr.Trial = &trace.Trial{Zone: "elsewhere.", DS: []trace.TrialDS{{Tag: 12345, Algorithm: 13, DigestType: 2, Digest: "3F1C"}}}
+				return tr
+			}(),
+			avoid: []string{"--try-ds"},
+		},
 		"a report already sent is not offered again": {
 			trace: func() *trace.Trace {
 				step := answer()

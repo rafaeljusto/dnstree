@@ -84,9 +84,9 @@ type Trace struct {
 	// --rdap did not ask.
 	Registration *Registration
 
-	// Trial is the delegation --try-ns put in place of the real one, nil for a
-	// walk of the DNS as it is. A walk with one is a simulation of a zone
-	// moved to other nameservers, and has to read as one wherever it is drawn.
+	// Trial is the delegation --try-ns and --try-ds put in place of the real
+	// one, nil for a walk of the DNS as it is. A walk with one is a simulation,
+	// and has to read as one wherever it is drawn.
 	Trial *Trial
 
 	// Propagation is how long changes to the zone the walk ended in take to
@@ -109,20 +109,34 @@ type Trace struct {
 	Report *Report
 }
 
-// Trial is a zone delegated, for one walk, to nameservers of the run's choosing
-// rather than the ones its parent names: a move to another provider, tried
-// before the registry is told. The parent's DS stays what it is, which is the
-// point: it is what the move would meet on the day.
+// Trial is a zone delegated, for one walk, as the run chooses rather than as
+// its parent does: to other nameservers, a move to another provider, or with
+// another DS, a key handed to the registry, tried before the registry is told.
+// Whatever the run does not replace stays as the parent gave it, which is the
+// point: it is what the change would meet on the day.
 type Trial struct {
 	Zone string
 
-	// NS are the nameservers, in the order they were named. A server named
-	// by its address alone is named by the address.
+	// NS are the nameservers, in the order they were named, none where only
+	// the DS is tried. A server named by its address alone is named by the
+	// address.
 	NS []string
 
 	// Addrs are the addresses given for them, which stand in for glue. A
 	// nameserver with none is looked up the way one named outside its zone is.
 	Addrs map[string][]netip.Addr
+
+	// DS is the set that stands in for the parent's DS, none where it is the
+	// parent's that is checked.
+	DS []TrialDS
+}
+
+// TrialDS is one DS record as a registrar's form takes it.
+type TrialDS struct {
+	Tag        uint16
+	Algorithm  uint8
+	DigestType uint8
+	Digest     string // hex, uppercase
 }
 
 // Report is a broken chain of trust reported to the agent the zone asked for

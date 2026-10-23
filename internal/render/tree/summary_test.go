@@ -54,6 +54,23 @@ func TestSummaryTrial(t *testing.T) {
 	}
 }
 
+// TestSummaryTrialDS covers a walk --try-ds gave a DS to, which moved no
+// nameservers and has to read as a simulation all the same.
+func TestSummaryTrialDS(t *testing.T) {
+	tr := walk(1)
+	tr.Root.Children[0].Kind = trace.KindAnswer
+	tr.Trial = &trace.Trial{Zone: "example.com.", DS: []trace.TrialDS{{Tag: 12345, Algorithm: 13, DigestType: 2, Digest: "3F1C"}}}
+
+	var buf bytes.Buffer
+	Summary(&buf, tr, Options{Color: ColorNever})
+	if want := "as though the parent held the DS --try-ds gave"; !strings.Contains(buf.String(), want) {
+		t.Errorf("got %q, want it to carry %q", buf.String(), want)
+	}
+	if strings.Contains(buf.String(), "delegated to") {
+		t.Errorf("got %q, want no nameservers claimed", buf.String())
+	}
+}
+
 // TestSummaryResolver is the comparison the line is there for: what the same
 // question cost through a recursive server.
 func TestSummaryResolver(t *testing.T) {

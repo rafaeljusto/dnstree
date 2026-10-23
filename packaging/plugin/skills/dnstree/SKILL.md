@@ -87,6 +87,7 @@ whole; `dnstree --schema` describes every field.
 | whether the nameservers handle EDNS the way resolvers need (RFC 8906, DNS Flag Day), and answer over TCP | `dnstree --format markdown --check-edns NAME` |
 | which software and version each nameserver runs | `dnstree --format markdown --software --all NAME` |
 | whether a nameserver move will work, before it is made | `dnstree --format markdown --dnssec --try-ns ZONE=NEWSERVER NAME` |
+| whether a DS will hold, before it is given to the registrar | `dnstree --format markdown --dnssec --try-ds 'ZONE=DS' NAME`, DS written as the registrar's form takes it: key tag, algorithm, digest type, digest |
 | how long a change takes to reach every cache | `dnstree --format markdown --dnssec --check-ns --serial --propagation NAME` |
 | why mail is refused or delayed | `dnstree --format markdown --dnssec --mail --spf NAME` |
 | whether SPF is over the ten-lookup limit | `dnstree --format markdown --spf NAME` |

@@ -507,6 +507,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--try-ns</code> walks as though a zone were already delegated to new nameservers. The parent's DS stays what it is, so a move that would break the chain of trust breaks it here, before the registry is told.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">DS</span>
+          <h3>A DS checked before the registrar has it</h3>
+          <p><code>--try-ds</code> walks as though the parent already held the DS you are about to submit. The DS of the wrong key, a digest cut short in the copying, or a key the zone does not publish breaks the chain here, with the key the DS should point at named, instead of in an outage that lasts as long as its TTL.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">running out</span>
           <h3>Signatures late in their life</h3>
           <p>A zone whose signer stopped validates to the last second and then fails all at once. A verdict resting on a signature with less than a fifth of its life left says when it runs out, while there is still time to re-sign.</p>
@@ -744,7 +749,7 @@ answered in 714ms | resolver in 235ms | 3 queries | 3 servers</pre>
 
           <div class="panel" role="tabpanel" id="panel-json" aria-labelledby="tab-json" hidden>
 <pre>{
-  <span class="k">"schema_version"</span>: <span class="n">4</span>,
+  <span class="k">"schema_version"</span>: <span class="n">5</span>,
   <span class="k">"question"</span>: { <span class="k">"name"</span>: <span class="s">"www.example.com."</span>, <span class="k">"type"</span>: <span class="s">"A"</span>, <span class="k">"class"</span>: <span class="s">"IN"</span> },
   <span class="k">"elapsed_ms"</span>: <span class="n">745.333</span>,
   <span class="k">"started"</span>: <span class="s">"2026-09-25T12:43:35.754956Z"</span>,

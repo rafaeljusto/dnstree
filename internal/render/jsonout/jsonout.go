@@ -16,8 +16,9 @@ import (
 // Version 2 added the extended errors of RFC 8914, the echoed client subnet,
 // the decoded service parameters of an HTTPS or SVCB record, and what the
 // resolver answered beside how long it took. Version 4 escapes the text of an
-// extended error, which version 3 wrote as the octets the server sent.
-const SchemaVersion = 4
+// extended error, which version 3 wrote as the octets the server sent. Version
+// 5 lets a trial replace the DS alone, with no nameservers named.
+const SchemaVersion = 5
 
 // Render writes the trace to w as JSON.
 func Render(w io.Writer, tr *trace.Trace) error {
@@ -38,7 +39,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 		document.Warnings = tr.Warnings
 		document.Without = tr.Without
 		if tr.Trial != nil {
-			document.Trial = &trial{Zone: tr.Trial.Zone, NS: tr.Trial.NS, Addrs: addrStrings(tr.Trial.Addrs)}
+			document.Trial = convertTrial(tr.Trial)
 		}
 		document.CAA = convertCAA(tr.CAA)
 		document.SPF = convertSPF(tr.SPF)
@@ -120,11 +121,31 @@ func convertPropagation(from *trace.Propagation) *propagation {
 	return to
 }
 
-// trial is the delegation --try-ns put in place of a zone's real one.
+// trial is the delegation --try-ns and --try-ds put in place of a zone's real
+// one.
 type trial struct {
 	Zone  string              `json:"zone"`
 	NS    []string            `json:"ns"`
 	Addrs map[string][]string `json:"addrs,omitempty"`
+	DS    []trialRecord       `json:"ds,omitempty"`
+}
+
+// trialRecord is one DS record --try-ds gave.
+type trialRecord struct {
+	KeyTag     uint16 `json:"key_tag"`
+	Algorithm  uint8  `json:"algorithm"`
+	DigestType uint8  `json:"digest_type"`
+	Digest     string `json:"digest"`
+}
+
+func convertTrial(t *trace.Trial) *trial {
+	// Present, if empty, where only the DS was tried, so that a reader can
+	// tell none were named from a field it does not know.
+	converted := &trial{Zone: t.Zone, NS: append([]string{}, t.NS...), Addrs: addrStrings(t.Addrs)}
+	for _, ds := range t.DS {
+		converted.DS = append(converted.DS, trialRecord{KeyTag: ds.Tag, Algorithm: ds.Algorithm, DigestType: ds.DigestType, Digest: ds.Digest})
+	}
+	return converted
 }
 
 // report is the failure report --report sent to the agent the zone named (RFC

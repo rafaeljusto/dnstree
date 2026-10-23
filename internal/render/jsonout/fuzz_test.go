@@ -32,14 +32,16 @@ func FuzzRead(f *testing.F) {
 		f.Fatal(err)
 	}
 	f.Add(saved.Bytes())
-	f.Add([]byte(`{"schema_version":4,"question":{"name":"x\u001b[2K.","type":"A","class":"IN"},"root":{"zone":".","kind":"zone"}}`))
-	f.Add([]byte(`{"schema_version":4,"question":{"name":"x.","type":"A","class":"IN"},"root":{"zone":".","kind":"zone"},` +
+	f.Add([]byte(`{"schema_version": 5,"question":{"name":"x\u001b[2K.","type":"A","class":"IN"},"root":{"zone":".","kind":"zone"}}`))
+	f.Add([]byte(`{"schema_version": 5,"question":{"name":"x.","type":"A","class":"IN"},"root":{"zone":".","kind":"zone"},` +
 		`"resolvers":[{"server":{"ip":"192.0.2.53","port":53},"elapsed_ms":1,"behaviour":{"validates":"no","rewrites":"yes",` +
 		`"missing":{"elapsed_ms":1,"rcode":"NOERROR","records":[{"name":"x.com.","ttl":1,"type":"A","data":"\u001b[2K"}]}}}]}`))
-	f.Add([]byte(`{"schema_version":4,"question":{"name":"x.","type":"AAAA","class":"IN"},"root":{"zone":".","kind":"zone"},` +
+	f.Add([]byte(`{"schema_version": 5,"question":{"name":"x.","type":"AAAA","class":"IN"},"root":{"zone":".","kind":"zone"},` +
 		`"resolvers":[{"server":{"ip":"192.0.2.53","port":53},"elapsed_ms":1,"rcode":"NOERROR","synthesised":true,` +
 		`"records":[{"name":"x.","ttl":1,"type":"AAAA","data":"64:ff9b::c000:20a"}],"behaviour":{"validates":"no","rewrites":"no",` +
 		`"synthesises":"yes","prefixes":["64:ff9b::/96"],"dns64":{"elapsed_ms":1,"rcode":"NOERROR"}}}]}`))
+	f.Add([]byte(`{"schema_version": 5,"question":{"name":"x.","type":"A","class":"IN"},"root":{"zone":".","kind":"zone"},` +
+		`"trial":{"zone":"x\u001b[2K.","ns":[],"ds":[{"key_tag":1,"algorithm":13,"digest_type":2,"digest":"\u001b[2K"}]}}`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		tr, err := jsonout.Read(bytes.NewReader(data))

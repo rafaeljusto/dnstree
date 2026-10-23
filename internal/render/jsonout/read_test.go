@@ -56,6 +56,13 @@ func TestReadRoundTrip(t *testing.T) {
 			Trial: &trace.Trial{Zone: "example.", NS: []string{"ns1.new.net.", "192.0.2.9"},
 				Addrs: map[string][]netip.Addr{"192.0.2.9": {netip.MustParseAddr("192.0.2.9")}}},
 		},
+		"a DS tried, with the delegation left as the parent gave it": {
+			Question: trace.Question{Name: "www.example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Trial: &trace.Trial{Zone: "example.", NS: []string{}, DS: []trace.TrialDS{
+				{Tag: 12345, Algorithm: 13, DigestType: 2, Digest: "3F1C0A9B"},
+				{Tag: 23456, Algorithm: 8, DigestType: 1, Digest: "1DF8DC30"}}},
+		},
 		"a broken chain reported to the agent its zone named": {
 			Question: trace.Question{Name: "www.example.", Type: "A", Class: "IN"},
 			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
@@ -272,12 +279,12 @@ func TestReadTimed(t *testing.T) {
 		want     bool
 	}{
 		"a start of zero": {
-			document: `{"schema_version":4,"question":{"name":"example.","type":"A","class":"IN"},"elapsed_ms":1,
+			document: `{"schema_version": 5,"question":{"name":"example.","type":"A","class":"IN"},"elapsed_ms":1,
 				"root":{"zone":".","kind":"zone","children":[{"zone":".","kind":"answer","start_ms":0,"rtt_ms":1}]}}`,
 			want: true,
 		},
 		"no start anywhere": {
-			document: `{"schema_version":4,"question":{"name":"example.","type":"A","class":"IN"},"elapsed_ms":1,
+			document: `{"schema_version": 5,"question":{"name":"example.","type":"A","class":"IN"},"elapsed_ms":1,
 				"root":{"zone":".","kind":"zone","children":[{"zone":".","kind":"answer","rtt_ms":1}]}}`,
 			want: false,
 		},
@@ -347,252 +354,257 @@ func TestReadRefuses(t *testing.T) {
 			want:     "version 3",
 			version:  true,
 		},
+		"a document from before a trial could leave the nameservers alone": {
+			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1}`,
+			want:     "version 4",
+			version:  true,
+		},
 		"a kind of step nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "victory"}]}}`,
 			want: `"victory"`,
 		},
 		"a grade nothing here gives": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"check": {"zone": "x.", "areas": [{"area": "dnssec", "grade": "splendid"}]}}`,
 			want: `"splendid"`,
 		},
 		"an area nothing here grades": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"check": {"zone": "x.", "areas": [{"area": "vibes", "grade": "passed"}]}}`,
 			want: `"vibes"`,
 		},
 		"a registry that said something nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"registration": {"domain": "x.", "state": "forever"}}`,
 			want: `"forever"`,
 		},
 		"a registration that runs out at no time": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"registration": {"domain": "x.", "state": "registered", "expires": "soon"}}`,
 			want: "registration",
 		},
 		"a chain of trust in a state nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "trusted"}}}`,
 			want: `"trusted"`,
 		},
 		"a CAA lookup that came to something nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"caa": {"asked": [{"name": "x.", "found": "maybe"}]}}`,
 			want: `"maybe"`,
 		},
 		"a mail host in a DANE state nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "hosts": [{"name": "mx.x.", "preference": 10, "dane": "trusted"}]}}`,
 			want: `"trusted"`,
 		},
 		"a presented certificate in a state nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "hosts": [{"name": "mx.x.", "preference": 10, "dane": "dane",
 				"presented": [{"address": "192.0.2.25", "state": "trusted"}]}]}}`,
 			want: `"trusted"`,
 		},
 		"a presented certificate matched by a record the host does not have": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "hosts": [{"name": "mx.x.", "preference": 10, "dane": "dane",
 				"presented": [{"address": "192.0.2.25", "state": "match", "matched": [3]}]}]}}`,
 			want: "record 3 of a set of 0",
 		},
 		"a mail path with no MX set and no host": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "implicit": true}}`,
 			want: "no MX set",
 		},
 		"a mail path with a null MX and hosts": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "null": true, "hosts": [{"name": "mx.x.", "preference": 0, "dane": "none"}]}}`,
 			want: "null MX",
 		},
 		"a mail policy that came to something nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "dmarc": {"name": "_dmarc.x.", "lookup": {"name": "_dmarc.x."}, "found": "maybe"}}}`,
 			want: `"maybe"`,
 		},
 		"a DKIM key in a state nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "dkim": [{"selector": "s", "name": "s._domainkey.x.", "lookup": {"name": "s._domainkey.x."}, "found": "published", "state": "strong"}]}}`,
 			want: `"strong"`,
 		},
 		"a DKIM key that was not found, with a state": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "dkim": [{"selector": "s", "name": "s._domainkey.x.", "lookup": {"name": "s._domainkey.x."}, "found": "none", "state": "usable"}]}}`,
 			want: `"usable"`,
 		},
 		"a service path of a type that has no service mode": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "MX", "chain": [{"lookup": {"name": "x."}}]}}`,
 			want: `"MX"`,
 		},
 		"a service path with no set": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "HTTPS", "chain": [], "none": true}}`,
 			want: "has none",
 		},
 		"a record of a service path without its parameters": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."},
 					"records": [{"name": "x.", "ttl": 1, "type": "HTTPS", "data": "1 ."}]}]}}`,
 			want: "not decoded",
 		},
 		"a hint that is no address": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."}}],
 					"targets": [{"name": "x.", "priority": 1, "stray": ["nowhere"]}]}}`,
 			want: "stray hints",
 		},
 		"a CAA verdict in a state nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"caa": {"asked": [], "dnssec": {"state": "trusted"}}}`,
 			want: `"trusted"`,
 		},
 		"a request of the parent in a state nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure", "signal": {"state": "granted"}}}}`,
 			want: `"granted"`,
 		},
 		"a DS that came to something nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "dnssec": {"state": "secure",
 				"ds": [{"tag": 1, "algorithm": "ED25519", "digest": "SHA256", "match": "probably"}]}}}`,
 			want: `"probably"`,
 		},
 		"a way to be left dangling nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "nxdomain", "dangling": {"kind": "adrift", "name": "x."}}]}}`,
 			want: `"adrift"`,
 		},
 		"a probe of something nothing here asks for": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "version", "state": "open"}}]}}`,
 			want: `"version"`,
 		},
 		"a probe that came to something nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "transfer", "state": "ajar"}}]}}`,
 			want: `"ajar"`,
 		},
 		"an edns test of a shape nothing here asks in": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "edns": {"kind": "padding", "state": "ok"}}]}}`,
 			want: `"padding"`,
 		},
 		"an edns test broken in a way nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "edns": {"kind": "flag", "state": "broken", "fault": "\u001b[31mred"}}]}}`,
 			want: `not what an edns test can get wrong`,
 		},
 		"an edns test that passed with a fault": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "edns": {"kind": "flag", "state": "ok", "fault": "echoed"}}]}}`,
 			want: `cannot have a fault`,
 		},
 		"a way to answer a cookie nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "cookie": "crumbled"}]}}`,
 			want: `"crumbled"`,
 		},
 		"a resolver's TTL saying something nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "rcode": "NOERROR", "kept": "forever"}]}`,
 			want: `"forever"`,
 		},
 		"a resolver's failure coming of something nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "rcode": "SERVFAIL", "failed": "gremlins"}]}`,
 			want: `"gremlins"`,
 		},
 		"a resolver asked again whose second answer says nothing here knows": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "rcode": "SERVFAIL", "unchecked": {"elapsed_ms": 1, "kept": "forever"}}]}`,
 			want: `"forever"`,
 		},
 		"a resolver seen to do something nothing here checks": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "sometimes", "rewrites": "no"}}]}`,
 			want: `"sometimes"`,
 		},
 		"a prefix no AAAA record can be made up under": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no", "prefixes": ["64:ff9b::/80"]}}]}`,
 			want: `"64:ff9b::/80"`,
 		},
 		"a made-up answer matched against the zone's": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "AAAA", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "AAAA", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "match": "differs", "synthesised": true}]}`,
 			want: "made up",
 		},
 		"a behaviour inside the answers another rests on": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no",
 					"root": {"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no"}}}}]}`,
 			want: "inside the answers",
 		},
 		"an address that is not one": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "server": {"ip": "not-an-ip"}}]}}`,
 			want: "not-an-ip",
 		},
 		"a walk nested deeper than any walk goes": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1, "root": ` +
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1, "root": ` +
 				strings.Repeat(`{"zone": ".", "kind": "zone", "children": [`, 1100) + strings.Repeat(`]}`, 1100) + `}`,
 			want: "deeper",
 		},
 		"a walk that took longer than a Duration holds": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1e300}`,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1e300}`,
 			want:     "elapsed_ms",
 		},
 		"a query that went out before the walk began": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "start_ms": -1}]}}`,
 			want: "start_ms",
 		},
 		"a round trip that ran backwards": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "answer", "rtt_ms": -1}]}}`,
 			want: "rtt_ms",
 		},
 		"a resolver that took longer than a year": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"server": {"ip": "192.0.2.1"}, "elapsed_ms": 4e10}]}`,
 			want: "elapsed_ms",
 		},
 		"a glue name carrying escapes beside an address that is not one": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": ".", "kind": "referral",
 					"delegation": {"zone": "x.", "glue": {"ns.\u001b[2Jx.": ["nope"]}}}]}}`,
 			want: "nope",
 		},
 		"a service target carrying escapes beside an address that is not one": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."}}],
 					"targets": [{"name": "t.\u001b[2Jx.", "priority": 1, "addrs": ["nope"]}]}}`,
 			want: "nope",
 		},
 		"a service record carrying escapes left undecoded": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."},
 					"records": [{"name": "x.\u001b[2J", "ttl": 1, "type": "HTTPS\u001b[1A", "data": "1 ."}]}]}}`,
 			want: "not decoded",
 		},
 		"a service record carrying escapes beside a hint that is not one": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"service_path": {"name": "x.", "type": "HTTPS", "chain": [{"lookup": {"name": "x."},
 					"records": [{"name": "x.\u001b[2J", "ttl": 1, "type": "HTTPS", "data": "1 .", "service": {"priority": 1, "target": "x.", "hints": ["nope"]}}]}]}}`,
 			want: "nope",
 		},
 		"a step apart from the walk that is not an aside": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "apart": true}}`,
 			want: "apart",
 		},
 		"something after the trace": {
-			document: `{"schema_version": 4, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} {"more": 1}`,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} {"more": 1}`,
 			want:     "after",
 		},
 	}
@@ -618,7 +630,7 @@ func TestReadRefuses(t *testing.T) {
 // gives up past what any trace comes to rather than holding all of it.
 func TestReadRefusesTheEndless(t *testing.T) {
 	endless := io.MultiReader(
-		strings.NewReader(`{"schema_version": 4, "warnings": ["`),
+		strings.NewReader(`{"schema_version": 5, "warnings": ["`),
 		io.LimitReader(repeat('a'), 80<<20),
 	)
 	if _, err := jsonout.Read(endless); err == nil || !strings.Contains(err.Error(), "larger") {

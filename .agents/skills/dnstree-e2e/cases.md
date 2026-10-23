@@ -158,6 +158,9 @@ cached, not a bug. Run it again.
 | serial-glueless | `$D $B --serial zonetransfer.me SOA` | exit 0, a serial from both `nsztm1` and `nsztm2` |
 | try-ns | `$D $B --try-ns example.com=hera.ns.cloudflare.com@108.162.192.162 example.com` | exit 0, the referral marked `(replaced by --try-ns)`, the summary `as though delegated to hera.ns.cloudflare.com.` |
 | try-ns-lame | `$D $B --try-ns example.com=ns1.google.com example.com` | exit 2, the server looked up and drawn `REFUSED  lame` |
+| try-ds | `$D $B --dnssec --try-ds "example.com=$(dig +short DS example.com \| head -1)" www.example.com` | exit 0, the referral to example.com. marked `(DS replaced by --try-ds)`, the summary `as though the parent held the DS --try-ds gave`, `--explain` saying the parent can be given it |
+| try-ds-wrong-key | `$D $B --dnssec --explain --try-ds "example.com=<the DS of a key of flags 256>" www.example.com` | exit 3, bogus at example.com. with `which signs the zone's data, not its keys; give the parent the DS of key N`, N being the key `dig +short DS example.com` names |
+| try-ds-refused | `$D --try-ds 'example.com=2371 13 2 C988' example.com`, the same with `--dnssec` | exit 1 both: without `--dnssec` saying only it checks a DS, with it `"C988" is 2 octets, and digest type 2 makes 32` |
 | axfr-open | `$D $B --check-axfr zonetransfer.me SOA` | exit 0, `axfr open` on both of its nameservers, which come with no glue: the probe looks up the one the walk did not need. Nothing of the zone drawn |
 | axfr-closed | `$D $B --check-axfr example.com` | exit 0, none open |
 | axfr-doh | `$D $B --check-axfr --doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |

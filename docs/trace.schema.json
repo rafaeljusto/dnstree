@@ -9,7 +9,7 @@
     "schema_version": {
       "description": "The version of this document's shape. It is written as a single value rather than a lower bound, because this schema describes that one version: a document of a later version has had a field change meaning or go away, and is not a document this schema can be read against.",
       "type": "integer",
-      "const": 4
+      "const": 5
     },
     "question": { "$ref": "#/$defs/question" },
     "elapsed_ms": {
@@ -218,7 +218,7 @@
       }
     },
     "trial": {
-      "description": "The delegation --try-ns put in place of a zone's real one, present only where it was asked for. Such a walk is a simulation of the zone moved to these nameservers: the referral to the zone is kept as the parent gave it, DS included, and marked replaced, and the walk goes on to the servers named here instead.",
+      "description": "The delegation --try-ns and --try-ds put in place of a zone's real one, present only where it was asked for. Such a walk is a simulation: of the zone moved to the nameservers named here, where there are any, and of its parent holding the DS records here, where there are any. The referral to the zone is kept as the parent gave it and marked replaced, and the walk goes on to the servers named here, and checks the zone's keys against the DS here, instead.",
       "type": "object",
       "required": ["zone", "ns"],
       "properties": {
@@ -227,7 +227,7 @@
           "type": "string"
         },
         "ns": {
-          "description": "The nameservers named, in order; one named by its address alone is named by the address.",
+          "description": "The nameservers named, in order; one named by its address alone is named by the address. Empty where only the DS was tried, and the walk followed the parent's own delegation.",
           "type": "array",
           "items": { "type": "string" }
         },
@@ -238,7 +238,23 @@
             "type": "array",
             "items": { "type": "string" }
           }
+        },
+        "ds": {
+          "description": "The DS records the chain of trust took for the parent's, as though the parent had signed them, in the order given. They replace whatever the parent said of the zone's DS, a DS of its own or the proof it has none.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/trial_record" }
         }
+      }
+    },
+    "trial_record": {
+      "description": "One DS record --try-ds gave, as a registrar's form takes it.",
+      "type": "object",
+      "required": ["key_tag", "algorithm", "digest_type", "digest"],
+      "properties": {
+        "key_tag": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "algorithm": { "description": "The algorithm number, as the DS carries it.", "type": "integer", "minimum": 0, "maximum": 255 },
+        "digest_type": { "description": "The digest type number, as the DS carries it.", "type": "integer", "minimum": 0, "maximum": 255 },
+        "digest": { "description": "The digest, in uppercase hex.", "type": "string" }
       }
     },
     "report": {
