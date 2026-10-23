@@ -382,6 +382,32 @@ func (s *Server) Request(tb testing.TB, owner string) string {
 	return cds(owner, s.signer.ksk) + cdnskey(owner, s.signer.ksk)
 }
 
+// DS is the DS of the key signing key of this server's zone, the one to hand
+// its parent. The zone has to be signed.
+func (s *Server) DS(tb testing.TB) trace.TrialDS {
+	tb.Helper()
+	return s.keyDS(tb, func(s *signer) *dns.DNSKEY { return s.ksk })
+}
+
+// ZoneKeyDS is the DS of the zone signing key, the one an operator hands the
+// parent by mistake.
+func (s *Server) ZoneKeyDS(tb testing.TB) trace.TrialDS {
+	tb.Helper()
+	return s.keyDS(tb, func(s *signer) *dns.DNSKEY { return s.zsk })
+}
+
+func (s *Server) keyDS(tb testing.TB, which func(*signer) *dns.DNSKEY) trace.TrialDS {
+	tb.Helper()
+
+	if s.signer == nil {
+		tb.Fatalf("fakens: %s is not signed, and has no key", s.origin)
+	}
+	s.signer.mu.Lock()
+	defer s.signer.mu.Unlock()
+	ds := which(s.signer).ToDS(dns.SHA256)
+	return trace.TrialDS{Tag: ds.KeyTag, Algorithm: ds.Algorithm, DigestType: ds.DigestType, Digest: strings.ToUpper(ds.Digest)}
+}
+
 // parse reads a zone in presentation format, against the origin it belongs to.
 func parse(tb testing.TB, origin, zone string) []dns.RR {
 	tb.Helper()
@@ -876,6 +902,12 @@ func (s *Server) signed(section []dns.RR) []dns.RR {
 			}
 		case dns.TypeRRSIG:
 			continue // already carries its own signature
+		case dns.TypeDNSKEY:
+			// Signed by the keys that sign keys, as signers that split them
+			// do: a DS for the zone signing key leads nowhere.
+			if dns.EqualName(rrset[0].Header().Name, s.origin) {
+				continue
+			}
 		}
 		if signature := s.signer.signRRset(rrset); signature != nil {
 			signed = append(signed, signature)
