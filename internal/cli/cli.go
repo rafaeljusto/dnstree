@@ -529,10 +529,11 @@ how to check a DS before it is handed to the registrar. The DS is written as
 the registrar's form takes it and dnssec-dsfromkey prints it, key tag,
 algorithm, digest type and digest: example.com='12345 13 2 3F1C...9AB0'. The
 set given replaces the parent's, whether the parent holds one or not, so a
-rollover that keeps the old DS beside a new one names both. The chain of trust is checked against it as
-though the parent had signed it, and a DS that does not hold says which key it
-points at and which it should. It needs --dnssec, takes the same zone as
---try-ns, and the two together try a whole move to a provider that signs.
+rollover that keeps the old DS beside a new one names both. The chain of trust
+is checked against it as though the parent had signed it, and a DS that does
+not hold says which key it points at and which it should. It needs --dnssec,
+takes the same zone as --try-ns, and the two together try a whole move to a
+provider that signs.
 
 --nsid asks every server for the name it goes by (RFC 5001), and draws it
 beside the address. One anycast address is a great many machines in a great many
@@ -1673,7 +1674,7 @@ func (l *trialList) Set(value string) error {
 	if !ok || zone == "" || server == "" {
 		return fmt.Errorf("%q is not ZONE=SERVER", value)
 	}
-	zone, err := l.zone(zone)
+	zone, err := l.zone(zone, "--root to walk from other servers")
 	if err != nil {
 		return err
 	}
@@ -1715,15 +1716,16 @@ func (l *trialList) Set(value string) error {
 }
 
 // zone reads the zone a --try-ns or --try-ds names, which every one of them in
-// a run has to agree on.
-func (l *trialList) zone(written string) (string, error) {
+// a run has to agree on. instead is what to use for the root, which has no
+// parent to try anything at.
+func (l *trialList) zone(written, instead string) (string, error) {
 	zone, err := idn.ASCII(written)
 	if err != nil {
 		return "", err
 	}
 	zone = fqdn(strings.ToLower(zone))
 	if zone == "." {
-		return "", errors.New("the root has no parent to delegate it, so it cannot be moved; use --root or --trust-anchors")
+		return "", fmt.Errorf("%q is the root, which has no parent; use %s", written, instead)
 	}
 	if l.trial == nil {
 		l.trial = &trace.Trial{Zone: zone, Addrs: map[string][]netip.Addr{}}
@@ -1776,7 +1778,7 @@ func (l trialDS) Set(value string) error {
 		return fmt.Errorf("%q is %d octets, and digest type %d makes %d; copy it whole", digest, len(raw), digestType, size)
 	}
 
-	if _, err := l.zone(zone); err != nil {
+	if _, err := l.zone(zone, "--trust-anchors to try other keys for it"); err != nil {
 		return err
 	}
 	ds := trace.TrialDS{Tag: uint16(tag), Algorithm: uint8(algorithm), DigestType: uint8(digestType), Digest: digest}
