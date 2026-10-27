@@ -712,10 +712,11 @@ func supposedDS(set []*dns.DS, authority []dns.RR, zone string) []*dns.DS {
 
 // supposedReason says what is wrong with a DS set Suppose was given, in the
 // terms of the form it is handed over on: the key it points at, and the one it
-// should. A DS that digests a key comes first, since it is the likeliest to be
-// the one meant.
+// should. A right DS over a key set whose signature fails comes first, since
+// it is the zone that needs fixing; then a DS that digests a key, the likeliest
+// to be the one meant.
 func (c *Chain) supposedReason(set []*dns.DS, keys []*dns.DNSKEY, signatures []*dns.RRSIG) string {
-	var pointed, misdigested, missing string
+	var unsigned, pointed, misdigested, missing string
 	for _, ds := range set {
 		named := slices.IndexFunc(keys, func(key *dns.DNSKEY) bool {
 			return key.KeyTag() == ds.KeyTag && key.Algorithm == ds.Algorithm
@@ -727,11 +728,14 @@ func (c *Chain) supposedReason(set []*dns.DS, keys []*dns.DNSKEY, signatures []*
 			misdigested = cmp.Or(misdigested, fmt.Sprintf("the DS names key %d, but its digest is not that key's; check the digest type, and that the digest was copied whole", ds.KeyTag))
 		case keys[named].Flags&dns.FlagSEP == 0:
 			pointed = cmp.Or(pointed, fmt.Sprintf("the DS points at key %d, which signs the zone's data, not its keys", ds.KeyTag))
+		case signsKeys(signatures, ds):
+			unsigned = cmp.Or(unsigned, fmt.Sprintf("the DS is right, but %s over the zone's keys; the zone has to sign its key set again",
+				signatureFault(signatures, ds, c.now())))
 		default:
 			pointed = cmp.Or(pointed, fmt.Sprintf("the DS points at key %d, which does not sign the zone's keys", ds.KeyTag))
 		}
 	}
-	reason := cmp.Or(pointed, misdigested, missing)
+	reason := cmp.Or(unsigned, pointed, misdigested, missing)
 
 	var signers []string
 	for _, key := range keys {
@@ -743,6 +747,26 @@ func (c *Chain) supposedReason(set []*dns.DS, keys []*dns.DNSKEY, signatures []*
 		reason += "; give the parent the DS of key " + strings.Join(signers, " or ")
 	}
 	return reason
+}
+
+// signsKeys reports whether a signature over the key set claims to be made by
+// the key ds names.
+func signsKeys(signatures []*dns.RRSIG, ds *dns.DS) bool {
+	return slices.ContainsFunc(signatures, func(signature *dns.RRSIG) bool {
+		return signature.TypeCovered == dns.TypeDNSKEY && signature.KeyTag == ds.KeyTag && signature.Algorithm == ds.Algorithm
+	})
+}
+
+// signatureFault says why the key set's signatures by the key ds names fail,
+// once verify has said they do.
+func signatureFault(signatures []*dns.RRSIG, ds *dns.DS, now time.Time) string {
+	for _, signature := range signatures {
+		if signature.TypeCovered == dns.TypeDNSKEY && signature.KeyTag == ds.KeyTag &&
+			signature.Algorithm == ds.Algorithm && !signature.ValidPeriod(now) {
+			return fmt.Sprintf("the signature of key %d is outside its validity period", ds.KeyTag)
+		}
+	}
+	return fmt.Sprintf("the signature of key %d does not verify", ds.KeyTag)
 }
 
 // digests reports whether ds is the digest of key, false for a digest type

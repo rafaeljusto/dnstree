@@ -136,6 +136,7 @@ func TestTrialDS(t *testing.T) {
 		zone     string
 		unsigned bool // the zone has no DS at its parent yet
 		bareCom  bool // com. is not signed, so nothing below it can be
+		broken   bool // the zone's key set carries a signature that does not verify
 		ds       func(example *fakens.Server) []trace.TrialDS
 		state    trace.DNSSECState
 		reason   string
@@ -170,6 +171,12 @@ func TestTrialDS(t *testing.T) {
 			},
 			state:  trace.Bogus,
 			reason: "but its digest is not that key's"},
+		"the right DS over a key set whose signature is broken": {
+			unsigned: true,
+			broken:   true,
+			ds:       func(example *fakens.Server) []trace.TrialDS { return []trace.TrialDS{example.DS(t)} },
+			state:    trace.Bogus,
+			reason:   "the DS is right, but the signature of key "},
 		"a DS for a key the zone does not publish": {
 			unsigned: true,
 			ds: func(example *fakens.Server) []trace.TrialDS {
@@ -201,7 +208,7 @@ func TestTrialDS(t *testing.T) {
 			hierarchy.Add(fakens.Config{Name: "ns.com.", Origin: "com.", Zone: comZone, Declared: "192.0.2.2",
 				DNSSEC: true, Behaviour: fakens.Behaviour{NoDS: test.bareCom}})
 			example := hierarchy.Add(fakens.Config{Name: "ns.example.com.", Origin: "example.com.", Zone: exampleZone, Declared: "192.0.2.3",
-				DNSSEC: true, Behaviour: fakens.Behaviour{NoDS: test.unsigned}})
+				DNSSEC: true, Behaviour: fakens.Behaviour{NoDS: test.unsigned, BadKeySignature: test.broken}})
 
 			trial := trace.Trial{Zone: cmp.Or(test.zone, "example.com."), DS: test.ds(example)}
 			cfg := resolver.Config{DNSSEC: true, Anchors: root.Anchors(t), Try: &trial}
