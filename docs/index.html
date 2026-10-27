@@ -346,7 +346,7 @@ footer a:hover{color:var(--ink)}
         thing in a reply that says which of them answered — so two hops that look like
         the same server may be a continent apart. <code>--software</code> asks each
         one which software it runs, the way <code>dig CH TXT version.bind</code> does:
-        <code>version "9.20.29"</code>, or <code>version hidden</code> for a server
+        <code>version "ATLAS"</code>, or <code>version hidden</code> for a server
         whose operator would rather not say.
       </p>
 
@@ -504,12 +504,12 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">moving</span>
           <h3>A move to a new provider, tried first</h3>
-          <p><code>--try-ns</code> walks as though a zone were already delegated to new nameservers. The parent's DS stays what it is, so a move that would break the chain of trust breaks it here, before the registry is told.</p>
+          <p><code>--try-ns</code> walks as though a zone were already delegated to new nameservers. The parent's DS stays what it is unless <code>--try-ds</code> replaces it, so a move that would break the chain of trust breaks it here, before the registry is told.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">DS</span>
           <h3>A DS checked before the registrar has it</h3>
-          <p><code>--try-ds</code> walks as though the parent already held the DS you are about to submit. The DS of the wrong key, a digest cut short in the copying, or a key the zone does not publish breaks the chain here, with the key the DS should point at named, instead of in an outage that lasts as long as its TTL.</p>
+          <p><code>--try-ds</code> walks as though the parent already held the DS you are about to submit. The DS of the wrong key, or of a key the zone does not publish, breaks the chain here, with the key the DS should point at named, instead of in an outage that lasts as long as its TTL; a digest cut short in the copying is refused outright.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">running out</span>

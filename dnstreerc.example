@@ -54,6 +54,10 @@
 # apart. It costs no query of its own.
 # nsid = true
 
+# Ask each server which software it runs, the way dig CH TXT version.bind
+# does. It costs a query or two a server.
+# software = true
+
 # Send each server a DNS cookie (RFC 7873), and say on each hop whether it
 # answered with one. It costs no query of its own.
 # cookie = true

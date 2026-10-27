@@ -6,6 +6,7 @@ server says about its own answer.
 - [All of it at once](#all-of-it-at-once)
 - [Whether the parent and the child agree](#whether-the-parent-and-the-child-agree)
 - [Records that point where they may not](#records-that-point-where-they-may-not)
+- [Addresses nobody can reach](#addresses-nobody-can-reach)
 - [Whether they all have the same zone](#whether-they-all-have-the-same-zone)
 - [What they give a stranger](#what-they-give-a-stranger)
 - [How they handle EDNS](#how-they-handle-edns)
@@ -41,7 +42,7 @@ check example.com.
   ✔ consistency   every nameserver asked serves one copy of example.com., serial 2418004112 (2 nameservers, 12 addresses)
   ✔ dnssec        the chain of trust holds from the root to example.com., signed with ECDSAP256SHA256
   ⚠ servers       all 2 nameservers of example.com. are in AS13335, so one operator's outage takes the whole zone with it
-  ✔ edns          every nameserver of example.com. that was asked passed the RFC 8906 edns tests
+  ✔ edns          every nameserver of example.com. that was asked passed the RFC 8906 tests
   · strangers     not asked; --check-axfr and --check-recursion probe the nameservers, which is for your own zone
   ✔ caa           no name from example.com. up has a CAA set, so any certificate authority may issue for it
   ✔ mail          the SPF policy of example.com. takes 0 of the 10 lookups a check is allowed
