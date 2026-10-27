@@ -627,6 +627,7 @@ test("changes are counted the way the sentences say them", () => {
     "nothing compared": [undefined, 0],
     "nothing changed": [{ when: "1 day ago" }, 0],
     "an answer": [{ was: { kind: "answer" } }, 1],
+    "the same answer with another TTL": [{ ttl_was: 3600, ttl: 60 }, 1],
     "nameservers that came and went are one change": [{ zones: [{ name: "a.", ns_came: ["x."], ns_went: ["y."] }] }, 1],
     "a cut's nameservers and its chain are two": [{ zones: [{ name: "a.", ns_went: ["y."], dnssec_was: "secure" }] }, 2],
     "a cut that came and one that went": [{ was: {}, zones: [{ name: "a.", came: true }, { name: "b.", went: true }] }, 3],

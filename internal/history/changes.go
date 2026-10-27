@@ -183,8 +183,7 @@ func signing(zones []ZoneDelta) []explain.Finding {
 }
 
 // Delta is what [Differences] says, kept as data for a page to draw rather
-// than as sentences to read. The sentences are made from it, so the two cannot
-// disagree.
+// than as sentences to read: every change a sentence names has its field here.
 type Delta struct {
 	// When is how far apart the two walks were made, in the words the
 	// sentences use.
@@ -192,6 +191,11 @@ type Delta struct {
 
 	// Was is the answer as it was, where it is not what it is now.
 	Was *Answer `json:"was,omitempty"`
+
+	// TTLWas is the TTL the same answer had then, and TTL the one it has now,
+	// set only where the answer did not change and its TTL did.
+	TTLWas uint32 `json:"ttl_was,omitempty"`
+	TTL    uint32 `json:"ttl,omitempty"`
 
 	// Zones is every cut that changed, those this walk crossed first, in the
 	// order it crossed them, and then those it crosses no longer.
@@ -250,6 +254,8 @@ func compare(before, now *Walk) *Delta {
 	delta := &Delta{}
 	if before.Kind != now.Kind || !slices.Equal(before.Answer, now.Answer) {
 		delta.Was = &Answer{Kind: before.Kind, Answer: before.Answer}
+	} else if before.TTL != now.TTL && before.TTL != 0 && now.TTL != 0 {
+		delta.TTLWas, delta.TTL = before.TTL, now.TTL
 	}
 	for _, zone := range now.Zones {
 		was, known := find(before.Zones, zone.Name)

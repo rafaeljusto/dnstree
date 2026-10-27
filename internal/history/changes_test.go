@@ -325,7 +325,7 @@ func TestCompare(t *testing.T) {
 		"a TTL alone is not a different answer": {
 			before: remembered(nil),
 			now:    later(func(walk *history.Walk) { walk.TTL = 60 }),
-			want:   &history.Delta{When: "1 day ago"},
+			want:   &history.Delta{When: "1 day ago", TTLWas: 3600, TTL: 60},
 		},
 		"a nameserver swapped and a chain broken": {
 			before: remembered(nil),

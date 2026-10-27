@@ -266,8 +266,9 @@ export function changesOf(hops, changes, result) {
 }
 
 // How many things changed, counted the way the sentences under the walk say
-// them: a cut that came or went, its nameservers, its chain, and the answer.
-export const changeCount = (changes) => (changes?.was ? 1 : 0) + (changes?.zones ?? []).reduce((sum, zone) =>
+// them: a cut that came or went, its nameservers, its chain, and the answer or
+// its TTL.
+export const changeCount = (changes) => (changes?.was || changes?.ttl_was ? 1 : 0) + (changes?.zones ?? []).reduce((sum, zone) =>
   sum + (zone.came || zone.went ? 1 : 0) + (zone.ns_came?.length || zone.ns_went?.length ? 1 : 0) + (zone.dnssec_was ? 1 : 0), 0);
 
 /* ── the view, in the address ──────────────────────────────────────────── */
