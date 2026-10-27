@@ -9,6 +9,10 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   unsigned cut on a parent's servers, DNS64 detection, the 3D scene's
   changes, `--try-ds`, the `--diff` delta as data); every fuzz test searched
   for 30 s. `FuzzClipEscaped` failed on its own property, not on the code.
+  Fixed in the working tree after it: `clipEscaped` says whether it cut, so
+  the fuzz test no longer takes a trailing `...` for the mark, and `\...` is
+  kept under `testdata/fuzz`. A version that itself ends in `...` still
+  reads as clipped when drawn, which is cosmetic.
 
 ## Open findings
 
@@ -20,12 +24,6 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   `@mentions` and `#refs`; fixing it means marking them apart from the prose
   explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
-- Low: `FuzzClipEscaped` takes a trailing `...` for the cut mark, so text
-  ending in `\` and a dot, which `clipEscaped` keeps whole and uncut (`\...`
-  comes back as `\...`), fails it as half an escape; `make fuzz` stops there.
-  The same mark leaves a version that ends in `...` reading as clipped
-  ([version_internal_test.go:20](../../../internal/transport/version_internal_test.go#L20),
-  [version.go:64](../../../internal/transport/version.go#L64)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
   bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea`,
   `db990d4` and `7eeec81`, were clean.
