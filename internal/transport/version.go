@@ -37,14 +37,19 @@ func SaidVersion(resp *dns.Msg) (string, bool) {
 		}
 	}
 	text := strings.TrimSpace(strings.Join(said, " "))
-	return clipEscaped(text, MaxVersion), text != ""
+	clipped, cut := clipEscaped(text, MaxVersion)
+	if cut {
+		clipped += "..."
+	}
+	return clipped, text != ""
 }
 
-// clipEscaped bounds escaped text to limit bytes, and says where it was cut.
-// An escape is \DDD or a backslash and the byte after it, and is kept whole
-// or not at all. Anything outside printable ASCII is escaped on the way, in
-// case the text did not come from the codec.
-func clipEscaped(text string, limit int) string {
+// clipEscaped bounds escaped text to limit bytes, and says whether it was
+// cut: the text itself may end in dots. An escape is \DDD or a backslash and
+// the byte after it, and is kept whole or not at all. Anything outside
+// printable ASCII is escaped on the way, in case the text did not come from
+// the codec.
+func clipEscaped(text string, limit int) (string, bool) {
 	var b strings.Builder
 	for i, used := 0, 0; i < len(text); i += used {
 		token := text[i : i+1]
@@ -61,12 +66,11 @@ func clipEscaped(text string, limit int) string {
 			token = `\\`
 		}
 		if b.Len()+len(token) > limit {
-			b.WriteString("...")
-			break
+			return b.String(), true
 		}
 		b.WriteString(token)
 	}
-	return b.String()
+	return b.String(), false
 }
 
 func printable(c byte) bool { return c >= ' ' && c <= '~' }
