@@ -175,7 +175,7 @@ func TestEDNSOverTCP(t *testing.T) {
 	}
 }
 
-// TestEDNSNotByDefault covers the cost: up to five queries a nameserver are asked
+// TestEDNSNotByDefault covers the cost: up to six queries a nameserver are asked
 // only when they are asked for.
 func TestEDNSNotByDefault(t *testing.T) {
 	t.Parallel()

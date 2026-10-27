@@ -166,10 +166,10 @@ const DNS64Name = "ipv4only.arpa."
 
 // Probe asks server the questions whose right answers are known beforehand:
 // BrokenName and the root's SOA with DNSSEC, missing, a name that cannot
-// exist, the TXT of each echo, and the AAAA of DNS64Name. A SERVFAIL for BrokenName is asked again
-// with checking disabled, which tells a failed validation from a failure to
-// get there. What the answers say of the resolver is left to the reading of
-// them.
+// exist, the TXT of each echo, and the AAAA of DNS64Name. A SERVFAIL for
+// BrokenName is asked again with checking disabled, which tells a failed
+// validation from a failure to get there. What the answers say of the resolver
+// is left to the reading of them.
 //
 // Nothing is asked again over a fallback: the answers are small, and a silent
 // resolver would hold the run up for a timeout per transport per question.
