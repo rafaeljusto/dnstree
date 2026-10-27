@@ -78,7 +78,9 @@ These need no network: every one exits before a query goes out.
 | nxdomain | `$D $B --expect nxdomain nope-e2e-zz9.iana.org` | exit 0. NXDOMAIN is an answer |
 | nodata | `$D $B --expect nodata example.com NAPTR` | exit 0 |
 | cname | `$D $B www.github.com` | exit 0, the CNAME to `github.com.` drawn, then the walk to its A |
-| reverse | `$D $B -x 8.8.8.8` | exit 0, `8.8.8.8.in-addr.arpa.` PTR `dns.google.` |
+| reverse | `$D $B -x 8.8.8.8` | exit 0, `8.8.8.8.in-addr.arpa.` PTR `dns.google.`, `ptr: dns.google. points back to 8.8.8.8` and an `(A of dns.google. for the reverse check)` hop |
+| reverse-noback | `$D $B -x 184.84.0.1` | exit 0, `does not point back: it has no A record`, and a warning ending `point the PTR at a name that has it` |
+| reverse-none | `$D $B -x 192.0.2.1` | exit 0, `ptr: 192.0.2.1 has no name to point back to it` |
 | reverse6 | `$D $B -x 2001:4860:4860::8888` | exit 0, a PTR under `ip6.arpa.` |
 | idn | `$D $B münchen.de` | exit 0, asked and drawn as `xn--mnchen-3ya.de.` |
 | all | `$D $B --all example.com` | exit 0. Every nameserver of each zone asked: dozens of queries, not 3 |
@@ -86,6 +88,7 @@ These need no network: every one exits before a query goes out.
 | qmin | `$D $B --qmin www.example.com` | exit 0, hops marked `(minimised to …)` |
 | without | `$D $B --without a.root-servers.net example.com` | exit 0, a.root not asked, and the summary says `without a.root-servers.net.` |
 | nsid | `$D $B --nsid example.com` | exit 0, an `@identifier` beside the servers that publish one (the roots do) |
+| software | `$D $B --software example.com`, and the same with `--live` under `script` | exit 0, `version "…"` or `version hidden` beside every server (the roots say `version "ATLAS"`). The live run ends with the same summary line, query count included |
 | cookie | `$D $B --cookie example.com` | exit 0, every hop says `cookie`, `no cookie` or one of the other states |
 | subnet | `$D $B --subnet 8.8.8.0/24 www.google.com` | exit 0, Google's hops say `ecs scope /N` |
 | explain | `$D $B --explain example.com` | exit 0, sentences under the tree naming the answer and who gave it |
@@ -100,6 +103,7 @@ These need no network: every one exits before a query goes out.
 | ipv6 | `$D $B -6 example.com` | exit 0, only IPv6 addresses asked. Skip it if the environment has no IPv6 |
 | color | `$D --no-asn --no-compare --color always example.com` | escapes on stdout even though it is a pipe |
 | check-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --check-resolver example.com` | exit 0, `resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone`, then a line on ECS and minimisation. With `--no-compare`, exit 1: `--check-resolver checks the resolvers --no-compare leaves unasked` |
+| dns64 | `$D --no-asn --color never --resolver 2001:4860:4860::6464 --check-resolver example.com AAAA` | exit 0, `makes up AAAA records from A records under 64:ff9b::/96 (DNS64)`. Needs IPv6. 1.1.1.1 above has no DNS64 line |
 
 ## dnssec
 
@@ -160,7 +164,9 @@ cached, not a bug. Run it again.
 | try-ns-lame | `$D $B --try-ns example.com=ns1.google.com example.com` | exit 2, the server looked up and drawn `REFUSED  lame` |
 | try-ds | `$D $B --dnssec --try-ds "example.com=$(dig +short DS example.com \| head -1)" www.example.com` | exit 0, the referral to example.com. marked `(DS replaced by --try-ds)`, the summary `as though the parent held the DS --try-ds gave`, `--explain` saying the parent can be given it |
 | try-ds-wrong-key | `$D $B --dnssec --explain --try-ds "example.com=<the DS of a key of flags 256>" www.example.com` | exit 3, bogus at example.com. with `which signs the zone's data, not its keys; give the parent the DS of key N`, N being the key `dig +short DS example.com` names |
-| try-ds-refused | `$D --try-ds 'example.com=2371 13 2 C988' example.com`, the same with `--dnssec` | exit 1 both: without `--dnssec` saying only it checks a DS, with it `"C988" is 2 octets, and digest type 2 makes 32` |
+| try-ds-refused | `$D --try-ds "example.com=2371 13 2 $(printf 'C9%.0s' {1..32})" example.com`, then `$D --dnssec --try-ds 'example.com=2371 13 2 C988' example.com` | exit 1 both: the first `--try-ds tries a DS, which only --dnssec checks`, the second `"C988" is 2 octets, and digest type 2 makes 32`. A digest cut short is refused while flags are read, before the check for `--dnssec` |
+| try-ds-root | `$D --dnssec --try-ds ".=2371 13 2 $(printf 'C9%.0s' {1..32})" example.com` | exit 1, `--try-ds "." is the root, which has no parent; use --trust-anchors to try other keys for it` |
+| unreachable | `$D $B --try-ns example.com=10.0.0.53.nip.io --timeout 500ms --retries 0 example.com` | exit 2, `(private address)` on the hop, and `warning: nip.io. gives 10.0.0.53 …` ending `publish the server's public address in nip.io.`. `192.0.2.53.nip.io` gives the documentation wording, `100.64.0.53.nip.io` the RFC 6598 one |
 | axfr-open | `$D $B --check-axfr zonetransfer.me SOA` | exit 0, `axfr open` on both of its nameservers, which come with no glue: the probe looks up the one the walk did not need. Nothing of the zone drawn |
 | axfr-closed | `$D $B --check-axfr example.com` | exit 0, none open |
 | axfr-doh | `$D $B --check-axfr --doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |
@@ -215,6 +221,7 @@ cached, not a bug. Run it again.
 | budget-0 | `$D $B --max-cname 0 www.github.com`, and the same for `--max-depth` and `--max-queries`, and from a file of defaults | exit 1, `is no budget at all; the least is 1`, naming the file where the file set it. Left alone, a budget takes its default |
 | timeout | `$D $B --timeout 200ms --retries 0 --root 192.0.2.1 example.com` | exit 2 within about a second, `timeout` on the hop |
 | retries | the same with `--retries 2` | exit 2, one note: `asked again after 2 silences`. With `--retries 0` there is none |
+| software-budget | `$D $B --software --max-queries 4 example.com` | exit 0, `raise --max-queries to ask them all` |
 | port | `$D $B --port 9 --timeout 300ms --retries 0 --root a.root-servers.net@198.41.0.4 example.com` | exit 2, `no server answered for .`, the tree drawn |
 
 ## start

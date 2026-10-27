@@ -2,26 +2,33 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `db990d4`
-- **Date**: 2026-10-20
-- **Scope**: the commits since `d0eefea` (DSYNC, key rollover, missing glue,
-  the takeover check below the zone, alias verdicts, a zone with no keys for
-  its DS, DO without EDNS0, the replay clock, nanosecond captures, the skill
-  eval); every fuzz test searched for 30 s, nothing found. Fixed in the
-  working tree after it: DSYNC and SVCB targets said to have no address on a
-  bogus denial, or on a budget that never reached them.
+- **Commit**: `7eeec81`
+- **Date**: 2026-10-27
+- **Scope**: the commits since `db990d4` (unreachable nameserver addresses,
+  TCP in `--check-edns`, the reverse-name check, `--software`, the hidden
+  unsigned cut on a parent's servers, DNS64 detection, the 3D scene's
+  changes, `--try-ds`, the `--diff` delta as data); every fuzz test searched
+  for 30 s. `FuzzClipEscaped` failed on its own property, not on the code.
 
 ## Open findings
 
-- Low: names, CAA issuer values, SPF names, the report agent, and now MX hosts
-  in the `--tlsa` finding, the `--serial` servers, resolver operators and DKIM
-  selectors in the markdown report's finding sentences are open to GitHub's
-  autolinks, `@mentions` and `#refs`; fixing it means marking them apart from
-  the prose explain writes
+- Low: names, CAA issuer values, SPF names, the report agent, MX hosts in the
+  `--tlsa` finding, the `--serial` servers, resolver operators, DKIM
+  selectors, and now the software a server says it runs (the `--check-edns`
+  finding) and the names a PTR set gives (the reverse-check warnings) in the
+  markdown report's finding sentences are open to GitHub's autolinks,
+  `@mentions` and `#refs`; fixing it means marking them apart from the prose
+  explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
+- Low: `FuzzClipEscaped` takes a trailing `...` for the cut mark, so text
+  ending in `\` and a dot, which `clipEscaped` keeps whole and uncut (`\...`
+  comes back as `\...`), fails it as half an escape; `make fuzz` stops there.
+  The same mark leaves a version that ends in `...` reading as clipped
+  ([version_internal_test.go:20](../../../internal/transport/version_internal_test.go#L20),
+  [version.go:64](../../../internal/transport/version.go#L64)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
-  bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea` and
-  `db990d4`, were clean.
+  bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea`,
+  `db990d4` and `7eeec81`, were clean.
 
 ## Checked and sound
 
@@ -390,3 +397,36 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   and hints are judged only from those; a target the budget never reached is
   not one with no address (`TestDSYNC`, `TestServicePath`,
   `TestDSYNCOutOfBudget`).
+- `--try-ds`: the set stands in for the parent's only at the zone named,
+  never the root; the chain above has to be Secure first (`enter` inherits
+  otherwise, and the walk says so); a DS that does not hold is bogus with the
+  key it should name; `Clone` carries the set; refused without `--dnssec`,
+  with `--diff`, from the file of defaults and on `--from`; never in
+  dnstree-web; `Trial.DS` digests go through `Shown`.
+- Hidden cuts (`settleCut`, `apexOf`): an unsigned AA answer's SOA or NS
+  owner is believed only through the parent's signed no-DS proof, whose NSEC
+  or NSEC3 bitmap needs NS and no SOA or DS, so a real NSEC at a name that
+  is no delegation cannot make it insecure; every descent stands strictly
+  between the zone and the cut, spends a query and ends; a zone the parent
+  never delegated is bogus (`TestDNSSECHiddenUnsignedCut`).
+- `--software`: CHAOS only for that query (`inClass` keeps the question's
+  class, IN everywhere else), through the same Down, pcap and replay
+  wrappers; `afford` before each fan-out, hops written after `askEach` on the
+  walking goroutine; text clipped to 48 bytes, printable ASCII, escapes kept
+  whole; through `Server.Shown`; off in dnstree-web.
+- `--check-edns` over TCP: the fourth and the UDP re-ask are spent before
+  they are asked, each goroutine writes its own step, attached after; a TCP
+  failure is never retried on the fallback; `read.go` checks `tcp` and
+  `closed`.
+- Reverse check: only on `-x`, every lookup through `look` (Apart), bogus or
+  failed lookups never confirm, `Reverse.Shown` escapes every name, `read.go`
+  recomputes `Back` and `Confirmed`; openmetrics takes no label.
+- Unreachable addresses: `Unroutable` is advice only, never a guard;
+  `unreached` under `r.mu`; off unless every root is public.
+- DNS64: prefixes only at RFC 6052 lengths and only from the two known
+  addresses; it changes the comparison alone; `read.go` checks prefixes and
+  refuses a synthesised answer with a match.
+- `--diff`/`--against` delta: the same comparison as the sentences, drawn in
+  the scene through `textContent` and `TONES` with an unknown state falling
+  back to quiet.
+- `go test -race -count=2 ./...` is clean at `7eeec81`.
