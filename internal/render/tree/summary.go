@@ -26,8 +26,7 @@ func Summary(w io.Writer, tr *trace.Trace, opts Options) {
 }
 
 // writeSummary is the line itself, which a live drawing and a finished tree
-// reach by different roads: one counted the queries as they went out, the other
-// reads them off the trace.
+// both end with.
 func writeSummary(w io.Writer, tr *trace.Trace, paint painter, sep string,
 	charset Charset, elapsed time.Duration, counts []string) {
 

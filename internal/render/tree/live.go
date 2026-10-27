@@ -230,9 +230,9 @@ func (l *Live) Clear() {
 }
 
 // Summary is what the drawing leaves behind: one line under the finished tree
-// saying how the walk went and what it cost. It counts the queries it watched
-// go out rather than reading them back off the trace, which is the one thing a
-// live drawing knows better.
+// saying how the walk went and what it cost. It reads the cost off the trace
+// rather than the queries it watched go out, which take in --software's that
+// no hop records, so that it says what a run without --live says.
 func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 	if l == nil || tr == nil {
 		return
@@ -240,8 +240,10 @@ func (l *Live) Summary(w io.Writer, tr *trace.Trace) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	writeSummary(w, tr.Shown(), painter(l.opts.Color == ColorAlways), l.sep,
-		l.opts.Charset, cmp.Or(tr.Elapsed, time.Since(l.start)), l.counts())
+	tr = tr.Shown()
+	queries, servers := spent(tr)
+	writeSummary(w, tr, painter(l.opts.Color == ColorAlways), l.sep,
+		l.opts.Charset, cmp.Or(tr.Elapsed, time.Since(l.start)), counts(queries, servers))
 }
 
 // draw renders the walk and puts a whole frame on the screen.

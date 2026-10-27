@@ -403,6 +403,27 @@ func TestLiveSummary(t *testing.T) {
 	}
 }
 
+// TestLiveSummaryMatchesPlain covers a query no hop records, such as
+// --software's: the live footer counts it, but the line left under the finished
+// tree is the one a run without --live prints.
+func TestLiveSummaryMatchesPlain(t *testing.T) {
+	tr := walk(1)
+	tr.Elapsed = time.Second
+
+	var plain bytes.Buffer
+	Summary(&plain, tr, Options{Color: ColorNever})
+
+	var buf bytes.Buffer
+	live := newLive(&buf, Options{Color: ColorNever})
+	live.Asking(".", trace.Server{IP: netip.MustParseAddr("192.0.2.1")})
+	live.Asking(".", trace.Server{IP: netip.MustParseAddr("192.0.2.1")})
+	live.Summary(&buf, tr)
+
+	if got, want := buf.String(), plain.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // TestLiveCrumbs is the walk so far, read off the branch it is working on.
 func TestLiveCrumbs(t *testing.T) {
 	live := newLive(&bytes.Buffer{}, Options{Color: ColorNever})
