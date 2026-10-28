@@ -34,6 +34,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/history"
 	"github.com/rafaeljusto/dnstree/v2/internal/rdap"
 	"github.com/rafaeljusto/dnstree/v2/internal/recursive"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/dig"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/dot"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/jsonout"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/markdown"
@@ -1115,6 +1116,8 @@ func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 		return tree.Waterfall(w, tr, treeOptions(cfg))
 	case "openmetrics":
 		return openmetrics.Render(w, tr)
+	case "dig":
+		return dig.Render(w, tr)
 	default:
 		return tree.Render(w, tr, treeOptions(cfg))
 	}

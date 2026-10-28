@@ -57,7 +57,7 @@ These need no network: every one exits before a query goes out.
 | diff-against | `$D --diff --against x.json example.com` | exit 1: ask for one |
 | watch-short | `$D --watch 500ms example.com` | exit 1: a second is the least |
 | live-waterfall | `$D --live --format waterfall example.com` | exit 1 |
-| json-several | `$D --format json example.com A AAAA` | exit 1: one walk only. Also dot, mermaid, openmetrics and web |
+| json-several | `$D --format json example.com A AAAA` | exit 1: one walk only. Also dot, mermaid, openmetrics, dig and web |
 | from-name | `$D --from ex.json example.com` | exit 1: no name to resolve |
 | from-shape | `$D --from ex.json --no-asn` | exit 1: a walk already made cannot be changed |
 | names-expect | `$D --names list --expect secure` | exit 1 |

@@ -122,10 +122,13 @@ fuzz:
 # Rewrites the renderer goldens, and docs/trace.schema.json with them. go test
 # refuses a flag a package does not define, and only the packages that use
 # internal/testutil/golden define -update, so those are the ones asked. One at
-# a time and in order, since the markdown golden is drawn from the json one.
+# a time and the json one first, since the dig and markdown goldens are drawn
+# from it.
 goldens:
 	$(GO) test -p 1 $$(grep -lE 'golden\.(Compare|Updating)' internal/render/*/*_test.go | \
-		xargs -n1 dirname | sort -u | sed 's|^|./|') -update
+		xargs -n1 dirname | sort -u | \
+		awk '/jsonout$$/ { print; next } { rest = rest $$0 "\n" } END { printf "%s", rest }' | \
+		sed 's|^|./|') -update
 
 # dist builds a whole release: an archive per platform, a native package per
 # Linux architecture, the Homebrew formula, and the checksums over all of them.

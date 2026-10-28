@@ -593,8 +593,8 @@ footer a:hover{color:var(--ink)}
         also why the nameservers of a zone are only weighed against each other where the walk
         asked all of them — <code>--all</code> does, and a set that is not all accounted for
         leaves the question unanswered rather than half answered.
-        <code>--format json</code>, <code>dot</code>, <code>mermaid</code>, <code>waterfall-mermaid</code>
-        and <code>openmetrics</code> refuse the flag — all five are read by a program, which has the same facts in fields
+        <code>--format json</code>, <code>dot</code>, <code>mermaid</code>, <code>waterfall-mermaid</code>,
+        <code>openmetrics</code> and <code>dig</code> refuse the flag — all six are read by a program, which has the same facts in fields
         already. A chain whose signatures are late in the life they were made for is said too,
         with how long it has left: a zone whose signer stopped validates to the last second.
         So is a secure zone set up the way the advice has moved on from: a retired algorithm,
@@ -942,6 +942,13 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
         <code>--format markdown</code> writes the walk as a report to paste into a ticket or an
         incident write-up: what it came to, the tree in a code fence, the sentences
         <code>--explain</code> would say, and what the resolvers answered.
+      </p>
+
+      <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">
+        <code>--format dig</code> writes the dig commands that ask what the walk asked, one per
+        query and each with the options it was sent with, for whoever has to fix the zone and
+        has no dnstree:
+        <code>dig @108.162.192.162 www.example.com. A +norecurse +bufsize=1232 +dnssec</code>.
       </p>
 
       <p style="margin-top:1.1rem; font-size:.9rem; color:var(--faint)">

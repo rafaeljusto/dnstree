@@ -106,6 +106,11 @@ func TestRun(t *testing.T) {
 				tb.Errorf("got %q, want a chart and no summary under it", out)
 			}
 		}},
+		"dig": {format: "dig", check: func(tb testing.TB, out string) {
+			if !strings.Contains(out, "\ndig @") || !strings.Contains(out, " +norecurse") || strings.Contains(out, "answered in") {
+				tb.Errorf("got %q, want a dig command per query and no summary under them", out)
+			}
+		}},
 		"waterfall": {format: "waterfall", check: func(tb testing.TB, out string) {
 			if !strings.Contains(out, "█") || !strings.Contains(out, "answered in") {
 				tb.Errorf("got %q, want a bar per query and the summary under them", out)
@@ -1246,6 +1251,7 @@ func TestRunFromHostile(t *testing.T) {
 		{"--format", "dot"},
 		{"--format", "mermaid"},
 		{"--format", "openmetrics"},
+		{"--format", "dig"},
 		{"--format", "waterfall", "--color", "always"},
 		{"--format", "waterfall-ascii", "--explain"},
 		{"--format", "waterfall-mermaid"},

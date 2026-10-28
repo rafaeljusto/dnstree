@@ -127,8 +127,9 @@ lookups go to the first of them, since they need somewhere to ask rather than a
 poll. One --resolver on the command line replaces every one the file of defaults
 chose, rather than adding to them.
 
-FORMAT is one of tree (the default), ascii, emoji, waterfall, waterfall-ascii,
-waterfall-mermaid, markdown, json, dot, mermaid, openmetrics, web or web-3d.
+FORMAT is one of tree (the default), ascii, emoji, waterfall,
+waterfall-ascii, waterfall-mermaid, markdown, json, dot, mermaid, openmetrics,
+dig, web or web-3d.
 
 --format web draws nothing in the terminal. It serves the finished walk as a
 page instead, on this machine and on whatever port is free, and opens a browser
@@ -259,6 +260,15 @@ labelled with the question. Run from cron into the
 directory of node_exporter's textfile collector, it is what Prometheus alerts
 on.
 
+--format dig writes the dig commands that ask what the walk asked, one per
+query and each under a comment that says what came of it, to send to whoever
+has to fix a zone and has no dnstree. Each command carries the options its
+query was sent with: +norecurse, the EDNS0 buffer, +dnssec, +nsid, +cookie,
++subnet, and +tcp, +tls or +https for the transport; +cookie needs dig 9.11 or
+later, and +tls and +https 9.18. Names are escaped for dig and quoted for the
+shell. A walk saved before the options were recorded gives commands without
+them.
+
 --from reads a walk that --format json wrote, from FILE or from - for the
 standard input, and draws it in whichever format was asked for, as though it
 had just been made: a walk from a machine nobody else can reach can be drawn,
@@ -308,9 +318,9 @@ that names it; a NAME given several types on the command line is the same.
 Every name and type is checked before anything is asked. The run exits with
 the worst any of them earned: a broken chain of trust over no answer, and no
 answer over an answer. Several questions cannot be written as one json, dot,
-mermaid, waterfall-mermaid, openmetrics or served page, held to one --expect
-or --against, or watched, so those are refused; --diff compares each with the
-last walk of its own question.
+mermaid, waterfall-mermaid, openmetrics, dig or served page, held to one
+--expect or --against, or watched, so those are refused; --diff compares each
+with the last walk of its own question.
 
 --subnet asks every server the question as though it came from somebody inside
 that prefix, which is how a server that tailors its answers by network can be
@@ -1422,6 +1432,7 @@ var formats = []format{
 	{name: "dot", once: true, programs: true},
 	{name: "mermaid", once: true, programs: true},
 	{name: "openmetrics", once: true, programs: true},
+	{name: "dig", once: true, programs: true},
 	{name: "web", once: true, serves: true},
 	{name: "web-3d", once: true, serves: true},
 }

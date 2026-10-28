@@ -228,7 +228,7 @@ broke, then 2 where one came to no answer, and 0 only where they all answered.
 draws each as it is made. What can only be said of one walk is refused:
 `--expect`, which could not say which question it was about, `--against`,
 `--watch`, and the formats written as one document — `json`, `dot`, `mermaid`,
-`waterfall-mermaid`, `openmetrics`, `web` and `web-3d`. `--format markdown`
+`waterfall-mermaid`, `openmetrics`, `dig`, `web` and `web-3d`. `--format markdown`
 writes a report per question, each headed with its own.
 
 ## Leaving it running

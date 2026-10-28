@@ -111,9 +111,9 @@ not let strangers in. No list of risky services is carried, since it would go
 stale. A walk stops looking up nameservers named outside a zone at the first
 that has an address, so it takes `--all` to find a dangling one listed after it.
 
-`--format json`, `dot`, `mermaid`, `waterfall-mermaid` and `openmetrics` refuse
-`--explain`, `--diff` and `--against`: all five are read by a program, which
-has the same facts in fields already.
+`--format json`, `dot`, `mermaid`, `waterfall-mermaid`, `openmetrics` and `dig`
+refuse `--explain`, `--diff` and `--against`: all six are read by a program,
+which has the same facts in fields already.
 
 ## Watching it happen
 
@@ -323,6 +323,42 @@ walked on 2026-09-30 21:05 UTC
 | --- | --- | --- |
 | 8.8.8.8 | agrees | 251ms |
 ````
+
+</details>
+
+`--format dig` writes the dig commands that ask what the walk asked, one per
+query, each under a comment that says where it went and what came of it. It is
+for the people who fix a zone and have no dnstree: the first thing they ask for
+is the dig output, and the commands are it. Each one carries what its query was
+sent with, read off the query as it went out: `+norecurse`, the EDNS0 buffer
+or `+noedns` for a server that could not parse it, `+dnssec`, `+nsid`,
+`+cookie`, `+subnet`, the shapes `--check-edns` tests, and `+tcp`, `+tls` or
+`+https` for the transport. `+cookie` needs dig 9.11 or later, and `+tls` and
+`+https` 9.18, which the output says above the commands that use them. Asides
+and the lookups of `--mail` and the other checks say whose they are. Names are
+escaped for dig and quoted for the shell, so nothing a zone named can run as a
+command. A walk saved before dnstree recorded the options gives commands
+without them, and says so.
+
+<details>
+<summary>A walk, as dig commands</summary>
+
+```
+$ dnstree --format dig www.example.com
+# dnstree www.example.com. A, as dig commands
+# . at a.root-servers.net.: referral to com.
+dig @198.41.0.4 www.example.com. A +norecurse +bufsize=1232 +dnssec
+# . at a.root-servers.net.: aside, answer, DNSKEY of .
+dig @198.41.0.4 . DNSKEY +norecurse +bufsize=1232 +dnssec
+# com. at l.gtld-servers.net.: referral to example.com.
+dig @192.41.162.30 www.example.com. A +norecurse +bufsize=1232 +dnssec
+# com. at l.gtld-servers.net.: aside, answer, DNSKEY of com.
+dig @192.41.162.30 com. DNSKEY +norecurse +bufsize=1232 +dnssec
+# example.com. at hera.ns.cloudflare.com.: answer
+dig @108.162.192.162 www.example.com. A +norecurse +bufsize=1232 +dnssec
+# example.com. at hera.ns.cloudflare.com.: aside, answer, DNSKEY of example.com.
+dig @108.162.192.162 example.com. DNSKEY +norecurse +bufsize=1232 +dnssec
+```
 
 </details>
 

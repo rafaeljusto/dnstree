@@ -1,0 +1,12 @@
+# dnstree www.example.com. A, as dig commands
+# +cookie needs dig 9.11 or later
+# . at a.root-servers.net.: referral to com.
+dig @198.41.0.4 www.example.com. A +norecurse +bufsize=1232 +dnssec +nsid +cookie +subnet=198.51.100.0/24
+# com. at b.gtld-servers.net.: no answer
+dig @192.33.14.30 www.example.com. A +norecurse +bufsize=1232 +dnssec
+# com. at a.gtld-servers.net.: referral to example.com., truncated over udp
+dig @192.5.6.30 www.example.com. A +tcp +norecurse +bufsize=1232 +dnssec
+# example.com. at a.iana-servers.net.: answer
+dig @199.43.135.53 www.example.com. A +norecurse +bufsize=1232 +dnssec
+# example.com. at a.iana-servers.net.: aside, answer, DNSKEY of example.com.
+dig @199.43.135.53 example.com. DNSKEY +norecurse +bufsize=1232 +dnssec
