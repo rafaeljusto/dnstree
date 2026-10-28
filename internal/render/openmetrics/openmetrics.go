@@ -24,13 +24,34 @@ import (
 // the textfile collector reads the older Prometheus format and refuses the
 // OpenMetrics types it does not know.
 func Render(w io.Writer, tr *trace.Trace) error {
-	out := bufio.NewWriter(w)
+	var e Exposition
+	e.Add(tr)
+	return e.Write(w)
+}
+
+// Exposition is the walks of one run written as one file. A family may appear
+// only once in it, so the samples of every walk are held under their family
+// until the last walk is in.
+type Exposition struct {
+	families []*family
+	named    map[string]*family
+}
+
+type family struct {
+	head    string
+	samples []string
+}
+
+// Add takes the samples of one more walk. Two walks of the same question would
+// write the same series twice, which the format refuses; the caller keeps
+// them apart.
+func (e *Exposition) Add(tr *trace.Trace) {
 	tr = tr.Shown()
 	if tr == nil {
 		tr = &trace.Trace{}
 	}
 	question := []label{{"name", tr.Question.Name}, {"type", tr.Question.Type}}
-	m := &metrics{out: out, question: question}
+	m := &metrics{e: e, question: question}
 
 	m.family("dnstree_result", "", "how the walk ended, one of answer, cname, nodata, nxdomain, filtered or none")
 	ended := result(tr)
@@ -277,7 +298,20 @@ func Render(w io.Writer, tr *trace.Trace) error {
 	m.family("dnstree_warnings", "", "what the walk could not do")
 	m.sample("dnstree_warnings", strconv.Itoa(len(tr.Warnings)))
 
-	m.write("# EOF\n")
+}
+
+// Write writes every family the walks added, in the order they first came,
+// and the line that ends the file.
+func (e *Exposition) Write(w io.Writer) error {
+	out := bufio.NewWriter(w)
+	for _, f := range e.families {
+		_, _ = out.WriteString(f.head)
+		for _, sample := range f.samples {
+			_, _ = out.WriteString(sample)
+		}
+	}
+	// A bufio writer holds the first error it meets until Flush.
+	_, _ = out.WriteString("# EOF\n")
 	return out.Flush()
 }
 
@@ -389,32 +423,39 @@ func resolvers(m *metrics, tr *trace.Trace) {
 type label struct{ name, value string }
 
 type metrics struct {
-	out      *bufio.Writer
+	e        *Exposition
 	question []label
+	current  *family
 }
 
-// family opens a metric family. OpenMetrics wants a unit to be the end of the
-// name as well as said on its own line.
+// family opens a metric family, or goes back to the one an earlier walk opened.
+// OpenMetrics wants a unit to be the end of the name as well as said on its own
+// line.
 func (m *metrics) family(name, unit, help string) {
-	m.write("# TYPE " + name + " gauge\n")
-	if unit != "" {
-		m.write("# UNIT " + name + " " + unit + "\n")
+	if f, ok := m.e.named[name]; ok {
+		m.current = f
+		return
 	}
-	m.write("# HELP " + name + " " + help + "\n")
+	head := "# TYPE " + name + " gauge\n"
+	if unit != "" {
+		head += "# UNIT " + name + " " + unit + "\n"
+	}
+	head += "# HELP " + name + " " + help + "\n"
+	m.current = &family{head: head}
+	if m.e.named == nil {
+		m.e.named = map[string]*family{}
+	}
+	m.e.named[name] = m.current
+	m.e.families = append(m.e.families, m.current)
 }
 
+// sample adds to the family opened last, which is the one it is named after.
 func (m *metrics) sample(name, value string, labels ...label) {
 	pairs := make([]string, 0, len(m.question)+len(labels))
 	for _, l := range append(m.question[:len(m.question):len(m.question)], labels...) {
 		pairs = append(pairs, l.name+`="`+escape(l.value)+`"`)
 	}
-	m.write(name + "{" + strings.Join(pairs, ",") + "} " + value + "\n")
-}
-
-// write adds to the output. A bufio writer holds the first error it meets until
-// Flush, which is what Render returns.
-func (m *metrics) write(text string) {
-	_, _ = m.out.WriteString(text)
+	m.current.samples = append(m.current.samples, name+"{"+strings.Join(pairs, ",")+"} "+value+"\n")
 }
 
 // escape is a label value as both formats read it. The names are escaped

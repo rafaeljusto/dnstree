@@ -344,6 +344,11 @@ func TestReadRefuses(t *testing.T) {
 			document: "digraph dnstree {}",
 			want:     "not a trace",
 		},
+		"the walks --names writes, one to a line": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1}` + "\n" +
+				`{"schema_version": 5, "question": {"name": "y.", "type": "A", "class": "IN"}, "elapsed_ms": 1}` + "\n",
+			want: "several walks",
+		},
 		"a document of another version": {
 			document: `{"schema_version": 2, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1}`,
 			want:     "version 2",
@@ -604,7 +609,7 @@ func TestReadRefuses(t *testing.T) {
 			want: "apart",
 		},
 		"something after the trace": {
-			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} {"more": 1}`,
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} [1]`,
 			want:     "after",
 		},
 	}

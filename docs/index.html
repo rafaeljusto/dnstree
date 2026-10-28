@@ -994,7 +994,9 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
       in turn, every one from the root servers down, and draws a tree for each under the
       question it answers. <code>--names</code> reads a list of them from a file, a name and
       its types to a line, which is the domain checked whole before a change and again after
-      it. The run exits with the worst any of them earned.</p>
+      it. The run exits with the worst any of them earned. With <code>--format json</code>
+      each walk is a line of its own, and with <code>--format openmetrics</code> the whole
+      list is one file for Prometheus to alert on.</p>
 
       <h3 style="margin-top:2.2rem">Ask from several places at once</h3>
       <p class="section-lede">Repeat <code>--resolver</code> and the question goes to all of

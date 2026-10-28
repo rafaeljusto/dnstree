@@ -258,7 +258,7 @@ stray, how long
 --rdap found the registration has left and what the resolvers answered, each
 labelled with the question. Run from cron into the
 directory of node_exporter's textfile collector, it is what Prometheus alerts
-on.
+on; with --names one file holds every name, written once the last walk ends.
 
 --format dig writes the dig commands that ask what the walk asked, one per
 query and each under a comment that says what came of it, to send to whoever
@@ -317,10 +317,14 @@ nothing carried from one to the next, and each is drawn in turn under a line
 that names it; a NAME given several types on the command line is the same.
 Every name and type is checked before anything is asked. The run exits with
 the worst any of them earned: a broken chain of trust over no answer, and no
-answer over an answer. Several questions cannot be written as one json, dot,
-mermaid, waterfall-mermaid, openmetrics, dig or served page, held to one
---expect or --against, or watched, so those are refused; --diff compares each
-with the last walk of its own question.
+answer over an answer. With --format json each walk is written on a line of
+its own, each the document one walk makes, and with openmetrics every walk goes
+into one file, so a list of names becomes one set of numbers to alert on; a
+question listed twice is refused there, since it would make the same series
+twice. Several questions cannot be written as one dot, mermaid,
+waterfall-mermaid, dig or served page, held to one --expect or --against, or
+watched, so those are refused; --diff compares each with the last walk of its
+own question.
 
 --subnet asks every server the question as though it came from somebody inside
 that prefix, which is how a server that tailors its answers by network can be
@@ -1334,15 +1338,20 @@ func (c *Config) Questions() []Question {
 	return append([]Question{{Name: c.Name, Type: c.Type}}, c.More...)
 }
 
-// several refuses what cannot be said of more than one walk. --names counts
-// however many lines the file turns out to hold, so that what a run accepts
-// does not hang on what is in it.
+// Several reports whether the run may ask more than one question. --names
+// counts however many lines the file turns out to hold, so that what a run
+// accepts, and the shape of what it writes, do not hang on what is in it.
+func (c *Config) Several() bool {
+	return len(c.More) > 0 || c.Names != ""
+}
+
+// several refuses what cannot be said of more than one walk.
 func several(cfg *Config, expecting bool) error {
-	if len(cfg.More) == 0 && cfg.Names == "" {
+	if !cfg.Several() {
 		return nil
 	}
-	switch {
-	case Programs(cfg.Format) || Serves(cfg.Format):
+	switch f, _ := lookupFormat(cfg.Format); {
+	case (f.programs || f.serves) && !f.several:
 		return fmt.Errorf("%w: %s writes one walk, and several questions make several", ErrUsage, cfg.Format)
 	case expecting:
 		return fmt.Errorf("%w: --expect cannot say which of several questions it is about", ErrUsage)
@@ -1416,6 +1425,9 @@ type format struct {
 	propagates bool
 	serves     bool // a page served to a browser
 	programs   bool // read by a program rather than a person
+	// several is a format read by a program that can still hold more than one
+	// walk: JSON a line to each, and one OpenMetrics file over all of them.
+	several bool
 }
 
 // formats are every --format there is, in the order the help lists them. A
@@ -1428,10 +1440,10 @@ var formats = []format{
 	{name: "waterfall-ascii", once: true},
 	{name: "waterfall-mermaid", once: true, programs: true},
 	{name: "markdown", once: true, propagates: true},
-	{name: "json", once: true, propagates: true, programs: true},
+	{name: "json", once: true, propagates: true, programs: true, several: true},
 	{name: "dot", once: true, programs: true},
 	{name: "mermaid", once: true, programs: true},
-	{name: "openmetrics", once: true, programs: true},
+	{name: "openmetrics", once: true, programs: true, several: true},
 	{name: "dig", once: true, programs: true},
 	{name: "web", once: true, serves: true},
 	{name: "web-3d", once: true, serves: true},

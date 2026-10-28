@@ -1362,6 +1362,108 @@ lame.               IN NS   a.root-servers.net.
 	}
 }
 
+// TestRunSeveralForPrograms covers --names written for a program: a line of
+// JSON to each walk, each one --from reads, and one OpenMetrics file over all
+// of them, with nothing between the walks that is not theirs.
+func TestRunSeveralForPrograms(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone + `
+lame.               IN NS   a.root-servers.net.
+`})
+	common := []string{"--root-hints", rootHintsFile(t), "--port", strconv.Itoa(int(server.Addr.Port())),
+		"--no-asn", "--no-compare", "--names", "-"}
+
+	tests := map[string]struct {
+		format string
+		names  string
+		want   int
+		check  func(t *testing.T, out string)
+	}{
+		"json, a walk to a line": {
+			format: "json", names: ". NS\nlame.\n", want: exitNoAnswer,
+			check: func(t *testing.T, out string) {
+				lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+				if len(lines) != 2 {
+					t.Fatalf("got %d lines, want 2:\n%s", len(lines), out)
+				}
+				for i, want := range []string{".", "lame."} {
+					tr, err := jsonout.Read(strings.NewReader(lines[i]))
+					if err != nil {
+						t.Fatalf("reading line %d: %v", i+1, err)
+					}
+					if tr.Question.Name != want {
+						t.Errorf("got line %d about %s, want %s", i+1, tr.Question.Name, want)
+					}
+				}
+			},
+		},
+		"a single line of json, since the flag and not the file decides": {
+			format: "json", names: ". NS\n", want: exitAnswer,
+			check: func(t *testing.T, out string) {
+				if strings.Count(out, "\n") != 1 {
+					t.Errorf("got\n%s\nwant one line", out)
+				}
+			},
+		},
+		"openmetrics, one file over every walk": {
+			format: "openmetrics", names: ". NS\nlame.\n", want: exitNoAnswer,
+			check: func(t *testing.T, out string) {
+				for text, want := range map[string]int{
+					"# TYPE dnstree_result gauge\n": 1,
+					"# EOF\n":                       1,
+					`dnstree_result{name=".",type="NS",kind="answer"} 1`:  1,
+					`dnstree_result{name="lame.",type="A",kind="none"} 1`: 1,
+					`dnstree_walk_seconds{name="lame.",type="A"}`:         1,
+				} {
+					if got := strings.Count(out, text); got != want {
+						t.Errorf("got %q %d times, want %d in\n%s", text, got, want, out)
+					}
+				}
+			},
+		},
+		"openmetrics refuses a question listed twice, before anything is walked": {
+			format: "openmetrics", names: ". NS\nlame.\n. ns\n", want: exitUsage,
+			check: func(t *testing.T, out string) {
+				if out != "" {
+					t.Errorf("got\n%s\nwant nothing written", out)
+				}
+			},
+		},
+	}
+
+	t.Run("openmetrics cut short still writes the walks it finished", func(t *testing.T) {
+		previous := stdin
+		t.Cleanup(func() { stdin = previous })
+		stdin = strings.NewReader(". NS\nlame.\n")
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		var stdout, stderr bytes.Buffer
+		run(ctx, append(slices.Clone(common), "--format", "openmetrics"), &stdout, &stderr)
+		out := stdout.String()
+		if !strings.HasSuffix(out, "# EOF\n") || !strings.Contains(out, `dnstree_result{name=".",type="NS"`) {
+			t.Errorf("got\n%s\nwant the first walk written whole", out)
+		}
+		if strings.Contains(out, `name="lame."`) {
+			t.Errorf("got\n%s\nwant the walk never started left out", out)
+		}
+	})
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			previous := stdin
+			t.Cleanup(func() { stdin = previous })
+			stdin = strings.NewReader(test.names)
+
+			var stdout, stderr bytes.Buffer
+			code := run(t.Context(), append(slices.Clone(common), "--format", test.format), &stdout, &stderr)
+			if code != test.want {
+				t.Fatalf("got exit %d, want %d: %s%s", code, test.want, stdout.String(), stderr.String())
+			}
+			test.check(t, stdout.String())
+		})
+	}
+}
+
 // TestReportWithNoAgent covers a broken zone that names nobody to tell. Nothing
 // is sent, and the run that asked for a report says so rather than nothing.
 func TestReportWithNoAgent(t *testing.T) {

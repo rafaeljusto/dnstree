@@ -22,6 +22,18 @@ const SchemaVersion = 5
 
 // Render writes the trace to w as JSON.
 func Render(w io.Writer, tr *trace.Trace) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(convertTrace(tr))
+}
+
+// Line writes the trace to w as the document Render writes, on one line: the
+// walks of --names are JSON Lines, read as they come and each fit for --from.
+func Line(w io.Writer, tr *trace.Trace) error {
+	return json.NewEncoder(w).Encode(convertTrace(tr))
+}
+
+func convertTrace(tr *trace.Trace) document {
 	document := document{SchemaVersion: SchemaVersion}
 	if tr != nil {
 		tr = tr.Shown()
@@ -56,10 +68,7 @@ func Render(w io.Writer, tr *trace.Trace) error {
 				Rcode: tr.Report.Rcode, Error: tr.Report.Err}
 		}
 	}
-
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(document)
+	return document
 }
 
 type document struct {

@@ -170,7 +170,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return watch(ctx, cfg, log, lookups, registry, reference, stdout, stderr)
 	}
 	if cfg.From != "" {
-		return one(ctx, cfg, log, lookups, registry, nil, nil, reference, stdout, stderr)
+		return one(ctx, cfg, log, lookups, registry, nil, nil, reference, nil, stdout, stderr)
 	}
 
 	questions, err := asked(cfg)
@@ -198,6 +198,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		defer rec.close(stderr)
 	}
 
+	// A family may appear only once in an OpenMetrics file, so the walks are
+	// held until the last of them, and written even when the run is cut short.
+	var metrics *openmetrics.Exposition
+	if cfg.Format == "openmetrics" && cfg.Several() {
+		metrics = &openmetrics.Exposition{}
+	}
+
 	// Each question is a walk of its own from the root servers down, and the
 	// run answers with the worst any of them earned.
 	worst := exitAnswer
@@ -206,19 +213,28 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			if ctx.Err() != nil {
 				break
 			}
-			fmt.Fprintln(stdout)
+			// What a program reads carries its question in every walk.
+			if !cli.Programs(cfg.Format) {
+				fmt.Fprintln(stdout)
+			}
 		}
 		walk := *cfg
 		walk.Name, walk.Type = question.Name, question.Type
-		if len(questions) > 1 && cfg.Format != "markdown" {
+		if len(questions) > 1 && cfg.Format != "markdown" && !cli.Programs(cfg.Format) {
 			// A report heads itself with its question already.
 			tree.Asked(stdout, trace.Question{Name: fqdn(question.Name), Type: question.Type}, treeOptions(cfg))
 		}
-		code := one(ctx, &walk, log, lookups, registry, rec, replay, reference, stdout, stderr)
+		code := one(ctx, &walk, log, lookups, registry, rec, replay, reference, metrics, stdout, stderr)
 		if code == exitUsage {
 			return code
 		}
 		worst = worse(worst, code)
+	}
+	if metrics != nil {
+		if err := metrics.Write(stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
 	}
 	return worst
 }
@@ -233,8 +249,17 @@ func asked(cfg *cli.Config) ([]cli.Question, error) {
 			return nil, err
 		}
 	}
+	seen := map[cli.Question]bool{}
 	for _, question := range questions {
-		if err := resolver.Askable(question.Name, question.Type); err != nil {
+		err := resolver.Askable(question.Name, question.Type)
+		// The same question twice would be the same series twice, which no
+		// scraper takes.
+		key := cli.Question{Name: strings.ToLower(fqdn(question.Name)), Type: strings.ToUpper(question.Type)}
+		if err == nil && cfg.Format == "openmetrics" && seen[key] {
+			err = fmt.Errorf("%s %s is asked twice, and openmetrics holds one series of each question", key.Name, key.Type)
+		}
+		seen[key] = true
+		if err != nil {
 			if cfg.Names != "" {
 				return nil, fmt.Errorf("%w: --names %s: %w", cli.ErrUsage, cfg.Names, err)
 			}
@@ -280,9 +305,11 @@ func worse(a, b int) int {
 }
 
 // one draws one walk, made now or read back with --from, with everything the
-// run asked to be said under it.
+// run asked to be said under it. Where metrics is given, the walk goes into it
+// instead, to be written with the others of the run.
 func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
-	lookups *asn.Resolver, registry *rdap.Client, rec *recording, replay *transport.Replay, reference *history.Walk, stdout, stderr io.Writer) int {
+	lookups *asn.Resolver, registry *rdap.Client, rec *recording, replay *transport.Replay, reference *history.Walk,
+	metrics *openmetrics.Exposition, stdout, stderr io.Writer) int {
 
 	var err error
 
@@ -352,6 +379,13 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 			fmt.Fprintln(stderr, err)
 			return exitUsage
 		}
+		return outcome(cfg, tr, stderr)
+	}
+
+	// Nothing is said under a format a program reads, so the walk is all there
+	// is to hold.
+	if metrics != nil {
+		metrics.Add(tr)
 		return outcome(cfg, tr, stderr)
 	}
 
@@ -1105,6 +1139,9 @@ func carry(proto string, cfg transport.Config) transport.Transport {
 func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 	switch cfg.Format {
 	case "json":
+		if cfg.Several() {
+			return jsonout.Line(w, tr)
+		}
 		return jsonout.Render(w, tr)
 	case "dot":
 		return dot.Render(w, tr)

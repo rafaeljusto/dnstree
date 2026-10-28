@@ -306,6 +306,38 @@ func TestRender(t *testing.T) {
 	golden.Compare(t, "resolution", got.String())
 }
 
+// TestLine covers the walks of --names as JSON Lines: each on a line of its
+// own, and each the document Render writes, so --from reads any one of them.
+func TestLine(t *testing.T) {
+	var lines bytes.Buffer
+	for _, tr := range []*trace.Trace{resolution(), {Question: trace.Question{Name: "example.org.", Type: "MX"}}} {
+		if err := jsonout.Line(&lines, tr); err != nil {
+			t.Fatalf("Line: %v", err)
+		}
+	}
+
+	var want bytes.Buffer
+	if err := jsonout.Render(&want, resolution()); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	got := strings.Split(strings.TrimSuffix(lines.String(), "\n"), "\n")
+	if len(got) != 2 {
+		t.Fatalf("got %d lines, want 2:\n%s", len(got), lines.String())
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, want.Bytes()); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if got[0] != compact.String() {
+		t.Errorf("got\n%s\nwant\n%s", got[0], compact.String())
+	}
+	for _, line := range got {
+		if _, err := jsonout.Read(strings.NewReader(line)); err != nil {
+			t.Errorf("Read: %v", err)
+		}
+	}
+}
+
 // TestRenderShape checks the promises the schema makes, rather than the exact
 // bytes the golden file holds.
 func TestRenderShape(t *testing.T) {

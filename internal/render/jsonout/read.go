@@ -37,7 +37,11 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	if err != nil {
 		return nil, fmt.Errorf("jsonout: not a trace: %w", err)
 	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+	switch next, err := decoder.Token(); {
+	case errors.Is(err, io.EOF):
+	case next == json.Delim('{'):
+		return nil, errors.New("jsonout: not a trace: it holds several walks, one to a line as --names writes them; give it one line")
+	default:
 		return nil, errors.New("jsonout: not a trace: something follows it after it ends")
 	}
 	if doc.SchemaVersion != SchemaVersion {

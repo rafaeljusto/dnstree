@@ -227,9 +227,14 @@ broke, then 2 where one came to no answer, and 0 only where they all answered.
 `--diff` holds each walk against the last one of its own question, and `--live`
 draws each as it is made. What can only be said of one walk is refused:
 `--expect`, which could not say which question it was about, `--against`,
-`--watch`, and the formats written as one document — `json`, `dot`, `mermaid`,
-`waterfall-mermaid`, `openmetrics`, `dig`, `web` and `web-3d`. `--format markdown`
-writes a report per question, each headed with its own.
+`--watch`, and the formats written as one document — `dot`, `mermaid`,
+`waterfall-mermaid`, `dig`, `web` and `web-3d`. `--format markdown`
+writes a report per question, each headed with its own. `--format json` writes
+each walk on a line of its own, the same document one walk makes, so the output
+is [JSON Lines](https://jsonlines.org/) and any line of it is a walk
+[`--from`](#drawing-a-walk-again) reads; `--format openmetrics` writes
+[one file over every walk](#numbers-for-a-monitoring-system). Several questions
+always mean that shape, even where the file holds one line.
 
 ## Leaving it running
 
@@ -423,3 +428,40 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
 ```
 
 </details>
+
+`--names` puts a whole list in one file, which is how a registrar, a hosting
+company or anybody with a drawer of brand domains watches all of them at once:
+every series is labelled with its question already, so one dashboard can show
+the chains of trust that broke rather than one alert per cron job.
+
+```
+*/15 * * * * dnstree --dnssec --format openmetrics --names /etc/dnstree/domains.txt > /var/lib/node_exporter/domains.prom.$$ && mv /var/lib/node_exporter/domains.prom.$$ /var/lib/node_exporter/domains.prom
+```
+
+```
+$ dnstree --dnssec --format openmetrics --names domains.txt
+...
+# TYPE dnstree_dnssec gauge
+# HELP dnstree_dnssec how far the chain of trust got, one of secure, insecure, bogus or indeterminate
+dnstree_dnssec{name="example.com.",type="A",state="secure"} 1
+dnstree_dnssec{name="example.com.",type="A",state="insecure"} 0
+dnstree_dnssec{name="example.com.",type="A",state="bogus"} 0
+dnstree_dnssec{name="example.com.",type="A",state="indeterminate"} 0
+dnstree_dnssec{name="example.org.",type="A",state="secure"} 1
+dnstree_dnssec{name="example.org.",type="A",state="insecure"} 0
+dnstree_dnssec{name="example.org.",type="A",state="bogus"} 0
+dnstree_dnssec{name="example.org.",type="A",state="indeterminate"} 0
+# TYPE dnstree_signature_left_seconds gauge
+# UNIT dnstree_signature_left_seconds seconds
+# HELP dnstree_signature_left_seconds how long the first signature to run out had left when the walk was made
+dnstree_signature_left_seconds{name="example.com.",type="A"} 90001.074595
+dnstree_signature_left_seconds{name="example.org.",type="A"} 90001.620585
+# EOF
+```
+
+A family is written once, with every walk's samples under it, so nothing is
+written until the last walk ends: a list of hundreds takes minutes, which suits
+a file cron writes rather than an exporter a scrape waits on. A run cut short
+writes the walks it finished. A question listed twice would make the same
+series twice, which a scraper refuses, so it is refused before anything is
+asked.

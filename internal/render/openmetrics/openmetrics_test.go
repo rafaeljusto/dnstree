@@ -342,6 +342,36 @@ func TestRenderEmpty(t *testing.T) {
 	}
 }
 
+// TestExposition covers the walks of --names written as one file: a family
+// declared once and never split, even one only a later walk has, and every
+// sample each walk would have written alone.
+func TestExposition(t *testing.T) {
+	other := &trace.Trace{Question: trace.Question{Name: "example.org.", Type: "MX"}}
+	walks := []*trace.Trace{other, resolution()}
+
+	var e openmetrics.Exposition
+	for _, tr := range walks {
+		e.Add(tr)
+	}
+	var out bytes.Buffer
+	if err := e.Write(&out); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	valid(t, out.String())
+
+	got := out.String()
+	for _, tr := range walks {
+		for line := range strings.Lines(render(t, tr)) {
+			if !strings.HasPrefix(line, "#") && !strings.Contains(got, line) {
+				t.Errorf("got\n%s\nwant %q in it", got, line)
+			}
+		}
+	}
+	if strings.Index(got, `name="example.org."`) > strings.Index(got, `name="www.example.com."`) {
+		t.Errorf("got\n%s\nwant the walks' samples in the order they were added", got)
+	}
+}
+
 func render(tb testing.TB, tr *trace.Trace) string {
 	tb.Helper()
 	var out bytes.Buffer

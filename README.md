@@ -132,7 +132,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | Flag | What it does |
 | --- | --- |
 | [`-x`](#reverse-lookups) | resolve the PTR of this address, in place of a name and a type, and say whether its names point back to it |
-| [`--names`](docs/guide/scripting.md#several-questions-in-one-run) | walk every `NAME [TYPE...]` line of a file, or of `-` for the standard input, one after another |
+| [`--names`](docs/guide/scripting.md#several-questions-in-one-run) | walk every `NAME [TYPE...]` line of a file, or of `-` for the standard input, one after another; `json` writes a line per walk, `openmetrics` one file over all of them |
 | `-4`, `-6` | ask only IPv4 or only IPv6 servers; the others are drawn unqueried |
 | [`--udp`](docs/guide/configuring.md#carrying-the-queries), `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
 | [`--dot`](docs/guide/configuring.md#carrying-the-queries), `--doh` | carry them encrypted, over TLS or HTTPS |
