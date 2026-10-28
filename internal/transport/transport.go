@@ -257,6 +257,43 @@ func EchoedSubnet(resp *dns.Msg) *trace.Subnet {
 	return nil
 }
 
+// Sent is what a query carries beside its question. EDNS is worked out the way
+// the codec decides to write an OPT record, rather than from UDPSize alone, so
+// a version or flag sent without a buffer still counts.
+func Sent(req *dns.Msg) *trace.Sent {
+	sent := &trace.Sent{Recursion: req.RecursionDesired}
+	if len(req.Question) > 0 {
+		if class := req.Question[0].Header().Class; class != dns.ClassINET {
+			sent.Class = dnsutil.ClassToString(class)
+		}
+	}
+	for _, rr := range req.Pseudo {
+		switch option := rr.(type) {
+		case *dns.NSID:
+			sent.NSID = true
+		case *dns.COOKIE:
+			sent.Cookie = true
+		case *dns.SUBNET:
+			if prefix, err := option.Address.Unmap().Prefix(int(option.Netmask)); err == nil {
+				sent.Subnet = prefix
+			}
+		case *dns.ERFC3597:
+			sent.Options = append(sent.Options, option.EDNS0Code)
+		case dns.EDNS0:
+			sent.Options = append(sent.Options, dns.RRToCode(option))
+		default:
+			continue
+		}
+		sent.EDNS = true
+	}
+	if req.UDPSize > dns.MinMsgSize {
+		sent.UDPSize = req.UDPSize
+	}
+	sent.DO, sent.Version, sent.Flags = req.Security, req.Version, req.Z
+	sent.EDNS = sent.EDNS || sent.UDPSize > 0 || sent.DO || sent.Version > 0 || sent.Flags > 0
+	return sent
+}
+
 // IsTimeout reports whether err is the server staying silent, which the tree
 // shows as an unanswered hop rather than a hard failure.
 func IsTimeout(err error) bool {

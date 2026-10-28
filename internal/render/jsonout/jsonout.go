@@ -312,6 +312,7 @@ type step struct {
 	Kind       string          `json:"kind"`
 	Server     *server         `json:"server,omitempty"`
 	Asked      *asked          `json:"asked,omitempty"`
+	Sent       *sent           `json:"sent,omitempty"`
 	Proto      string          `json:"proto,omitempty"`
 	StartMS    *float64        `json:"start_ms,omitempty"`
 	RTTMS      float64         `json:"rtt_ms,omitempty"`
@@ -524,6 +525,7 @@ func convert(from *trace.Step, timed bool) *step {
 		Kind:       string(from.Kind),
 		Server:     convertServer(from.Server),
 		Asked:      convertAsked(from.Asked),
+		Sent:       convertSent(from.Sent),
 		Proto:      from.Proto,
 		RTTMS:      milliseconds(from.RTT),
 		SizeBytes:  from.Size,
@@ -699,6 +701,35 @@ func convertSubnet(from *trace.Subnet) *subnet {
 		return nil
 	}
 	return &subnet{Prefix: from.Prefix.String(), Scope: from.Scope}
+}
+
+type sent struct {
+	Class     string   `json:"class,omitempty"`
+	Recursion bool     `json:"recursion,omitempty"`
+	EDNS      bool     `json:"edns"`
+	Version   uint8    `json:"version,omitempty"`
+	UDPSize   uint16   `json:"udp_size,omitempty"`
+	DO        bool     `json:"do,omitempty"`
+	Flags     uint16   `json:"flags,omitempty"`
+	NSID      bool     `json:"nsid,omitempty"`
+	Cookie    bool     `json:"cookie,omitempty"`
+	Subnet    string   `json:"subnet,omitempty"`
+	Options   []uint16 `json:"options,omitempty"`
+}
+
+func convertSent(from *trace.Sent) *sent {
+	if from == nil {
+		return nil
+	}
+	to := &sent{
+		Class: from.Class, Recursion: from.Recursion, EDNS: from.EDNS, Version: from.Version,
+		UDPSize: from.UDPSize, DO: from.DO, Flags: from.Flags, NSID: from.NSID, Cookie: from.Cookie,
+		Options: from.Options,
+	}
+	if from.Subnet.IsValid() {
+		to.Subnet = from.Subnet.String()
+	}
+	return to
 }
 
 func convertAsked(from trace.Question) *asked {

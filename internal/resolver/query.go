@@ -213,6 +213,12 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 		if cookie && err == nil {
 			r.remember(server.Addr(), resp)
 		}
+		// An answered attempt replaces what was sent, and a failed one only
+		// stands in for nothing: a failed retry leaves the hop holding the
+		// answer before it, and the query that got that answer.
+		if err == nil || step.Sent == nil {
+			step.Sent = transport.Sent(req)
+		}
 
 		r.cfg.Log.Debug("asked a nameserver",
 			"zone", step.Zone, "server", server, "proto", carrier.Proto(),

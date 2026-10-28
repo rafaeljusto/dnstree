@@ -882,6 +882,7 @@
         },
         "server": { "$ref": "#/$defs/server" },
         "asked": { "$ref": "#/$defs/asked" },
+        "sent": { "$ref": "#/$defs/sent" },
         "proto": {
           "description": "What the query was carried over: udp, tcp, dot or doh.",
           "type": "string"
@@ -1064,6 +1065,24 @@
       "properties": {
         "name": { "type": "string" },
         "type": { "type": "string" }
+      }
+    },
+    "sent": {
+      "description": "What the query whose answer the hop kept carried beside its question, read off the message as it went out and never off the answer: what --format dig repeats. Where no attempt was answered it is the first query. Absent on a hop that asked nothing, and throughout a walk saved before dnstree recorded it.",
+      "type": "object",
+      "required": ["edns"],
+      "properties": {
+        "class": { "description": "The query's class where it was not IN.", "type": "string" },
+        "recursion": { "description": "Set where the query asked for recursion, which only the probe of --check-recursion does.", "type": "boolean" },
+        "edns": { "description": "Whether the query carried an OPT record. The fields below it are absent without one.", "type": "boolean" },
+        "version": { "description": "The EDNS version, absent for 0.", "type": "integer", "minimum": 0 },
+        "udp_size": { "description": "The EDNS0 buffer advertised, in bytes.", "type": "integer", "minimum": 0 },
+        "do": { "description": "Set where the query asked for signatures (the DO bit).", "type": "boolean" },
+        "flags": { "description": "EDNS flags other than DO, as a number.", "type": "integer", "minimum": 0 },
+        "nsid": { "description": "Set where the query asked the server to say which of itself answered (RFC 5001).", "type": "boolean" },
+        "cookie": { "description": "Set where the query carried a DNS cookie (RFC 7873).", "type": "boolean" },
+        "subnet": { "description": "The client subnet the query carried (RFC 7871).", "type": "string" },
+        "options": { "description": "Any other EDNS option the query carried, by code.", "type": "array", "items": { "type": "integer", "minimum": 0 } }
       }
     },
     "soa": {

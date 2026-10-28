@@ -36,6 +36,14 @@
           "name": "www.example.com.",
           "type": "A"
         },
+        "sent": {
+          "edns": true,
+          "udp_size": 1232,
+          "do": true,
+          "nsid": true,
+          "cookie": true,
+          "subnet": "198.51.100.0/24"
+        },
         "proto": "udp",
         "rtt_ms": 12,
         "size_bytes": 745,
@@ -179,6 +187,11 @@
               "name": "www.example.com.",
               "type": "A"
             },
+            "sent": {
+              "edns": true,
+              "udp_size": 1232,
+              "do": true
+            },
             "proto": "udp",
             "rtt_ms": 2000,
             "error": "udp 192.33.14.30:53: i/o timeout"
@@ -197,6 +210,11 @@
             "asked": {
               "name": "www.example.com.",
               "type": "A"
+            },
+            "sent": {
+              "edns": true,
+              "udp_size": 1232,
+              "do": true
             },
             "proto": "tcp",
             "rtt_ms": 18,
@@ -271,6 +289,11 @@
                   "name": "www.example.com.",
                   "type": "A"
                 },
+                "sent": {
+                  "edns": true,
+                  "udp_size": 1232,
+                  "do": true
+                },
                 "proto": "udp",
                 "rtt_ms": 9.4,
                 "size_bytes": 1187,
@@ -316,6 +339,11 @@
                     "asked": {
                       "name": "example.com.",
                       "type": "DNSKEY"
+                    },
+                    "sent": {
+                      "edns": true,
+                      "udp_size": 1232,
+                      "do": true
                     },
                     "proto": "udp",
                     "rtt_ms": 8,

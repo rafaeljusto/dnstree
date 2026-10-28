@@ -198,6 +198,11 @@ func (s *Step) Shown() *Step {
 	shown.Server = s.Server.Shown()
 	shown.Proto, shown.Rcode = Shown(s.Proto), Shown(s.Rcode)
 	shown.Asked = s.Asked.Shown()
+	if s.Sent != nil {
+		sent := *s.Sent
+		sent.Class, sent.Options = Shown(sent.Class), slices.Clone(sent.Options)
+		shown.Sent = &sent
+	}
 	shown.Records = shownRecords(s.Records)
 	shown.Extended = shownExtended(s.Extended)
 	shown.Notes = shownAll(s.Notes)

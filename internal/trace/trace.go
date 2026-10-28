@@ -598,6 +598,11 @@ type Step struct {
 	Asked Question
 	RTT   time.Duration
 
+	// Sent is what the query whose answer the hop kept carried beside its
+	// question, or the first query where none was answered. It is nil where
+	// the hop asked nothing, or the walk was saved before it was recorded.
+	Sent *Sent
+
 	// Start is when the hop's first query went out, counted from
 	// Trace.Started. Its retries run on from there, so it occupies Start to
 	// Start+RTT, and hops that overlap were in flight together.
@@ -699,6 +704,30 @@ type Step struct {
 
 	Children []*Step
 	Err      string
+}
+
+// Sent is the header bits and EDNS a query went out with. It is read off the
+// message as it was sent, never off the answer, so that what --format dig
+// prints asks exactly what the walk asked.
+type Sent struct {
+	// Class is the query's class where it is not IN.
+	Class string
+
+	// Recursion is the RD bit. The walk never sets it; the probe that asks
+	// whether a server recurses for strangers does.
+	Recursion bool
+
+	// EDNS is whether the query carried an OPT record. The fields below it
+	// live in that record, and are zero without one.
+	EDNS    bool
+	Version uint8
+	UDPSize uint16
+	DO      bool
+	Flags   uint16 // EDNS flags other than DO
+	NSID    bool
+	Cookie  bool
+	Subnet  netip.Prefix
+	Options []uint16 // any other option, by code
 }
 
 // tightMargin is how little room left counts as none: about what one more

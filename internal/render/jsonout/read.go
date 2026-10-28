@@ -230,6 +230,9 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	if to.Subnet, err = readSubnet(from.Subnet); err != nil {
 		return nil, err
 	}
+	if to.Sent, err = readSent(from.Sent); err != nil {
+		return nil, err
+	}
 	if to.Delegation, err = readDelegation(from.Delegation); err != nil {
 		return nil, err
 	}
@@ -464,6 +467,25 @@ func readSubnet(from *subnet) (*trace.Subnet, error) {
 		return nil, fmt.Errorf("jsonout: subnet %q: %w", from.Prefix, err)
 	}
 	return &trace.Subnet{Prefix: prefix, Scope: from.Scope}, nil
+}
+
+func readSent(from *sent) (*trace.Sent, error) {
+	if from == nil {
+		return nil, nil
+	}
+	to := &trace.Sent{
+		Class: from.Class, Recursion: from.Recursion, EDNS: from.EDNS, Version: from.Version,
+		UDPSize: from.UDPSize, DO: from.DO, Flags: from.Flags, NSID: from.NSID, Cookie: from.Cookie,
+		Options: from.Options,
+	}
+	if from.Subnet != "" {
+		prefix, err := netip.ParsePrefix(from.Subnet)
+		if err != nil {
+			return nil, fmt.Errorf("jsonout: sent subnet %q: %w", from.Subnet, err)
+		}
+		to.Subnet = prefix
+	}
+	return to, nil
 }
 
 func readRecords(from []record) ([]trace.RR, error) {
