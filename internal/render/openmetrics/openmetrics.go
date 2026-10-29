@@ -265,6 +265,18 @@ func (e *Exposition) Add(tr *trace.Trace) {
 		}
 	}
 
+	// A count the budget cut short would read as servers gone missing.
+	if s := tr.SRV; s != nil && !s.Cut {
+		reachable := map[string]bool{}
+		for _, target := range s.Targets {
+			if len(target.Addrs) > 0 {
+				reachable[target.Name] = true
+			}
+		}
+		m.family("dnstree_srv_targets", "", "the hosts the name's SRV records send a client to that have an address")
+		m.sample("dnstree_srv_targets", strconv.Itoa(len(reachable)))
+	}
+
 	// A budget that stopped the names short leaves a no unsaid rather than
 	// said; a walk with no PTR set to read has nothing to be confirmed.
 	if c := tr.Reverse; c != nil && c.PTR.Answered() && (c.Confirmed() || !c.Cut) {

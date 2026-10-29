@@ -59,6 +59,7 @@ one after another, each from the root servers down.
   --tlsa                  match the certificate each DANE host presents
   --dkim SELECTOR         check the DKIM key NAME publishes for SELECTOR; repeat it
   --svcb                  follow NAME's HTTPS or SVCB records to their servers
+  --srv                   follow NAME's SRV records to the hosts they name
   --deps                  list every zone NAME depends on, its nameservers' too
   --rdap                  ask the registry when the domain expires, and compare
   --propagation           say how long a change takes to reach every cache
@@ -254,7 +255,7 @@ left on the signatures, what --check-ds found, which nameservers the
 passed, who --caa found free to issue, how many lookups --spf counted, how many
 MX hosts --mail found DANE covering and which mail policies it found, how many
 of the targets --svcb found have an address and how many of their hints are
-stray, how long
+stray, how many of the hosts --srv found have an address, how long
 --rdap found the registration has left and what the resolvers answered, each
 labelled with the question. Run from cron into the
 directory of node_exporter's textfile collector, it is what Prometheus alerts
@@ -495,6 +496,18 @@ lookup is a walk of its own, drawn in the tree as an aside, and spends the
 walk's budget; a TYPE of HTTPS or SVCB is the first set itself. A NAME with a
 port is asked as written, such as _8443._https.example.com.
 
+--srv follows NAME's SRV records (RFC 2782) to the A and AAAA of every host
+they name, as a client of the service would; NAME is the service's own name,
+such as _xmpp-client._tcp.example.com. A host with no address, or whose
+addresses could not be looked up or do not validate, is said in a warning, and
+so is a host that is an alias, which RFC 2782 forbids, a host at an address no
+client on the internet can reach, and a target of . beside other records. A
+target of . alone says the service is not offered. Every record is followed,
+not the one a client would pick, and a host named by several is looked up
+once. Nothing is connected to: a host that resolves is not one that serves.
+Each lookup is a walk of its own, drawn in the tree as an aside, and spends the
+walk's budget; a TYPE of SRV is the set itself.
+
 --deps lists every zone NAME depends on: the zones the walk went through, and
 those the lookup of each of their nameservers goes through, and those of
 their nameservers in turn, each zone once. Whoever controls any of them can
@@ -644,6 +657,7 @@ type Config struct {
 	TLSA           bool
 	DKIM           []string
 	SVCB           bool
+	SRV            bool
 	Deps           bool
 	RDAP           bool
 	Propagation    bool
@@ -892,6 +906,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.TLSA, "tlsa", false, "match the certificate each DANE host presents")
 	flags.Var(&selectors, "dkim", "check the DKIM key of this selector")
 	flags.BoolVar(&cfg.SVCB, "svcb", false, "follow the name's HTTPS or SVCB records to their servers")
+	flags.BoolVar(&cfg.SRV, "srv", false, "follow the name's SRV records to the hosts they name")
 	flags.BoolVar(&cfg.Deps, "deps", false, "list every zone the name depends on, its nameservers' too")
 	flags.BoolVar(&cfg.RDAP, "rdap", false, "ask the registry when the domain expires, and compare")
 	flags.BoolVar(&cfg.Check, "check", false, "run the checks that grade a zone, and grade its health")
@@ -1407,7 +1422,7 @@ var askOutside = map[string]bool{
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "srv": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "try-ds": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

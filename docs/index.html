@@ -447,6 +447,11 @@ footer a:hover{color:var(--ink)}
           <p><code>--svcb</code> follows a name's HTTPS records down their aliases to the servers they name, and holds the <code>ipv4hint</code> and <code>ipv6hint</code> a browser may connect on against where those servers really are.</p>
         </div>
         <div class="finding">
+          <span class="tag tag-warn">gone</span>
+          <h3>A service record that points nowhere</h3>
+          <p><code>--srv</code> follows a service's SRV records, the way a chat, phone or directory client finds its server, to the address of every host they name, and says which has none, which is an alias where none may be, and which sits at an address no client can reach.</p>
+        </div>
+        <div class="finding">
           <span class="tag tag-warn">hidden</span>
           <h3>A zone nobody chose to depend on</h3>
           <p><code>--deps</code> follows every nameserver of every zone on the way, and every nameserver of theirs, and lists each zone the name depends on with the nameserver that brought it in. Whoever controls any of them can make the name resolve somewhere else.</p>

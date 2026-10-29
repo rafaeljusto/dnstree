@@ -72,6 +72,10 @@ type Trace struct {
 	// records connects, nil where --svcb did not ask.
 	ServicePath *ServicePath
 
+	// SRV is where the name's SRV records send a client, nil where --srv did
+	// not ask.
+	SRV *SRV
+
 	// Reverse is whether the names the PTR set gives point back to the
 	// address -x asked about, nil for any other question.
 	Reverse *Reverse

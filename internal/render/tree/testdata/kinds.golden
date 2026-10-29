@@ -25,6 +25,10 @@ mail: dane covers 1 of 2 MX hosts, but the MX set is not signed, so it protects 
 svcb: www.example.com. HTTPS 0 cdn.example.net.  [secure]
 svcb: cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  [insecure]
 svcb:   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
+srv: 3 SRV records at _xmpp-client._tcp.example.com.  [secure]
+srv:   10 50 5222 chat.example.com. 203.0.113.10
+srv:   20 0 5222 xmpp.example.net. 10.0.0.5; an alias for host.example.net.; 10.0.0.5 cannot be reached from the internet
+srv: the budget ran out before 1 target was looked up
 csync: com. CSYNC 2024091501 immediate soaminimum A NS AAAA  a parent that polls copies it
 csync:   adds NS ns3.com.
 csync:   removes NS ns4.com.

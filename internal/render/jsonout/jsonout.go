@@ -57,6 +57,7 @@ func convertTrace(tr *trace.Trace) document {
 		document.SPF = convertSPF(tr.SPF)
 		document.Mail = convertMail(tr.Mail)
 		document.ServicePath = convertServicePath(tr.ServicePath)
+		document.SRV = convertSRV(tr.SRV)
 		document.Reverse = convertReverse(tr.Reverse)
 		document.Dependencies = convertDependencies(tr.Dependencies)
 		document.Registration = convertRegistration(tr.Registration)
@@ -84,6 +85,7 @@ type document struct {
 	SPF           *spf          `json:"spf,omitempty"`
 	Mail          *mail         `json:"mail,omitempty"`
 	ServicePath   *servicePath  `json:"service_path,omitempty"`
+	SRV           *srv          `json:"srv,omitempty"`
 	Reverse       *reverse      `json:"reverse,omitempty"`
 	Dependencies  *dependencies `json:"dependencies,omitempty"`
 	Registration  *registration `json:"registration,omitempty"`

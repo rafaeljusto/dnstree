@@ -152,6 +152,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--tlsa`](docs/guide/zones.md#whether-the-certificates-match) | connect to each MX host DANE covers, start TLS, and match the certificate it presents against its TLSA set; needs `--mail` and `--dnssec` |
 | [`--dkim SELECTOR`](docs/guide/zones.md#whether-its-dkim-keys-are-there) | check the DKIM key the name publishes for a selector: there, parses, long enough, not revoked or SHA-1 only (RFC 6376, RFC 8301); repeat it; needs `--mail` |
 | [`--svcb`](docs/guide/zones.md#where-a-browser-connects) | follow the name's HTTPS or SVCB records to the servers they name, and hold their address hints against what the servers resolve to (RFC 9460) |
+| [`--srv`](docs/guide/zones.md#where-a-service-lives) | follow a service's SRV records to the hosts they name, and say which have no address, are aliases, or sit where no client can reach them (RFC 2782) |
 | [`--deps`](docs/guide/zones.md#what-it-depends-on) | list every zone the name depends on: the walk's own, and those the lookups of every nameserver of each go through in turn, with which are unsigned |
 | [`--rdap`](docs/guide/zones.md#whether-its-registration-is-about-to-run-out) | ask the domain's registry when the registration runs out and whether it is held, and compare its nameservers and DS with the TLD's (RFC 9083) |
 | [`--propagation`](docs/guide/zones.md#how-long-a-change-takes-to-reach-everyone) | say how long each kind of change to the zone takes to reach every cache, from the TTLs the walk saw |

@@ -734,6 +734,52 @@
       }
     ]
   },
+  "srv": {
+    "name": "_xmpp-client._tcp.example.com.",
+    "lookup": {
+      "name": "_xmpp-client._tcp.example.com.",
+      "dnssec": {
+        "state": "secure",
+        "zone": "example.com."
+      }
+    },
+    "targets": [
+      {
+        "name": "chat.example.com.",
+        "priority": 10,
+        "weight": 50,
+        "port": 5222,
+        "ipv4": {
+          "name": "chat.example.com.",
+          "dnssec": {
+            "state": "secure",
+            "zone": "example.com."
+          }
+        },
+        "addrs": [
+          "203.0.113.10"
+        ]
+      },
+      {
+        "name": "xmpp.example.net.",
+        "priority": 20,
+        "weight": 0,
+        "port": 5222,
+        "ipv4": {
+          "name": "xmpp.example.net.",
+          "alias": "host.example.net."
+        },
+        "addrs": [
+          "10.0.0.5"
+        ],
+        "unreachable": [
+          "10.0.0.5"
+        ]
+      }
+    ],
+    "cut": true,
+    "left": 1
+  },
   "reverse": {
     "addr": "192.0.2.40",
     "ptr": {

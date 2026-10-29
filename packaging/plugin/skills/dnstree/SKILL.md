@@ -95,6 +95,7 @@ whole; `dnstree --schema` describes every field.
 | whether each mail host's certificate matches its TLSA records | `dnstree --format markdown --dnssec --mail --tlsa NAME` |
 | which CAs may issue a certificate | `dnstree --format markdown --dnssec --caa NAME` |
 | where HTTPS/SVCB records lead | `dnstree --format markdown --dnssec --svcb NAME` |
+| why a client cannot find a service's server (XMPP, SIP, Matrix, LDAP, Kerberos, CalDAV: NAME is `_service._proto.domain`) | `dnstree --format markdown --dnssec --srv NAME SRV` |
 | every zone a name depends on, its nameservers' included | `dnstree --format markdown --dnssec --deps NAME` |
 | when the domain registration expires | `dnstree --format markdown --rdap NAME` |
 | whether the zone survives losing a server | `dnstree --format markdown --without SERVER NAME` |

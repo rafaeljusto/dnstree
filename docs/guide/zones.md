@@ -878,6 +878,55 @@ the targets it did not reach unjudged. The exit code is left alone. `--format js
 `service_path`, and `--format openmetrics` as `dnstree_svcb_targets` and
 `dnstree_svcb_stray_hints`.
 
+## Where a service lives
+
+Many services are not found at a fixed name. A chat or phone client, a mail
+client looking for IMAP, or a laptop joining a directory first asks for an SRV
+record (RFC 2782) at the service's own name, such as
+`_xmpp-client._tcp.example.com`, which names a host and a port to connect to,
+with a priority and a weight. `--srv` follows the records to the addresses of
+every host they name:
+
+```
+$ dnstree --srv --dnssec --explain --no-asn --no-compare _sip._tls.microsoft.com SRV
+...
+│   │   └── ns1-39.azure-dns.com. 150.171.10.39  231ms  NOERROR  AA AD  [insecure]
+│   │       ├── _sip._tls.microsoft.com. 3600 SRV 100 1 443 sipdir.online.lync.com.
+│   │       ├── ns1-39.azure-dns.com. 150.171.10.39  228ms  NOERROR  AA AD  no data  (DNSKEY of microsoft.com.)
+│   │       ├── com.  (A of sipdir.online.lync.com. for srv)
+...
+│   │       └── online.lync.com.  (AAAA of sipdir.online.lync.com. for srv)
+│   │           └── ns4-33.azure-dns.info. 13.107.206.33  225ms  NXDOMAIN  AA DO  [insecure]
+...
+srv: 1 SRV record at _sip._tls.microsoft.com.  [insecure]
+srv:   100 1 443 sipdir.online.lync.com. no address
+warning: sipdir.online.lync.com., which the SRV records of _sip._tls.microsoft.com. name, has no address, so a client has nothing to connect to there; fix the record or give the target an address
+✔ answered in 4.2s · 18 queries · 7 servers
+...
+· the SRV records of _sip._tls.microsoft.com. name sipdir.online.lync.com., which has no address, so a client sent there has nothing to connect to
+```
+
+Each record is drawn as priority, weight, port and host, best priority first,
+with the addresses the host's A and AAAA sets came to, as far as `-4` or `-6`
+allows. Every record is followed, not the one a client would pick, and a host
+named by several records, on several ports, is looked up once. A warning says
+when a host has no address, or its addresses cannot be looked up or do not
+validate; when a host is an alias, which RFC 2782 forbids and some clients
+will not follow; when a host has an address no client on the internet can
+reach, such as a private one from an internal view of the zone; when the set
+fails to look up or does not validate; and when a target of `.` sits beside
+other records. A target of `.` alone says the service is deliberately not
+offered at the name, and is not a fault.
+
+`NAME` is the service's name as written: dnstree keeps no list of services. A
+TYPE of SRV makes the walk's own answer the set; any other TYPE looks it up as
+an aside. Nothing connects to the hosts or their ports, so a host that resolves
+is not one that serves. The lookups spend the walk's budget, and a check cut
+short says how many records it left. The exit code is left alone.
+`--format json` carries it as `srv`, and `--format openmetrics` as
+`dnstree_srv_targets`, the hosts that have an address, left out when the
+budget cut the check short.
+
 ## What it depends on
 
 To reach a name, a resolver asks the servers of every zone above it. But those

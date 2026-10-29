@@ -250,6 +250,19 @@ func resolution() *trace.Trace {
 				Addrs: []netip.Addr{netip.MustParseAddr("203.0.113.7")},
 				Hints: []netip.Addr{netip.MustParseAddr("192.0.2.1")}, Stray: []netip.Addr{netip.MustParseAddr("192.0.2.1")}}},
 		},
+		SRV: &trace.SRV{
+			Name: "_xmpp-client._tcp.example.com.", Lookup: trace.Lookup{Name: "_xmpp-client._tcp.example.com.",
+				DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "example.com."}},
+			Targets: []trace.SRVTarget{
+				{Name: "chat.example.com.", Priority: 10, Weight: 50, Port: 5222,
+					IPv4:  &trace.Lookup{Name: "chat.example.com.", DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "example.com."}},
+					Addrs: []netip.Addr{netip.MustParseAddr("203.0.113.10")}},
+				{Name: "xmpp.example.net.", Priority: 20, Weight: 0, Port: 5222,
+					IPv4:  &trace.Lookup{Name: "xmpp.example.net.", Alias: "host.example.net."},
+					Addrs: []netip.Addr{netip.MustParseAddr("10.0.0.5")}, Unreachable: []netip.Addr{netip.MustParseAddr("10.0.0.5")}},
+			},
+			Cut: true, Left: 1,
+		},
 		Reverse: &trace.Reverse{
 			Addr: netip.MustParseAddr("192.0.2.40"),
 			PTR:  trace.Lookup{Name: "40.2.0.192.in-addr.arpa.", Alias: "40.32/27.2.0.192.in-addr.arpa."},

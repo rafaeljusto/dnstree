@@ -71,6 +71,7 @@ func (t *Trace) Shown() *Trace {
 	shown.SPF = t.SPF.Shown()
 	shown.Mail = t.Mail.Shown()
 	shown.ServicePath = t.ServicePath.Shown()
+	shown.SRV = t.SRV.Shown()
 	shown.Reverse = t.Reverse.Shown()
 	shown.Dependencies = t.Dependencies.Shown()
 	shown.Registration = t.Registration.Shown()

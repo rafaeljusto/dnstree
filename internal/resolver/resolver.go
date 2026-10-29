@@ -197,6 +197,11 @@ type Config struct {
 	// like the mail check's.
 	SVCB bool
 
+	// SRV follows the name's SRV records to the addresses of every target
+	// they name (RFC 2782). Each lookup is a walk of its own, like the mail
+	// check's.
+	SRV bool
+
 	// Confirm is the address a PTR question stands for. The names its PTR set
 	// gives are each looked up for an address of its family, to say which of
 	// them point back to it: forward-confirmed reverse DNS. Each lookup is a
@@ -359,6 +364,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	}
 	if r.cfg.SVCB {
 		run.svcb(ctx, cmp.Or(end, run.trace.Root), end)
+	}
+	if r.cfg.SRV {
+		run.srv(ctx, cmp.Or(end, run.trace.Root), end)
 	}
 	if r.cfg.Confirm.IsValid() && rrtype == dns.TypePTR {
 		run.confirm(ctx, cmp.Or(end, run.trace.Root), end)

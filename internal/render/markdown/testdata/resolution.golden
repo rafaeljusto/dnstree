@@ -38,6 +38,10 @@ mail: dane covers 1 of 1 MX host, not counting 1 that cannot be reached
 svcb: www.example.com. HTTPS 0 cdn.example.net.  [secure]
 svcb: cdn.example.net. HTTPS 1 edge.example.net. alpn="h3" port="8443" ipv4hint="192.0.2.1" ech="AEX+DQBBAAA="  [ech]  [insecure]
 svcb:   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
+srv: 3 SRV records at _xmpp-client._tcp.example.com.  [secure]
+srv:   10 50 5222 chat.example.com. 203.0.113.10
+srv:   20 0 5222 xmpp.example.net. 10.0.0.5; an alias for host.example.net.; 10.0.0.5 cannot be reached from the internet
+srv: the budget ran out before 1 target was looked up
 ptr: mail.example.com. points back to 192.0.2.40
 ptr: old.example.com. (through host.example.net.) does not point back: it has 198.51.100.7, not 192.0.2.40
 ptr: gone.example.com. was not confirmed: the budget ran out before it was made
@@ -96,6 +100,7 @@ check example.com.
 - ⚠ there is no DKIM key for selector gone (no key is published there), so mail signed with it fails DKIM
 - mail.example.com. points back to 192.0.2.40, so the address is forward-confirmed
 - ⚠ the HTTPS records of www.example.com. hint at addresses edge.example.net. does not have, so a client that connects on the hints may reach another server
+- ⚠ the SRV check of \_xmpp-client.\_tcp.example.com. ran out of budget before every target was looked up, and left 1 target
 - ⚠ 198.51.100.53 answered this question differently, which a name whose answer is tailored to where it is asked from does honestly, and nothing else should
 
 **resolvers**

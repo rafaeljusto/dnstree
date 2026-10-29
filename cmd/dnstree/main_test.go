@@ -1958,6 +1958,58 @@ edge.example.test. IN A     192.0.2.7
 	}
 }
 
+// TestRunSRV follows a service's SRV records to the hosts they name, and draws
+// them again from the walk --format json saved.
+func TestRunSRV(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", Zone: rootZone + `
+_xmpp._tcp.example.test. IN SRV 20 0 5222 gone.example.test.
+_xmpp._tcp.example.test. IN SRV 10 50 5222 chat.example.test.
+chat.example.test.       IN A   192.0.2.7
+`})
+	base := []string{"--root", server.Addr.String(), "--no-asn", "--no-compare", "--color", "never", "-4"}
+	want := []string{
+		"srv: 2 SRV records at _xmpp._tcp.example.test.",
+		"srv:   10 50 5222 chat.example.test. 192.0.2.7",
+		"srv:   20 0 5222 gone.example.test. no address",
+	}
+	drawn := func(out string) []string {
+		var lines []string
+		for line := range strings.Lines(out) {
+			if strings.HasPrefix(line, "srv: ") {
+				lines = append(lines, strings.TrimSuffix(line, "\n"))
+			}
+		}
+		return lines
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), append(base, "--srv", "_xmpp._tcp.example.test", "SRV"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if !strings.Contains(stdout.String(), "gone.example.test., which the SRV records of _xmpp._tcp.example.test. name, has no address") {
+		t.Errorf("got\n%s\nwant the target with no address warned about", stdout.String())
+	}
+
+	stdout.Reset()
+	if code := run(t.Context(), append(base, "--srv", "--format", "json", "_xmpp._tcp.example.test", "SRV"), &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	path := filepath.Join(t.TempDir(), "walk.json")
+	if err := os.WriteFile(path, stdout.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	if code := run(t.Context(), []string{"--from", path, "--color", "never"}, &stdout, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s", code, exitAnswer, stderr.String())
+	}
+	if got := drawn(stdout.String()); !slices.Equal(got, want) {
+		t.Errorf("got %q drawn again, want %q", got, want)
+	}
+}
+
 // TestRunDeps lists the zones a name depends on, says which nameserver does
 // not exist, and draws the list again from the walk --format json saved.
 func TestRunDeps(t *testing.T) {
