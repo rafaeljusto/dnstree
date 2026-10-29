@@ -192,38 +192,58 @@ func serviceTargets(services []trace.RR) []trace.ServiceTarget {
 // addresses looks up the A and AAAA sets of a target, as far as the run's
 // family allows, and finds the hints that are none of them.
 func (r *run) addresses(ctx context.Context, under *trace.Step, target *trace.ServiceTarget) {
-	judged := map[int]bool{}
+	found := r.hostAddresses(ctx, under, target.Name, "svcb")
+	target.IPv4, target.IPv6, target.Addrs = found.ipv4, found.ipv6, found.addrs
+	if found.stopped {
+		return
+	}
+	for _, hint := range target.Hints {
+		if found.judged[family(hint)] && !slices.Contains(target.Addrs, hint) {
+			target.Stray = append(target.Stray, hint)
+		}
+	}
+}
+
+// hostFound is what the lookups of a host's addresses came to.
+type hostFound struct {
+	ipv4, ipv6 *trace.Lookup
+	addrs      []netip.Addr
+
+	// judged are the families whose lookup was answered, and stopped is a
+	// budget of the run's cutting the lookups short.
+	judged  map[int]bool
+	stopped bool
+}
+
+// hostAddresses looks up the A and AAAA sets of name, as far as the run's
+// family allows.
+func (r *run) hostAddresses(ctx context.Context, under *trace.Step, name, purpose string) hostFound {
+	found := hostFound{judged: map[int]bool{}}
 	for _, f := range []struct {
 		family int
 		qtype  uint16
 		into   **trace.Lookup
-	}{{4, dns.TypeA, &target.IPv4}, {6, dns.TypeAAAA, &target.IPv6}} {
+	}{{4, dns.TypeA, &found.ipv4}, {6, dns.TypeAAAA, &found.ipv6}} {
 		if r.cfg.Family != 0 && r.cfg.Family != f.family {
 			continue
 		}
-		result, lookup, stopped := r.look(ctx, under, target.Name, f.qtype, "svcb")
+		result, lookup, stopped := r.look(ctx, under, name, f.qtype, purpose)
 		*f.into = &lookup
 		if stopped {
-			return
+			found.stopped = true
+			return found
 		}
 		if !lookup.Answered() {
 			continue
 		}
-		judged[f.family] = true
-		for _, record := range result.Records {
-			if record.Type != dnsutil.TypeToString(f.qtype) || !dns.EqualName(record.Name, result.Asked.Name) {
-				continue
-			}
-			if addr, err := netip.ParseAddr(record.Data); err == nil && !slices.Contains(target.Addrs, addr) {
-				target.Addrs = append(target.Addrs, addr)
+		found.judged[f.family] = true
+		for _, addr := range addresses(result.Records, result.Asked.Name, f.qtype) {
+			if !slices.Contains(found.addrs, addr) {
+				found.addrs = append(found.addrs, addr)
 			}
 		}
 	}
-	for _, hint := range target.Hints {
-		if judged[family(hint)] && !slices.Contains(target.Addrs, hint) {
-			target.Stray = append(target.Stray, hint)
-		}
-	}
+	return found
 }
 
 // echOn warns about an ECH configuration in a set of the chain the way

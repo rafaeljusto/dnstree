@@ -89,8 +89,14 @@ func nowhere(addrs []netip.Addr, lookups ...*Lookup) bool {
 // Failed is why the address lookups of a target failed, where every one asked
 // did, and empty otherwise.
 func (t ServiceTarget) Failed() string {
+	return failed(t.IPv4, t.IPv6)
+}
+
+// failed is why the lookups of a host failed, where every one asked did, and
+// empty otherwise.
+func failed(lookups ...*Lookup) string {
 	why := ""
-	for _, lookup := range []*Lookup{t.IPv4, t.IPv6} {
+	for _, lookup := range lookups {
 		if lookup == nil {
 			continue
 		}
