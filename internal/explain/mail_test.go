@@ -94,6 +94,23 @@ func TestDelivery(t *testing.T) {
 			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyPublished, Type: "rsa", Bits: 512, State: trace.DKIMWeak, Why: "512 bits"}),
 			want: "receivers do not verify with the DKIM key for selector s1 (512 bits)",
 		},
+		"a host that refuses DMARC reports": {
+			mail: &trace.Mail{Name: "test.", Null: true, DMARC: &trace.MailPolicy{Name: "_dmarc.test.", Found: trace.PolicyNone},
+				Reports: []trace.ReportHost{{Host: "vendor.example.", State: trace.ReportRefused,
+					Lookup: &trace.Lookup{Name: "test._report._dmarc.vendor.example."}}}},
+			want: "the DMARC policy at _dmarc.test. sends reports to vendor.example., which publishes no test._report._dmarc.vendor.example. record, so receivers drop them",
+		},
+		"a host beside the policy's domain that refuses DMARC reports": {
+			mail: &trace.Mail{Name: "a.test.", Null: true, DMARC: &trace.MailPolicy{Name: "_dmarc.a.test.", Found: trace.PolicyNone},
+				Reports: []trace.ReportHost{{Host: "b.test.", State: trace.ReportRefused, Kin: true,
+					Lookup: &trace.Lookup{Name: "a.test._report._dmarc.b.test."}}}},
+			want: "so receivers drop them, unless they take a.test. and b.test. for one organisation",
+		},
+		"a host whose consent to DMARC reports could not be had": {
+			mail: &trace.Mail{Name: "test.", Null: true, Reports: []trace.ReportHost{{Host: "vendor.example.", State: trace.ReportUnknown,
+				Why: "the TXT lookup failed: SERVFAIL"}}},
+			want: "whether vendor.example. takes the DMARC reports sent to it could not be told: the TXT lookup failed: SERVFAIL",
+		},
 		"a DKIM key that is missing": {
 			mail: dkimMail(trace.DKIMKey{Selector: "s1", Found: trace.PolicyNone, Why: "no key is published there"}),
 			want: "there is no DKIM key for selector s1 (no key is published there), so mail signed with it fails DKIM",

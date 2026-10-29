@@ -352,6 +352,12 @@
         "mta_sts": { "description": "The MTA-STS record at _mta-sts (RFC 8461). Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
         "tls_rpt": { "description": "The TLS-RPT record at _smtp._tls (RFC 8460). Absent where the check stopped before asking.", "$ref": "#/$defs/mail_policy" },
         "dmarc": { "description": "The DMARC record at _dmarc of the name, or where the name has none, the one a walk up the tree found for it: at its organisational domain, or at a public suffix marked psd=y (RFC 9989 4.10). A record found above the name applies its np where the name does not exist and its sp where it does, each where it has one, and its p otherwise. Absent where the check stopped before asking, or before the walk could say.", "$ref": "#/$defs/mail_policy" },
+        "reports": {
+          "description": "The hosts outside the DMARC policy's domain its rua sends aggregate reports to, each once, in the order named, and whether each agreed to take them (RFC 9990 4). A host at, above or below the policy's domain is taken for the same organisation and is not asked. At most four are asked.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/report_host" }
+        },
+        "reports_left": { "description": "How many hosts the rua names past the four asked, which were not.", "type": "integer", "minimum": 1 },
         "dkim": {
           "description": "The DKIM keys of the selectors --dkim named, in the order named; selectors the budget left unasked are absent.",
           "type": "array",
@@ -571,6 +577,22 @@
           "items": { "$ref": "#/$defs/policy_tag" }
         },
         "why": { "description": "What made it invalid or failed, or a reading of it a receiver makes.", "type": "string" }
+      }
+    },
+    "report_host": {
+      "description": "One host a DMARC policy sends its aggregate reports to, from outside the policy's domain.",
+      "type": "object",
+      "required": ["host", "state"],
+      "properties": {
+        "host": { "type": "string" },
+        "lookup": { "description": "The TXT lookup at <policy domain>._report._dmarc.<host>, absent where it was not made. Each is a walk of its own, in the tree as an aside, and never reaches the exit code.", "$ref": "#/$defs/lookup" },
+        "state": {
+          "description": "accepted: a record there begins v=DMARC1, and receivers send the reports. refused: none does, and receivers drop the reports without telling anyone. unknown: the lookup failed, did not validate, or the budget ran out. unasked: the name to look it up at would be longer than 255 octets.",
+          "type": "string",
+          "enum": ["accepted", "refused", "unknown", "unasked"]
+        },
+        "kin": { "description": "Present where the host shares a parent below the top-level domain with the policy's domain, which a receiver may take for the same organisation, and then send the reports without asking.", "type": "boolean" },
+        "why": { "type": "string" }
       }
     },
     "dkim_key": {

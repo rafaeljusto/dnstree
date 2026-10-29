@@ -30,6 +30,20 @@ func delivery(tr *trace.Trace) []Finding {
 				"%s publishes no DMARC policy, so a receiver decides alone what to do with mail forged as it", m.Name)})
 		}
 	}
+	for _, report := range m.Reports {
+		switch report.State {
+		case trace.ReportRefused:
+			text := fmt.Sprintf("the DMARC policy at %s sends reports to %s, which publishes no %s record, so receivers drop them",
+				m.DMARC.Name, report.Host, report.Lookup.Name)
+			if report.Kin {
+				text += fmt.Sprintf(", unless they take %s and %s for one organisation", strings.TrimPrefix(m.DMARC.Name, "_dmarc."), report.Host)
+			}
+			findings = append(findings, Finding{Topic: Mail, Level: Warn, Text: text})
+		case trace.ReportUnknown, trace.ReportUnasked:
+			findings = append(findings, Finding{Topic: Mail, Level: Note, Unknown: true, Text: fmt.Sprintf(
+				"whether %s takes the DMARC reports sent to it could not be told: %s", report.Host, report.Why)})
+		}
+	}
 	for _, key := range m.DKIM {
 		findings = append(findings, dkimKey(key))
 	}

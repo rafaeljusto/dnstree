@@ -693,6 +693,29 @@ the domain one label below publishes none. A record found above the name
 applies its `np` where the name does not exist and its `sp` where it does,
 each where it has one, and its `p` otherwise. A lookup that fails on the way
 stops the walk, and the line says so rather than guess which record applies.
+
+A DMARC record's `rua` says where receivers send their daily reports. A
+receiver sends them to a host outside the record's domain only where that host
+agrees, with a TXT record beginning `v=DMARC1` at
+`<record's domain>._report._dmarc.<host>` (RFC 9990 section 4), and drops them
+silently where it does not. `--mail` asks each such host, up to four, and says
+which take the reports:
+
+```
+$ dnstree --mail --explain --no-asn --no-compare paypal.com
+...
+mail: no mta-sts; no tls-rpt; dmarc p=reject
+mail: dmarc reports to rua.agari.com. accepted, vali.email. accepted
+...
+```
+
+A host that publishes no such record is `refused`, which is said in a warning.
+Only a lookup that answered counts as a refusal: one that failed, or did not
+validate under `--dnssec`, is `unknown`. A host at, above or below the
+record's domain is taken for the same organisation and not asked. A host beside
+it, sharing a parent below the top-level domain, is asked, and a refusal of one
+says a receiver may take the two for one organisation instead. A `rua` the
+host's own record names is not followed, and `ruf` is not checked.
 Nothing connects to a mail server unless `--tlsa`
 asks, and the MTA-STS policy file is not fetched. The lookups spend the walk's
 budget, and a check cut short says so. The exit code is left alone.

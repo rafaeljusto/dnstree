@@ -1,6 +1,7 @@
 package resolver_test
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"testing"
@@ -50,6 +51,8 @@ _25._tcp.pkix IN TLSA 1 0 1 ` + tlsaData + `
 bare          IN A    192.0.2.28
 mx3           IN A    192.0.2.32
 _25._tcp.mx3  IN CNAME _25._tcp.mx.plain.com.
+example.com._report._dmarc      IN TXT "v=DMARC1"
+solo.example.com._report._dmarc IN TXT "rua=mailto:d@mailhost.com; v=DMARC1"
 `
 
 	plainZone = `
@@ -501,6 +504,100 @@ _dmarc.y IN TXT "v=DMARC1; p=quarantine; psd=n"`,
 			}
 			if !slices.Equal(asked, tt.asked) {
 				t.Errorf("asked %q, want %q", asked, tt.asked)
+			}
+		})
+	}
+}
+
+// TestMailDMARCReports covers the hosts a DMARC policy sends its reports to
+// from outside its domain, which take them only where they say so (RFC 9990
+// 4).
+func TestMailDMARCReports(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		extra     string
+		behaviour fakens.Behaviour
+		signed    bool
+		qname     string
+
+		want    []string
+		left    int
+		warning string
+	}{
+		"a host that publishes the record takes the reports": {
+			extra: `_dmarc IN TXT "v=DMARC1; p=reject; rua=mailto:d@mailhost.com"`,
+			want:  []string{"mailhost.com. accepted"},
+		},
+		"a signed record takes them under --dnssec": {
+			extra:  `_dmarc IN TXT "v=DMARC1; p=reject; rua=mailto:d@mailhost.com"`,
+			signed: true,
+			want:   []string{"mailhost.com. accepted"},
+		},
+		"a host at or below the policy's domain is not asked": {
+			extra: `_dmarc IN TXT "v=DMARC1; p=reject; rua=mailto:d@example.com,mailto:d@reports.example.com"`,
+		},
+		"a record that does not begin v=DMARC1 refuses them": {
+			extra:   `_dmarc.solo IN TXT "v=DMARC1; p=none; rua=mailto:d@mailhost.com"`,
+			qname:   "solo.example.com",
+			want:    []string{"mailhost.com. refused"},
+			warning: "sends reports to mailhost.com., which publishes no solo.example.com._report._dmarc.mailhost.com. record",
+		},
+		"a signed denial refuses them under --dnssec": {
+			extra:   `_dmarc.solo IN TXT "v=DMARC1; p=none; rua=mailto:d@mailhost.com"`,
+			signed:  true,
+			qname:   "solo.example.com",
+			want:    []string{"mailhost.com. refused"},
+			warning: "so receivers drop them",
+		},
+		"a host that does not exist refuses them": {
+			extra:   `_dmarc IN TXT "v=DMARC1; p=reject; rua=mailto:d@nowhere.com"`,
+			want:    []string{"nowhere.com. refused"},
+			warning: "sends reports to nowhere.com.",
+		},
+		"a size limit, a query and capitals are read past": {
+			extra: `_dmarc IN TXT "v=DMARC1; p=reject; rua=mailto:D@MailHost.COM!10m, mailto:d@mailhost.com?subject=x"`,
+			want:  []string{"mailhost.com. accepted"},
+		},
+		"a host whose servers do not answer is unknown rather than refused": {
+			extra:     `_dmarc IN TXT "v=DMARC1; p=reject; rua=mailto:d@mailhost.com"`,
+			behaviour: fakens.Behaviour{Drop: true},
+			want:      []string{"mailhost.com. unknown"},
+		},
+		"a host beside the policy's domain may be the same organisation's": {
+			extra:   `_dmarc.solo IN TXT "v=DMARC1; p=none; rua=mailto:d@mx.example.com"`,
+			qname:   "solo.example.com",
+			want:    []string{"mx.example.com. refused"},
+			warning: "unless they take solo.example.com. and mx.example.com. for one organisation",
+		},
+		"hosts past the cap are counted and not asked": {
+			extra:   `_dmarc IN TXT "v=DMARC1; p=reject; rua=mailto:a@a.com,mailto:b@b.com,mailto:c@c.com,mailto:d@d.com,mailto:e@e.com,mailto:a@A.com"`,
+			want:    []string{"a.com. refused", "b.com. refused", "c.com. refused", "d.com. refused"},
+			left:    1,
+			warning: "sends reports to d.com.",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, cfg := mailed(t, tt.extra, tt.behaviour, tt.signed)
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), cmp.Or(tt.qname, "example.com"), "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			var got []string
+			for _, report := range tr.Mail.Reports {
+				got = append(got, report.Host+" "+string(report.State))
+			}
+			if !slices.Equal(got, tt.want) || tr.Mail.ReportsLeft != tt.left {
+				t.Errorf("got reports %q and %d left, want %q and %d", got, tr.Mail.ReportsLeft, tt.want, tt.left)
+			}
+			refused := slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, "sends reports to") })
+			if tt.warning != "" && !slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, tt.warning) }) ||
+				tt.warning == "" && refused {
+				t.Errorf("got warnings %q, want one saying %q", tr.Warnings, tt.warning)
+			}
+			if tr.Broken() {
+				t.Errorf("got the chain broken, want the hosts' zones kept out of it")
 			}
 		})
 	}

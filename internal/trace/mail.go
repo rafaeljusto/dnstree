@@ -32,6 +32,12 @@ type Mail struct {
 	TLSRPT *MailPolicy
 	DMARC  *MailPolicy
 
+	// Reports are the hosts outside the DMARC policy's domain its rua sends
+	// aggregate reports to, and whether each agreed to take them (RFC 9990
+	// 4). ReportsLeft are the hosts past the cap, which were not asked.
+	Reports     []ReportHost
+	ReportsLeft int
+
 	// DKIM are the keys of the selectors --dkim named, in the order named.
 	DKIM []DKIMKey
 
@@ -213,6 +219,45 @@ type PolicyTag struct {
 	Value string
 }
 
+// ReportHost is one host a DMARC policy sends its aggregate reports to, from
+// outside the policy's domain.
+type ReportHost struct {
+	Host string
+
+	// Lookup is that of the record that says the host takes the reports, at
+	// <policy domain>._report._dmarc.<host>; nil where it was not asked.
+	Lookup *Lookup
+
+	State ReportState
+
+	// Kin is a host that shares a parent below the top-level domain with the
+	// policy's domain, which a receiver may take for the same organisation,
+	// and then send the reports without asking.
+	Kin bool
+
+	// Why is what made the state so, in a few words.
+	Why string
+}
+
+// ReportState is what a receiver makes of one host reports go to.
+type ReportState string
+
+// What a host reports go to can come to.
+const (
+	// ReportAccepted is a host that publishes the record, which receivers
+	// send the reports to.
+	ReportAccepted ReportState = "accepted"
+
+	// ReportRefused is a host with no such record, whose reports receivers
+	// drop without telling anyone.
+	ReportRefused ReportState = "refused"
+
+	// ReportUnknown is a host whose record could not be had, and
+	// ReportUnasked one whose record's name is too long to ask.
+	ReportUnknown ReportState = "unknown"
+	ReportUnasked ReportState = "unasked"
+)
+
 // DKIMKey is the key one selector publishes for checking mail signed as the
 // domain (RFC 6376 3.6.1).
 type DKIMKey struct {
@@ -364,6 +409,13 @@ func (m *Mail) Shown() *Mail {
 		}
 	}
 	shown.MTASTS, shown.TLSRPT, shown.DMARC = m.MTASTS.shown(), m.TLSRPT.shown(), m.DMARC.shown()
+	shown.Reports = slices.Clone(m.Reports)
+	for i := range shown.Reports {
+		report := &shown.Reports[i]
+		report.Host, report.Why = Shown(report.Host), Shown(report.Why)
+		report.State = ReportState(Shown(string(report.State)))
+		report.Lookup = report.Lookup.shownRef()
+	}
 	shown.DKIM = slices.Clone(m.DKIM)
 	for i := range shown.DKIM {
 		key := &shown.DKIM[i]

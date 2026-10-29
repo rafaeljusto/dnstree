@@ -213,6 +213,13 @@ func resolution() *trace.Trace {
 				Found: trace.PolicyNone},
 			DMARC: &trace.MailPolicy{Name: "_dmarc.example.com.", Lookup: trace.Lookup{Name: "_dmarc.example.com."},
 				Found: trace.PolicyInvalid, Why: "2 records begin v=DMARC1, and a sender reads that as none"},
+			Reports: []trace.ReportHost{
+				{Host: "vendor.example.net.", Lookup: &trace.Lookup{Name: "example.com._report._dmarc.vendor.example.net."},
+					State: trace.ReportAccepted, Why: "it publishes example.com._report._dmarc.vendor.example.net."},
+				{Host: "old.example.org.", Lookup: &trace.Lookup{Name: "example.com._report._dmarc.old.example.org."},
+					State: trace.ReportRefused, Why: "it publishes no v=DMARC1 record at example.com._report._dmarc.old.example.org."},
+			},
+			ReportsLeft: 1,
 			DKIM: []trace.DKIMKey{
 				{Selector: "s1", Name: "s1._domainkey.www.example.com.",
 					Lookup: trace.Lookup{Name: "s1._domainkey.www.example.com.", Alias: "s1.dkim.example.net."},

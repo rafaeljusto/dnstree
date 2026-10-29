@@ -72,6 +72,9 @@ func (r *renderer) mailPath(m *trace.Mail) []string {
 	if line := r.mailPolicies(m, mark); line != "" {
 		lines = append(lines, line)
 	}
+	if line := r.dmarcReports(m, mark); line != "" {
+		lines = append(lines, line)
+	}
 	for _, key := range m.DKIM {
 		lines = append(lines, r.dkim(key, mark))
 	}
@@ -162,6 +165,28 @@ func (r *renderer) mailPolicies(m *trace.Mail, mark string) string {
 		return r.paint.paint(mark+strings.Join(said, "; "), yellow)
 	}
 	return r.paint.dim(mark + strings.Join(said, "; "))
+}
+
+// dmarcReports is the line that says which hosts outside the DMARC policy's
+// domain take the reports it sends them.
+func (r *renderer) dmarcReports(m *trace.Mail, mark string) string {
+	if len(m.Reports) == 0 {
+		return ""
+	}
+	var said []string
+	doubt := false
+	for _, report := range m.Reports {
+		said = append(said, report.Host+" "+string(report.State))
+		doubt = doubt || report.State != trace.ReportAccepted
+	}
+	text := mark + "dmarc reports to " + strings.Join(said, ", ")
+	if m.ReportsLeft > 0 {
+		text += ", " + strconv.Itoa(m.ReportsLeft) + " more not asked"
+	}
+	if doubt {
+		return r.paint.paint(text, yellow)
+	}
+	return r.paint.dim(text)
 }
 
 // dkim is the line that says what a receiver makes of one DKIM key.

@@ -13,6 +13,7 @@ import (
 	"codeberg.org/miekg/dns/dnsutil"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/dkim"
+	"github.com/rafaeljusto/dnstree/v2/internal/idn"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
 
@@ -52,6 +53,7 @@ func (r *run) mail(ctx context.Context, under *trace.Step) {
 	}
 	if !r.counters.spent() {
 		m.DMARC = r.dmarc(ctx, under, name)
+		r.reports(ctx, under, m)
 	}
 	for _, selector := range r.cfg.DKIM {
 		if r.counters.spent() {
@@ -375,6 +377,80 @@ func (r *run) dmarc(ctx context.Context, under *trace.Step, name string) *trace.
 	return applied(found)
 }
 
+// maxReportHosts bounds the lookups a long rua costs.
+const maxReportHosts = 4
+
+// reports asks each host outside the DMARC policy's domain that its rua sends
+// reports to whether it takes them (RFC 9990 4). A host at, above or below
+// that domain is taken for the same organisation, which receivers do not ask.
+func (r *run) reports(ctx context.Context, under *trace.Step, m *trace.Mail) {
+	p := m.DMARC
+	if p == nil || p.Found != trace.PolicyPublished {
+		return
+	}
+	domain := strings.TrimPrefix(p.Name, "_dmarc.")
+	for _, host := range reportHosts(p.Tag("rua")) {
+		switch {
+		case dnsutil.IsBelow(domain, host) || dnsutil.IsBelow(host, domain):
+			continue
+		case len(m.Reports) == maxReportHosts:
+			m.ReportsLeft++
+			continue
+		}
+		report := trace.ReportHost{Host: host, Kin: dnsutil.Common(domain, host) > 1}
+		name := domain + "_report._dmarc." + host
+		if !dnsutil.IsName(name) {
+			report.State, report.Why = trace.ReportUnasked, "the name to look it up at would be longer than 255 octets"
+			m.Reports = append(m.Reports, report)
+			continue
+		}
+		result, lookup, stopped := r.look(ctx, under, name, dns.TypeTXT, "mail")
+		report.Lookup = &lookup
+		switch {
+		case stopped:
+			report.State, report.Why = trace.ReportUnknown, "the budget ran out before it was looked up"
+		case lookup.Err != "":
+			report.State, report.Why = trace.ReportUnknown, "the TXT lookup failed: "+lookup.Err
+		case r.cfg.DNSSEC && lookup.DNSSEC != nil && lookup.DNSSEC.State == trace.Bogus:
+			report.State, report.Why = trace.ReportUnknown, "it does not validate: "+lookup.DNSSEC.Reason
+		case slices.ContainsFunc(texts(result.Records, result.Asked.Name), func(text string) bool { return tagged(text, "v=DMARC1") }):
+			report.State, report.Why = trace.ReportAccepted, "it publishes "+name
+		default:
+			report.State, report.Why = trace.ReportRefused, "it publishes no v=DMARC1 record at "+name
+		}
+		m.Reports = append(m.Reports, report)
+	}
+}
+
+// reportHosts are the hosts of the mailto URIs in a rua tag, lowercased, each
+// once, in the order named. A size limit after ! is dropped, as RFC 7489
+// allowed one.
+func reportHosts(rua string) []string {
+	var hosts []string
+	for uri := range strings.SplitSeq(rua, ",") {
+		scheme, address, ok := strings.Cut(strings.TrimSpace(uri), ":")
+		if !ok || !strings.EqualFold(scheme, "mailto") {
+			continue
+		}
+		address, _, _ = strings.Cut(address, "?")
+		address, _, _ = strings.Cut(address, "!")
+		at := strings.LastIndexByte(address, '@')
+		if at < 0 {
+			continue
+		}
+		host, err := idn.ASCII(address[at+1:])
+		if err != nil || strings.HasPrefix(host, "[") {
+			continue
+		}
+		// IsName leaves the last label of a name with no final dot unmeasured.
+		host = dnsutil.Canonical(host)
+		if dnsutil.IsName(host) && dnsutil.Labels(host) > 0 && !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
+}
+
 // dkim looks up the key selector publishes for mail signed as name, following
 // aliases the way a receiver does: a selector is often an alias for a key its
 // mail provider keeps, and one the provider has dropped is no key at all.
@@ -549,6 +625,17 @@ func (r *run) warnMail(m *trace.Mail) {
 		if p.policy != nil && p.policy.Found == trace.PolicyInvalid {
 			r.warnf(trace.AreaMail, "the policy at %s is no policy to a %s: %s; publish one record that parses", p.policy.Name, p.reader, p.policy.Why)
 		}
+	}
+	for _, report := range m.Reports {
+		if report.State != trace.ReportRefused {
+			continue
+		}
+		unless := ""
+		if report.Kin {
+			unless = ", unless they take " + strings.TrimPrefix(m.DMARC.Name, "_dmarc.") + " and " + report.Host + " for one organisation"
+		}
+		r.warnf(trace.AreaMail, "the DMARC policy at %s sends reports to %s, which publishes no %s record to take them, so receivers drop them%s; add it there, or take the address out of rua",
+			m.DMARC.Name, report.Host, report.Lookup.Name, unless)
 	}
 	for _, key := range m.DKIM {
 		switch {

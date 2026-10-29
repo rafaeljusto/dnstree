@@ -431,6 +431,17 @@ func TestReadRefuses(t *testing.T) {
 				"mail": {"name": "x.", "mx": {"name": "x."}, "dmarc": {"name": "_dmarc.x.", "lookup": {"name": "_dmarc.x."}, "found": "maybe"}}}`,
 			want: `"maybe"`,
 		},
+		"hosts DMARC reports go to with no DMARC record": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "reports": [{"host": "v.", "lookup": {"name": "x._report._dmarc.v."}, "state": "refused"}]}}`,
+			want: "no DMARC record",
+		},
+		"a host refusing DMARC reports with no lookup": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"mail": {"name": "x.", "mx": {"name": "x."}, "dmarc": {"name": "_dmarc.x.", "lookup": {"name": "_dmarc.x."}, "found": "published"},
+				"reports": [{"host": "v.", "state": "refused"}]}}`,
+			want: "no lookup",
+		},
 		"a DKIM key in a state nothing here knows": {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"mail": {"name": "x.", "mx": {"name": "x."}, "dkim": [{"selector": "s", "name": "s._domainkey.x.", "lookup": {"name": "s._domainkey.x."}, "found": "published", "state": "strong"}]}}`,

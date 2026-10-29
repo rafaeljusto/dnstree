@@ -10,18 +10,28 @@ import (
 // mail is how mail to the name is delivered, as a sending server that checks
 // DANE finds out (RFC 7672).
 type mail struct {
-	Name     string      `json:"name"`
-	MX       lookup      `json:"mx"`
-	Null     bool        `json:"null,omitempty"`
-	Implicit bool        `json:"implicit,omitempty"`
-	Absent   bool        `json:"absent,omitempty"`
-	Hosts    []mailHost  `json:"hosts,omitempty"`
-	MTASTS   *mailPolicy `json:"mta_sts,omitempty"`
-	TLSRPT   *mailPolicy `json:"tls_rpt,omitempty"`
-	DMARC    *mailPolicy `json:"dmarc,omitempty"`
-	DKIM     []dkimKey   `json:"dkim,omitempty"`
-	Stopped  string      `json:"stopped,omitempty"`
-	Cut      bool        `json:"cut,omitempty"`
+	Name     string       `json:"name"`
+	MX       lookup       `json:"mx"`
+	Null     bool         `json:"null,omitempty"`
+	Implicit bool         `json:"implicit,omitempty"`
+	Absent   bool         `json:"absent,omitempty"`
+	Hosts    []mailHost   `json:"hosts,omitempty"`
+	MTASTS   *mailPolicy  `json:"mta_sts,omitempty"`
+	TLSRPT   *mailPolicy  `json:"tls_rpt,omitempty"`
+	DMARC    *mailPolicy  `json:"dmarc,omitempty"`
+	Reports  []reportHost `json:"reports,omitempty"`
+	Left     int          `json:"reports_left,omitempty"`
+	DKIM     []dkimKey    `json:"dkim,omitempty"`
+	Stopped  string       `json:"stopped,omitempty"`
+	Cut      bool         `json:"cut,omitempty"`
+}
+
+type reportHost struct {
+	Host   string  `json:"host"`
+	Lookup *lookup `json:"lookup,omitempty"`
+	State  string  `json:"state"`
+	Kin    bool    `json:"kin,omitempty"`
+	Why    string  `json:"why,omitempty"`
 }
 
 type lookup struct {
@@ -95,7 +105,14 @@ func convertMail(from *trace.Mail) *mail {
 	to := &mail{
 		Name: from.Name, MX: convertLookup(from.MX), Null: from.Null, Implicit: from.Implicit, Absent: from.Absent,
 		MTASTS: convertPolicy(from.MTASTS), TLSRPT: convertPolicy(from.TLSRPT), DMARC: convertPolicy(from.DMARC),
-		Stopped: from.Stopped, Cut: from.Cut,
+		Left: from.ReportsLeft, Stopped: from.Stopped, Cut: from.Cut,
+	}
+	for _, r := range from.Reports {
+		converted := reportHost{Host: r.Host, State: string(r.State), Kin: r.Kin, Why: r.Why}
+		if r.Lookup != nil {
+			converted.Lookup = new(convertLookup(*r.Lookup))
+		}
+		to.Reports = append(to.Reports, converted)
 	}
 	for _, key := range from.DKIM {
 		k := dkimKey{Selector: key.Selector, Name: key.Name, Lookup: convertLookup(key.Lookup), Found: string(key.Found),
@@ -163,7 +180,7 @@ func readMail(from *mail) (*trace.Mail, error) {
 		return nil, fmt.Errorf("jsonout: a mail path with a null MX has no hosts, not %d", len(from.Hosts))
 	}
 	to := &trace.Mail{Name: from.Name, MX: mx, Null: from.Null, Implicit: from.Implicit, Absent: from.Absent,
-		Stopped: from.Stopped, Cut: from.Cut}
+		ReportsLeft: from.Left, Stopped: from.Stopped, Cut: from.Cut}
 	for _, host := range from.Hosts {
 		state := trace.DANEState(host.DANE)
 		switch state {
@@ -201,6 +218,16 @@ func readMail(from *mail) (*trace.Mail, error) {
 	}
 	if to.DMARC, err = readPolicy(from.DMARC); err != nil {
 		return nil, err
+	}
+	if len(from.Reports) > 0 && to.DMARC == nil {
+		return nil, fmt.Errorf("jsonout: a mail path with hosts DMARC reports go to has no DMARC record")
+	}
+	for _, r := range from.Reports {
+		read, err := readReport(r)
+		if err != nil {
+			return nil, err
+		}
+		to.Reports = append(to.Reports, read)
 	}
 	for _, key := range from.DKIM {
 		k, err := readDKIM(key)
@@ -240,6 +267,26 @@ func readDKIM(from dkimKey) (trace.DKIMKey, error) {
 		to.Tags = append(to.Tags, trace.PolicyTag(tag))
 	}
 	return to, nil
+}
+
+// readReport reads one host DMARC reports go to back. A refusal names the
+// record it looked for, since that is what it is explained by.
+func readReport(from reportHost) (trace.ReportHost, error) {
+	state := trace.ReportState(from.State)
+	switch state {
+	case trace.ReportAccepted, trace.ReportUnknown, trace.ReportUnasked:
+	case trace.ReportRefused:
+		if from.Lookup == nil {
+			return trace.ReportHost{}, fmt.Errorf("jsonout: a host refusing DMARC reports has no lookup")
+		}
+	default:
+		return trace.ReportHost{}, fmt.Errorf("jsonout: %q is not what a host DMARC reports go to can come to", from.State)
+	}
+	read, err := readLookupRef(from.Lookup)
+	if err != nil {
+		return trace.ReportHost{}, err
+	}
+	return trace.ReportHost{Host: from.Host, Lookup: read, State: state, Kin: from.Kin, Why: from.Why}, nil
 }
 
 // readPresented reads what each address showed --tlsa. A match has to name

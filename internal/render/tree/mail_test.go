@@ -125,6 +125,16 @@ func TestRenderMail(t *testing.T) {
 				"mail: dkim none._domainkey.test. none: no key is published there",
 			},
 		},
+		"hosts DMARC reports go to": {
+			mail: &trace.Mail{Name: "test.", Null: true, Reports: []trace.ReportHost{
+				{Host: "vendor.example.", State: trace.ReportAccepted},
+				{Host: "old.example.", State: trace.ReportRefused},
+			}, ReportsLeft: 2},
+			want: []string{
+				"mail: test. takes no mail (null MX)",
+				"mail: dmarc reports to vendor.example. accepted, old.example. refused, 2 more not asked",
+			},
+		},
 		"a check that stopped": {
 			mail: &trace.Mail{Name: "test.", Stopped: "the MX lookup failed: SERVFAIL"},
 			want: []string{"mail: stopped: the MX lookup failed: SERVFAIL"},

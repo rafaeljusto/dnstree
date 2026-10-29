@@ -591,6 +591,25 @@
       "found": "invalid",
       "why": "2 records begin v=DMARC1, and a sender reads that as none"
     },
+    "reports": [
+      {
+        "host": "vendor.example.net.",
+        "lookup": {
+          "name": "example.com._report._dmarc.vendor.example.net."
+        },
+        "state": "accepted",
+        "why": "it publishes example.com._report._dmarc.vendor.example.net."
+      },
+      {
+        "host": "old.example.org.",
+        "lookup": {
+          "name": "example.com._report._dmarc.old.example.org."
+        },
+        "state": "refused",
+        "why": "it publishes no v=DMARC1 record at example.com._report._dmarc.old.example.org."
+      }
+    ],
+    "reports_left": 1,
     "dkim": [
       {
         "selector": "s1",

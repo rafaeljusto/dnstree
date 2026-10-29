@@ -31,6 +31,7 @@ mail:     192.0.2.25 match: 3 1 1 e41cc763 matches CN=mx.example.com, issued 202
 mail:   20 backup.example.net. unreachable: its addresses could not be looked up: SERVFAIL
 mail: stopped: the budget ran out before every lookup was made
 mail: mta-sts id=20240101; no tls-rpt; dmarc invalid
+mail: dmarc reports to vendor.example.net. accepted, old.example.org. refused, 1 more not asked
 mail: dkim s1._domainkey.www.example.com. → s1.dkim.example.net. rsa, testing (t=y): 1024 bits, under the 2048 RFC 8301 asks signers for
 mail: dkim gone._domainkey.www.example.com. none: no key is published there
 mail: dane covers 1 of 1 MX host, not counting 1 that cannot be reached
@@ -90,6 +91,7 @@ check example.com.
 - the CAA set at example.com. lets only letsencrypt.org issue for www.example.com., and no certificate authority issue wildcards below it
 - ⚠ no verdict on the SPF policy of www.example.com.: the budget ran out
 - DANE covers every MX host of www.example.com. that can be reached, so a sender that checks it delivers only over TLS, to a server whose certificate matches
+- ⚠ the DMARC policy at \_dmarc.example.com. sends reports to old.example.org., which publishes no example.com.\_report.\_dmarc.old.example.org. record, so receivers drop them
 - the DKIM key for selector s1 is a 1024 bit rsa key a receiver verifies with, though shorter than the 2048 bits RFC 8301 asks signers for; it is marked t=y, which asks receivers not to hold a failure against the domain
 - ⚠ there is no DKIM key for selector gone (no key is published there), so mail signed with it fails DKIM
 - mail.example.com. points back to 192.0.2.40, so the address is forward-confirmed
