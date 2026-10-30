@@ -149,6 +149,3 @@ step:
 > Merge any open changes, then run the release workflow on `main` with
 > `bump: auto` and `dry_run: true`, and again without the dry run once it
 > names the version above.
-
-After the tag exists, `dnstree-close-ideas` closes the threads the release
-shipped. That is the maintainer's call, not part of this skill.
