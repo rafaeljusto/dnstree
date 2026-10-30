@@ -2,31 +2,37 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `7eeec81`
-- **Date**: 2026-10-27
-- **Scope**: the commits since `db990d4` (unreachable nameserver addresses,
-  TCP in `--check-edns`, the reverse-name check, `--software`, the hidden
-  unsigned cut on a parent's servers, DNS64 detection, the 3D scene's
-  changes, `--try-ds`, the `--diff` delta as data); every fuzz test searched
-  for 30 s. `FuzzClipEscaped` failed on its own property, not on the code.
-  Fixed in the working tree after it: `clipEscaped` says whether it cut, so
-  the fuzz test no longer takes a trailing `...` for the mark, and `\...` is
-  kept under `testdata/fuzz`. A version that itself ends in `...` still
-  reads as clipped when drawn, which is cosmetic.
+- **Commit**: `86bc3bd`
+- **Date**: 2026-10-30
+- **Scope**: the commits since `7eeec81` (`--format dig` and the `Sent`
+  record behind it, `--srv`, the DMARC report hosts, JSON Lines and one
+  OpenMetrics file for `--names`, where a resolver's questions come from,
+  the `--try-ds` key-set reason, the clipped-version fix, the TTL delta, the
+  live summary). The fuzz search was left out: it ran apart, at the same
+  time, for this release.
 
 ## Open findings
 
+- Medium: `--format dig` writes a saved walk's `asked.type` as a bare dig
+  argument, and `jsonout.Read` checks no type, so `--from` a hostile file
+  prints `dig @ip name -f/etc/passwd`, which reads that file and sends its
+  lines as queries
+  ([dig.go:85](../../../internal/render/dig/dig.go#L85),
+  [read.go:165](../../../internal/render/jsonout/read.go#L165)); `sent.class`
+  is unchecked too, but `-c` takes it as its value.
+- Low: `--format dig` from `--from` escapes the backslash of a name the file
+  holds escaped, so `a\032b.example.` is asked as `a\092032b.example.`
+  ([dig.go:197](../../../internal/render/dig/dig.go#L197)).
 - Low: names, CAA issuer values, SPF names, the report agent, MX hosts in the
   `--tlsa` finding, the `--serial` servers, resolver operators, DKIM
-  selectors, and now the software a server says it runs (the `--check-edns`
-  finding) and the names a PTR set gives (the reverse-check warnings) in the
-  markdown report's finding sentences are open to GitHub's autolinks,
-  `@mentions` and `#refs`; fixing it means marking them apart from the prose
-  explain writes
+  selectors, the software a server says it runs, the names a PTR set gives,
+  and now the DMARC report hosts and SRV targets in the markdown report's
+  finding sentences are open to GitHub's autolinks, `@mentions` and `#refs`;
+  fixing it means marking them apart from the prose explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
   bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea`,
-  `db990d4` and `7eeec81`, were clean.
+  `db990d4`, `7eeec81` and `86bc3bd`, were clean.
 
 ## Checked and sound
 
@@ -151,7 +157,9 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - Pending nameserver names shrink every pass and stay inside the query budget.
 - `unowned` is bounded by `len(Answer)`; dangling and DDR strings go through
   `Shown`; DDR drops AliasMode, `.` targets and unknown mandatory keys.
-- `idn.ASCII` runs only on user input; `terse` always goes deeper and terminates.
+- `idn.ASCII` runs on user input, and on rua hosts, which the codec hands over
+  escaped and so never above 127, leaving it a pass-through; `terse` always
+  goes deeper and terminates.
 - `--against`: the saved file goes through `saved()` limits and `history.Of`;
   `Against` indexes nothing; a fuzz of Read, Against, Findings and every
   renderer found no panic and no raw escape.
@@ -428,3 +436,27 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   the scene through `textContent` and `TONES` with an unknown state falling
   back to quiet.
 - `go test -race -count=2 ./...` is clean at `7eeec81`.
+- `--srv`: every lookup through `look` (Apart) or the walk's own end, a
+  failed or bogus SRV set stops before any target, `.` alone is no service,
+  each host asked once and nothing started on a spent budget; SRV fields
+  parsed with `ParseUint(…, 16)`; `SRV.Shown` covers names, stops and
+  lookups; `read.go` refuses a negative `left`; refused with `--from`, off in
+  dnstree-web; openmetrics takes no label from it.
+- DMARC report hosts: at most 4 asked, each through `look` under the mail
+  check's Apart root, the name checked by `IsName` first; a refusal needs a
+  lookup and a DMARC record when read back, so no renderer dereferences nil.
+- `Sent` is read off the request only; a failed retry never replaces an
+  answered one; `Class` goes through `Shown`; `read.go` parses the subnet.
+- `--format dig`: every argument POSIX single-quoted unless all safe, names
+  as `\DDD` with a leading `+`, `-` and `@` escaped, comments through `Shown`
+  so no newline leaves a comment line (the type is the open finding).
+- JSON Lines: one `Encode` per walk, so no raw newline inside one; `Read`
+  refuses a second document. OpenMetrics over `--names`: families written
+  once, a question asked twice (case and final dot folded, IDN already
+  punycode) refused.
+- Resolver sources: at most 4 per resolver from the echo answers, each an AS
+  lookup inside `asnGrace`; `Elsewhere` needs the resolver's own AS and
+  every source's; `read.go` recomputes it, so `reaches` and explain never
+  read a nil `ASN`.
+- `supposedReason`'s new case only rewords the reason; no state reads it.
+- `go test -race -count=2 ./...` and `go vet` are clean at `86bc3bd`.
