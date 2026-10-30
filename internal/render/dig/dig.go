@@ -66,7 +66,12 @@ func (s *script) add(step *trace.Step, within string) {
 		s.unrecorded = s.unrecorded || step.Sent == nil
 		s.cookie = s.cookie || step.Sent != nil && step.Sent.EDNS && step.Sent.Cookie
 		s.encrypted = s.encrypted || step.Proto == "dot" || step.Proto == "doh"
-		s.lines = append(s.lines, "# "+comment(step, within), command(step))
+		s.lines = append(s.lines, "# "+comment(step, within))
+		if askable(step) {
+			s.lines = append(s.lines, command(step))
+		} else {
+			s.lines = append(s.lines, "# no command: the type or class saved for it is not one dig reads as such")
+		}
 	}
 	for _, child := range step.Children {
 		s.add(child, within)
@@ -90,6 +95,23 @@ func command(step *trace.Step) string {
 		quoted[i] = quote(arg)
 	}
 	return strings.Join(quoted, " ")
+}
+
+// askable reports whether the type and class a step saved can go on a command
+// line. A walk only ever records mnemonics, but a file read with --from says
+// what it likes, and a bare -f/etc/passwd is an option to dig.
+func askable(step *trace.Step) bool {
+	values := []string{step.Asked.Type}
+	if step.Sent != nil && step.Sent.Class != "" {
+		values = append(values, step.Sent.Class)
+	}
+	for _, value := range values {
+		if value == "" || value[0] < 'A' || value[0] > 'Z' ||
+			strings.Trim(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-") != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // ports are where each transport is asked when nothing says otherwise, for

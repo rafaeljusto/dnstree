@@ -50,7 +50,7 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	}
 
 	tr := &trace.Trace{
-		Question: trace.Question{Name: doc.Question.Name, Type: doc.Question.Type, Class: doc.Question.Class},
+		Question: trace.Question{Name: octets(doc.Question.Name), Type: doc.Question.Type, Class: doc.Question.Class},
 		Warnings: doc.Warnings,
 		Without:  doc.Without,
 	}
@@ -216,7 +216,7 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		}
 	}
 	if from.Asked != nil {
-		to.Asked = trace.Question{Name: from.Asked.Name, Type: from.Asked.Type}
+		to.Asked = trace.Question{Name: octets(from.Asked.Name), Type: from.Asked.Type}
 	}
 	if from.Flags != nil {
 		to.Flags = trace.Flags{AA: from.Flags.AA, TC: from.Flags.TC, AD: from.Flags.AD, DO: from.Flags.DO, EDNS: from.Flags.EDNS}
@@ -791,6 +791,29 @@ func unescape(text string) string {
 			}
 		}
 		b.WriteByte(text[i])
+	}
+	return b.String()
+}
+
+// octets undoes what trace.Shown did to a name before it was written: each
+// \DDD it wrote for an octet that cannot be drawn becomes that octet again, so
+// --format dig asks for the name the walk asked for. Every other renderer
+// escapes it back the same way. A \DDD of a printable octet is left alone,
+// since Shown never writes one.
+func octets(name string) string {
+	if !strings.Contains(name, `\`) {
+		return name
+	}
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		if name[i] == '\\' && i+4 <= len(name) && strings.Trim(name[i+1:i+4], "0123456789") == "" {
+			if n, _ := strconv.Atoi(name[i+1 : i+4]); n <= 255 && (n < ' ' || n > '~') {
+				b.WriteByte(byte(n))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(name[i])
 	}
 	return b.String()
 }
