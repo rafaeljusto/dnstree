@@ -109,7 +109,9 @@ Each of these has been a bug, or would be a silent regression.
   know, or a denial of existence it cannot compute, is `indeterminate` — never
   `bogus`. Bogus is exit code 3 and has to keep meaning something. Only a
   record the zone above has signed can earn `indeterminate`: an unsigned DS is
-  anyone's, whatever algorithm it names, and is `bogus`.
+  anyone's, whatever algorithm it names, and is `bogus`. An RSA key whose
+  exponent the codec cannot load (`lv.` signs with 2^32+1) is unchecked only
+  where a signed DS names it; an answer claiming one is `bogus`.
 - **A signed response is checked against the zone its signer names.** A server
   serving both sides of a cut it never referred the walk across answers, and
   refers, with the child's keys. The chain crosses into the signer's zone first,
@@ -175,10 +177,10 @@ Each of these has been a bug, or would be a silent regression.
   A run of several walks exits with the worst of them, ranked 3, 2, 4, 0 — not
   the highest number.
 - **A check's own lookups are not the run's.** The walks `--mail`, `--dkim`,
-  `--svcb`, `--deps`, the bootstrap signals and the DSYNC lookups make start
-  at a step marked `Apart` (`run.look`), and the chain of trust, signature
-  lifetimes and the exit code read only `Trace.judged`, so somebody else's
-  broken zone never exits 3.
+  `--svcb`, `--srv`, `--deps`, `-x`'s reverse check, the bootstrap signals and
+  the DSYNC lookups make start at a step marked `Apart` (`run.look`), and the
+  chain of trust, signature lifetimes and the exit code read only
+  `Trace.judged`, so somebody else's broken zone never exits 3.
 - **`--format ascii` emits nothing above codepoint 127** — a test asserts it,
   because the format exists for pasting into documents.
 - **`schema_version` in the JSON output** is bumped whenever a field changes
@@ -249,7 +251,8 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   with a scenario that reproduces it on purpose.
 - Tests against the real internet go behind `//go:build live`.
 - What a zone or a stranger wrote and is parsed or escaped by hand is fuzzed
-  against a property, not an example: the SPF check, the DKIM key reader, a
+  against a property, not an example: the SPF check, the DKIM key reader, the
+  hosts a DMARC `rua` names, the echoes `--check-resolver` reads, a
   capture `--replay` reads, the TXT the resolver tests' zones write, a
   saved walk read into every renderer, the live line cut, the escaper of each
   format, and the names dnstree-web redirects to. `make check` replays the seeds and the

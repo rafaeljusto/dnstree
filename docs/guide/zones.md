@@ -14,6 +14,7 @@ server says about its own answer.
 - [What a check of its mail costs](#what-a-check-of-its-mail-costs)
 - [Whether its mail can be sent verified](#whether-its-mail-can-be-sent-verified)
 - [Where a browser connects](#where-a-browser-connects)
+- [Where a service lives](#where-a-service-lives)
 - [What it depends on](#what-it-depends-on)
 - [Whether its registration is about to run out](#whether-its-registration-is-about-to-run-out)
 - [How long a change takes to reach everyone](#how-long-a-change-takes-to-reach-everyone)
@@ -715,7 +716,10 @@ validate under `--dnssec`, is `unknown`. A host at, above or below the
 record's domain is taken for the same organisation and not asked. A host beside
 it, sharing a parent below the top-level domain, is asked, and a refusal of one
 says a receiver may take the two for one organisation instead. A `rua` the
-host's own record names is not followed, and `ruf` is not checked.
+host's own record names is not followed, and `ruf` is not checked. Four hosts
+are asked at most, and the rest are counted as `N more not asked`; one whose
+lookup name would run past 255 octets is `unasked`.
+
 Nothing connects to a mail server unless `--tlsa`
 asks, and the MTA-STS policy file is not fetched. The lookups spend the walk's
 budget, and a check cut short says so. The exit code is left alone.

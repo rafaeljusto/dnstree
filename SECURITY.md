@@ -40,6 +40,10 @@ public addresses DNSSEC proved for hosts DANE covers. A way for a server to
 hold it past its timeout, make it read without bound, or have it connect
 anywhere else is a vulnerability.
 
+`--format dig` writes shell commands built from names a zone chose. A name
+that makes one do anything but ask dig its question, once pasted into a shell,
+is a vulnerability.
+
 dnstree-web runs those walks for strangers. A way to make it query a private,
 loopback or link-local address, redirect off its own host, or get round its
 per-client limits is a vulnerability.

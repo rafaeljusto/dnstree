@@ -316,7 +316,7 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
   serials and SOA timers, zone transfers and open recursion, how they handle
   EDNS, aliases where they may not be, addresses nobody can reach, who may
   issue certificates, SPF, DANE, DMARC and DKIM, which servers a browser
-  connects to, what a name depends on, when its registration runs out, how
+  connects to, where a service's SRV records lead, what a name depends on, when its registration runs out, how
   long a change takes to reach every cache, extended errors, NSID,
   `--software`, cookies, `--qmin`, `--without`, `--try-ns`, `--try-ds` and
   answer sizes.

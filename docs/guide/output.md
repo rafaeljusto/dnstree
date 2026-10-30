@@ -344,7 +344,7 @@ without them, and says so.
 <summary>A walk, as dig commands</summary>
 
 ```
-$ dnstree --format dig www.example.com
+$ dnstree --format dig --dnssec www.example.com
 # dnstree www.example.com. A, as dig commands
 # . at a.root-servers.net.: referral to com.
 dig @198.41.0.4 www.example.com. A +norecurse +bufsize=1232 +dnssec

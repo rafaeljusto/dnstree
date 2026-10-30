@@ -216,9 +216,10 @@ rewrites NXDOMAIN answers a name that does not exist with the address of a page
 of its own, which breaks whatever relies on being told a name is not there. One
 that sends ECS tells the servers it asks which network you are on, and one that
 does not minimise its queries shows the root and the top-level domains every
-name you look up. And the one that answers may not be the one you asked. `--check-resolver` puts questions whose right answers are
-known to each resolver the question is timed against, and says under the tree
-what each one was seen to do:
+name you look up. And the one that answers may not be the one you asked.
+`--check-resolver` puts questions whose right answers are known to each resolver
+the question is timed against, and says under the tree what each one was seen
+to do:
 
 ```
 $ dnstree --check-resolver --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 4.2.2.2 --resolver 9.9.9.9 --explain www.isc.org
@@ -235,7 +236,7 @@ resolver: 4.2.2.2 reaches zones from its own AS3356
 resolver: 9.9.9.9 validates DNSSEC and leaves NXDOMAIN alone
 resolver: 9.9.9.9 sends no ECS to google or akamai and minimises queries
 resolver: 9.9.9.9 reaches zones from AS20326, not its own AS19281
-✔ answered in 2.2s · resolvers in 254ms-286ms · 6 queries · 3 servers
+✔ answered in 866ms · resolvers in 260ms-293ms · 3 queries · 3 servers
 ...
 · 1.1.1.1 sends ECS: akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
 · 8.8.8.8 sends ECS: google's and akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
