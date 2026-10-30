@@ -10,7 +10,8 @@ pull requests and the commit prefixes that decide the version.
 
 The repository ships its own skills in `.agents/skills/` (linked from
 `.claude/skills/`): `dnstree-commit`, `dnstree-review`, `dnstree-audit`,
-`dnstree-docs`, `dnstree-e2e`, `dnstree-dig` and `dnstree-modernise`. When one of them covers the task, use it
+`dnstree-docs`, `dnstree-e2e`, `dnstree-dig`, `dnstree-modernise` and
+`dnstree-release`. When one of them covers the task, use it
 over a general-purpose skill that does something similar: they know the rules
 this file sets down, and the others do not.
 
@@ -46,6 +47,10 @@ copy is in the tree and a test fails when it and `--schema`
 have drifted apart.
 
 ## Releasing
+
+`dnstree-release` gets a release ready: it runs the gates every release
+needs, and decides from the diff since the last tag which of the other skills
+the release needs. Run it rather than every skill, every time.
 
 `make dist` builds everything but the images and the Lambda zip: the archives, a Debian, RPM and
 Alpine package per Linux architecture, the Homebrew formula and the checksums
