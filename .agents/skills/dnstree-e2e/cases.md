@@ -57,7 +57,7 @@ These need no network: every one exits before a query goes out.
 | diff-against | `$D --diff --against x.json example.com` | exit 1: ask for one |
 | watch-short | `$D --watch 500ms example.com` | exit 1: a second is the least |
 | live-waterfall | `$D --live --format waterfall example.com` | exit 1 |
-| json-several | `$D --format json example.com A AAAA` | exit 1: one walk only. Also dot, mermaid, openmetrics, dig and web |
+| json-several | `$D --format dot example.com A AAAA` | exit 1: one walk only. Also mermaid, waterfall-mermaid, dig, web and web-3d. json writes a line per walk and openmetrics one file, both exit 0 |
 | from-name | `$D --from ex.json example.com` | exit 1: no name to resolve |
 | from-shape | `$D --from ex.json --no-asn` | exit 1: a walk already made cannot be changed |
 | names-expect | `$D --names list --expect secure` | exit 1 |
@@ -103,6 +103,7 @@ These need no network: every one exits before a query goes out.
 | ipv6 | `$D $B -6 example.com` | exit 0, only IPv6 addresses asked. Skip it if the environment has no IPv6 |
 | color | `$D --no-asn --no-compare --color always example.com` | escapes on stdout even though it is a pipe |
 | check-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --check-resolver example.com` | exit 0, `resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone`, then a line on ECS and minimisation. With `--no-compare`, exit 1: `--check-resolver checks the resolvers --no-compare leaves unasked` |
+| check-resolver-network | `$D --color never --resolver 9.9.9.9 --check-resolver example.com` | exit 0, `9.9.9.9 reaches zones from AS20326, not its own AS19281`; 1.1.1.1 says `reaches zones from its own AS13335`. With `--no-asn` the line is left out |
 | dns64 | `$D --no-asn --color never --resolver 2001:4860:4860::6464 --check-resolver example.com AAAA` | exit 0, `makes up AAAA records from A records under 64:ff9b::/96 (DNS64)`. Needs IPv6. 1.1.1.1 above has no DNS64 line |
 
 ## dnssec
@@ -149,7 +150,7 @@ cached, not a bug. Run it again.
 | replay | after `pcap`, `$D $B --replay w.pcap example.com`, then with `--format waterfall` | exit 0, the tree of `pcap` and its `answered in`, counted on the capture's clock; the bars one after another, not all from 0 |
 | replay-miss | `$D $B --dnssec --replay w.pcap example.com`, then `iana.org` | exit 2, every hop `the capture holds no answer to … asked this way` |
 | replay-refused | `--replay w.pcap` with `--rdap`, then `--dot` | exit 1, one line each |
-| replay-file | `--replay nope.pcap`, then `--replay junk.txt` | exit 1, `--replay nope.pcap: no such file or directory`, then `not a packet capture dnstree --pcap wrote` |
+| replay-file | `--replay nope.pcap`, then `--replay junk.txt` | exit 1, `--replay nope.pcap: no such file or directory`, then `too short to be a packet capture`, or `not a packet capture dnstree --pcap wrote` for a longer file |
 
 ## zone
 
