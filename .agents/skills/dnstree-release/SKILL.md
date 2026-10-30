@@ -104,8 +104,14 @@ module either way. One with no fix is listed in the report.
 - `dnstree-docs` and `dnstree-audit` are offline. If your agent can run
   subagents, give them one each, alongside the network steps. Each subagent
   invokes the skill itself with the scope from the plan, and is told it edits
-  nothing.
+  nothing but the audit's coverage ledger, which that skill rewrites. Tell the
+  audit to skip its own fuzz search when `make fuzz` is already running.
 - `make fuzz` runs alongside the offline steps.
+- Where your agent can pick a model per subagent, give `dnstree-audit` the
+  strongest one: it reasons about proofs and hostile servers. `dnstree-docs`,
+  `dnstree-e2e` and `dnstree-dig` do with a mid tier, though a disagreement
+  `dnstree-dig` cannot settle goes to the strongest. Nothing below that: the
+  cases that matter are the ones whose output looks fine at a glance.
 
 Verify what comes back before you report it: subagents over-report, and a
 network failure is not a product failure until a rerun says so.
