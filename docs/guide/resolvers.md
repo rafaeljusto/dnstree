@@ -216,24 +216,31 @@ rewrites NXDOMAIN answers a name that does not exist with the address of a page
 of its own, which breaks whatever relies on being told a name is not there. One
 that sends ECS tells the servers it asks which network you are on, and one that
 does not minimise its queries shows the root and the top-level domains every
-name you look up. `--check-resolver` puts questions whose right answers are
+name you look up. And the one that answers may not be the one you asked. `--check-resolver` puts questions whose right answers are
 known to each resolver the question is timed against, and says under the tree
 what each one was seen to do:
 
 ```
-$ dnstree --check-resolver --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 4.2.2.2 --explain www.isc.org
+$ dnstree --check-resolver --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 4.2.2.2 --resolver 9.9.9.9 --explain www.isc.org
 ...
 resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone
 resolver: 1.1.1.1 sends ECS (/24) to akamai but not google and minimises queries
+resolver: 1.1.1.1 reaches zones from its own AS13335
 resolver: 8.8.8.8 validates DNSSEC and leaves NXDOMAIN alone
 resolver: 8.8.8.8 sends ECS (/24) to google and akamai and minimises queries
+resolver: 8.8.8.8 reaches zones from its own AS15169
 resolver: 4.2.2.2 does not validate DNSSEC and leaves NXDOMAIN alone
 resolver: 4.2.2.2 sends no ECS to google or akamai and minimises queries
-✔ answered in 920ms · resolvers in 317ms-399ms · 3 queries · 3 servers
+resolver: 4.2.2.2 reaches zones from its own AS3356
+resolver: 9.9.9.9 validates DNSSEC and leaves NXDOMAIN alone
+resolver: 9.9.9.9 sends no ECS to google or akamai and minimises queries
+resolver: 9.9.9.9 reaches zones from AS20326, not its own AS19281
+✔ answered in 2.2s · resolvers in 254ms-286ms · 6 queries · 3 servers
 ...
 · 1.1.1.1 sends ECS: akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
 · 8.8.8.8 sends ECS: google's and akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
 · 4.2.2.2 does not validate DNSSEC: it answered dnssec-failed.org, whose chain of trust is broken on purpose, so a forged answer for a signed name reaches whoever uses it as though it were real
+· the questions put to 9.9.9.9 reached the zones from AS20326, not from AS19281, where it is: the resolver may ask through a partner network, or forward to another resolver, or something on the path may be answering in its place, which would make what this run says of it about that server instead; --dot or --doh rule the last out, since only the resolver itself can answer them
 ```
 
 - **Validation** rests on `dnssec-failed.org`, a zone Comcast keeps broken on
@@ -272,10 +279,24 @@ resolver: 4.2.2.2 sends no ECS to google or akamai and minimises queries
   · 2001:4860:4860::6464 answered github.com. AAAA with 64:ff9b::4e4:1f96, made up from the A record 4.228.31.150: the zone publishes no AAAA, and the resolver makes them up for IPv6-only networks (DNS64, RFC 6147)
   ```
 
+- **Where its questions come from** rests on the same two echoes, which also
+  name the address the question reached them from. Its origin AS is set
+  beside the AS of the resolver's own address, for a resolver at a public
+  address only: one at a private address, such as a router, is expected to
+  pass its questions on through somebody else. Different networks are not
+  proof of anything. Quad9 asks through AS20326 and AdGuard through AS60068
+  on every network; a forwarder asks through whoever it forwards to; and a
+  network that answers port 53 itself, whatever address the question was sent
+  to, looks the same. The line says what was seen and leaves the reading to
+  you; over `--dot` or `--doh` only the resolver itself can answer. With
+  `--no-asn` there is nothing to compare, and the line is left out.
+
 Whatever the answers leave open is said as "may or may not", never guessed:
 a resolver that forwards to another, or treats these names specially, is
 something the questions cannot see past. It costs up to eight queries per
-resolver, and sets no exit code: a resolver is not the name being asked about.
+resolver, and the origin AS lookups of its address and of the ones its
+questions came from, and sets no exit code: a resolver is not the name being
+asked about.
 
 > [!NOTE]
 > Every check depends on a zone somebody else runs. Should one of them be

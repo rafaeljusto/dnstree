@@ -605,8 +605,11 @@ sends ECS if Google's or Akamai's test zone reports a client subnet arriving
 with the question, and minimises queries if internet.nl's test zone says so. It
 makes up AAAA records (DNS64) if it answers one for ipv4only.arpa, which has
 none, and the prefix is read from where the known address sits in it; a
-resolver's AAAA under that prefix is then not counted as a difference.
-Whatever the answers leave open is said as "may or may not", never guessed. It
+resolver's AAAA under that prefix is then not counted as a difference. For a
+resolver at a public address, the origin AS of the address the two test zones
+saw its questions come from is set beside its own; a different one may be a
+partner network, a forwarder, or something on the path answering in its place,
+which --dot and --doh rule out. Whatever the answers leave open is said as "may or may not", never guessed. It
 costs up to eight queries per resolver, sets no exit code, and needs the
 comparison that --no-compare turns off.
 

@@ -342,6 +342,14 @@ type Behaviour struct {
 	// where the known address sits in what it made up (RFC 6052).
 	Synthesises Observed
 	Prefixes    []netip.Prefix
+
+	// Sources are the addresses the echoes saw its questions come from, with
+	// their origin AS where the lookups found it. Elsewhere is whether they
+	// all sit outside the AS of the resolver's own public address. A yes is
+	// what was seen, not interception: big resolvers ask through partner
+	// networks, and a forwarder asks through somebody else.
+	Sources   []Server
+	Elsewhere Observed
 }
 
 // Echo is what one zone saw of the client subnet: Bits is the prefix length

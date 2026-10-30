@@ -23,10 +23,43 @@ func Behave(tr *trace.Trace) {
 		}
 		answer.Behaviour.Validates = validates(answer.Behaviour)
 		answer.Behaviour.Rewrites = rewrites(answer.Behaviour)
-		answer.Behaviour.Subnet, answer.Behaviour.Echoes = subnet(answer.Behaviour)
+		answer.Behaviour.Subnet, answer.Behaviour.Echoes, answer.Behaviour.Sources = subnet(answer.Behaviour)
 		answer.Behaviour.Minimises = minimises(answer.Behaviour.Minimisation)
 		answer.Behaviour.Synthesises, answer.Behaviour.Prefixes = synthesises(answer.Behaviour.DNS64)
 	}
+}
+
+// Located reads whether each resolver's questions reached the echoes from
+// outside the AS of its own address. It runs after the origin AS lookups, and
+// only judges a resolver public says is on the internet: one at a private
+// address is expected to pass its questions on through somebody else.
+func Located(tr *trace.Trace, public func(netip.Addr) bool) {
+	if tr == nil {
+		return
+	}
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Behaviour == nil || len(answer.Behaviour.Sources) == 0 ||
+			!public(answer.Server.IP) {
+			continue
+		}
+		answer.Behaviour.Elsewhere = elsewhere(answer.Server.ASN, answer.Behaviour.Sources)
+	}
+}
+
+// elsewhere is no where any source shares the resolver's AS, and yes only
+// where every source's AS is known and none does: a source the lookups found
+// nothing for may be the one inside.
+func elsewhere(own *trace.ASNInfo, sources []trace.Server) trace.Observed {
+	if own == nil {
+		return trace.ObservedUnknown
+	}
+	if slices.ContainsFunc(sources, func(s trace.Server) bool { return s.ASN != nil && s.ASN.Number == own.Number }) {
+		return trace.ObservedNo
+	}
+	if slices.ContainsFunc(sources, func(s trace.Server) bool { return s.ASN == nil }) {
+		return trace.ObservedUnknown
+	}
+	return trace.ObservedYes
 }
 
 // wellKnown are the addresses of ipv4only.arpa. (RFC 7050): where
@@ -101,98 +134,129 @@ func rewrites(b *trace.Behaviour) trace.Observed {
 	return trace.ObservedUnknown
 }
 
-// subnet is whether either echo was sent a client subnet. Each counts only
-// where it answered in the shape its operator writes, the resolver's own
-// address included: an answer without that is no evidence of an absence.
-func subnet(b *trace.Behaviour) (trace.Observed, []trace.Echo) {
-	var echoes []trace.Echo
-	for _, echo := range []trace.Echo{googleEcho(b.Google), akamaiEcho(b.Akamai)} {
-		if echo.Sent != trace.ObservedUnknown {
-			echoes = append(echoes, echo)
+// maxSources bounds the addresses kept from the echoes, each an AS lookup:
+// they name one each, and whatever answers in a resolver's place can name
+// as many as fit in a datagram.
+const maxSources = 4
+
+// subnet is whether either echo was sent a client subnet, and the addresses
+// the questions came from. Each counts only where it answered in the shape its
+// operator writes, the resolver's own address included: an answer without
+// that is no evidence of an absence.
+func subnet(b *trace.Behaviour) (trace.Observed, []trace.Echo, []trace.Server) {
+	var (
+		echoes  []trace.Echo
+		sources []trace.Server
+	)
+	google, fromGoogle := googleEcho(b.Google)
+	akamai, fromAkamai := akamaiEcho(b.Akamai)
+	for _, seen := range []struct {
+		echo trace.Echo
+		from []netip.Addr
+	}{{google, fromGoogle}, {akamai, fromAkamai}} {
+		if seen.echo.Sent == trace.ObservedUnknown {
+			continue
+		}
+		echoes = append(echoes, seen.echo)
+		for _, addr := range seen.from {
+			if len(sources) < maxSources && !slices.ContainsFunc(sources, func(s trace.Server) bool { return s.IP == addr }) {
+				sources = append(sources, trace.Server{IP: addr})
+			}
 		}
 	}
 	switch {
 	case slices.ContainsFunc(echoes, func(e trace.Echo) bool { return e.Sent == trace.ObservedYes }):
-		return trace.ObservedYes, echoes
+		return trace.ObservedYes, echoes, sources
 	case len(echoes) > 0:
-		return trace.ObservedNo, echoes
+		return trace.ObservedNo, echoes, sources
 	}
-	return trace.ObservedUnknown, nil
+	return trace.ObservedUnknown, nil, nil
 }
 
 // googleEcho reads Google's answer: one string with the address the question
 // came from, and another, "edns0-client-subnet <prefix>", where a subnet did.
 // A string of any other shape leaves it unknown, so that a zone that changes
 // what it writes cannot pass for one that saw no subnet.
-func googleEcho(answer *trace.Resolver) trace.Echo {
+func googleEcho(answer *trace.Resolver) (trace.Echo, []netip.Addr) {
 	echo := trace.Echo{Operator: "google", Sent: trace.ObservedUnknown}
-	var source, sent bool
+	var (
+		sources []netip.Addr
+		sent    bool
+	)
 	for _, record := range echoRecords(answer) {
 		texts := txtStrings(record)
 		if len(texts) != 1 {
-			return echo
+			return echo, nil
 		}
 		if prefix, ok := strings.CutPrefix(texts[0], "edns0-client-subnet "); ok {
 			if echo.Bits, ok = prefixBits(prefix); !ok {
-				return echo
+				return echo, nil
 			}
 			sent = true
 			continue
 		}
-		if _, err := netip.ParseAddr(texts[0]); err != nil {
-			return echo
+		addr, err := netip.ParseAddr(texts[0])
+		if err != nil {
+			return echo, nil
 		}
-		source = true
+		sources = append(sources, addr.Unmap())
 	}
-	return read(echo, source, sent)
+	return read(echo, sources, sent)
 }
 
 // akamaiEcho reads Akamai's answer: pairs of strings, "ns" with the address
 // the question came from, "ip" with the client's as the server reckons it,
 // and "ecs" with "<prefix>/<scope>" where a subnet came. Anything else leaves
 // it unknown, as for Google.
-func akamaiEcho(answer *trace.Resolver) trace.Echo {
+func akamaiEcho(answer *trace.Resolver) (trace.Echo, []netip.Addr) {
 	echo := trace.Echo{Operator: "akamai", Sent: trace.ObservedUnknown}
-	var source, sent bool
+	var (
+		sources []netip.Addr
+		sent    bool
+	)
 	for _, record := range echoRecords(answer) {
 		texts := txtStrings(record)
 		if len(texts) != 2 {
-			return echo
+			return echo, nil
 		}
 		switch texts[0] {
 		case "ecs":
 			parts := strings.Split(texts[1], "/")
 			if len(parts) != 3 {
-				return echo
+				return echo, nil
 			}
 			var ok bool
 			if echo.Bits, ok = prefixBits(parts[0] + "/" + parts[1]); !ok {
-				return echo
+				return echo, nil
 			}
 			sent = true
 		case "ns", "ip":
-			if _, err := netip.ParseAddr(texts[1]); err != nil {
-				return echo
+			addr, err := netip.ParseAddr(texts[1])
+			if err != nil {
+				return echo, nil
 			}
-			source = source || texts[0] == "ns"
+			// "ip" is the client, which is nobody's business here.
+			if texts[0] == "ns" {
+				sources = append(sources, addr.Unmap())
+			}
 		default:
-			return echo
+			return echo, nil
 		}
 	}
-	return read(echo, source, sent)
+	return read(echo, sources, sent)
 }
 
 // read settles an echo once every string in its answer was understood. A
 // /0 carries no address at all: it is how a resolver asks not to be given an
 // answer for a subnet (RFC 7871 section 7.1.2), so it counts as none sent.
-func read(echo trace.Echo, source, sent bool) trace.Echo {
+func read(echo trace.Echo, sources []netip.Addr, sent bool) (trace.Echo, []netip.Addr) {
 	switch {
 	case sent && echo.Bits > 0:
 		echo.Sent = trace.ObservedYes
-	case sent || source:
+	case sent || len(sources) > 0:
 		echo.Sent, echo.Bits = trace.ObservedNo, 0
 	}
-	return echo
+	return echo, sources
 }
 
 // minimises reads internet.nl's verdict, which the zone writes in words.

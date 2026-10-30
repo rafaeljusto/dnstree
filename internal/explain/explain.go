@@ -1252,6 +1252,15 @@ func behaviours(tr *trace.Trace) []Finding {
 				"%s does not minimise queries: internet.nl's test zone was asked the whole name where a part would do, so the root and the top-level domains see every name its clients look up (RFC 9156)",
 				who)})
 		}
+		if seen.Elsewhere == trace.ObservedYes {
+			var from []string
+			for _, source := range seen.Sources {
+				from = add(from, fmt.Sprintf("AS%d", source.ASN.Number))
+			}
+			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"the questions put to %s reached the zones from %s, not from AS%d, where it is: the resolver may ask through a partner network, or forward to another resolver, or something on the path may be answering in its place, which would make what this run says of it about that server instead; --dot or --doh rule the last out, since only the resolver itself can answer them",
+				who, list(from), answer.Server.ASN.Number)})
+		}
 		if answer.Synthesised {
 			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
 				"%s answered %s AAAA with %s: the zone publishes no AAAA, and the resolver makes them up for IPv6-only networks (DNS64, RFC 6147)",

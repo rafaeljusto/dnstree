@@ -838,8 +838,32 @@ func (r *renderer) behaviours(tr *trace.Trace) []string {
 		if seen.Synthesises == trace.ObservedYes {
 			lines = append(lines, r.paint.dim(mark+who+" "+synthesises(seen.Prefixes)))
 		}
+		if reached := reaches(answer.Server.ASN, seen); reached != "" {
+			lines = append(lines, r.paint.dim(mark+who+" "+reached))
+		}
 	}
 	return lines
+}
+
+// reaches says which network a public resolver's questions reached the zones
+// from, beside its own. It gives no verdict: a resolver asking through a
+// partner network and something answering in its place look the same.
+func reaches(own *trace.ASNInfo, seen *trace.Behaviour) string {
+	switch seen.Elsewhere {
+	case trace.ObservedNo:
+		return fmt.Sprintf("reaches zones from its own AS%d", own.Number)
+	case trace.ObservedYes:
+		var from []string
+		for _, source := range seen.Sources {
+			if number := fmt.Sprintf("AS%d", source.ASN.Number); !slices.Contains(from, number) {
+				from = append(from, number)
+			}
+		}
+		return fmt.Sprintf("reaches zones from %s, not its own AS%d", strings.Join(from, " and "), own.Number)
+	case trace.ObservedUnknown:
+		return "reaches zones from a network that could not be compared with its own"
+	}
+	return ""
 }
 
 // synthesises says a resolver makes up AAAA records, which it does on purpose

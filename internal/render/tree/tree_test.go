@@ -489,6 +489,57 @@ func behaving() *trace.Trace {
 	return tr
 }
 
+func TestRenderWhereResolversReach(t *testing.T) {
+	t.Parallel()
+
+	in := func(ip string, number uint32) trace.Server {
+		server := trace.Server{IP: netip.MustParseAddr(ip), Port: 53}
+		if number > 0 {
+			server.ASN = &trace.ASNInfo{Number: number}
+		}
+		return server
+	}
+	tr := resolution()
+	tr.Resolvers = []*trace.Resolver{{
+		Server: in("8.8.8.8", 15169),
+		Behaviour: &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Elsewhere: trace.ObservedNo, Sources: []trace.Server{in("172.217.32.30", 15169)}},
+	}, {
+		Server: in("9.9.9.9", 19281),
+		Behaviour: &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Elsewhere: trace.ObservedYes, Sources: []trace.Server{
+				in("2607:fdc0:202:3:9999::214", 20326), in("2607:fdc0:202:3:9999::215", 20326), in("79.127.211.213", 60068),
+			}},
+	}, {
+		Server: in("1.1.1.1", 0),
+		Behaviour: &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Elsewhere: trace.ObservedUnknown, Sources: []trace.Server{in("2400:cb00:52:1024::a29e:25c2", 0)}},
+	}, {
+		// A private address is not judged: nothing to draw.
+		Server: in("192.168.1.1", 0),
+		Behaviour: &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Sources: []trace.Server{in("203.0.113.9", 64500)}},
+	}}
+
+	var out bytes.Buffer
+	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"resolver: 8.8.8.8 reaches zones from its own AS15169\n",
+		"resolver: 9.9.9.9 reaches zones from AS20326 and AS60068, not its own AS19281\n",
+		"resolver: 1.1.1.1 reaches zones from a network that could not be compared with its own\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("got no %q in:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "192.168.1.1") != 1 {
+		t.Errorf("got a line on where a private resolver reaches zones from:\n%s", got)
+	}
+}
+
 func TestRenderBehaviours(t *testing.T) {
 	var out bytes.Buffer
 	if err := tree.Render(&out, behaving(), tree.Options{Charset: tree.ASCII}); err != nil {

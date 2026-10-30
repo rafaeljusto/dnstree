@@ -854,6 +854,16 @@
         "dns64": {
           "description": "ipv4only.arpa. AAAA, which a resolver that does not make addresses up answers with none.",
           "$ref": "#/$defs/resolver"
+        },
+        "sources": {
+          "description": "The addresses google's and akamai's echoes saw its questions come from, each with its origin AS where the lookups found it. The client address akamai reports is left out.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/server" }
+        },
+        "elsewhere": {
+          "description": "yes, every source is outside the AS of its own public address; no, one is inside it; unknown, an AS could not be found. A yes is what was seen, not interception: big resolvers ask through partner networks, and forwarders through somebody else. Absent where its address is not public or no source was read.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
         }
       }
     },

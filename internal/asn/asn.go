@@ -126,15 +126,19 @@ func (r *Resolver) Annotate(ctx context.Context, tr *trace.Trace) {
 	// Only the lookups of this trace are waited on: under --watch the same
 	// resolver carries the stragglers of every run before it.
 	var pending []chan struct{}
+	var asked []*trace.Server
 	for step := range tr.Steps() {
 		if queried(step) {
-			r.Start(ctx, step.Server.IP)
-			r.mu.Lock()
-			if done, ok := r.started[step.Server.IP.Unmap()]; ok {
-				pending = append(pending, done)
-			}
-			r.mu.Unlock()
+			asked = append(asked, &step.Server)
 		}
+	}
+	for _, server := range append(asked, judged(tr)...) {
+		r.Start(ctx, server.IP)
+		r.mu.Lock()
+		if done, ok := r.started[server.IP.Unmap()]; ok {
+			pending = append(pending, done)
+		}
+		r.mu.Unlock()
 	}
 	if len(pending) == 0 {
 		return
@@ -164,6 +168,12 @@ wait:
 			found++
 		}
 	}
+	for _, server := range judged(tr) {
+		if info := r.cached[server.IP.Unmap()]; info != nil {
+			server.ASN = info
+			found++
+		}
+	}
 	// Saying nothing would leave a reader wondering where the AS numbers went.
 	switch {
 	case found > 0:
@@ -174,6 +184,22 @@ wait:
 		tr.Warnings = append(tr.Warnings,
 			"the origin AS lookups did not answer in time; --no-asn skips them")
 	}
+}
+
+// judged are the servers of each resolver --check-resolver judged by where
+// its questions came from: its own address, and the ones the zones saw.
+func judged(tr *trace.Trace) []*trace.Server {
+	var servers []*trace.Server
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Behaviour == nil || len(answer.Behaviour.Sources) == 0 {
+			continue
+		}
+		servers = append(servers, &answer.Server)
+		for i := range answer.Behaviour.Sources {
+			servers = append(servers, &answer.Behaviour.Sources[i])
+		}
+	}
+	return servers
 }
 
 // queried reports whether a step is a hop the walk really made. A server it

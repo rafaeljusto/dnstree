@@ -178,6 +178,20 @@ func TestReadRoundTrip(t *testing.T) {
 				},
 			}},
 		},
+		"a resolver whose questions reached the zones from another network": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("9.9.9.9"), Port: 53, ASN: &trace.ASNInfo{Number: 19281}},
+				Rcode:  "NOERROR",
+				Behaviour: &trace.Behaviour{
+					Validates: trace.ObservedYes, Rewrites: trace.ObservedNo, Elsewhere: trace.ObservedYes,
+					Sources: []trace.Server{
+						{IP: netip.MustParseAddr("2607:fdc0:202:3:9999::214"), ASN: &trace.ASNInfo{Number: 20326}},
+					},
+				},
+			}},
+		},
 		"resolvers whose TTLs said something of their copies": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -549,6 +563,28 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no", "prefixes": ["64:ff9b::/80"]}}]}`,
 			want: `"64:ff9b::/80"`,
+		},
+		"a resolver judged by where its questions came from, with none named": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no", "elsewhere": "yes"}}]}`,
+			want: "none named",
+		},
+		"a resolver said to reach zones from elsewhere with no network to say it by": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "server": {"ip": "9.9.9.9", "asn": {"number": 19281}},
+					"behaviour": {"validates": "no", "rewrites": "no", "elsewhere": "yes", "sources": [{"ip": "9.9.9.10"}]}}]}`,
+			want: `elsewhere "yes"`,
+		},
+		"a resolver said to reach zones from its own network with no source in it": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "server": {"ip": "9.9.9.9"},
+					"behaviour": {"validates": "no", "rewrites": "no", "elsewhere": "no", "sources": [{"ip": "9.9.9.10", "asn": {"number": 19281}}]}}]}`,
+			want: `elsewhere "no"`,
+		},
+		"a source with no address": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no", "sources": [{"name": "x."}]}}]}`,
+			want: "no address",
 		},
 		"a made-up answer matched against the zone's": {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "AAAA", "class": "IN"}, "elapsed_ms": 1,

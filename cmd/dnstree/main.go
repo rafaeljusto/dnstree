@@ -475,15 +475,24 @@ func made(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		cancel()
 	}
 
+	// Behave before the AS lookups, which look up the addresses it reads out
+	// of the echoes, and before the comparison, which reads the DNS64
+	// prefixes it finds.
+	if timed != nil {
+		tr.Resolvers = <-timed
+		recursive.Behave(tr)
+	}
 	if lookups != nil {
 		grace, cancel := context.WithTimeout(ctx, asnGrace)
 		defer cancel()
 		lookups.Annotate(grace, tr)
 	}
 	if timed != nil {
-		tr.Resolvers = <-timed
-		// Behave first: the comparison reads the DNS64 prefixes it finds.
-		recursive.Behave(tr)
+		// Without the lookups there is no network to compare, and --no-asn
+		// asked for none.
+		if lookups != nil {
+			recursive.Located(tr, transport.Public)
+		}
 		recursive.Compare(tr)
 	}
 	if cfg.Report {

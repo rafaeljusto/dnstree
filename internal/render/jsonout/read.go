@@ -346,7 +346,23 @@ func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 	if to.Behaviour, err = readBehaviour(from.Behaviour); err != nil {
 		return nil, err
 	}
+	if to.Behaviour != nil && !located(to.Server.ASN, to.Behaviour) {
+		return nil, fmt.Errorf("jsonout: elsewhere %q is not what the networks it names say", to.Behaviour.Elsewhere)
+	}
 	return to, nil
+}
+
+// located is whether a resolver's elsewhere agrees with the AS numbers it was
+// read from, which are what the drawing of it names.
+func located(own *trace.ASNInfo, b *trace.Behaviour) bool {
+	inside := func(s trace.Server) bool { return own != nil && s.ASN != nil && s.ASN.Number == own.Number }
+	switch b.Elsewhere {
+	case trace.ObservedYes:
+		return own != nil && !slices.ContainsFunc(b.Sources, func(s trace.Server) bool { return s.ASN == nil || inside(s) })
+	case trace.ObservedNo:
+		return slices.ContainsFunc(b.Sources, inside)
+	}
+	return true
 }
 
 func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
@@ -356,7 +372,7 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 	to := &trace.Behaviour{
 		Validates: trace.Observed(from.Validates), Rewrites: trace.Observed(from.Rewrites),
 		Subnet: trace.Observed(from.Subnet), Minimises: trace.Observed(from.Minimises),
-		Synthesises: trace.Observed(from.Synthesises),
+		Synthesises: trace.Observed(from.Synthesises), Elsewhere: trace.Observed(from.Elsewhere),
 	}
 	for _, seen := range []trace.Observed{to.Validates, to.Rewrites} {
 		if !observed(seen) {
@@ -364,7 +380,7 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 		}
 	}
 	// Absent from a walk saved before they were asked.
-	for _, seen := range []trace.Observed{to.Subnet, to.Minimises, to.Synthesises} {
+	for _, seen := range []trace.Observed{to.Subnet, to.Minimises, to.Synthesises, to.Elsewhere} {
 		if seen != "" && !observed(seen) {
 			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
 		}
@@ -376,6 +392,19 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 			return nil, fmt.Errorf("jsonout: %q is no prefix AAAA records can be made up under", text)
 		}
 		to.Prefixes = append(to.Prefixes, prefix)
+	}
+	for _, from := range from.Sources {
+		source, err := readServer(from)
+		if err != nil {
+			return nil, err
+		}
+		if !source.IP.IsValid() {
+			return nil, errors.New("jsonout: a source with no address")
+		}
+		to.Sources = append(to.Sources, source)
+	}
+	if to.Elsewhere != "" && len(to.Sources) == 0 {
+		return nil, errors.New("jsonout: a resolver judged by where its questions came from, with none named")
 	}
 	for _, seen := range from.Echoes {
 		sent := trace.Observed(seen.Sent)

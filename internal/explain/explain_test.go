@@ -1113,6 +1113,18 @@ func TestBehaviours(t *testing.T) {
 	claimed.Synthesised = true
 	claimed.Records = []trace.RR{{Name: "www.test.", Type: "AAAA", Data: "2001:db8::1"}}
 	tr.Resolvers = append(tr.Resolvers, claimed)
+	// Queried from other networks, and from its own: only the first is said.
+	in := func(number uint32) *trace.ASNInfo { return &trace.ASNInfo{Number: number} }
+	away := resolver("9.9.9.9", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+		Elsewhere: trace.ObservedYes, Sources: []trace.Server{
+			{IP: netip.MustParseAddr("2607:fdc0:202:3:9999::214"), ASN: in(20326)},
+			{IP: netip.MustParseAddr("79.127.211.213"), ASN: in(60068)},
+		}})
+	away.Server.ASN = in(19281)
+	home := resolver("8.8.8.8", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+		Elsewhere: trace.ObservedNo, Sources: []trace.Server{{IP: netip.MustParseAddr("172.217.32.30"), ASN: in(15169)}}})
+	home.Server.ASN = in(15169)
+	tr.Resolvers = append(tr.Resolvers, away, home)
 
 	got := said(tr)
 	for _, want := range []string{
@@ -1122,12 +1134,13 @@ func TestBehaviours(t *testing.T) {
 		"192.0.2.53 rewrites NXDOMAIN: a made-up name came back as 198.51.100.1",
 		"192.0.2.57 sends ECS: google's servers were told the /24 the question came from",
 		"192.0.2.57 does not minimise queries: internet.nl's test zone",
+		"the questions put to 9.9.9.9 reached the zones from AS20326 and AS60068, not from AS19281, where it is",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("got %q, want it to say %q", got, want)
 		}
 	}
-	for _, unsaid := range []string{"192.0.2.54", "192.0.2.55", "192.0.2.56"} {
+	for _, unsaid := range []string{"192.0.2.54", "192.0.2.55", "192.0.2.56", "8.8.8.8"} {
 		if strings.Contains(got, unsaid) {
 			t.Errorf("got %q, want nothing about %s", got, unsaid)
 		}

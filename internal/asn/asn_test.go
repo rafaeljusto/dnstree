@@ -105,6 +105,37 @@ func TestAnnotate(t *testing.T) {
 	}
 }
 
+// TestAnnotateJudgedResolvers covers the resolvers --check-resolver judged by
+// where their questions came from: they and those sources get an AS, and a
+// resolver that was only compared costs no lookup.
+func TestAnnotateJudgedResolvers(t *testing.T) {
+	var asked atomic.Int64
+	lookup := lookupAgainst(t, cymru)
+	counted := func(ctx context.Context, name string) ([]string, error) {
+		asked.Add(1)
+		return lookup(ctx, name)
+	}
+
+	judged := &trace.Resolver{
+		Server:    trace.Server{IP: netip.MustParseAddr("1.2.3.4")},
+		Behaviour: &trace.Behaviour{Sources: []trace.Server{{IP: netip.MustParseAddr("5.0.0.1")}}},
+	}
+	compared := &trace.Resolver{Server: trace.Server{IP: netip.MustParseAddr("9.9.9.9")}}
+	tr := &trace.Trace{Resolvers: []*trace.Resolver{judged, nil, compared}}
+
+	asn.New(counted, nil).Annotate(t.Context(), tr)
+
+	if got := asked.Load(); got != 2 {
+		t.Errorf("asked %d times, want 2: the judged resolver and its source", got)
+	}
+	if got := judged.Server.ASN; got == nil || got.Number != 15169 {
+		t.Errorf("got the resolver in %+v, want AS15169", got)
+	}
+	if got := judged.Behaviour.Sources[0].ASN; got == nil || got.Number != 64500 {
+		t.Errorf("got the source in %+v, want AS64500", got)
+	}
+}
+
 // TestAnnotateWithoutLookups covers the promise that this is best effort: the
 // trace survives a resolver that cannot answer at all.
 func TestAnnotateWithoutLookups(t *testing.T) {

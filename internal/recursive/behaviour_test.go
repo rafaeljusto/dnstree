@@ -1,6 +1,7 @@
 package recursive_test
 
 import (
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -251,5 +252,136 @@ func FuzzBehaveEchoes(f *testing.F) {
 		if (behaviour.Subnet == trace.ObservedUnknown) != (len(behaviour.Echoes) == 0) {
 			t.Errorf("got subnet %q with echoes %+v from %q", behaviour.Subnet, behaviour.Echoes, data)
 		}
+		if len(behaviour.Sources) > 4 {
+			t.Errorf("got %d sources from %q", len(behaviour.Sources), data)
+		}
+		for _, source := range behaviour.Sources {
+			if !source.IP.IsValid() || source.IP.Is4In6() || len(behaviour.Echoes) == 0 {
+				t.Errorf("got source %v from %q, with echoes %+v", source.IP, data, behaviour.Echoes)
+			}
+		}
 	})
+}
+
+func TestBehaveSources(t *testing.T) {
+	t.Parallel()
+
+	txt := func(data ...string) *trace.Resolver {
+		answer := &trace.Resolver{Rcode: "NOERROR"}
+		for _, d := range data {
+			answer.Records = append(answer.Records, trace.RR{Name: "x.", Type: "TXT", Data: d})
+		}
+		return answer
+	}
+
+	tests := map[string]struct {
+		behaviour trace.Behaviour
+		sources   []string
+	}{
+		"each echo's source is kept once, the client's address left out": {
+			behaviour: trace.Behaviour{
+				Google: txt(`"172.217.32.30"`, `"edns0-client-subnet 198.51.100.0/24"`),
+				Akamai: txt(`"ns" "172.217.32.30"`, `"ip" "198.51.100.235"`),
+			},
+			sources: []string{"172.217.32.30"},
+		},
+		"different sources are kept in the order the echoes are read": {
+			behaviour: trace.Behaviour{
+				Google: txt(`"172.217.32.23"`),
+				Akamai: txt(`"ns" "2607:fdc0:202:3:9999::214"`),
+			},
+			sources: []string{"172.217.32.23", "2607:fdc0:202:3:9999::214"},
+		},
+		"an echo in a shape nobody writes gives no source": {
+			behaviour: trace.Behaviour{
+				Google: txt(`"172.217.32.23"`, `"hello"`),
+				Akamai: txt(`"ns" "172.68.199.106"`, `"subnet" "198.51.100.0/24"`),
+			},
+		},
+		"an echo naming more sources than a resolver has is cut short": {
+			behaviour: trace.Behaviour{Akamai: txt(`"ns" "192.0.2.1"`, `"ns" "192.0.2.2"`, `"ns" "192.0.2.3"`,
+				`"ns" "192.0.2.4"`, `"ns" "192.0.2.5"`, `"ns" "192.0.2.6"`)},
+			sources: []string{"192.0.2.1", "192.0.2.2", "192.0.2.3", "192.0.2.4"},
+		},
+		"an IPv4 address written as IPv6 is kept as IPv4": {
+			behaviour: trace.Behaviour{Akamai: txt(`"ns" "::ffff:172.68.199.106"`)},
+			sources:   []string{"172.68.199.106"},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			behaviour := test.behaviour
+			recursive.Behave(&trace.Trace{Resolvers: []*trace.Resolver{{Behaviour: &behaviour}}})
+			var got []string
+			for _, source := range behaviour.Sources {
+				got = append(got, source.IP.String())
+			}
+			if !slices.Equal(got, test.sources) {
+				t.Errorf("got sources %v, want %v", got, test.sources)
+			}
+		})
+	}
+}
+
+func TestLocated(t *testing.T) {
+	t.Parallel()
+
+	quad9 := &trace.ASNInfo{Number: 19281}
+	in := func(addr string, number uint32) trace.Server {
+		source := trace.Server{IP: netip.MustParseAddr(addr)}
+		if number > 0 {
+			source.ASN = &trace.ASNInfo{Number: number}
+		}
+		return source
+	}
+	public := func(addr netip.Addr) bool { return !addr.IsPrivate() }
+
+	tests := map[string]struct {
+		server    trace.Server
+		sources   []trace.Server
+		elsewhere trace.Observed
+	}{
+		"a source in the resolver's own AS is no": {
+			server:    trace.Server{IP: netip.MustParseAddr("9.9.9.9"), ASN: quad9},
+			sources:   []trace.Server{in("2607:fdc0:202:3:9999::214", 20326), in("9.9.9.10", 19281)},
+			elsewhere: trace.ObservedNo,
+		},
+		"every source in another AS is yes": {
+			server:    trace.Server{IP: netip.MustParseAddr("9.9.9.9"), ASN: quad9},
+			sources:   []trace.Server{in("2607:fdc0:202:3:9999::214", 20326)},
+			elsewhere: trace.ObservedYes,
+		},
+		"a source whose AS was not found may be the one inside": {
+			server:    trace.Server{IP: netip.MustParseAddr("9.9.9.9"), ASN: quad9},
+			sources:   []trace.Server{in("2607:fdc0:202:3:9999::214", 20326), in("9.9.9.10", 0)},
+			elsewhere: trace.ObservedUnknown,
+		},
+		"a resolver whose own AS was not found cannot be compared": {
+			server:    trace.Server{IP: netip.MustParseAddr("9.9.9.9")},
+			sources:   []trace.Server{in("2607:fdc0:202:3:9999::214", 20326)},
+			elsewhere: trace.ObservedUnknown,
+		},
+		"a resolver at a private address is not judged": {
+			server:  trace.Server{IP: netip.MustParseAddr("192.168.1.1")},
+			sources: []trace.Server{in("2607:fdc0:202:3:9999::214", 20326)},
+		},
+		"a resolver no echo was read for is not judged": {
+			server: trace.Server{IP: netip.MustParseAddr("9.9.9.9"), ASN: quad9},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			behaviour := &trace.Behaviour{Sources: test.sources}
+			recursive.Located(&trace.Trace{Resolvers: []*trace.Resolver{
+				{Server: test.server, Behaviour: behaviour}, nil, {},
+			}}, public)
+			if behaviour.Elsewhere != test.elsewhere {
+				t.Errorf("got %q, want %q", behaviour.Elsewhere, test.elsewhere)
+			}
+		})
+	}
 }

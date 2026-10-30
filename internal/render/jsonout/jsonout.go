@@ -247,6 +247,8 @@ type resolver struct {
 // that rest on. Validates, Rewrites, Subnet, Minimises and Synthesises are
 // "yes", "no" or "unknown"; the last three are absent from a walk saved before
 // they were asked. Prefixes are where it puts the AAAA records it makes up.
+// Sources are where its questions reached the echoes from, and Elsewhere,
+// absent where it was not judged, whether all of them are outside its own AS.
 type behaviour struct {
 	Validates    string    `json:"validates"`
 	Rewrites     string    `json:"rewrites"`
@@ -262,6 +264,8 @@ type behaviour struct {
 	Synthesises  string    `json:"synthesises,omitempty"`
 	Prefixes     []string  `json:"prefixes,omitempty"`
 	DNS64        *resolver `json:"dns64,omitempty"`
+	Sources      []*server `json:"sources,omitempty"`
+	Elsewhere    string    `json:"elsewhere,omitempty"`
 }
 
 type echo struct {
@@ -614,6 +618,10 @@ func convertBehaviour(from *trace.Behaviour) *behaviour {
 		Minimisation: convertResolver(from.Minimisation),
 		Synthesises:  string(from.Synthesises),
 		DNS64:        convertResolver(from.DNS64),
+		Elsewhere:    string(from.Elsewhere),
+	}
+	for _, source := range from.Sources {
+		to.Sources = append(to.Sources, convertServer(source))
 	}
 	for _, prefix := range from.Prefixes {
 		to.Prefixes = append(to.Prefixes, prefix.String())

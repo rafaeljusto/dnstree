@@ -1105,7 +1105,10 @@ dig @108.162.192.162 example.com. DNSKEY +norecurse +bufsize=1232 +dnssec</pre>
       address of a page of its own. It also asks zones that report what reaches them whether
       it passes your subnet on (ECS) and whether it asks a name a label at a time (QNAME
       minimisation), and whether it makes up IPv6 addresses for names that have only IPv4 ones
-      (DNS64), so its answer is not taken for one the zone gave. What the answers leave open is said as "may or may not", never
+      (DNS64), so its answer is not taken for one the zone gave. For a resolver at a public
+      address it sets the network its questions reach zones from beside its own: a different
+      one can be a partner network, a forwarder, or something on the path answering in its
+      place. What the answers leave open is said as "may or may not", never
       guessed.</p>
 
       <h3 style="margin-top:2.2rem">Leave it running</h3>
