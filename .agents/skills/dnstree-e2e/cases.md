@@ -195,12 +195,17 @@ cached, not a bug. Run it again.
 | svcb-aside | `$D $B --svcb cloudflare.com` | exit 0, the HTTPS set looked up as an aside (`HTTPS of cloudflare.com. for svcb`), and no hint said to be stray |
 | svcb-none | `$D $B --svcb pinterest.com` | exit 0, `svcb: no HTTPS records at pinterest.com.` and `svcb: so a client connects as it would without them` |
 | svcb-formats | `$D $B --svcb --format json cloudflare.com HTTPS`, then `--format openmetrics`, then `--from` the JSON | `.service_path.targets` in the JSON; `dnstree_svcb_targets` and `dnstree_svcb_stray_hints … 0`; the same `svcb:` lines drawn back |
+| srv | `$D $B --srv --dnssec _xmpp-server._tcp.jabber.org SRV` | exit 0, `srv: 1 SRV record at _xmpp-server._tcp.jabber.org.  [insecure]`, then `srv:   30 30 5269 scarlet.jabber.org.` and its addresses |
+| srv-none | `$D $B --srv example.com SRV` | exit 0, `srv: no SRV records at example.com.` |
+| srv-formats | `$D $B --srv --format json _xmpp-server._tcp.jabber.org SRV`, then `--format openmetrics`, then `--from` the JSON | `.srv` in the JSON; `dnstree_srv_targets`; the same `srv:` lines drawn back |
 | deps | `$D $B --deps --dnssec www.example.com` | exit 0, `deps: www.example.com. depends on N zones besides the root`, a `deps:   com., example.com.  the walk` line, then a line per nameserver that brought zones in, `gtld-servers.net. (unsigned)` among them, and no warning about the budget |
 | deps-budget | `$D $B --deps --max-queries 20 www.example.com` | exit 0, `depends on at least`, `deps: stopped: the budget ran out …` and a warning ending `raise --max-queries` |
 | deps-formats | `$D $B --deps --format json www.example.com`, then `--from` the JSON | `.dependencies.zones[].via` in the JSON; the same `deps:` lines drawn back |
 | propagation-formats | `$D $B --propagation --format json example.com`, then `--format dot`, then `--from` the JSON without and with `--propagation` | `.propagation.waits` in the JSON; exit 1 for dot; nothing drawn back without the flag, the same lines with it |
 | mail | `$D $B --mail --dnssec --explain freebsd.org` | exit 0, `mail: 2 MX hosts for freebsd.org. [secure …]`, mx1 `dane (1 TLSA record)`, mx66 `none: its zone proves there is no TLSA set`, `mail: dane covers 1 of 2 MX hosts`, and a warning ending `publish TLSA for it` |
 | mail-unchecked | `$D $B --mail freebsd.org` | exit 0, every host `unchecked`, and `mail: dane not checked: add --dnssec` |
+| mail-reports | `$D $B --mail --dnssec paypal.com` | exit 0, `mail: dmarc reports to rua.agari.com. accepted, vali.email. accepted` |
+| mail-reports-refused | `$D $B --mail --dnssec facebook.com` | exit 0, `mail: dmarc reports to dmarc.facebookmail.com. refused` and a warning ending `or take the address out of rua`; the exit code is left alone |
 | tlsa-alone | `$D $B --tlsa freebsd.org`, then with `--mail` alone | exit 1, `--tlsa checks the certificates of the hosts --mail finds and --dnssec proves` |
 | tlsa | `$D $B --mail --dnssec --tlsa freebsd.org` | exit 0, `mail:     <address> match: 3 1 1 … matches CN=mx1.freebsd.org`. Where port 25 is blocked, one line saying so, never a mismatch |
 | dkim-alone | `$D $B --dkim google github.com` | exit 1, `--dkim checks keys beside the mail records --mail reads` |
@@ -252,6 +257,7 @@ format with `$D --color never --from ex.json --format F`. `--from` takes no
 | dot | `dot -Tsvg` renders it, when Graphviz is installed |
 | mermaid | a `---` front matter with the title, then `flowchart LR` |
 | openmetrics | `dnstree_` metric lines, ends with `# EOF` |
+| dig | `# dnstree example.com. A, as dig commands`, then a `#` comment and a `dig @ADDR NAME TYPE … +norecurse +bufsize=1232 +dnssec` line per query; each runs under dig and comes back with the rcode the walk recorded |
 
 `web` and `web-3d` are under `long`.
 
@@ -278,6 +284,8 @@ format with `$D --color never --from ex.json --format F`. `--from` takes no
 | names-file | a file with `example.com A`, a `#` comment, a blank line and `iana.org MX`, passed as `--names list` | exit 0, two walks each under its name, the comment and the blank skipped |
 | names-stdin | the same piped to `--names -` | the same |
 | names-worst | `--names` with `example.com` and `dnssec-failed.org` plus `--dnssec` | exit 3: the worst of them |
+| names-json | the `names-file` list with `--format json` | exit 0, one JSON document a line, in the order of the file; `--from` a line draws it, and the whole file is refused with `several walks` |
+| names-openmetrics | the same with `--format openmetrics`, then a list naming `example.com A` twice | exit 0, one file, each `# TYPE` once and one `# EOF`; the second exits 1, `example.com. A is asked twice, and openmetrics holds one series of each question` |
 | diff-first | `$D $B --diff example.com` | exit 0, `nothing to compare: this is the first walk …`, one file in the cache |
 | diff-second | the same again | `nothing has changed since …`, still one file |
 | diff-names | `--names` with two questions and `--diff` | one cache file per question |

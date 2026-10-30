@@ -114,8 +114,10 @@ Work through them in this order unless the scope names one.
    `internal/render/web` (payload embedding, `</script>` breakout), and what the
    local server binds to and accepts (Host header, DNS rebinding, any origin).
    DOT and Mermaid label escaping. Autolinks, `@mentions` and `#refs` in
-   `--format markdown`. OpenMetrics label escaping. `--format ascii` staying
-   below codepoint 128. Width counting on hostile runes.
+   `--format markdown`. OpenMetrics label escaping. Shell quoting and dig
+   escaping in `--format dig`, whose output is pasted into a shell, and the
+   types and classes a saved walk hands it. `--format ascii` staying below
+   codepoint 128. Width counting on hostile runes.
 6. **disk: `internal/history` and `internal/capture`.** File names built from
    the question (path traversal, separators, case, IDNs), permissions, atomic
    writes, and a corrupt or hostile cache file being read back. A capture

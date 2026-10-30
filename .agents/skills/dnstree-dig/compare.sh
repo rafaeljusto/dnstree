@@ -114,9 +114,11 @@ if [ "${1:-}" = one ]; then
 	elif [ "$auth" != - ] && [ "$auth" != unreachable ] && [ "$ours" != - ] && [ "$auth" != "$ours" ]; then
 		class=auth-rcode notes="walk $ours, server $auth"
 	elif [ "$auth" = NOERROR ] && ! answers "$D/auth" | cmp -s - "$D/walk.answers"; then
-		# Letter case and quotes around a value (RFC 9460 2.1) are how the
-		# data is written, not what it is.
-		if answers "$D/auth" | tr -d '"' | tr A-Z a-z | cmp -s - <(tr -d '"' < "$D/walk.answers" | tr A-Z a-z); then
+		# Letter case, quotes around a value (RFC 9460 2.1) and a LOC size
+		# written 107.00m or 107m (RFC 1876) are how the data is written, not
+		# what it is.
+		written() { tr -d '"' | tr A-Z a-z | sed -E 's/([0-9])\.0+m/\1m/g'; }
+		if answers "$D/auth" | written | cmp -s - <(written < "$D/walk.answers"); then
 			class=auth-format
 		elif [ "$varies" -gt 1 ]; then
 			class=auth-varies notes="$varies different answers in 5 asks"

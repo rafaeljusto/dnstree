@@ -71,8 +71,8 @@ change touches without a test holding it. The ones that regress most quietly:
   `internal/dane`.
 - A name or wire text drawn without going through `Trace.Shown`.
 - A minimised hop (`Step.Minimised`) read as the answer.
-- A check's own lookup (`--mail`, `--dkim`, `--svcb`, `--deps`, DSYNC, the
-  bootstrap signals) not started through `run.look`, or a verdict or exit code
+- A check's own lookup (`--mail`, `--dkim`, `--svcb`, `--srv`, `--deps`,
+  `-x`'s reverse check, DSYNC, the bootstrap signals) not started through `run.look`, or a verdict or exit code
   read from the whole trace rather than `Trace.judged`: somebody else's broken
   zone would exit 3.
 - A signature's time left read against the clock rather than `Trace.Started`.
