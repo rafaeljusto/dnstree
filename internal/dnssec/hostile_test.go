@@ -1,6 +1,8 @@
 package dnssec_test
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"testing"
@@ -197,6 +199,82 @@ func TestUnimplementedAlgorithmIsIndeterminate(t *testing.T) {
 	status := chain.Enter("example.", authority, []dns.RR{key, signature})
 	if status.State != trace.Indeterminate {
 		t.Errorf("got %s (%s), want indeterminate", status.State, status.Reason)
+	}
+}
+
+// TestUnloadableRSAKey covers RSA keys the codec cannot load. One whose
+// exponent is past what crypto/rsa takes is sound, and lv. signs with one, so
+// its signatures went unchecked rather than failed. One that is malformed is
+// the zone's fault.
+func TestUnloadableRSAKey(t *testing.T) {
+	modulus := append([]byte{0xc1}, bytes.Repeat([]byte{0x5a}, 255)...)
+	tests := []struct {
+		name     string
+		exponent []byte
+		want     trace.DNSSECState
+	}{
+		{"an exponent of 2^32+1, as lv. publishes, is out of reach", []byte{0x01, 0, 0, 0, 0x01}, trace.Indeterminate},
+		{"an exponent of 2^31 is out of reach", []byte{0x80, 0, 0, 0}, trace.Indeterminate},
+		{"an exponent with a leading zero is malformed", []byte{0, 0x01, 0, 0x01}, trace.Bogus},
+		{"an exponent of 65537 is checked, and the signature fails", []byte{0x01, 0, 0x01}, trace.Bogus},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := newZone(t, ".")
+			chain := dnssec.New(root.anchors(t, dns.SHA256))
+			if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+				t.Fatalf("got %+v entering the root, want it secure", status)
+			}
+
+			raw := append(append([]byte{byte(len(tt.exponent))}, tt.exponent...), modulus...)
+			key := &dns.DNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET, TTL: 3600}}
+			key.Flags, key.Protocol, key.Algorithm = 257, 3, dns.RSASHA256
+			key.PublicKey = base64.StdEncoding.EncodeToString(raw)
+			signature := record(t, fmt.Sprintf(
+				"example. 3600 IN RRSIG DNSKEY 8 1 3600 20300101000000 20200101000000 %d example. %s",
+				key.KeyTag(), base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x2a}, 256))))
+			ds := key.ToDS(dns.SHA256)
+			authority := []dns.RR{ds, root.sign(t, []dns.RR{ds}, time.Now().Add(time.Hour))}
+
+			status := chain.Enter("example.", authority, []dns.RR{key, signature})
+			if status.State != tt.want {
+				t.Errorf("got %s (%s), want %s", status.State, status.Reason, tt.want)
+			}
+		})
+	}
+}
+
+// TestForgedAnswerClaimingUnloadableKey covers a secure zone that also
+// publishes an RSA key the codec cannot load. An answer whose only signature
+// claims that key is a forgery as far as anything here can tell: letting it
+// through as indeterminate would let anyone on the path exit 0 for the zone.
+func TestForgedAnswerClaimingUnloadableKey(t *testing.T) {
+	root, child := newZone(t, "."), newZone(t, "example.")
+	chain := dnssec.New(root.anchors(t, dns.SHA256))
+	if status := chain.Enter(".", nil, root.dnskeys(t)); status.State != trace.Secure {
+		t.Fatalf("got %+v entering the root, want it secure", status)
+	}
+
+	raw := append([]byte{5, 0x01, 0, 0, 0, 0x01, 0xc1}, bytes.Repeat([]byte{0x5a}, 255)...)
+	odd := &dns.DNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET, TTL: 3600}}
+	odd.Flags, odd.Protocol, odd.Algorithm = 256, 3, dns.RSASHA256
+	odd.PublicKey = base64.StdEncoding.EncodeToString(raw)
+	keyset := []dns.RR{child.key, odd}
+	dnskeys := append(append([]dns.RR{}, keyset...), child.sign(t, keyset, time.Now().Add(time.Hour)))
+	ds := child.ds()
+	authority := []dns.RR{ds, root.sign(t, []dns.RR{ds}, time.Now().Add(time.Hour))}
+	if status := chain.Enter("example.", authority, dnskeys); status.State != trace.Secure {
+		t.Fatalf("got %s (%s) entering example., want it secure", status.State, status.Reason)
+	}
+
+	answer := []dns.RR{
+		record(t, "www.example. 3600 IN A 192.0.2.1"),
+		record(t, fmt.Sprintf("www.example. 3600 IN RRSIG A 8 2 3600 20300101000000 20200101000000 %d example. %s",
+			odd.KeyTag(), base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x2a}, 256)))),
+	}
+	status := chain.Verify(answer, nil, dns.RcodeSuccess, "www.example.", dns.TypeA)
+	if status.State != trace.Bogus {
+		t.Errorf("got %s (%s), want bogus", status.State, status.Reason)
 	}
 }
 

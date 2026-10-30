@@ -224,6 +224,12 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR, answered bool) *
 	// one is tried.
 	signature, err := c.verify(asRRs(keys), signatures, pointed)
 	if err != nil {
+		// Only here, where a DS the parent signed names the key: in an answer,
+		// a signature claiming such a key would let a forgery go unchecked.
+		if key := unloadableSigner(pointed, signatures); key != nil {
+			return c.settleAs(status, trace.Indeterminate, fmt.Sprintf(
+				"the DNSKEY set could not be checked: key %d has an RSA exponent too large to check here", key.KeyTag()), nil)
+		}
 		if zone == "." {
 			return c.settleAs(status, trace.Bogus, "the DNSKEY set of the root is not signed by a key a trust anchor points at", nil)
 		}
@@ -516,6 +522,58 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 		}
 	}
 	return nil, reason
+}
+
+// unloadableSigner is a key the DS points at that signed the set, as far as
+// its signature says, and that the codec cannot load.
+func unloadableSigner(pointed []*dns.DNSKEY, signatures []*dns.RRSIG) *dns.DNSKEY {
+	for _, key := range pointed {
+		if !unloadable(key) {
+			continue
+		}
+		for _, signature := range signatures {
+			if signature.KeyTag == key.KeyTag() && signature.Algorithm == key.Algorithm &&
+				signature.TypeCovered == dns.TypeDNSKEY {
+				return key
+			}
+		}
+	}
+	return nil
+}
+
+// unloadable reports a well-formed RSA key whose exponent the codec cannot
+// load: RFC 3110 allows up to 4096 bits, crypto/rsa takes no more than 2^31-1.
+// The KSK of lv. is one, at 2^32+1. A key malformed some other way is left to
+// fail as any bad key does.
+func unloadable(key *dns.DNSKEY) bool {
+	switch key.Algorithm {
+	case dns.RSASHA1, dns.RSASHA1NSEC3SHA1, dns.RSASHA256, dns.RSASHA512:
+	default:
+		return false
+	}
+	raw, err := base64.StdEncoding.DecodeString(key.PublicKey)
+	if err != nil || len(raw) < 3 {
+		return false
+	}
+	size, at := int(raw[0]), 1
+	if size == 0 {
+		size, at = int(raw[1])<<8|int(raw[2]), 3
+	}
+	modulus := at + size
+	if size == 0 || modulus >= len(raw) || raw[at] == 0 || raw[modulus] == 0 {
+		return false
+	}
+	if n := len(raw) - modulus; n < 64 || n > 512 {
+		return false
+	}
+	if size > 4 {
+		return true
+	}
+	var exponent uint64
+	for _, b := range raw[at:modulus] {
+		exponent = exponent<<8 | uint64(b)
+	}
+	return exponent > 1<<31-1
 }
 
 // about stamps a verdict with the zone the chain was in when it was reached,
