@@ -1135,6 +1135,9 @@ func TestBehaviours(t *testing.T) {
 				{Tag: 20326, Trusted: trace.ObservedNo},
 				{Tag: 38696, Trusted: trace.ObservedNo, Signs: true},
 			}}),
+		// Without --dnssec nothing says which key signs the root.
+		resolver("192.0.2.63", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Sentinels: []trace.Sentinel{{Tag: 20326, Trusted: trace.ObservedNo}, {Tag: 38696, Trusted: trace.ObservedYes}}}),
 		resolver("192.0.2.62", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
 			Anchored: trace.ObservedYes, Sentinels: []trace.Sentinel{
 				{Tag: 38696, Trusted: trace.ObservedYes, Signs: true}, {Tag: 20326, Trusted: trace.ObservedUnknown},
@@ -1152,13 +1155,13 @@ func TestBehaviours(t *testing.T) {
 		"the questions put to 9.9.9.9 reached the zones from AS20326 and AS60068, not from AS19281, where it is",
 		"192.0.2.60 does not trust the key the root signs with: it fails the root's own SOA as well as dnssec-failed.org",
 		"192.0.2.61 does not trust root key 38696, the one the root signs with",
-		"192.0.2.61 does not trust root key 20326, which this run trusts",
+		"192.0.2.63 does not trust root key 20326, which this run trusts",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("got %q, want it to say %q", got, want)
 		}
 	}
-	for _, unsaid := range []string{"192.0.2.54", "192.0.2.55", "192.0.2.56", "8.8.8.8", "192.0.2.62"} {
+	for _, unsaid := range []string{"192.0.2.54", "192.0.2.55", "192.0.2.56", "8.8.8.8", "192.0.2.62", "192.0.2.61 does not trust root key 20326"} {
 		if strings.Contains(got, unsaid) {
 			t.Errorf("got %q, want nothing about %s", got, unsaid)
 		}

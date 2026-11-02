@@ -1229,19 +1229,21 @@ func behaviours(tr *trace.Trace) []Finding {
 				"%s does not trust the key the root signs with: it fails the root's own SOA as well as dnssec-failed.org, and answers both once told not to check, so every signed name fails through it while unsigned ones still resolve; give it the root's current trust anchor, or let it follow the root's announcements (RFC 5011)",
 				who)})
 		}
+		// Once the walk has seen which key signs the root, not trusting another
+		// is a resolver that let a retired key go, which is right.
+		signer := slices.ContainsFunc(seen.Sentinels, func(s trace.Sentinel) bool { return s.Signs })
 		for _, sentinel := range seen.Sentinels {
-			if sentinel.Trusted != trace.ObservedNo {
-				continue
-			}
-			if sentinel.Signs {
+			switch {
+			case sentinel.Trusted != trace.ObservedNo:
+			case sentinel.Signs:
 				findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
 					"%s does not trust root key %d, the one the root signs with: the root key sentinel (RFC 8509) says so, and signed names fail through it; give it the root's current trust anchor",
 					who, sentinel.Tag)})
-				continue
+			case !signer:
+				findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+					"%s does not trust root key %d, which this run trusts: the root key sentinel (RFC 8509) says so, and signed names fail through it if that is the key the root signs with, which --dnssec would say",
+					who, sentinel.Tag)})
 			}
-			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
-				"%s does not trust root key %d, which this run trusts: the root key sentinel (RFC 8509) says so, and it matters once the root signs with that key",
-				who, sentinel.Tag)})
 		}
 		if seen.Rewrites == trace.ObservedYes {
 			came := "with an answer"
