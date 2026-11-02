@@ -233,7 +233,8 @@ func unwrap(data []byte) (src, dst netip.AddrPort, proto byte, payload []byte, e
 		if 40+length > len(data) {
 			return src, dst, 0, nil, errors.New("an IPv6 header that does not fit its packet")
 		}
-		srcAddr, dstAddr = netip.AddrFrom16([16]byte(data[8:24])), netip.AddrFrom16([16]byte(data[24:40]))
+		// Unmapped as Record does, so a replay finds the server it is asked for.
+		srcAddr, dstAddr = netip.AddrFrom16([16]byte(data[8:24])).Unmap(), netip.AddrFrom16([16]byte(data[24:40])).Unmap()
 		proto, payload = data[6], data[40:40+length]
 	default:
 		return src, dst, 0, nil, errors.New("not an IP packet")
