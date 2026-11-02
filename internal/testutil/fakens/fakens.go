@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -169,6 +170,11 @@ type Behaviour struct {
 	// Authentic sets AD on every answer, the way a validating resolver marks
 	// what it checked.
 	Authentic bool
+
+	// Sentinel is the root keys a resolver trusts, answering the root key
+	// sentinel's names the way one that reads them does (RFC 8509). Nil
+	// answers them like any other name.
+	Sentinel []uint16
 }
 
 // Cookies is how a server answers a DNS cookie.
@@ -568,6 +574,8 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		reply.Rcode = dns.RcodeServerFailure
 	case s.behaviour.ServFailUnlessCD && !req.CheckingDisabled:
 		reply.Rcode = dns.RcodeServerFailure
+	case s.behaviour.Sentinel != nil && !req.CheckingDisabled && sentinelFails(name, s.behaviour.Sentinel):
+		reply.Rcode = dns.RcodeServerFailure
 	case s.behaviour.Lame:
 		// NOERROR, no AA, nothing to follow: the server is not serving this zone.
 	case qtype == dns.TypeAXFR:
@@ -942,6 +950,25 @@ func (s *Server) hasChildren(name string) bool {
 		if owner := rr.Header().Name; !dns.EqualName(owner, name) && dnsutil.IsBelow(name, owner) {
 			return true
 		}
+	}
+	return false
+}
+
+// sentinelFails is whether a resolver trusting the keys in trusted fails name:
+// an is-ta label for a key it does not trust, or a not-ta label for one it
+// does (RFC 8509 section 3.2).
+func sentinelFails(name string, trusted []uint16) bool {
+	label, _, _ := strings.Cut(strings.ToLower(name), ".")
+	for prefix, wants := range map[string]bool{"root-key-sentinel-is-ta-": true, "root-key-sentinel-not-ta-": false} {
+		digits, ok := strings.CutPrefix(label, prefix)
+		if !ok || len(digits) != 5 {
+			continue
+		}
+		tag, err := strconv.ParseUint(digits, 10, 16)
+		if err != nil {
+			return false
+		}
+		return slices.Contains(trusted, uint16(tag)) != wants
 	}
 	return false
 }

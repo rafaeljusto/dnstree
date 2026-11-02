@@ -307,9 +307,24 @@ type Resolver struct {
 type Behaviour struct {
 	// Broken is a name whose chain of trust is broken on purpose, asked with
 	// DNSSEC, with Unchecked asked after a SERVFAIL. Root is the root's SOA,
-	// which a resolver that validates marks authentic.
+	// which a resolver that validates marks authentic, asked again the same
+	// way.
 	Broken *Resolver
 	Root   *Resolver
+
+	// Sentinels are the root key sentinel's questions (RFC 8509), one pair
+	// for each root key the run trusts. Nil in a walk saved before they were
+	// asked. ReadsSentinel is no where every pair was answered whichever key
+	// it named, which is a resolver that does not read the sentinel, and
+	// empty where none was asked.
+	Sentinels     []Sentinel
+	ReadsSentinel Observed
+
+	// Anchored is no where the resolver fails the root's own SOA as well as
+	// the broken name, and answers both once told not to check: it cannot
+	// validate under the key the root signs with. Empty in a walk saved
+	// before the root was asked again.
+	Anchored Observed
 
 	// Missing is a name made up so that it cannot exist.
 	Missing *Resolver
@@ -350,6 +365,18 @@ type Behaviour struct {
 	// networks, and a forwarder asks through somebody else.
 	Sources   []Server
 	Elsewhere Observed
+}
+
+// Sentinel is what a resolver said of one root key (RFC 8509). Is answers
+// and Not fails at a resolver that trusts it, the other way round at one that
+// does not; one that answers both does not read the sentinel, or does not
+// validate. Signs is whether the walk saw the key sign the root's key set,
+// which only a walk with DNSSEC looks at.
+type Sentinel struct {
+	Tag     uint16
+	Is, Not *Resolver
+	Trusted Observed
+	Signs   bool
 }
 
 // Echo is what one zone saw of the client subnet: Bits is the prefix length

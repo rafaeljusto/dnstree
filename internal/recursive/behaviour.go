@@ -26,7 +26,84 @@ func Behave(tr *trace.Trace) {
 		answer.Behaviour.Subnet, answer.Behaviour.Echoes, answer.Behaviour.Sources = subnet(answer.Behaviour)
 		answer.Behaviour.Minimises = minimises(answer.Behaviour.Minimisation)
 		answer.Behaviour.Synthesises, answer.Behaviour.Prefixes = synthesises(answer.Behaviour.DNS64)
+		answer.Behaviour.Anchored = anchored(answer.Behaviour)
+		for i := range answer.Behaviour.Sentinels {
+			sentinel := &answer.Behaviour.Sentinels[i]
+			sentinel.Trusted = trusted(sentinel)
+			sentinel.Signs = signsRoot(tr, sentinel.Tag)
+		}
+		answer.Behaviour.ReadsSentinel = reads(answer.Behaviour.Sentinels)
 	}
+}
+
+// anchored is no where the root's SOA and the broken name both fail, and both
+// answer once told not to check: a resolver that cannot validate the root
+// cannot validate anything below it, and the broken name failing as well rules
+// out a root it cannot reach. Yes is the root's SOA marked authentic.
+func anchored(b *trace.Behaviour) trace.Observed {
+	root, broken := b.Root, b.Broken
+	switch {
+	case root == nil || root.Err != "":
+		return trace.ObservedUnknown
+	case root.Rcode == "NOERROR" && root.Authentic:
+		return trace.ObservedYes
+	case root.Rcode == "SERVFAIL" && answered(root.Unchecked) &&
+		broken != nil && broken.Err == "" && broken.Rcode == "SERVFAIL" && answered(broken.Unchecked):
+		return trace.ObservedNo
+	}
+	return trace.ObservedUnknown
+}
+
+// trusted reads the sentinel's pair for one key: a resolver that trusts it
+// answers the is-ta name and fails the not-ta one, and one that does not
+// does the opposite. Any other pair is a resolver that does not read the
+// sentinel, does not validate, or failed for some other reason.
+func trusted(s *trace.Sentinel) trace.Observed {
+	switch {
+	case answered(s.Is) && failedOnly(s.Not):
+		return trace.ObservedYes
+	case failedOnly(s.Is) && answered(s.Not):
+		return trace.ObservedNo
+	}
+	return trace.ObservedUnknown
+}
+
+// reads is yes where any key was told apart, and no where every pair was
+// answered both ways: a resolver that does not read the sentinel resolves its
+// names like any other.
+func reads(sentinels []trace.Sentinel) trace.Observed {
+	if len(sentinels) == 0 {
+		return ""
+	}
+	if slices.ContainsFunc(sentinels, func(s trace.Sentinel) bool { return s.Trusted != trace.ObservedUnknown }) {
+		return trace.ObservedYes
+	}
+	if !slices.ContainsFunc(sentinels, func(s trace.Sentinel) bool { return !answered(s.Is) || !answered(s.Not) }) {
+		return trace.ObservedNo
+	}
+	return trace.ObservedUnknown
+}
+
+func answered(answer *trace.Resolver) bool {
+	return answer != nil && answer.Err == "" && answer.Rcode == "NOERROR"
+}
+
+func failedOnly(answer *trace.Resolver) bool {
+	return answer != nil && answer.Err == "" && answer.Rcode == "SERVFAIL"
+}
+
+// signsRoot is whether the walk saw the key tagged tag sign the root's key
+// set. Only a walk with DNSSEC asks for the root's keys.
+func signsRoot(tr *trace.Trace, tag uint16) bool {
+	for step := range tr.Steps() {
+		if step.DNSSEC == nil || step.DNSSEC.Zone != "." {
+			continue
+		}
+		if slices.ContainsFunc(step.DNSSEC.Keys, func(k trace.Key) bool { return k.Tag == tag && k.Signs && !k.Revoked }) {
+			return true
+		}
+	}
+	return false
 }
 
 // Located reads whether each resolver's questions reached the echoes from

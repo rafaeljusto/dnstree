@@ -164,16 +164,33 @@ const (
 // answers its AAAA made the answer up.
 const DNS64Name = "ipv4only.arpa."
 
+// SentinelZone is a signed zone with an address for any name below it, which
+// the root key sentinel needs (RFC 8509). Cloudflare keeps it for the root's
+// 2026 key rollover; a live test notices if that stops.
+const SentinelZone = "dnstest.dev."
+
+// SentinelName is the name that asks a resolver whether it trusts the root key
+// tag: one that does answers the is-ta name and fails the not-ta one. The tag
+// is written in five digits (RFC 8509 section 2).
+func SentinelName(tag uint16, is bool) string {
+	kind := "not-ta"
+	if is {
+		kind = "is-ta"
+	}
+	return fmt.Sprintf("root-key-sentinel-%s-%05d.%s", kind, tag, SentinelZone)
+}
+
 // Probe asks server the questions whose right answers are known beforehand:
 // BrokenName and the root's SOA with DNSSEC, missing, a name that cannot
-// exist, the TXT of each echo, and the AAAA of DNS64Name. A SERVFAIL for
-// BrokenName is asked again with checking disabled, which tells a failed
+// exist, the TXT of each echo, the AAAA of DNS64Name, and the sentinel's two
+// names for each of the root keys in anchors. A SERVFAIL for BrokenName or
+// the root is asked again with checking disabled, which tells a failed
 // validation from a failure to get there. What the answers say of the resolver
 // is left to the reading of them.
 //
 // Nothing is asked again over a fallback: the answers are small, and a silent
 // resolver would hold the run up for a timeout per transport per question.
-func Probe(ctx context.Context, carrier Transport, server netip.AddrPort, missing string) *trace.Behaviour {
+func Probe(ctx context.Context, carrier Transport, server netip.AddrPort, missing string, anchors []uint16) *trace.Behaviour {
 	asked := func(name, qtype string, dnssec, unchecked bool) *trace.Resolver {
 		question := trace.Question{Name: name, Type: qtype, Class: "IN"}
 		answer, err := ask(ctx, carrier, nil, server, question, dnssec, netip.Prefix{}, 0, unchecked)
@@ -191,7 +208,18 @@ func Probe(ctx context.Context, carrier Transport, server netip.AddrPort, missin
 			found.Broken.Unchecked = asked(BrokenName, "A", true, true)
 		}
 	})
-	wait.Go(func() { found.Root = asked(".", "SOA", true, false) })
+	wait.Go(func() {
+		found.Root = asked(".", "SOA", true, false)
+		if found.Root.Rcode == "SERVFAIL" {
+			found.Root.Unchecked = asked(".", "SOA", true, true)
+		}
+	})
+	found.Sentinels = make([]trace.Sentinel, len(anchors))
+	for i, tag := range anchors {
+		found.Sentinels[i].Tag = tag
+		wait.Go(func() { found.Sentinels[i].Is = asked(SentinelName(tag, true), "A", false, false) })
+		wait.Go(func() { found.Sentinels[i].Not = asked(SentinelName(tag, false), "A", false, false) })
+	}
 	wait.Go(func() { found.Missing = asked(missing, "A", false, false) })
 	wait.Go(func() { found.Google = asked(GoogleEcho, "TXT", false, false) })
 	wait.Go(func() { found.Akamai = asked(AkamaiEcho, "TXT", false, false) })

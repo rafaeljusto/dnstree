@@ -61,3 +61,18 @@ func TestLiveEchoes(t *testing.T) {
 		t.Errorf("got no ECS sent to %s or no minimisation from %s:\n%s", transport.GoogleEcho, transport.MinimisationEcho, out)
 	}
 }
+
+// TestLiveSentinel checks that the zone --check-resolver asks the root key
+// sentinel under still answers for any name. Cloudflare's resolver reads the
+// sentinel, so a "may or may not" from it means the zone has changed.
+func TestLiveSentinel(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := run(t.Context(), []string{"--check-resolver", "--resolver", "1.1.1.1", "--no-asn", "--color", "never", "example.com", "A"}, &stdout, &stderr)
+	if code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+	}
+	if out := stdout.String(); !strings.Contains(out, "1.1.1.1 trusts root key") || strings.Contains(out, "may or may not trust root key") {
+		t.Errorf("got no root key read from %s:\n%s", transport.SentinelZone, out)
+	}
+}

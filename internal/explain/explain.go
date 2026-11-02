@@ -1224,6 +1224,25 @@ func behaviours(tr *trace.Trace) []Finding {
 				"%s does not validate DNSSEC: it answered dnssec-failed.org, whose chain of trust is broken on purpose, so a forged answer for a signed name reaches whoever uses it as though it were real",
 				who)})
 		}
+		if seen.Anchored == trace.ObservedNo {
+			findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+				"%s does not trust the key the root signs with: it fails the root's own SOA as well as dnssec-failed.org, and answers both once told not to check, so every signed name fails through it while unsigned ones still resolve; give it the root's current trust anchor, or let it follow the root's announcements (RFC 5011)",
+				who)})
+		}
+		for _, sentinel := range seen.Sentinels {
+			if sentinel.Trusted != trace.ObservedNo {
+				continue
+			}
+			if sentinel.Signs {
+				findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+					"%s does not trust root key %d, the one the root signs with: the root key sentinel (RFC 8509) says so, and signed names fail through it; give it the root's current trust anchor",
+					who, sentinel.Tag)})
+				continue
+			}
+			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s does not trust root key %d, which this run trusts: the root key sentinel (RFC 8509) says so, and it matters once the root signs with that key",
+				who, sentinel.Tag)})
+		}
 		if seen.Rewrites == trace.ObservedYes {
 			came := "with an answer"
 			if seen.Missing != nil {

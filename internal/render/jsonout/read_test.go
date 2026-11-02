@@ -178,6 +178,23 @@ func TestReadRoundTrip(t *testing.T) {
 				},
 			}},
 		},
+		"a resolver asked which root keys it trusts": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+				Rcode:  "SERVFAIL",
+				Behaviour: &trace.Behaviour{
+					Validates: trace.ObservedYes, Rewrites: trace.ObservedNo, Anchored: trace.ObservedNo,
+					ReadsSentinel: trace.ObservedYes,
+					Root:          &trace.Resolver{Rcode: "SERVFAIL", Unchecked: &trace.Resolver{Rcode: "NOERROR"}},
+					Sentinels: []trace.Sentinel{
+						{Tag: 20326, Trusted: trace.ObservedUnknown, Is: &trace.Resolver{Rcode: "SERVFAIL"}, Not: &trace.Resolver{Rcode: "SERVFAIL"}},
+						{Tag: 38696, Trusted: trace.ObservedNo, Signs: true},
+					},
+				},
+			}},
+		},
 		"a resolver whose questions reached the zones from another network": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
@@ -558,6 +575,29 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "sometimes", "rewrites": "no"}}]}`,
 			want: `"sometimes"`,
+		},
+		"a resolver said to trust a root key in a way nothing here checks": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no",
+					"sentinels": [{"tag": 38696, "trusted": "mostly"}]}}]}`,
+			want: `"mostly"`,
+		},
+		"a root key asked about twice": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no",
+					"sentinels": [{"tag": 38696, "trusted": "yes"}, {"tag": 38696, "trusted": "no"}]}}]}`,
+			want: "twice",
+		},
+		"a resolver anchored in a way nothing here checks": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no", "anchored": "partly"}}]}`,
+			want: `"partly"`,
+		},
+		"a behaviour inside a sentinel's answer": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no",
+					"sentinels": [{"tag": 38696, "trusted": "yes", "is": {"elapsed_ms": 1, "behaviour": {"validates": "no", "rewrites": "no"}}}]}}]}`,
+			want: "inside the answers",
 		},
 		"a prefix no AAAA record can be made up under": {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

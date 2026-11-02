@@ -807,8 +807,23 @@
           "$ref": "#/$defs/resolver"
         },
         "root": {
-          "description": "The root's SOA, asked with DNSSEC.",
+          "description": "The root's SOA, asked with DNSSEC, with unchecked present after a SERVFAIL.",
           "$ref": "#/$defs/resolver"
+        },
+        "anchored": {
+          "description": "no, it failed the root's SOA as well as dnssec-failed.org and answered both once told not to check, so it does not trust the key the root signs with; yes, it marked the root's SOA authentic; unknown, anything else. Absent from a walk saved before the root was asked again.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "reads_sentinel": {
+          "description": "yes, the sentinel told a key apart; no, it answered every name whichever key it named, so it does not read the sentinel or does not validate; unknown, anything else. Absent where no sentinel was asked.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "sentinels": {
+          "description": "The root key sentinel's questions (RFC 8509), one pair for each root key the run trusted. Absent from a walk saved before they were asked.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/sentinel" }
         },
         "missing": {
           "description": "The address of the made-up name.",
@@ -864,6 +879,34 @@
           "description": "yes, every source is outside the AS of its own public address; no, one is inside it; unknown, an AS could not be found. A yes is what was seen, not interception: big resolvers ask through partner networks, and forwarders through somebody else. Absent where its address is not public or no source was read.",
           "type": "string",
           "enum": ["yes", "no", "unknown"]
+        }
+      }
+    },
+    "sentinel": {
+      "description": "What a resolver said of one root key through the root key sentinel (RFC 8509).",
+      "type": "object",
+      "required": ["tag", "trusted"],
+      "properties": {
+        "tag": {
+          "description": "The key tag of the root key asked about.",
+          "type": "integer"
+        },
+        "trusted": {
+          "description": "yes, it answered root-key-sentinel-is-ta and failed root-key-sentinel-not-ta; no, the other way round; unknown, any other pair, which is what a resolver that does not read the sentinel answers.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "signs": {
+          "description": "Whether the walk saw the key sign the root's key set, which only a walk with --dnssec looks at.",
+          "type": "boolean"
+        },
+        "is": {
+          "description": "root-key-sentinel-is-ta-<tag>.dnstest.dev. A.",
+          "$ref": "#/$defs/resolver"
+        },
+        "not": {
+          "description": "root-key-sentinel-not-ta-<tag>.dnstest.dev. A.",
+          "$ref": "#/$defs/resolver"
         }
       }
     },

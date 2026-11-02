@@ -1052,6 +1052,11 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 	carrier := transport.NewUDP(transport.Config{Timeout: cfg.Timeout})
 	fallback := transport.NewTCP(transport.Config{Timeout: cfg.Timeout})
 
+	var anchors []uint16
+	if cfg.Behave {
+		anchors = rootKeys(cfg.TrustAnchors)
+	}
+
 	timed := make(chan []*trace.Resolver, 1)
 	go func() {
 		defer close(timed)
@@ -1067,7 +1072,7 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 				wait.Go(func() { discovered[i] = transport.Discover(ctx, carrier, fallback, server) })
 			}
 			if cfg.Behave {
-				wait.Go(func() { behaved[i] = transport.Probe(ctx, carrier, server, missingName()) })
+				wait.Go(func() { behaved[i] = transport.Probe(ctx, carrier, server, missingName(), anchors) })
 			}
 			wait.Go(func() {
 				answer, err := transport.Ask(ctx, carrier, server, question, cfg.DNSSEC, cfg.Subnet)
@@ -1103,6 +1108,26 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		timed <- slices.DeleteFunc(answers, func(answer *trace.Resolver) bool { return answer == nil })
 	}()
 	return timed
+}
+
+// rootKeys are the tags of the root keys the run trusts now, which the
+// sentinel asks each resolver about. A file of anchors that cannot be read
+// leaves none: the walk says why, and fails over it.
+func rootKeys(path string) []uint16 {
+	anchors, err := roothints.DefaultAnchors()
+	if path != "" {
+		anchors, err = roothints.LoadAnchorsFile(path)
+	}
+	if err != nil {
+		return nil
+	}
+	var tags []uint16
+	for _, anchor := range anchors.ValidAt(time.Now()) {
+		if !slices.Contains(tags, anchor.KeyTag) {
+			tags = append(tags, anchor.KeyTag)
+		}
+	}
+	return tags
 }
 
 // missingName is a name under com that cannot exist: random enough that no

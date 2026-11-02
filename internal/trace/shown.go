@@ -119,6 +119,10 @@ func (b *Behaviour) Shown() *Behaviour {
 	shown.Broken, shown.Root, shown.Missing = b.Broken.Shown(), b.Root.Shown(), b.Missing.Shown()
 	shown.Google, shown.Akamai, shown.Minimisation = b.Google.Shown(), b.Akamai.Shown(), b.Minimisation.Shown()
 	shown.DNS64 = b.DNS64.Shown()
+	shown.Sentinels = slices.Clone(b.Sentinels)
+	for i := range shown.Sentinels {
+		shown.Sentinels[i].Is, shown.Sentinels[i].Not = b.Sentinels[i].Is.Shown(), b.Sentinels[i].Not.Shown()
+	}
 	shown.Prefixes = slices.Clone(b.Prefixes)
 	shown.Sources = slices.Clone(b.Sources)
 	for i := range shown.Sources {

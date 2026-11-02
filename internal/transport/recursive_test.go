@@ -299,8 +299,9 @@ ns    IN A    127.0.0.1
 	}
 }
 
-// probeZone serves the root's SOA and the broken name. A rewriting resolver is
-// played by serving the made-up name too.
+// probeZone serves the root's SOA, the broken name, the echoes and the
+// sentinel's zone. A rewriting resolver is played by serving the made-up name
+// too.
 const probeZone = `
 @                  IN SOA  ns.test. hostmaster.test. 1 7200 3600 1209600 3600
 @                  IN NS   ns.test.
@@ -310,6 +311,10 @@ o-o.myaddr.l.google.com.   IN TXT "edns0-client-subnet 198.51.100.0/24"
 whoami.ds.akahelp.net.     IN TXT "ns" "192.0.2.53"
 qnamemintest.internet.nl.  IN TXT "HOORAY - QNAME minimisation is enabled on your resolver :)!"
 ipv4only.arpa.             IN AAAA 64:ff9b::c000:aa
+root-key-sentinel-is-ta-20326.dnstest.dev.  IN A 192.0.2.30
+root-key-sentinel-not-ta-20326.dnstest.dev. IN A 192.0.2.30
+root-key-sentinel-is-ta-38696.dnstest.dev.  IN A 192.0.2.30
+root-key-sentinel-not-ta-38696.dnstest.dev. IN A 192.0.2.30
 `
 
 func TestProbe(t *testing.T) {
@@ -318,8 +323,43 @@ func TestProbe(t *testing.T) {
 	tests := map[string]struct {
 		zone      string
 		behaviour fakens.Behaviour
+		anchors   []uint16
 		check     func(*testing.T, *trace.Behaviour)
 	}{
+		"the root is asked again unchecked after a SERVFAIL": {
+			zone:      probeZone,
+			behaviour: fakens.Behaviour{ServFailUnlessCD: true},
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if found.Root.Rcode != "SERVFAIL" || found.Root.Unchecked == nil ||
+					found.Root.Unchecked.Rcode != "NOERROR" {
+					t.Errorf("got %+v, want SERVFAIL and then an answer unchecked", found.Root)
+				}
+			},
+		},
+		"the sentinel's two names are asked for each root key": {
+			zone:      probeZone,
+			behaviour: fakens.Behaviour{Sentinel: []uint16{38696}},
+			anchors:   []uint16{20326, 38696},
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if len(found.Sentinels) != 2 {
+					t.Fatalf("got %+v, want a pair for each key", found.Sentinels)
+				}
+				for i, want := range [][2]string{{"SERVFAIL", "NOERROR"}, {"NOERROR", "SERVFAIL"}} {
+					got := found.Sentinels[i]
+					if got.Tag != []uint16{20326, 38696}[i] || got.Is.Rcode != want[0] || got.Not.Rcode != want[1] {
+						t.Errorf("got %d %s/%s, want %s/%s", got.Tag, got.Is.Rcode, got.Not.Rcode, want[0], want[1])
+					}
+				}
+			},
+		},
+		"no sentinel is asked without root keys": {
+			zone: probeZone,
+			check: func(t *testing.T, found *trace.Behaviour) {
+				if len(found.Sentinels) != 0 {
+					t.Errorf("got %+v, want none", found.Sentinels)
+				}
+			},
+		},
 		"a validating resolver is asked the broken name again unchecked": {
 			zone:      probeZone,
 			behaviour: fakens.Behaviour{ServFailUnlessCD: true},
@@ -388,7 +428,7 @@ func TestProbe(t *testing.T) {
 
 			server := fakens.New(t, fakens.Config{Origin: ".", Zone: test.zone, Behaviour: test.behaviour})
 			found := transport.Probe(t.Context(), transport.NewUDP(transport.Config{}), server.Addr,
-				"dnstree-0123456789abcdef.com.")
+				"dnstree-0123456789abcdef.com.", test.anchors)
 			test.check(t, found)
 
 			// DNSSEC is asked for where an answer is read for it, and only there.
@@ -406,13 +446,27 @@ func TestProbeSilent(t *testing.T) {
 
 	carrier := transport.NewUDP(transport.Config{Timeout: 200 * time.Millisecond})
 	start := time.Now()
-	found := transport.Probe(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:1"), "x.com.")
+	found := transport.Probe(t.Context(), carrier, netip.MustParseAddrPort("127.0.0.1:1"), "x.com.", []uint16{38696})
 	if took := time.Since(start); took > time.Second {
 		t.Errorf("took %s, want one timeout for the questions asked together", took)
 	}
-	for _, answer := range []*trace.Resolver{found.Broken, found.Root, found.Missing, found.Google, found.Akamai, found.Minimisation} {
+	for _, answer := range []*trace.Resolver{found.Broken, found.Root, found.Missing, found.Google, found.Akamai,
+		found.Minimisation, found.Sentinels[0].Is, found.Sentinels[0].Not} {
 		if answer == nil || answer.Err == "" {
 			t.Errorf("got %+v, want the silence carried in the result", answer)
+		}
+	}
+}
+
+func TestSentinelName(t *testing.T) {
+	t.Parallel()
+
+	for tag, want := range map[uint16][2]string{
+		38696: {"root-key-sentinel-is-ta-38696.dnstest.dev.", "root-key-sentinel-not-ta-38696.dnstest.dev."},
+		9:     {"root-key-sentinel-is-ta-00009.dnstest.dev.", "root-key-sentinel-not-ta-00009.dnstest.dev."},
+	} {
+		if is, not := transport.SentinelName(tag, true), transport.SentinelName(tag, false); is != want[0] || not != want[1] {
+			t.Errorf("got %s and %s for %d, want %s and %s", is, not, tag, want[0], want[1])
 		}
 	}
 }

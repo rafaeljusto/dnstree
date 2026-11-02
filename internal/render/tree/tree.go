@@ -832,6 +832,19 @@ func (r *renderer) behaviours(tr *trace.Trace) []string {
 		default:
 			lines = append(lines, r.paint.dim(line))
 		}
+		if seen.Anchored == trace.ObservedNo {
+			lines = append(lines, r.paint.paint(mark+who+" fails the root's own SOA and answers it once told not to check: it does not trust the key the root signs with", yellow))
+		}
+		// One that does not validate trusts no key, and one that cannot
+		// validate the root fails every name the sentinel asks: the line
+		// above has said all there is.
+		if keys, alarm := rootKeys(seen); keys != "" && seen.Validates != trace.ObservedNo && seen.Anchored != trace.ObservedNo {
+			if alarm {
+				lines = append(lines, r.paint.paint(mark+who+" "+keys, yellow))
+			} else {
+				lines = append(lines, r.paint.dim(mark+who+" "+keys))
+			}
+		}
 		if exposure := exposed(seen); exposure != "" {
 			lines = append(lines, r.paint.dim(mark+who+" "+exposure))
 		}
@@ -843,6 +856,51 @@ func (r *renderer) behaviours(tr *trace.Trace) []string {
 		}
 	}
 	return lines
+}
+
+// rootKeys says which root keys the sentinel shows a resolver trusting, and
+// whether one it does not is the key the walk saw sign the root. Empty for a
+// walk saved before the sentinel was asked.
+func rootKeys(seen *trace.Behaviour) (string, bool) {
+	var trusted, untrusted, open []string
+	alarm := false
+	for _, sentinel := range seen.Sentinels {
+		tag := strconv.Itoa(int(sentinel.Tag))
+		switch sentinel.Trusted {
+		case trace.ObservedYes:
+			trusted = append(trusted, tag)
+		case trace.ObservedNo:
+			untrusted = append(untrusted, tag)
+			alarm = alarm || sentinel.Signs
+		default:
+			open = append(open, tag)
+		}
+	}
+	keys := func(tags []string) string {
+		if len(tags) == 1 {
+			return "root key " + tags[0]
+		}
+		return "root keys " + strings.Join(tags, " and ")
+	}
+	var said []string
+	if len(trusted) > 0 {
+		said = append(said, "trusts "+keys(trusted))
+	}
+	switch {
+	case len(untrusted) > 0 && len(trusted) > 0:
+		said = append(said, "not "+strings.Join(untrusted, " or "))
+	case len(untrusted) > 0:
+		said = append(said, "does not trust "+keys(untrusted))
+	}
+	switch {
+	case len(open) > 0 && len(said) > 0:
+		said = append(said, "may or may not trust "+strings.Join(open, " or "))
+	case len(open) > 0 && seen.ReadsSentinel == trace.ObservedNo:
+		said = append(said, "may or may not trust "+keys(open)+": it answers the sentinel's names whichever key they name (RFC 8509)")
+	case len(open) > 0:
+		said = append(said, "may or may not trust "+keys(open)+": its answers to the sentinel (RFC 8509) do not say")
+	}
+	return strings.Join(said, ", "), alarm
 }
 
 // reaches says which network a public resolver's questions reached the zones

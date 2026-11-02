@@ -373,6 +373,7 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 		Validates: trace.Observed(from.Validates), Rewrites: trace.Observed(from.Rewrites),
 		Subnet: trace.Observed(from.Subnet), Minimises: trace.Observed(from.Minimises),
 		Synthesises: trace.Observed(from.Synthesises), Elsewhere: trace.Observed(from.Elsewhere),
+		Anchored: trace.Observed(from.Anchored), ReadsSentinel: trace.Observed(from.Reads),
 	}
 	for _, seen := range []trace.Observed{to.Validates, to.Rewrites} {
 		if !observed(seen) {
@@ -380,7 +381,7 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 		}
 	}
 	// Absent from a walk saved before they were asked.
-	for _, seen := range []trace.Observed{to.Subnet, to.Minimises, to.Synthesises, to.Elsewhere} {
+	for _, seen := range []trace.Observed{to.Subnet, to.Minimises, to.Synthesises, to.Elsewhere, to.Anchored, to.ReadsSentinel} {
 		if seen != "" && !observed(seen) {
 			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
 		}
@@ -415,6 +416,28 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 			return nil, fmt.Errorf("jsonout: /%d is no prefix length", seen.Bits)
 		}
 		to.Echoes = append(to.Echoes, trace.Echo{Operator: seen.Operator, Sent: sent, Bits: seen.Bits})
+	}
+	for _, seen := range from.Sentinels {
+		read := trace.Sentinel{Tag: seen.Tag, Trusted: trace.Observed(seen.Trusted), Signs: seen.Signs}
+		if !observed(read.Trusted) {
+			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to trust", seen.Trusted)
+		}
+		if slices.ContainsFunc(to.Sentinels, func(s trace.Sentinel) bool { return s.Tag == read.Tag }) {
+			return nil, fmt.Errorf("jsonout: root key %d asked about twice", read.Tag)
+		}
+		for _, answer := range []struct {
+			from *resolver
+			to   **trace.Resolver
+		}{{seen.Is, &read.Is}, {seen.Not, &read.Not}} {
+			if answer.from == nil {
+				continue
+			}
+			var err error
+			if *answer.to, err = readResolver(answer.from, false); err != nil {
+				return nil, err
+			}
+		}
+		to.Sentinels = append(to.Sentinels, read)
 	}
 	for _, answer := range []struct {
 		from *resolver

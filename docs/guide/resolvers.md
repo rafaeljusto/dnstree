@@ -216,7 +216,9 @@ rewrites NXDOMAIN answers a name that does not exist with the address of a page
 of its own, which breaks whatever relies on being told a name is not there. One
 that sends ECS tells the servers it asks which network you are on, and one that
 does not minimise its queries shows the root and the top-level domains every
-name you look up. And the one that answers may not be the one you asked.
+name you look up. One that does not trust the key the root signs with fails
+every signed name while unsigned ones still work. And the one that answers may
+not be the one you asked.
 `--check-resolver` puts questions whose right answers are known to each resolver
 the question is timed against, and says under the tree what each one was seen
 to do:
@@ -225,18 +227,21 @@ to do:
 $ dnstree --check-resolver --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 4.2.2.2 --resolver 9.9.9.9 --explain www.isc.org
 ...
 resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone
+resolver: 1.1.1.1 trusts root keys 20326 and 38696
 resolver: 1.1.1.1 sends ECS (/24) to akamai but not google and minimises queries
 resolver: 1.1.1.1 reaches zones from its own AS13335
 resolver: 8.8.8.8 validates DNSSEC and leaves NXDOMAIN alone
+resolver: 8.8.8.8 may or may not trust root keys 20326 and 38696: it answers the sentinel's names whichever key they name (RFC 8509)
 resolver: 8.8.8.8 sends ECS (/24) to google and akamai and minimises queries
 resolver: 8.8.8.8 reaches zones from its own AS15169
 resolver: 4.2.2.2 does not validate DNSSEC and leaves NXDOMAIN alone
 resolver: 4.2.2.2 sends no ECS to google or akamai and minimises queries
 resolver: 4.2.2.2 reaches zones from its own AS3356
 resolver: 9.9.9.9 validates DNSSEC and leaves NXDOMAIN alone
+resolver: 9.9.9.9 trusts root key 38696, may or may not trust 20326
 resolver: 9.9.9.9 sends no ECS to google or akamai and minimises queries
 resolver: 9.9.9.9 reaches zones from AS20326, not its own AS19281
-✔ answered in 866ms · resolvers in 260ms-293ms · 3 queries · 3 servers
+✔ answered in 868ms · resolvers in 272ms-392ms · 3 queries · 3 servers
 ...
 · 1.1.1.1 sends ECS: akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
 · 8.8.8.8 sends ECS: google's and akamai's servers were told the /24 the question came from, so the zones it sends it to learn which network its clients are on (RFC 7871)
@@ -250,6 +255,22 @@ resolver: 9.9.9.9 reaches zones from AS20326, not its own AS19281
   answers it outright does not, unless it marks the root's SOA authentic (the
   AD bit), in which case the zone is likelier to have been fixed than the
   resolver to validate everything but it, and the line says it cannot tell.
+- **The root's key** matters since October 2026, when the root began signing
+  with KSK-2024 (key tag 38696) in place of KSK-2017 (20326). A resolver that
+  never took the new key in, built with a fixed copy of the old one or unable
+  to keep what it learned ([RFC 5011](https://www.rfc-editor.org/rfc/rfc5011)),
+  fails the root's own SOA as well as `dnssec-failed.org`, and answers both
+  once told not to check: a yellow line says it does not trust the key the
+  root signs with. Where the resolver reads the root key sentinel
+  ([RFC 8509](https://www.rfc-editor.org/rfc/rfc8509)), it is also asked
+  about each root key the run trusts, by name under `dnstest.dev`, a zone
+  Cloudflare keeps for it: a resolver that trusts the key answers
+  `root-key-sentinel-is-ta-38696` and fails `root-key-sentinel-not-ta-38696`,
+  one that does not does the opposite. Many resolvers do not read the
+  sentinel and answer both, which says nothing either way, and the line says
+  so. With `--dnssec` the walk sees which key signs the root, and a resolver
+  the sentinel shows not trusting that one is a warning under `--explain`.
+  A resolver that does not validate trusts no key, and gets no line for them.
 - **NXDOMAIN rewriting** rests on a name made up for the run under `com.`. An
   NXDOMAIN is the truth; an address is a rewrite, and the line names it.
 - **ECS** ([RFC 7871](https://www.rfc-editor.org/rfc/rfc7871)) rests on two
@@ -294,8 +315,8 @@ resolver: 9.9.9.9 reaches zones from AS20326, not its own AS19281
 
 Whatever the answers leave open is said as "may or may not", never guessed:
 a resolver that forwards to another, or treats these names specially, is
-something the questions cannot see past. It costs up to eight queries per
-resolver, and the origin AS lookups of its address and of the ones its
+something the questions cannot see past. It costs up to nine queries per
+resolver, and two more for each root key, and the origin AS lookups of its address and of the ones its
 questions came from, and sets no exit code: a resolver is not the name being
 asked about.
 

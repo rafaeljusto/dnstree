@@ -1125,6 +1125,21 @@ func TestBehaviours(t *testing.T) {
 		Elsewhere: trace.ObservedNo, Sources: []trace.Server{{IP: netip.MustParseAddr("172.217.32.30"), ASN: in(15169)}}})
 	home.Server.ASN = in(15169)
 	tr.Resolvers = append(tr.Resolvers, away, home)
+	// One that cannot validate the root, and one the sentinel shows trusting
+	// neither key: only the one that signs the root is a warning.
+	tr.Resolvers = append(tr.Resolvers,
+		resolver("192.0.2.60", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Anchored: trace.ObservedNo}),
+		resolver("192.0.2.61", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Sentinels: []trace.Sentinel{
+				{Tag: 20326, Trusted: trace.ObservedNo},
+				{Tag: 38696, Trusted: trace.ObservedNo, Signs: true},
+			}}),
+		resolver("192.0.2.62", &trace.Behaviour{Validates: trace.ObservedYes, Rewrites: trace.ObservedNo,
+			Anchored: trace.ObservedYes, Sentinels: []trace.Sentinel{
+				{Tag: 38696, Trusted: trace.ObservedYes, Signs: true}, {Tag: 20326, Trusted: trace.ObservedUnknown},
+			}}),
+	)
 
 	got := said(tr)
 	for _, want := range []string{
@@ -1135,12 +1150,15 @@ func TestBehaviours(t *testing.T) {
 		"192.0.2.57 sends ECS: google's servers were told the /24 the question came from",
 		"192.0.2.57 does not minimise queries: internet.nl's test zone",
 		"the questions put to 9.9.9.9 reached the zones from AS20326 and AS60068, not from AS19281, where it is",
+		"192.0.2.60 does not trust the key the root signs with: it fails the root's own SOA as well as dnssec-failed.org",
+		"192.0.2.61 does not trust root key 38696, the one the root signs with",
+		"192.0.2.61 does not trust root key 20326, which this run trusts",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("got %q, want it to say %q", got, want)
 		}
 	}
-	for _, unsaid := range []string{"192.0.2.54", "192.0.2.55", "192.0.2.56", "8.8.8.8"} {
+	for _, unsaid := range []string{"192.0.2.54", "192.0.2.55", "192.0.2.56", "8.8.8.8", "192.0.2.62"} {
 		if strings.Contains(got, unsaid) {
 			t.Errorf("got %q, want nothing about %s", got, unsaid)
 		}

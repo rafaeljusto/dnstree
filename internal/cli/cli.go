@@ -599,19 +599,23 @@ comparison that --no-compare turns off.
 the question is timed against, and says under the tree what each one was seen
 to do. A resolver validates DNSSEC if it refuses dnssec-failed.org, whose chain
 of trust is broken on purpose, and answers once told not to check; it does not
-if it answers that name and marks nothing authentic, not even the root. It
-rewrites NXDOMAIN if a made-up name under com comes back with an address. It
-sends ECS if Google's or Akamai's test zone reports a client subnet arriving
-with the question, and minimises queries if internet.nl's test zone says so. It
-makes up AAAA records (DNS64) if it answers one for ipv4only.arpa, which has
+if it answers that name and marks nothing authentic, not even the root. It does
+not trust the key the root signs with if it fails the root's SOA as well, and
+answers both once told not to check. Where it reads the root key sentinel (RFC
+8509), it is asked under dnstest.dev whether it trusts each root key the run
+does; one that answers the sentinel's names whichever key they name does not
+read it, and is said to. It rewrites NXDOMAIN if a made-up name under com comes
+back with an address. It sends ECS if Google's or Akamai's test zone reports a
+client subnet arriving with the question, and minimises queries if internet.nl's
+test zone says so. It makes up AAAA records (DNS64) if it answers one for ipv4only.arpa, which has
 none, and the prefix is read from where the known address sits in it; a
 resolver's AAAA under that prefix is then not counted as a difference. For a
 resolver at a public address, the origin AS of the address the two test zones
 saw its questions come from is set beside its own; a different one may be a
 partner network, a forwarder, or something on the path answering in its place,
 which --dot and --doh rule out. Whatever the answers leave open is said as "may or may not", never guessed. It
-costs up to eight queries per resolver, sets no exit code, and needs the
-comparison that --no-compare turns off.
+costs up to nine queries per resolver and two for each root key, sets no exit
+code, and needs the comparison that --no-compare turns off.
 
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config

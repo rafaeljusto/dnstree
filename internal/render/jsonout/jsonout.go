@@ -250,22 +250,33 @@ type resolver struct {
 // Sources are where its questions reached the echoes from, and Elsewhere,
 // absent where it was not judged, whether all of them are outside its own AS.
 type behaviour struct {
-	Validates    string    `json:"validates"`
-	Rewrites     string    `json:"rewrites"`
-	Subnet       string    `json:"subnet,omitempty"`
-	Echoes       []echo    `json:"echoes,omitempty"`
-	Minimises    string    `json:"minimises,omitempty"`
-	Broken       *resolver `json:"broken,omitempty"`
-	Root         *resolver `json:"root,omitempty"`
-	Missing      *resolver `json:"missing,omitempty"`
-	Google       *resolver `json:"google,omitempty"`
-	Akamai       *resolver `json:"akamai,omitempty"`
-	Minimisation *resolver `json:"minimisation,omitempty"`
-	Synthesises  string    `json:"synthesises,omitempty"`
-	Prefixes     []string  `json:"prefixes,omitempty"`
-	DNS64        *resolver `json:"dns64,omitempty"`
-	Sources      []*server `json:"sources,omitempty"`
-	Elsewhere    string    `json:"elsewhere,omitempty"`
+	Validates    string     `json:"validates"`
+	Rewrites     string     `json:"rewrites"`
+	Subnet       string     `json:"subnet,omitempty"`
+	Echoes       []echo     `json:"echoes,omitempty"`
+	Minimises    string     `json:"minimises,omitempty"`
+	Broken       *resolver  `json:"broken,omitempty"`
+	Root         *resolver  `json:"root,omitempty"`
+	Anchored     string     `json:"anchored,omitempty"`
+	Sentinels    []sentinel `json:"sentinels,omitempty"`
+	Reads        string     `json:"reads_sentinel,omitempty"`
+	Missing      *resolver  `json:"missing,omitempty"`
+	Google       *resolver  `json:"google,omitempty"`
+	Akamai       *resolver  `json:"akamai,omitempty"`
+	Minimisation *resolver  `json:"minimisation,omitempty"`
+	Synthesises  string     `json:"synthesises,omitempty"`
+	Prefixes     []string   `json:"prefixes,omitempty"`
+	DNS64        *resolver  `json:"dns64,omitempty"`
+	Sources      []*server  `json:"sources,omitempty"`
+	Elsewhere    string     `json:"elsewhere,omitempty"`
+}
+
+type sentinel struct {
+	Tag     uint16    `json:"tag"`
+	Trusted string    `json:"trusted"`
+	Signs   bool      `json:"signs,omitempty"`
+	Is      *resolver `json:"is,omitempty"`
+	Not     *resolver `json:"not,omitempty"`
 }
 
 type echo struct {
@@ -612,6 +623,8 @@ func convertBehaviour(from *trace.Behaviour) *behaviour {
 		Minimises:    string(from.Minimises),
 		Broken:       convertResolver(from.Broken),
 		Root:         convertResolver(from.Root),
+		Anchored:     string(from.Anchored),
+		Reads:        string(from.ReadsSentinel),
 		Missing:      convertResolver(from.Missing),
 		Google:       convertResolver(from.Google),
 		Akamai:       convertResolver(from.Akamai),
@@ -628,6 +641,10 @@ func convertBehaviour(from *trace.Behaviour) *behaviour {
 	}
 	for _, seen := range from.Echoes {
 		to.Echoes = append(to.Echoes, echo{Operator: seen.Operator, Sent: string(seen.Sent), Bits: seen.Bits})
+	}
+	for _, seen := range from.Sentinels {
+		to.Sentinels = append(to.Sentinels, sentinel{Tag: seen.Tag, Trusted: string(seen.Trusted), Signs: seen.Signs,
+			Is: convertResolver(seen.Is), Not: convertResolver(seen.Not)})
 	}
 	return to
 }

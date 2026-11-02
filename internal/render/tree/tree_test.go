@@ -576,6 +576,94 @@ func TestRenderBehaviours(t *testing.T) {
 	}
 }
 
+func TestRenderRootKeys(t *testing.T) {
+	t.Parallel()
+
+	answered := &trace.Resolver{Rcode: "NOERROR"}
+	servfail := &trace.Resolver{Rcode: "SERVFAIL"}
+	tests := map[string]struct {
+		behaviour trace.Behaviour
+		want      string
+	}{
+		"a resolver that trusts every key says so": {
+			behaviour: trace.Behaviour{Sentinels: []trace.Sentinel{
+				{Tag: 20326, Trusted: trace.ObservedYes}, {Tag: 38696, Trusted: trace.ObservedYes},
+			}},
+			want: "resolver: 192.0.2.53 trusts root keys 20326 and 38696\n",
+		},
+		"a resolver that trusts one key of two names the other": {
+			behaviour: trace.Behaviour{Sentinels: []trace.Sentinel{
+				{Tag: 20326, Trusted: trace.ObservedNo}, {Tag: 38696, Trusted: trace.ObservedYes},
+			}},
+			want: "resolver: 192.0.2.53 trusts root key 38696, not 20326\n",
+		},
+		"a resolver that trusts none of them says so": {
+			behaviour: trace.Behaviour{Sentinels: []trace.Sentinel{{Tag: 38696, Trusted: trace.ObservedNo, Signs: true}}},
+			want:      "resolver: 192.0.2.53 does not trust root key 38696\n",
+		},
+		"a resolver that answers every name does not read the sentinel": {
+			behaviour: trace.Behaviour{ReadsSentinel: trace.ObservedNo, Sentinels: []trace.Sentinel{
+				{Tag: 20326, Trusted: trace.ObservedUnknown, Is: answered, Not: answered},
+				{Tag: 38696, Trusted: trace.ObservedUnknown, Is: answered, Not: answered},
+			}},
+			want: "resolver: 192.0.2.53 may or may not trust root keys 20326 and 38696: it answers the sentinel's names whichever key they name (RFC 8509)\n",
+		},
+		"a resolver whose answers say nothing leaves it open": {
+			behaviour: trace.Behaviour{ReadsSentinel: trace.ObservedUnknown, Sentinels: []trace.Sentinel{
+				{Tag: 38696, Trusted: trace.ObservedUnknown, Is: servfail, Not: servfail},
+			}},
+			want: "resolver: 192.0.2.53 may or may not trust root key 38696: its answers to the sentinel (RFC 8509) do not say\n",
+		},
+		"a key left open beside one read is named apart": {
+			behaviour: trace.Behaviour{Sentinels: []trace.Sentinel{
+				{Tag: 20326, Trusted: trace.ObservedUnknown}, {Tag: 38696, Trusted: trace.ObservedYes},
+			}},
+			want: "resolver: 192.0.2.53 trusts root key 38696, may or may not trust 20326\n",
+		},
+		"a resolver that does not validate says nothing of root keys": {
+			behaviour: trace.Behaviour{Validates: trace.ObservedNo, Sentinels: []trace.Sentinel{
+				{Tag: 38696, Trusted: trace.ObservedUnknown, Is: answered, Not: answered},
+			}},
+		},
+		"a resolver that fails the root says nothing more of root keys": {
+			behaviour: trace.Behaviour{Anchored: trace.ObservedNo, Sentinels: []trace.Sentinel{
+				{Tag: 38696, Trusted: trace.ObservedUnknown, Is: servfail, Not: servfail},
+			}},
+			want: "resolver: 192.0.2.53 fails the root's own SOA",
+		},
+		"a resolver that fails the root says it does not trust the root's key": {
+			behaviour: trace.Behaviour{Anchored: trace.ObservedNo},
+			want:      "resolver: 192.0.2.53 fails the root's own SOA and answers it once told not to check: it does not trust the key the root signs with\n",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			behaviour := test.behaviour
+			behaviour.Rewrites = trace.ObservedNo
+			if behaviour.Validates == "" {
+				behaviour.Validates = trace.ObservedYes
+			}
+			tr := resolution()
+			tr.Resolvers = []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53}, Rcode: "NOERROR", Behaviour: &behaviour,
+			}}
+			var out bytes.Buffer
+			if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII}); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			got := out.String()
+			if (test.want == "" || test.behaviour.Anchored == trace.ObservedNo) && strings.Contains(got, "root key") {
+				t.Errorf("got a line on root keys in:\n%s", got)
+			}
+			if !strings.Contains(got, test.want) {
+				t.Errorf("got no %q in:\n%s", test.want, got)
+			}
+		})
+	}
+}
+
 func TestRenderDesignations(t *testing.T) {
 	var out bytes.Buffer
 	if err := tree.Render(&out, designating(), tree.Options{Charset: tree.ASCII}); err != nil {

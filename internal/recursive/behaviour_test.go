@@ -94,6 +94,112 @@ func TestBehave(t *testing.T) {
 	}
 }
 
+func TestBehaveRootKeys(t *testing.T) {
+	t.Parallel()
+
+	answered := &trace.Resolver{Rcode: "NOERROR"}
+	servfail := &trace.Resolver{Rcode: "SERVFAIL"}
+	failsChecked := &trace.Resolver{Rcode: "SERVFAIL", Unchecked: answered}
+	authenticRoot := &trace.Resolver{Rcode: "NOERROR", Authentic: true}
+
+	tests := map[string]struct {
+		behaviour trace.Behaviour
+		anchored  trace.Observed
+		trusted   []trace.Observed
+		reads     trace.Observed
+	}{
+		"a resolver that fails the root and the broken name, and answers both unchecked, is not anchored": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: failsChecked},
+			anchored:  trace.ObservedNo,
+		},
+		"a resolver that fails the root unchecked too may not reach it": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: &trace.Resolver{Rcode: "SERVFAIL", Unchecked: servfail}},
+			anchored:  trace.ObservedUnknown,
+		},
+		"a resolver that fails the root and answers the broken name is not judged on its key": {
+			behaviour: trace.Behaviour{Broken: answered, Root: failsChecked},
+			anchored:  trace.ObservedUnknown,
+		},
+		"a resolver that marks the root authentic is anchored": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: authenticRoot},
+			anchored:  trace.ObservedYes,
+		},
+		"a root asked before it was asked again unchecked cannot be told apart": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: servfail},
+			anchored:  trace.ObservedUnknown,
+		},
+		"the sentinel reads each key on its own": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: authenticRoot, Sentinels: []trace.Sentinel{
+				{Tag: 20326, Is: servfail, Not: answered},
+				{Tag: 38696, Is: answered, Not: servfail},
+			}},
+			anchored: trace.ObservedYes,
+			trusted:  []trace.Observed{trace.ObservedNo, trace.ObservedYes},
+			reads:    trace.ObservedYes,
+		},
+		"a resolver that answers both names does not read the sentinel": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: authenticRoot, Sentinels: []trace.Sentinel{
+				{Tag: 38696, Is: answered, Not: answered},
+			}},
+			anchored: trace.ObservedYes,
+			trusted:  []trace.Observed{trace.ObservedUnknown},
+			reads:    trace.ObservedNo,
+		},
+		"a resolver that fails both names says nothing of the key": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: failsChecked, Sentinels: []trace.Sentinel{
+				{Tag: 38696, Is: servfail, Not: servfail},
+			}},
+			anchored: trace.ObservedNo,
+			trusted:  []trace.Observed{trace.ObservedUnknown},
+			reads:    trace.ObservedUnknown,
+		},
+		"a name that never came back says nothing of the key": {
+			behaviour: trace.Behaviour{Broken: failsChecked, Root: authenticRoot, Sentinels: []trace.Sentinel{
+				{Tag: 38696, Is: &trace.Resolver{Err: "timeout"}, Not: servfail},
+			}},
+			anchored: trace.ObservedYes,
+			trusted:  []trace.Observed{trace.ObservedUnknown},
+			reads:    trace.ObservedUnknown,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			behaviour := test.behaviour
+			behaviour.Sentinels = slices.Clone(test.behaviour.Sentinels)
+			tr := &trace.Trace{Resolvers: []*trace.Resolver{{Behaviour: &behaviour}}}
+			recursive.Behave(tr)
+			if behaviour.ReadsSentinel != test.reads {
+				t.Errorf("got reads %q, want %q", behaviour.ReadsSentinel, test.reads)
+			}
+			if behaviour.Anchored != test.anchored {
+				t.Errorf("got anchored %q, want %q", behaviour.Anchored, test.anchored)
+			}
+			for i, want := range test.trusted {
+				if got := behaviour.Sentinels[i].Trusted; got != want {
+					t.Errorf("got %q for %d, want %q", got, behaviour.Sentinels[i].Tag, want)
+				}
+			}
+		})
+	}
+}
+
+func TestBehaveRootSigner(t *testing.T) {
+	t.Parallel()
+
+	root := &trace.Step{DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: ".", Keys: []trace.Key{
+		{Tag: 20326, SEP: true},
+		{Tag: 38696, SEP: true, Signs: true},
+	}}}
+	behaviour := trace.Behaviour{Sentinels: []trace.Sentinel{{Tag: 20326}, {Tag: 38696}}}
+	tr := &trace.Trace{Root: root, Resolvers: []*trace.Resolver{{Behaviour: &behaviour}}}
+	recursive.Behave(tr)
+	if behaviour.Sentinels[0].Signs || !behaviour.Sentinels[1].Signs {
+		t.Errorf("got %+v, want only 38696 signing the root", behaviour.Sentinels)
+	}
+}
+
 func TestBehaveEchoes(t *testing.T) {
 	t.Parallel()
 
