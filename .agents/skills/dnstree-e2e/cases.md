@@ -104,6 +104,7 @@ These need no network: every one exits before a query goes out.
 | color | `$D --no-asn --no-compare --color always example.com` | escapes on stdout even though it is a pipe |
 | check-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --check-resolver example.com` | exit 0, `resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone`, then a line on ECS and minimisation. With `--no-compare`, exit 1: `--check-resolver checks the resolvers --no-compare leaves unasked` |
 | check-resolver-network | `$D --color never --resolver 9.9.9.9 --check-resolver example.com` | exit 0, `9.9.9.9 reaches zones from AS20326, not its own AS19281`; 1.1.1.1 says `reaches zones from its own AS13335`. With `--no-asn` the line is left out |
+| check-resolver-root-key | `$D --no-asn --color never --resolver 1.1.1.1 --resolver 8.8.8.8 --check-resolver example.com` | exit 0, `1.1.1.1 trusts root keys 20326 and 38696` (or `trusts root key 38696, not 20326` once 20326 is revoked); `8.8.8.8 may or may not trust root keys ...: it answers the sentinel's names whichever key they name (RFC 8509)`. No root key line for a resolver that does not validate |
 | dns64 | `$D --no-asn --color never --resolver 2001:4860:4860::6464 --check-resolver example.com AAAA` | exit 0, `makes up AAAA records from A records under 64:ff9b::/96 (DNS64)`. Needs IPv6. 1.1.1.1 above has no DNS64 line |
 
 ## dnssec
