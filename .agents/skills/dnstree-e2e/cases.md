@@ -254,6 +254,7 @@ format with `$D --color never --from ex.json --format F`. `--from` takes no
 | waterfall-ascii | `#` and `.` bars, nothing above 127 |
 | waterfall-mermaid | a `---` front matter with the title, then `gantt` |
 | markdown | a heading, the tree in a code fence, the explanation, the resolvers' table |
+| teach | `how dnstree found example.com. A, one hop at a time`, then a numbered paragraph per hop on the path, lines within 76 columns, and `that is the end of the walk:` before the summary |
 | json | the same JSON back: `jq -S` of both match |
 | dot | `dot -Tsvg` renders it, when Graphviz is installed |
 | mermaid | a `---` front matter with the title, then `flowchart LR` |
