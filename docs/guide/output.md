@@ -326,6 +326,63 @@ walked on 2026-09-30 21:05 UTC
 
 </details>
 
+`--format teach` tells the walk as a story, for somebody learning how DNS
+finds a name: a short paragraph for each hop on the way to the answer, saying
+who was asked and why that server, what it answered, and what that meant for
+the next step. A referral, glue, a detour to find a nameserver's address, an
+alias, a minimised question and the chain of trust each get their own words,
+explained the first time they come up and named after that. The work done
+beside the path, a zone's keys or the other servers `--all` asked, gets a
+sentence in the hop that needed it, and the lookups the checks make of their
+own are left out. It says only what the walk recorded, so it cannot disagree
+with the tree, and `--explain` still says under it what the walk came to.
+With `--from`, a walk saved once, an alias chain or a broken delegation, can
+be taught again with every class.
+
+<details>
+<summary>A walk, told hop by hop</summary>
+
+```
+$ dnstree --format teach www.example.com
+how dnstree found www.example.com. A, one hop at a time
+
+1. dnstree starts at the root, the zone at the top of every name. it knows
+   the addresses of the root servers from the list it starts with, and asked
+   a.root-servers.net. (198.41.0.4) for www.example.com. A. the root's key
+   is the one every validating resolver is set up to trust (the trust
+   anchor), so the chain of trust starts here. the root does not hold the
+   answer, but knows who runs com.: it answered with a referral to 13
+   servers: l.gtld-servers.net., j.gtld-servers.net., h.gtld-servers.net.
+   and 10 more. it gave their addresses along with their names (glue), so
+   there was nothing more to look up. a resolver may keep this referral for
+   2 days, so a change of nameservers takes that long to reach everyone. the
+   chain of trust reaches com.: the zone above signed a DS record, a digest
+   of com.'s key, and the key matched it. that is how one zone vouches for
+   the next. to check signatures, it also asked the same server for the keys
+   of the root (DNSKEY).
+
+2. it asked l.gtld-servers.net. (192.41.162.30), one of the 13 servers the
+   referral named for com., for www.example.com. A. com. does not hold the
+   answer, but knows who runs example.com.: it answered with a referral to 2
+   servers: hera.ns.cloudflare.com. and elliott.ns.cloudflare.com. it gave
+   their addresses too. a resolver may keep it for 2 days. the chain of
+   trust reaches example.com.: the DS the zone above signed matched its key.
+   it asked for the keys of com. too.
+
+3. it asked hera.ns.cloudflare.com. (108.162.192.162), one of the 2 servers
+   the referral named for example.com., for www.example.com. A. example.com.
+   holds the answer: www.example.com. 300 A 172.66.147.243 and
+   www.example.com. 300 A 104.20.23.154. it said so with authority (the AA
+   flag), since it serves the zone itself. it asked for the keys of
+   example.com. too.
+
+that is the end of the walk: www.example.com. A is 172.66.147.243 and
+104.20.23.154.
+✔ answered in 1.4s · resolver in 237ms · 6 queries · 3 servers
+```
+
+</details>
+
 `--format dig` writes the dig commands that ask what the walk asked, one per
 query, each under a comment that says where it went and what came of it. It is
 for the people who fix a zone and have no dnstree: the first thing they ask for

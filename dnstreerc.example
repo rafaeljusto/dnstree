@@ -108,8 +108,9 @@
 # What to draw
 
 # tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, markdown,
-# json, dot, mermaid, openmetrics, dig, web or web-3d. ascii emits nothing above
-# codepoint 127, for pasting somewhere that cannot carry box drawing.
+# teach, json, dot, mermaid, openmetrics, dig, web or web-3d. ascii emits
+# nothing above codepoint 127, for pasting somewhere that cannot carry box
+# drawing.
 # format = tree
 
 # waterfall draws the walk as a timeline, one bar per query, to show where the

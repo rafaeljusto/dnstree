@@ -40,6 +40,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/render/markdown"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/mermaid"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/openmetrics"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/teach"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
@@ -220,8 +221,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		walk := *cfg
 		walk.Name, walk.Type = question.Name, question.Type
-		if len(questions) > 1 && cfg.Format != "markdown" && !cli.Programs(cfg.Format) {
-			// A report heads itself with its question already.
+		if len(questions) > 1 && cfg.Format != "markdown" && cfg.Format != "teach" && !cli.Programs(cfg.Format) {
+			// A report and a story head themselves with their question already.
 			tree.Asked(stdout, trace.Question{Name: fqdn(question.Name), Type: question.Type}, treeOptions(cfg))
 		}
 		code := one(ctx, &walk, log, lookups, registry, rec, replay, reference, metrics, stdout, stderr)
@@ -1190,6 +1191,8 @@ func render(w io.Writer, cfg *cli.Config, tr *trace.Trace) error {
 		return openmetrics.Render(w, tr)
 	case "dig":
 		return dig.Render(w, tr)
+	case "teach":
+		return teach.Render(w, tr)
 	default:
 		return tree.Render(w, tr, treeOptions(cfg))
 	}

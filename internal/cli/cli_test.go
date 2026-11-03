@@ -273,6 +273,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "markdown", "--diff", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "markdown", Diff: true},
 		},
+		"a story for somebody learning DNS": {
+			args: []string{"--format", "teach", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "teach"},
+		},
 		"numbers for a monitoring system": {
 			args: []string{"--format", "openmetrics", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "openmetrics"},
@@ -421,6 +425,8 @@ func TestParseRejects(t *testing.T) {
 		"a page for a waterfall":                    {"--format", "waterfall", "--no-browser", "example.com"},
 		"live markdown":                             {"--format", "markdown", "--live", "example.com"},
 		"watched markdown":                          {"--format", "markdown", "--watch", "30s", "example.com"},
+		"live teach":                                {"--format", "teach", "--live", "example.com"},
+		"watched teach":                             {"--format", "teach", "--watch", "30s", "example.com"},
 		"live openmetrics":                          {"--format", "openmetrics", "--live", "example.com"},
 		"watched openmetrics":                       {"--format", "openmetrics", "--watch", "30s", "example.com"},
 		"explained openmetrics":                     {"--format", "openmetrics", "--explain", "example.com"},

@@ -12,6 +12,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/render/markdown"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/mermaid"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/openmetrics"
+	"github.com/rafaeljusto/dnstree/v2/internal/render/teach"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/tree"
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 )
@@ -102,6 +103,16 @@ func FuzzRead(f *testing.F) {
 		_ = tree.Waterfall(&out, tr, ascii)
 		if i := strings.IndexFunc(out.String(), func(r rune) bool { return r > '~' || r < ' ' && r != '\n' }); i >= 0 {
 			t.Errorf("ascii holds %q at %d: %q", out.String()[i:min(i+8, len(out.String()))], i, out.String())
+		}
+
+		// The story is pasted into teaching material, so it is held to the
+		// same bound as ascii: whatever a server wrote is escaped in it.
+		out.Reset()
+		if err := teach.Render(&out, tr); err != nil {
+			t.Fatalf("teach: %v", err)
+		}
+		if i := bytes.IndexFunc(out.Bytes(), func(r rune) bool { return r != '\n' && (r < ' ' || r > '~') }); i >= 0 {
+			t.Errorf("teach wrote %q at %d", out.Bytes()[i], i)
 		}
 	})
 }

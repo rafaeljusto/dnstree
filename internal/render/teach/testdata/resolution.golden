@@ -1,0 +1,32 @@
+how dnstree found www.example.com. A, one hop at a time
+
+1. dnstree starts at the root, the zone at the top of every name. it knows
+   the addresses of the root servers from the list it starts with, and asked
+   a.root-servers.net. (198.41.0.4) for www.example.com. A. the root does
+   not hold the answer, but knows who runs com.: it answered with a referral
+   to 1 server: a.gtld-servers.net. a resolver may keep this referral for 2
+   days, so a change of nameservers takes that long to reach everyone. com.
+   is not signed: the parent published no DS. nothing vouches for what is
+   below it, and a validating resolver takes its answers as they come.
+
+2. first it asked b.gtld-servers.net. (192.33.14.30), which did not answer
+   within 2s, so it moved on. then it asked a.gtld-servers.net. (192.5.6.30)
+   for www.example.com. A. the answer did not fit in a udp datagram (the
+   server set the TC bit), so it asked again over tcp, which has no such
+   limit. com. does not hold the answer, but knows who runs example.com.: it
+   answered with a referral to 2 servers: a.iana-servers.net. and
+   ns.outside.example. it gave addresses (glue) for 1 of them. it gave no
+   address for ns.outside.example., named outside example.com.: with no
+   address for it, finding one takes a lookup of its own. a resolver may
+   keep it for 2 days. the chain of trust reaches example.com.: the zone
+   above signed a DS record, a digest of example.com.'s key, and the key
+   matched it. that is how one zone vouches for the next.
+
+3. it asked a.iana-servers.net. (199.43.135.53), one of the 2 servers the
+   referral named for example.com., for www.example.com. A. example.com.
+   holds the answer: www.example.com. 3600 A 93.184.216.34. it said so with
+   authority (the AA flag), since it serves the zone itself. to check
+   signatures, it also asked the same server for the keys of example.com.
+   (DNSKEY).
+
+that is the end of the walk: www.example.com. A is 93.184.216.34.

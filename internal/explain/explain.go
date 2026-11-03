@@ -1400,6 +1400,10 @@ func add(names []string, name string) []string {
 	return append(names, name)
 }
 
+// Spell is a lifetime in the words the findings use, for the renderers that
+// write prose of their own.
+func Spell(seconds uint32) string { return spell(seconds) }
+
 // spell writes a lifetime out in words: the largest unit it fills, and the one
 // below where there is a remainder. It is read by somebody working out whether
 // to wait through it, so "2 days" earns its room over "172800" and over "48h".

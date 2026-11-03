@@ -129,8 +129,8 @@ poll. One --resolver on the command line replaces every one the file of defaults
 chose, rather than adding to them.
 
 FORMAT is one of tree (the default), ascii, emoji, waterfall,
-waterfall-ascii, waterfall-mermaid, markdown, json, dot, mermaid, openmetrics,
-dig, web or web-3d.
+waterfall-ascii, waterfall-mermaid, markdown, teach, json, dot, mermaid,
+openmetrics, dig, web or web-3d.
 
 --format web draws nothing in the terminal. It serves the finished walk as a
 page instead, on this machine and on whatever port is free, and opens a browser
@@ -247,6 +247,14 @@ it, and a table of what the resolvers answered. It always explains, and takes
 --diff and --against to add what changed. Everything a server wrote is escaped,
 so a name or a record cannot turn into a link, a mention or a table cell of its
 own. With --from, a walk saved during an incident becomes a report afterwards.
+
+--format teach tells the walk as a story for somebody learning DNS: a short
+paragraph for each hop on the way to the answer, saying who was asked and why
+that server, what it answered, and what that meant for the next step. A
+referral, glue, a detour to find a nameserver's address, an alias, a minimised
+question and the chain of trust each get their own words; the work done beside
+the path gets a sentence in the hop that needed it. It says only what the walk
+recorded, and with --from a walk saved once can be taught again.
 
 --format openmetrics writes the walk as numbers for a monitoring system: how
 it ended, what it and each hop on the path took, the chain of trust, the time
@@ -1464,6 +1472,7 @@ var formats = []format{
 	{name: "waterfall-ascii", once: true},
 	{name: "waterfall-mermaid", once: true, programs: true},
 	{name: "markdown", once: true, propagates: true},
+	{name: "teach", once: true},
 	{name: "json", once: true, propagates: true, programs: true, several: true},
 	{name: "dot", once: true, programs: true},
 	{name: "mermaid", once: true, programs: true},
