@@ -172,6 +172,7 @@ cached, not a bug. Run it again.
 | axfr-open | `$D $B --check-axfr zonetransfer.me SOA` | exit 0, `axfr open` on both of its nameservers, which come with no glue: the probe looks up the one the walk did not need. Nothing of the zone drawn |
 | axfr-closed | `$D $B --check-axfr example.com` | exit 0, none open |
 | axfr-doh | `$D $B --check-axfr --doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |
+| listing | `$D $B --check-axfr --explain isc.org` | exit 0, `listing nsec` per nameserver and a note that anyone can list the zone by following its denials; `www.ietf.org` gives `listing made-up`, `zonetransfer.me` `listing none`. Never painted or graded as a fault |
 | recursion | `$D $B --check-recursion example.com` | exit 0, `recursion closed` per nameserver |
 | edns | `$D $B --check-edns --explain www.isc.org` | exit 0, `edns0 ok`, `BADVERS  edns version 1 ok`, `edns option 100 ok`, `edns flag 0x40 ok`, `tcp ok` per address, `every nameserver of isc.org. that was asked passed the RFC 8906 tests` |
 | edns-budget | `$D $B --check-edns qq.com` | exit 0, `the budget ran out before every nameserver of qq.com. could be checked for how it handles edns; raise --max-queries` |
