@@ -340,7 +340,7 @@ func probes(m *metrics, tr *trace.Trace) {
 	if len(found) == 0 {
 		return
 	}
-	m.family("dnstree_open", "", "whether a nameserver of the zone gave a stranger what it should not: the whole zone (transfer), or a lookup of another name (recursion)")
+	m.family("dnstree_open", "", "whether a nameserver of the zone gave a stranger what it should not: the whole zone (transfer), a lookup of another name (recursion), or the names its denials list (listing)")
 	for _, step := range found {
 		m.sample("dnstree_open", flag(step.Probe.State == trace.ProbeOpen),
 			label{"check", string(step.Probe.Kind)},

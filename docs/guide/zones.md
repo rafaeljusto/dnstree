@@ -396,12 +396,13 @@ outside its zones:
 ```
 $ dnstree --check-axfr --check-recursion --explain --no-asn --no-compare zonetransfer.me
 ...
-│   │   └── nsztm1.digi.ninja. 81.4.108.41  310ms  NOERROR  AA  ede Prohibited (18)
-│   │       ├── zonetransfer.me. 7200 A 5.196.105.14
-│   │       ├── nsztm1.digi.ninja. 81.4.108.41  514ms  NOERROR  AA  axfr open
-│   │       └── nsztm1.digi.ninja. 81.4.108.41  248ms  REFUSED  recursion closed
+│   │   │   ├── 📍 zonetransfer.me. 7200 A 5.196.105.14
+│   │   │   ├── 🎯  nsztm1.digi.ninja. 81.4.108.41  🐢 565ms  NOERROR  AA  axfr open
+│   │   │   ├── 🎯  nsztm1.digi.ninja. 81.4.108.41  246ms  NXDOMAIN  AA  listing none
+│   │   │   └── 🎯  nsztm1.digi.ninja. 81.4.108.41  256ms  REFUSED  recursion closed
 ...
-· zone transfers of zonetransfer.me. are open to anyone at nsztm1.digi.ninja., which lists every name in the zone to whoever asks; allow them only to the zone's own secondaries
+· zone transfers of zonetransfer.me. are open to anyone at nsztm2.digi.ninja. and nsztm1.digi.ninja., which lists every name in the zone to whoever asks; allow them only to the zone's own secondaries
+· zonetransfer.me. answered without nsec or nsec3 at nsztm2.digi.ninja. and nsztm1.digi.ninja., so there are none to list its names from
 · no nameserver of zonetransfer.me. looked up another name for a stranger
 ```
 
@@ -411,15 +412,46 @@ both to itself says so once for each check:
 ```
 $ dnstree --check-axfr --check-recursion --explain --no-asn --no-compare www.isc.org
 ...
-│   │   ├── ns1.isc.org. 149.20.2.26  478ms  NOERROR  AA
-│   │   │   ├── www.isc.org. 300 A 151.101.131.42
+│   │   │   ├── 📍 www.isc.org. 300 A 151.101.131.42
 ...
-│   │   │   ├── ns1.isc.org. 149.20.2.26  736ms  REFUSED  axfr closed
-│   │   │   ├── ns1.isc.org. 149.20.2.26  367ms  REFUSED  recursion closed
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  🐢 718ms  REFUSED  axfr closed
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  358ms  NXDOMAIN  AA  listing nsec
+│   │   │   ├── 🎯  ns1.isc.org. 149.20.2.26  368ms  REFUSED  recursion closed
 ...
 · no nameserver of isc.org. handed the zone to a stranger
+· the denials of isc.org. at ns2.isc.org., ns3.isc.org., ns1.isc.org. and 2 more are nsec, which name the real names on either side, so anyone can list the zone by following them, whatever zone transfers allow
 · no nameserver of isc.org. looked up another name for a stranger
 ```
+
+A transfer is not the only way to list a zone. A signed zone has to prove a
+name missing, and an NSEC record does it by naming the real names on either
+side of the gap: ask for the name just after the second one and you get the
+next, until you have them all. So `--check-axfr` also asks each server for a
+made-up name, with DNSSEC, and draws how it denied it as `listing`:
+
+| denial | what it gives away |
+| --- | --- |
+| `nsec` | the real names, so the zone can be listed by following them |
+| `nsec3` | hashes of them; common names can be guessed offline, the more cheaply under RFC 9276's advice of no salt and no extra iterations |
+| `made-up` | nothing: the server signs as it answers and makes up neighbours for each name asked (RFC 4470, RFC 9824) |
+| `none` | nothing: the answer carried no NSEC or NSEC3, as from a zone not signed; a server that will not take EDNS0 cannot be asked, and is `unchecked` |
+
+```
+$ dnstree --check-axfr --explain --no-asn --no-compare www.ietf.org
+...
+│   │   │   ├── 🎯  jill.ns.cloudflare.com. 172.64.32.122  🐢 899ms  FORMERR  axfr closed  (retried without EDNS0)
+│   │   │   ├── 🎯  jill.ns.cloudflare.com. 172.64.32.122  221ms  NOERROR  AA  listing made-up
+...
+· no nameserver of ietf.org. handed the zone to a stranger
+· the denials of ietf.org. at jill.ns.cloudflare.com. and ken.ns.cloudflare.com. are made up for each name asked, so its names cannot be listed from them
+```
+
+Some zones list their names on purpose, the root among them, so none of these
+is a fault: they are notes, `--check` grades them as passed, and the exit code
+is left alone. Servers part way through a change of signer can deny in
+different ways, and each way is a line of its own. The listing is asked over
+whatever carries the walk, `--doh` included, and nothing of the denial is
+kept.
 
 Only the start of a transfer is read, and nothing of the zone is kept or drawn.
 A transfer needs TCP: over `--dot` it is asked over TLS (RFC 9103), and `--doh`
@@ -430,13 +462,13 @@ takes the connection and resets it once the transfer is asked for, the way
 Route 53 refuses one, is `closed`; one that cannot be reached at all is
 `unchecked`, never `closed`.
 
-Each costs a query per nameserver, is off unless asked for, and leaves the exit
-code alone. A refused
-transfer still lands in the server's logs, so these are for zones you run or
+Each costs a query per nameserver, `--check-axfr` two with the listing, is off
+unless asked for, and leaves the exit code alone. A refused transfer still lands in the server's logs, so these are for zones you run or
 have been asked to check. The root is never asked: its servers hand out the
 root zone on purpose (RFC 8806). Like `--serial`, they look up the nameservers
 the walk did not need, and ask every one an address was found for. `--format json` carries each check as a `probe`
-on its hop, and `--format openmetrics` as `dnstree_open`.
+on its hop, with the `denial` a listing found, and `--format openmetrics` as
+`dnstree_open`, a listing by NSEC counting as open.
 
 ## How they handle EDNS
 

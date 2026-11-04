@@ -55,6 +55,7 @@ func TestExposure(t *testing.T) {
 			want: map[string]trace.ProbeState{
 				"ns1.test. transfer": trace.ProbeClosed, "ns1.test. recursion": trace.ProbeClosed,
 				"ns2.test. transfer": trace.ProbeClosed, "ns2.test. recursion": trace.ProbeClosed,
+				"ns1.test. listing": trace.ProbeClosed, "ns2.test. listing": trace.ProbeClosed,
 			},
 		},
 		"a secondary that hands the zone to anyone": {
@@ -89,8 +90,8 @@ func TestExposure(t *testing.T) {
 			}
 
 			got := probes(tr)
-			if len(got) != 4 {
-				t.Fatalf("got %d probes, want both questions put to both servers: %s", len(got), format(steps(tr)))
+			if len(got) != 6 {
+				t.Fatalf("got %d probes, want the three questions put to both servers: %s", len(got), format(steps(tr)))
 			}
 			for key, want := range tt.want {
 				step := got[key]
@@ -159,8 +160,10 @@ func TestExposureWithoutTCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if got := probes(tr); len(got) != 0 {
-		t.Errorf("got %d probes, want none without tcp", len(got))
+	for key := range probes(tr) {
+		if !strings.HasSuffix(key, " listing") {
+			t.Errorf("got a probe for %s, want only the listing, which needs no tcp", key)
+		}
 	}
 	if !warned(tr, "zone transfers of test. were not checked: they need tcp") {
 		t.Errorf("got %q, want the missing transport said", tr.Warnings)
@@ -234,5 +237,77 @@ func TestExposureFallback(t *testing.T) {
 		if step == nil || step.Probe.State != want || step.Proto != transport.ProtoUDP {
 			t.Errorf("got %+v for %s, want %s over udp", step, key, want)
 		}
+	}
+}
+
+// TestListing covers each way a signed zone proves a name missing. Only NSEC
+// names the real neighbours, so only NSEC lets the zone be listed.
+func TestListing(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		denial    fakens.Denial
+		leaf      fakens.Behaviour
+		want      trace.Denial
+		wantState trace.ProbeState
+	}{
+		"a zone that names its gaps with NSEC": {
+			denial: fakens.DenialNSEC, want: trace.DenialNSEC, wantState: trace.ProbeOpen,
+		},
+		"a zone that hashes its names with NSEC3": {
+			denial: fakens.DenialNSEC3, want: trace.DenialNSEC3, wantState: trace.ProbeClosed,
+		},
+		"a zone that opts out of NSEC3 for unsigned delegations": {
+			denial: fakens.DenialNSEC3OptOut, want: trace.DenialNSEC3, wantState: trace.ProbeClosed,
+		},
+		"a zone signed as it answers, with compact denials": {
+			denial: fakens.DenialCompact, want: trace.DenialMadeUp, wantState: trace.ProbeClosed,
+		},
+		"a server that refuses edns0, and so can carry no denial": {
+			denial: fakens.DenialNSEC, leaf: fakens.Behaviour{FormErrEDNS: true}, wantState: trace.ProbeUnchecked,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h, cfg := signedZoneAs(t, exampleZone, tt.denial, tt.leaf)
+			cfg.CheckTransfer = true
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.example.com", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			step := probes(tr)["ns.example.com. listing"]
+			if step == nil {
+				t.Fatalf("got no listing probe: %s", format(steps(tr)))
+			}
+			if step.Probe.Denial != tt.want || step.Probe.State != tt.wantState {
+				t.Errorf("got %s %s, want %s %s", step.Probe.Denial, step.Probe.State, tt.want, tt.wantState)
+			}
+			if !step.Aside || len(step.Records) != 0 {
+				t.Errorf("got aside %t with %d records, want an aside that keeps nothing", step.Aside, len(step.Records))
+			}
+			if result := tr.Result(); result == nil || result.Kind != trace.KindAnswer || result.Probe != nil {
+				t.Errorf("got %+v as the result, want the walk's own answer", result)
+			}
+		})
+	}
+}
+
+// TestListingUnsigned covers a zone with no DNSSEC, which has no denials to
+// follow.
+func TestListingUnsigned(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{})
+	cfg.CheckTransfer = true
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	step := probes(tr)["ns1.test. listing"]
+	if step == nil || step.Probe.Denial != trace.DenialNone || step.Probe.State != trace.ProbeClosed {
+		t.Errorf("got %+v, want a closed listing with no denial", step)
 	}
 }

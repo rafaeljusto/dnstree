@@ -5,7 +5,7 @@ import {
   KINDS, TONES, kindOf, took, flatten, asked, resultOf, verdictOf, chainState, widthOf,
   layout, drift, schedule, titleOf, subtitleOf, factsOf, declutter, stepFrom,
   trailOf, rideAt, behind, around, landingOf, lifeOf, lasted, networksOf, spanning, cutOf, changesOf,
-  viewToHash, viewFromHash, changeCount, NETWORKS,
+  viewToHash, viewFromHash, changeCount, NETWORKS, leaks,
 } from "../assets/scene/walk.js";
 import { golden, zone, step, chain } from "./fixtures.mjs";
 
@@ -420,6 +420,8 @@ test("the inspector marks what is wrong with a hop", () => {
     "a zone handed to anyone": [{ probe: { kind: "axfr", state: "open" } }, "axfr", ["open", "bad"]],
     "recursion that could not be checked": [{ probe: { kind: "recursion", state: "unchecked" } }, "recursion", ["unchecked", "warn"]],
     "recursion refused": [{ probe: { kind: "recursion", state: "closed" } }, "recursion", ["closed", null]],
+    "a zone its denials list": [{ probe: { kind: "listing", state: "open", denial: "nsec" } }, "listing", ["nsec", "warn"]],
+    "a zone its denials hash": [{ probe: { kind: "listing", state: "closed", denial: "nsec3" } }, "listing", ["nsec3", null]],
     "an edns flag copied back": [{ edns: { kind: "flag", state: "broken", fault: "echoed" } }, "edns flag", ["broken: echoed", "bad"]],
     "an edns version answered as it should": [{ edns: { kind: "version", state: "ok" } }, "edns version", ["ok", null]],
     "an extended error withheld": [{ extended: [{ code: 15, reason: "Blocked", withheld: true }] }, "ede", ["Blocked", "warn"]],
@@ -633,4 +635,10 @@ test("changes are counted the way the sentences say them", () => {
     "a cut that came and one that went": [{ was: {}, zones: [{ name: "a.", came: true }, { name: "b.", went: true }] }, 3],
   };
   for (const [name, [changes, want]] of Object.entries(cases)) assert.equal(changeCount(changes), want, name);
+});
+
+test("a zone its denials list is no leak, since some list theirs on purpose", () => {
+  const hop = (probe) => ({ step: step("answer", { probe }) });
+  assert.equal(leaks(hop({ kind: "transfer", state: "open" })), true);
+  assert.equal(leaks(hop({ kind: "listing", state: "open", denial: "nsec" })), false);
 });

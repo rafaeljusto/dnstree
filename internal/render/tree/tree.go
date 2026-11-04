@@ -569,10 +569,21 @@ func (r *renderer) dangling(dangling *trace.Dangling) string {
 }
 
 // probe is what a nameserver gave when asked for what it should keep from
-// strangers. Only an open one is worth the colour of a fault.
+// strangers. Only an open one is worth the colour of a fault, and a zone that
+// can be listed from its denials is not a fault: some list theirs on purpose.
 func (r *renderer) probe(probe *trace.Probe) string {
 	if probe == nil {
 		return ""
+	}
+	if probe.Kind == trace.ProbeListing {
+		label := "listing " + string(probe.State)
+		if probe.Denial != "" {
+			label = "listing " + string(probe.Denial)
+		}
+		if probe.State == trace.ProbeClosed {
+			return r.paint.dim(label)
+		}
+		return r.paint.paint(label, yellow)
 	}
 	label := "axfr "
 	if probe.Kind == trace.ProbeRecursion {

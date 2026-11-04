@@ -706,13 +706,18 @@ func TestRenderProbes(t *testing.T) {
 		probe(trace.ProbeTransfer, trace.ProbeOpen),
 		probe(trace.ProbeTransfer, trace.ProbeClosed),
 		probe(trace.ProbeRecursion, trace.ProbeUnchecked),
+		probe(trace.ProbeListing, trace.ProbeOpen),
+		probe(trace.ProbeListing, trace.ProbeClosed),
+		probe(trace.ProbeListing, trace.ProbeUnchecked),
 	)
+	listings := answer.Children[len(answer.Children)-3:]
+	listings[0].Probe.Denial, listings[1].Probe.Denial = trace.DenialNSEC, trace.DenialNSEC3
 
 	var out bytes.Buffer
 	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	for _, want := range []string{"axfr open", "axfr closed", "recursion unchecked"} {
+	for _, want := range []string{"axfr open", "axfr closed", "recursion unchecked", "listing nsec", "listing nsec3", "listing unchecked"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got no %q in:\n%s", want, out.String())
 		}
@@ -724,6 +729,10 @@ func TestRenderProbes(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "\x1b[31maxfr open") {
 		t.Errorf("got no open transfer painted as a fault:\n%q", out.String())
+	}
+	// Some zones list their names on purpose, so a listing is never a fault.
+	if strings.Contains(out.String(), "\x1b[31mlisting") {
+		t.Errorf("got a listing painted as a fault:\n%q", out.String())
 	}
 }
 

@@ -988,10 +988,15 @@ const (
 )
 
 // Probe is a nameserver asked, as a stranger, for what it should keep to the
-// zone's own: the whole zone, or a lookup of a name it does not serve.
+// zone's own: the whole zone, a lookup of a name it does not serve, or a denial
+// that names its neighbours.
 type Probe struct {
 	Kind  ProbeKind
 	State ProbeState
+
+	// Denial is how the server proved a made-up name missing, set only on a
+	// listing probe that was answered.
+	Denial Denial
 }
 
 // ProbeKind is what a nameserver was asked for.
@@ -1001,6 +1006,19 @@ type ProbeKind string
 const (
 	ProbeTransfer  ProbeKind = "transfer"  // the whole zone, by AXFR
 	ProbeRecursion ProbeKind = "recursion" // a name outside its zones, looked up for us
+	ProbeListing   ProbeKind = "listing"   // a made-up name, whose denial may name real ones
+)
+
+// Denial is how a zone proves a name missing. Only NSEC hands out the names on
+// either side of the gap, and a whole zone can be listed by following them.
+type Denial string
+
+// How a zone can prove a name missing.
+const (
+	DenialNSEC   Denial = "nsec"    // the real neighbours, so the names can be listed
+	DenialNSEC3  Denial = "nsec3"   // hashes of them, which common names can be guessed from
+	DenialMadeUp Denial = "made-up" // neighbours made up as it answers (RFC 4470, RFC 9824)
+	DenialNone   Denial = "none"    // no NSEC or NSEC3 at all
 )
 
 // ProbeState is what came of it. Unchecked is a server that could not be

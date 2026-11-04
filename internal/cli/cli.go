@@ -398,7 +398,11 @@ or a new name staying missing for a day.
 zone (AXFR), the way anybody could, and says on each which of them hand it
 over. A transfer lists every name in the zone, and is meant for the zone's own
 secondaries. Only the start of the reply is read, and nothing of it is kept or
-drawn. It needs tcp, so --doh cannot ask it, and --dot asks it over tls.
+drawn. It needs tcp, so --doh cannot ask it, and --dot asks it over tls. Each
+server is also asked for a made-up name, to say whether its DNSSEC denials
+list the zone anyway: nsec names the real names on either side, nsec3 hashes
+of them, and a server signing as it answers makes them up. Some zones list
+their names on purpose, so this is never called a fault.
 
 --check-recursion asks each of them to look up a name outside its zones, and
 says which of them do: an authoritative server that resolves for anyone is an
@@ -406,9 +410,9 @@ open resolver, which floods whoever an attacker points it at. It goes by what
 comes back rather than by the flag that says a server recurses, which servers
 set without doing it.
 
-Both cost what --serial does, and are off unless asked for: a transfer
-refused still shows up in the server's logs, so they are for zones you run or
-have been asked to check. The root is never asked either, since its servers
+Both cost what --serial does, --check-axfr a query more per server for the
+listing, and are off unless asked for: a transfer refused still shows up in
+the server's logs, so they are for zones you run or have been asked to check. The root is never asked either, since its servers
 hand out the root zone on purpose.
 
 --check-edns asks every nameserver of the zone the walk ends in for its SOA in

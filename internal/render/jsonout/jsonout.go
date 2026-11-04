@@ -482,15 +482,16 @@ type ds struct {
 
 // probe is a nameserver asked for what it should keep from strangers.
 type probe struct {
-	Kind  string `json:"kind"`
-	State string `json:"state"`
+	Kind   string `json:"kind"`
+	State  string `json:"state"`
+	Denial string `json:"denial,omitempty"`
 }
 
 func convertProbe(from *trace.Probe) *probe {
 	if from == nil {
 		return nil
 	}
-	return &probe{Kind: string(from.Kind), State: string(from.State)}
+	return &probe{Kind: string(from.Kind), State: string(from.State), Denial: string(from.Denial)}
 }
 
 // edns is a nameserver asked in one of the shapes RFC 8906 tests.

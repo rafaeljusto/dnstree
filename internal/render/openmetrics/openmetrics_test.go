@@ -190,6 +190,7 @@ func TestRenderProbes(t *testing.T) {
 			probe("192.0.2.5", trace.ProbeRecursion, trace.ProbeClosed, trace.KindAnswer),
 			probe("192.0.2.6", trace.ProbeTransfer, trace.ProbeUnchecked, trace.KindTimeout),
 			probe("192.0.2.7", trace.ProbeTransfer, trace.ProbeClosed, trace.KindError),
+			probe("192.0.2.8", trace.ProbeListing, trace.ProbeOpen, trace.KindNXDomain),
 		}},
 	}
 
@@ -198,6 +199,7 @@ func TestRenderProbes(t *testing.T) {
 	for _, want := range []string{
 		`dnstree_open{name="www.test.",type="A",check="transfer",zone="test.",server="ns.test.",address="192.0.2.5"} 1`,
 		`dnstree_open{name="www.test.",type="A",check="recursion",zone="test.",server="ns.test.",address="192.0.2.5"} 0`,
+		`dnstree_open{name="www.test.",type="A",check="listing",zone="test.",server="ns.test.",address="192.0.2.8"} 1`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("got\n%s\nwant %s", out, want)

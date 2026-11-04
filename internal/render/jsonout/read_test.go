@@ -103,6 +103,10 @@ func TestReadRoundTrip(t *testing.T) {
 				Zone: "example.", Kind: trace.KindTimeout, Aside: true,
 				Asked: trace.Question{Name: ".", Type: "NS"},
 				Probe: &trace.Probe{Kind: trace.ProbeRecursion, State: trace.ProbeUnchecked},
+			}, {
+				Zone: "example.", Kind: trace.KindNXDomain, Aside: true, Rcode: "NXDOMAIN",
+				Asked: trace.Question{Name: "dnstree-listing.example.", Type: "A"},
+				Probe: &trace.Probe{Kind: trace.ProbeListing, State: trace.ProbeOpen, Denial: trace.DenialNSEC},
 			}}},
 		},
 		"nameservers asked how they handle edns": {
@@ -535,6 +539,16 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "transfer", "state": "ajar"}}]}}`,
 			want: `"ajar"`,
+		},
+		"a denial nothing here knows": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "listing", "state": "closed", "denial": "nsec5"}}]}}`,
+			want: `"nsec5"`,
+		},
+		"a denial on a probe that asks for none": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "children": [{"zone": "x.", "kind": "answer", "probe": {"kind": "transfer", "state": "closed", "denial": "nsec"}}]}}`,
+			want: `transfer probe carries no denial`,
 		},
 		"an edns test of a shape nothing here asks in": {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

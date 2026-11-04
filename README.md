@@ -143,7 +143,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--check-ds`](docs/guide/dnssec.md#what-the-zone-asks-its-parent) | ask the zone for its CDS and CDNSKEY and compare them with the parent's DS, or, for a zone with none, check the bootstrap signals of RFC 9615; ask the parent where it takes notice of a change (DSYNC) |
 | [`--report`](docs/guide/dnssec.md#telling-the-zone-it-is-broken) | tell the agent a zone names that its chain of trust is bogus (RFC 9567) |
 | [`--serial`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of the zone which copy of it they serve, and compare, and judge the SOA's timers |
-| [`--check-axfr`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over |
+| [`--check-axfr`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone for the whole of it, as a stranger, and say which hand it over, and whether its denials (NSEC) list it anyway |
 | [`--check-recursion`](docs/guide/zones.md#what-they-give-a-stranger) | ask every nameserver of the zone to look up somebody else's name, and say which do |
 | [`--check-edns`](docs/guide/zones.md#how-they-handle-edns) | ask every nameserver of the zone the RFC 8906 EDNS tests and the same over TCP, and say which fail them |
 | [`--caa`](docs/guide/zones.md#who-may-issue-certificates-for-it) | say which certificate authorities may issue for the name, and which CAA set decides it (RFC 8659) |

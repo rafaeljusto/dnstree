@@ -1253,6 +1253,11 @@ func TestExposure(t *testing.T) {
 		step.Aside, step.Probe = true, &trace.Probe{Kind: kind, State: state}
 		return step
 	}
+	listing := func(server string, state trace.ProbeState, denial trace.Denial) *trace.Step {
+		step := probe(server, trace.ProbeListing, state)
+		step.Probe.Denial = denial
+		return step
+	}
 
 	for name, tt := range map[string]struct {
 		probes []*trace.Step
@@ -1280,6 +1285,34 @@ func TestExposure(t *testing.T) {
 				"no nameserver of test. handed the zone to a stranger",
 				"no nameserver of test. looked up another name for a stranger",
 			},
+		},
+		"a zone whose denials name its names": {
+			probes: []*trace.Step{
+				probe("ns1.test.", trace.ProbeTransfer, trace.ProbeClosed),
+				listing("ns1.test.", trace.ProbeOpen, trace.DenialNSEC),
+			},
+			want: []string{
+				"no nameserver of test. handed the zone to a stranger",
+				"the denials of test. at ns1.test. are nsec",
+				"anyone can list the zone by following them, whatever zone transfers allow",
+			},
+		},
+		"servers part way through a change of signer": {
+			probes: []*trace.Step{
+				listing("ns1.test.", trace.ProbeClosed, trace.DenialNSEC3),
+				listing("ns2.test.", trace.ProbeClosed, trace.DenialMadeUp),
+				listing("ns3.test.", trace.ProbeUnchecked, ""),
+			},
+			want: []string{
+				"the denials of test. at ns1.test. are nsec3, which name hashes instead",
+				"the denials of test. at ns2.test. are made up for each name asked",
+				"ns3.test. could not be asked for a denial, so whether the names of test. can be listed there is unknown",
+			},
+			unsaid: []string{"are nsec,"},
+		},
+		"an unsigned zone": {
+			probes: []*trace.Step{listing("ns1.test.", trace.ProbeClosed, trace.DenialNone)},
+			want:   []string{"test. answered without nsec or nsec3 at ns1.test."},
 		},
 		"a server that could not be asked": {
 			probes: []*trace.Step{

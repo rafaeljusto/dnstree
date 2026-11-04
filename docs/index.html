@@ -414,7 +414,7 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">exposed</span>
           <h3>Nameservers that give strangers too much</h3>
-          <p><code>--check-axfr</code> asks every nameserver for the whole zone, and <code>--check-recursion</code> asks each to look up somebody else's name. Only the start of a transfer is read, and none of it is kept.</p>
+          <p><code>--check-axfr</code> asks every nameserver for the whole zone, and whether its NSEC denials list the names anyway; <code>--check-recursion</code> asks each to look up somebody else's name. Only the start of a transfer is read, and none of it is kept.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">unreachable</span>

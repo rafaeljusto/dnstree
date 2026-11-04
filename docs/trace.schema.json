@@ -1396,14 +1396,19 @@
       "required": ["kind", "state"],
       "properties": {
         "kind": {
-          "description": "transfer is the whole zone asked for by AXFR; recursion is a name outside its zones asked with recursion desired.",
+          "description": "transfer is the whole zone asked for by AXFR; recursion is a name outside its zones asked with recursion desired; listing is a made-up name under the zone, asked with DNSSEC, whose denial may name real ones.",
           "type": "string",
-          "enum": ["transfer", "recursion"]
+          "enum": ["transfer", "recursion", "listing"]
         },
         "state": {
-          "description": "open where the server gave it, closed where it did not, and unchecked where it could not be asked, which says nothing either way.",
+          "description": "open where the server gave it, closed where it did not, and unchecked where it could not be asked, which says nothing either way. A listing is open where the denial names real neighbours, so the zone's names can be listed by following them.",
           "type": "string",
           "enum": ["open", "closed", "unchecked"]
+        },
+        "denial": {
+          "description": "Set only on a listing that was answered: nsec where the denial names the real neighbours, nsec3 where it names hashes of them, made-up where the server made them up as it answered (RFC 4470, RFC 9824), none where it carried neither NSEC nor NSEC3.",
+          "type": "string",
+          "enum": ["nsec", "nsec3", "made-up", "none"]
         }
       }
     },

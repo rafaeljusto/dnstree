@@ -95,7 +95,7 @@ export function flatten(root) {
 export const asked = (step) => step.kind !== "zone" && step.kind !== "skipped";
 
 // A server that hands out its zone, or looks names up, for anyone who asks.
-export const leaks = (hop) => hop.step.probe?.state === "open";
+export const leaks = (hop) => hop.step.probe?.state === "open" && hop.step.probe.kind !== "listing";
 
 // resultOf is read the way the trace defines it: the deepest hop that is
 // neither an aside nor a minimised one.
@@ -520,7 +520,11 @@ export function factsOf(step, started) {
   const d = step.dangling;
   if (d) row(d.kind === "lame" ? "dangling" : `dangling ${d.kind}`, d.kind === "lame" ? "every nameserver lame" : `${d.missing} is missing`, "warn");
   if (step.probe) {
-    row(step.probe.kind === "recursion" ? "recursion" : "axfr", step.probe.state, { open: "bad", unchecked: "warn" }[step.probe.state]);
+    if (step.probe.kind === "listing") {
+      row("listing", step.probe.denial ?? step.probe.state, { open: "warn", unchecked: "warn" }[step.probe.state]);
+    } else {
+      row(step.probe.kind === "recursion" ? "recursion" : "axfr", step.probe.state, { open: "bad", unchecked: "warn" }[step.probe.state]);
+    }
   }
   if (step.edns) {
     const e = step.edns;

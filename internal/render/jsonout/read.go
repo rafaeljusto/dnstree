@@ -600,7 +600,7 @@ func readProbe(from *probe) (*trace.Probe, error) {
 	}
 	kind, state := trace.ProbeKind(from.Kind), trace.ProbeState(from.State)
 	switch kind {
-	case trace.ProbeTransfer, trace.ProbeRecursion:
+	case trace.ProbeTransfer, trace.ProbeRecursion, trace.ProbeListing:
 	default:
 		return nil, fmt.Errorf("jsonout: %q is not something a nameserver can be asked for", from.Kind)
 	}
@@ -609,7 +609,16 @@ func readProbe(from *probe) (*trace.Probe, error) {
 	default:
 		return nil, fmt.Errorf("jsonout: %q is not what can come of asking a nameserver", from.State)
 	}
-	return &trace.Probe{Kind: kind, State: state}, nil
+	denial := trace.Denial(from.Denial)
+	switch {
+	case denial == "":
+	case kind != trace.ProbeListing:
+		return nil, fmt.Errorf("jsonout: a %s probe carries no denial", kind)
+	case denial == trace.DenialNSEC, denial == trace.DenialNSEC3, denial == trace.DenialMadeUp, denial == trace.DenialNone:
+	default:
+		return nil, fmt.Errorf("jsonout: %q is not a way a zone proves a name missing", from.Denial)
+	}
+	return &trace.Probe{Kind: kind, State: state, Denial: denial}, nil
 }
 
 func readEDNS(from *edns) (*trace.EDNSTest, error) {

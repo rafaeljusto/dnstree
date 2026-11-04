@@ -934,8 +934,9 @@ func exposure(tr *trace.Trace) []Finding {
 		kind trace.ProbeKind
 	}
 	var (
-		order []about
-		held  = make(map[about]map[trace.ProbeState][]string)
+		order   []about
+		held    = make(map[about]map[trace.ProbeState][]string)
+		denials = make(map[about]map[trace.Denial][]string)
 	)
 	for step := range tr.Steps() {
 		if step.Probe == nil {
@@ -945,14 +946,22 @@ func exposure(tr *trace.Trace) []Finding {
 		if held[key] == nil {
 			order = append(order, key)
 			held[key] = make(map[trace.ProbeState][]string)
+			denials[key] = make(map[trace.Denial][]string)
 		}
 		held[key][step.Probe.State] = add(held[key][step.Probe.State], at(step))
+		if step.Probe.Denial != "" {
+			denials[key][step.Probe.Denial] = add(denials[key][step.Probe.Denial], at(step))
+		}
 	}
 
 	var findings []Finding
 	for _, key := range order {
 		states := held[key]
 		open, unchecked := states[trace.ProbeOpen], states[trace.ProbeUnchecked]
+		if key.kind == trace.ProbeListing {
+			findings = append(findings, listing(key.zone, denials[key], unchecked)...)
+			continue
+		}
 		asked := "a zone transfer"
 		if key.kind == trace.ProbeRecursion {
 			asked = "recursion"
@@ -978,6 +987,31 @@ func exposure(tr *trace.Trace) []Finding {
 				"%s could not be asked for %s, so whether %s is open there is unknown",
 				list(unchecked), asked, asked)})
 		}
+	}
+	return findings
+}
+
+// listing is what the denials of a zone's servers give away, a line for each
+// way they deny, since servers part way through a change of signer can differ.
+// None of it is a fault: the root and some TLDs list their names on purpose.
+func listing(zone string, denials map[trace.Denial][]string, unchecked []string) []Finding {
+	var findings []Finding
+	for _, d := range []struct {
+		denial trace.Denial
+		text   string
+	}{
+		{trace.DenialNSEC, "the denials of %s at %s are nsec, which name the real names on either side, so anyone can list the zone by following them, whatever zone transfers allow"},
+		{trace.DenialNSEC3, "the denials of %s at %s are nsec3, which name hashes instead; common names can be guessed from them offline"},
+		{trace.DenialMadeUp, "the denials of %s at %s are made up for each name asked, so its names cannot be listed from them"},
+		{trace.DenialNone, "%s answered without nsec or nsec3 at %s, so there are none to list its names from"},
+	} {
+		if servers := denials[d.denial]; len(servers) > 0 {
+			findings = append(findings, Finding{Topic: Servers, Level: Note, Text: fmt.Sprintf(d.text, zone, list(servers))})
+		}
+	}
+	if len(unchecked) > 0 {
+		findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
+			"%s could not be asked for a denial, so whether the names of %s can be listed there is unknown", list(unchecked), zone)})
 	}
 	return findings
 }

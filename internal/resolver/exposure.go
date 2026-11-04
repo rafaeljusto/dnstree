@@ -3,6 +3,7 @@ package resolver
 import (
 	"cmp"
 	"context"
+	"slices"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
@@ -12,9 +13,10 @@ import (
 )
 
 // checkExposure asks every nameserver of the zone the walk ended in for what it
-// should keep from strangers: the whole zone, and a lookup of somebody else's
-// name. Like checkSerial the questions go out together and join the trace
-// afterwards, from the goroutine doing the walking.
+// should keep from strangers: the whole zone, a lookup of somebody else's name,
+// and a denial that may list the zone a name at a time. Like checkSerial the
+// questions go out together and join the trace afterwards, from the goroutine
+// doing the walking.
 //
 // The root is left alone. Its servers hand the zone to anyone on purpose (RFC
 // 8806), and a name outside the root's zones does not exist to be asked.
@@ -51,6 +53,11 @@ func (r *run) checkExposure(ctx context.Context, answer *trace.Step, zone string
 		if checkTransfer {
 			probes = append(probes, probe{server, trace.ProbeTransfer})
 		}
+		// Following NSEC records lists a zone as surely as a transfer does, so
+		// it goes with --check-axfr, over any transport.
+		if r.cfg.CheckTransfer {
+			probes = append(probes, probe{server, trace.ProbeListing})
+		}
 		if r.cfg.CheckRecursion {
 			probes = append(probes, probe{server, trace.ProbeRecursion})
 		}
@@ -58,8 +65,12 @@ func (r *run) checkExposure(ctx context.Context, answer *trace.Step, zone string
 
 	probes, budget := afford(r.counters, probes)
 	steps := askAll(probes, func(p probe) *trace.Step {
-		if p.kind == trace.ProbeTransfer {
-			return r.probe(ctx, zone, p.server, transfer, zone, dns.TypeAXFR, p.kind, false, transferred)
+		switch p.kind {
+		case trace.ProbeTransfer:
+			return r.probe(ctx, zone, p.server, transfer, zone, dns.TypeAXFR, p.kind, false, transferred(zone))
+		case trace.ProbeListing:
+			qname := listingName + zone
+			return r.probe(ctx, zone, p.server, r.cfg.Transport, qname, dns.TypeA, p.kind, false, listed(qname))
 		}
 		return r.probe(ctx, zone, p.server, r.cfg.Transport, ".", dns.TypeNS, p.kind, true, recursed)
 	})
@@ -72,11 +83,15 @@ func (r *run) checkExposure(ctx context.Context, answer *trace.Step, zone string
 	}
 }
 
+// listingName is the label of the made-up name a listing probe asks for. It is
+// fixed rather than random so that a capture of the walk replays.
+const listingName = "dnstree-listing."
+
 // probe asks one server one of the questions checkExposure puts, and reads the
-// answer with open. Whatever came back is dropped once it has been read: the
+// answer with read. Whatever came back is dropped once it has been read: the
 // zone a server should not have handed over is not ours to keep or draw.
 func (r *run) probe(ctx context.Context, zone string, server trace.Server, carrier transport.Transport,
-	qname string, qtype uint16, kind trace.ProbeKind, recurse bool, open func(*dns.Msg, string) bool) *trace.Step {
+	qname string, qtype uint16, kind trace.ProbeKind, recurse bool, read func(*dns.Msg, *trace.Probe)) *trace.Step {
 
 	port := server.Port
 	server.Port = cmp.Or(port, carrier.Port())
@@ -94,7 +109,13 @@ func (r *run) probe(ctx context.Context, zone string, server trace.Server, carri
 		Aside:  true,
 		Probe:  &trace.Probe{Kind: kind, State: trace.ProbeUnchecked},
 	}
-	desire := func(req *dns.Msg) { req.RecursionDesired = recurse }
+	desire := func(req *dns.Msg) {
+		req.RecursionDesired = recurse
+		// The denials only come signed to a query that asks for DNSSEC.
+		if kind == trace.ProbeListing {
+			req.Security = req.UDPSize > 0
+		}
+	}
 
 	udpSize := r.cfg.UDPSize
 	resp, err := r.exchange(ctx, step, carrier, qname, qtype, udpSize, port, desire)
@@ -147,34 +168,78 @@ func (r *run) probe(ctx context.Context, zone string, server trace.Server, carri
 	step.Size = len(resp.Data)
 	step.Flags = trace.Flags{AA: resp.Authoritative, EDNS: resp.UDPSize > 0}
 	step.Probe.State = trace.ProbeClosed
-	if open(resp, zone) {
-		step.Probe.State = trace.ProbeOpen
-	}
+	read(resp, step.Probe)
 	return step
 }
 
-// transferred reports whether a reply to an AXFR is the zone: a transfer opens
-// with the zone's own SOA (RFC 5936 2.2). A refusal, or anything else, is not.
-func transferred(resp *dns.Msg, zone string) bool {
-	if resp.Rcode != dns.RcodeSuccess || len(resp.Answer) == 0 {
-		return false
+// transferred reads a reply to an AXFR as the zone where it opens with the
+// zone's own SOA (RFC 5936 2.2). A refusal, or anything else, is not.
+func transferred(zone string) func(*dns.Msg, *trace.Probe) {
+	return func(resp *dns.Msg, probe *trace.Probe) {
+		if resp.Rcode != dns.RcodeSuccess || len(resp.Answer) == 0 {
+			return
+		}
+		first := resp.Answer[0]
+		if dns.RRToType(first) == dns.TypeSOA && dns.EqualName(first.Header().Name, zone) {
+			probe.State = trace.ProbeOpen
+		}
 	}
-	first := resp.Answer[0]
-	return dns.RRToType(first) == dns.TypeSOA && dns.EqualName(first.Header().Name, zone)
 }
 
-// recursed reports whether a reply to the root's NS set, asked of a server
-// that does not serve the root, is a lookup done for us. It goes by what came
-// back and not by RA, which servers set without recursing. An authoritative
-// answer is a server holding a copy of the root, which is not a resolver.
-func recursed(resp *dns.Msg, _ string) bool {
+// listed reads the denial of qname, a name made up under the zone. A reply
+// that is no denial with authority says nothing about how the zone denies, and
+// nor does one without EDNS0, which cannot have carried the DNSSEC records:
+// a server that refused EDNS0 was asked again without it.
+func listed(qname string) func(*dns.Msg, *trace.Probe) {
+	return func(resp *dns.Msg, probe *trace.Probe) {
+		if !resp.Authoritative || resp.UDPSize == 0 || resp.Rcode != dns.RcodeSuccess && resp.Rcode != dns.RcodeNameError {
+			probe.State = trace.ProbeUnchecked
+			return
+		}
+		probe.Denial = denial(resp, qname)
+		if probe.Denial == trace.DenialNSEC {
+			probe.State = trace.ProbeOpen
+		}
+	}
+}
+
+// denial is how resp proves qname missing. A signer working as it answers
+// gives the name itself as an owner (RFC 9824) or the name just after it as
+// the next one (RFC 4470); one real neighbour among them would still be read
+// as made up, which is the side that claims less.
+func denial(resp *dns.Msg, qname string) trace.Denial {
+	found := trace.DenialNone
+	for _, rr := range slices.Concat(resp.Answer, resp.Ns) {
+		switch rr := rr.(type) {
+		case *dns.NSEC:
+			// The codec unpacks a zero octet escaped, though it packs one raw.
+			next := rr.NextDomain
+			if dns.EqualName(rr.Hdr.Name, qname) || dns.EqualName(next, `\000.`+qname) || dns.EqualName(next, "\x00."+qname) {
+				return trace.DenialMadeUp
+			}
+			found = trace.DenialNSEC
+		case *dns.NSEC3:
+			if found == trace.DenialNone {
+				found = trace.DenialNSEC3
+			}
+		}
+	}
+	return found
+}
+
+// recursed reads a reply to the root's NS set, asked of a server that does not
+// serve the root, as a lookup done for us where it carries that set. It goes by
+// what came back and not by RA, which servers set without recursing. An
+// authoritative answer is a server holding a copy of the root, which is not a
+// resolver.
+func recursed(resp *dns.Msg, probe *trace.Probe) {
 	if resp.Rcode != dns.RcodeSuccess || resp.Authoritative {
-		return false
+		return
 	}
 	for _, rr := range resp.Answer {
 		if dns.RRToType(rr) == dns.TypeNS && dns.EqualName(rr.Header().Name, ".") {
-			return true
+			probe.State = trace.ProbeOpen
+			return
 		}
 	}
-	return false
 }

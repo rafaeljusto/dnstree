@@ -224,7 +224,7 @@ var drawnElsewhere = map[string]bool{"ExtendedError.Text": true}
 // constants, and jsonout.Read refuses any other value. A new one belongs here
 // only once its reader does the same.
 var readChecked = map[string]bool{
-	"Area": true, "CSYNCState": true, "CookieState": true, "DNSSECState": true,
+	"Area": true, "CSYNCState": true, "CookieState": true, "DNSSECState": true, "Denial": true,
 	"DanglingKind": true, "EDNSFault": true, "EDNSKind": true, "EDNSState": true,
 	"Failure": true, "Grade": true, "Kept": true, "Match": true,
 	"Observed": true, "ProbeKind": true, "ProbeState": true, "RegistrationState": true,
