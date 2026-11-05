@@ -35,7 +35,8 @@ func TestDenial(t *testing.T) {
 			want:      trace.DenialMadeUp,
 		},
 		"hashed names": {
-			authority: []string{"1avvqn74sg75ukfvf25dgcethgq638ek.example.com. 3600 IN NSEC3 1 0 0 - 75b9id679qqoij81oc7ut2ejikvuqrpu A RRSIG"},
+			// Upper case: the codec packs no other base32hex since v0.6.128.
+			authority: []string{"1avvqn74sg75ukfvf25dgcethgq638ek.example.com. 3600 IN NSEC3 1 0 0 - 75B9ID679QQOIJ81OC7UT2EJIKVUQRPU A RRSIG"},
 			want:      trace.DenialNSEC3,
 		},
 		"no denial at all": {
