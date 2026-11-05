@@ -232,6 +232,7 @@ func (s *Step) Shown() *Step {
 		shown.Delegation = &d
 	}
 	shown.DNSSEC = s.DNSSEC.shown()
+	shown.Repeated = s.Repeated.shown()
 	if s.Dangling != nil {
 		d := *s.Dangling
 		d.Name, d.Target = Shown(d.Name), Shown(d.Target)

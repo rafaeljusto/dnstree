@@ -797,6 +797,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 
 		NSID:     cfg.NSID,
 		Software: cfg.Software,
+		Repeat:   cfg.Repeat,
 		Cookie:   cfg.Cookie,
 		Minimise: cfg.Minimise,
 		Subnet:   cfg.Subnet,

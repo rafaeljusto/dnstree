@@ -364,6 +364,7 @@ type step struct {
 	Dangling   *dangling       `json:"dangling,omitempty"`
 	Probe      *probe          `json:"probe,omitempty"`
 	EDNS       *edns           `json:"edns,omitempty"`
+	Repeated   *repeated       `json:"repeated,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	Children   []*step         `json:"children,omitempty"`
 }
@@ -576,6 +577,7 @@ func convert(from *trace.Step, timed bool) *step {
 		Dangling:   convertDangling(from.Dangling),
 		Probe:      convertProbe(from.Probe),
 		EDNS:       convertEDNS(from.EDNS),
+		Repeated:   convertRepeated(from.Repeated),
 		Error:      from.Err,
 	}
 	// Written wherever it is known, a start of zero included: the first query

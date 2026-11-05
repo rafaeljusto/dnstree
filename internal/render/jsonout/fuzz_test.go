@@ -43,6 +43,10 @@ func FuzzRead(f *testing.F) {
 		`"synthesises":"yes","prefixes":["64:ff9b::/96"],"dns64":{"elapsed_ms":1,"rcode":"NOERROR"}}}]}`))
 	f.Add([]byte(`{"schema_version": 5,"question":{"name":"x.","type":"A","class":"IN"},"root":{"zone":".","kind":"zone"},` +
 		`"trial":{"zone":"x\u001b[2K.","ns":[],"ds":[{"key_tag":1,"algorithm":13,"digest_type":2,"digest":"\u001b[2K"}]}}`))
+	f.Add([]byte(`{"schema_version": 5,"question":{"name":"x.","type":"A","class":"IN"},"root":{"zone":".","kind":"zone","children":[` +
+		`{"zone":"x.","kind":"answer","server":{"name":"ns.x.","ip":"192.0.2.5","port":53},"asked":{"name":"x.","type":"A"},"rcode":"NOERROR",` +
+		`"repeated":{"asked":3,"answered":2,"timed_out":1,"rcodes":[{"value":"NOERROR","times":1},{"value":"\u001b[2K","times":1}],` +
+		`"best_ms":1,"median_ms":2,"worst_ms":3,"instances":[{"value":"\u001b[2K","times":2}]}}]}}`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		tr, err := jsonout.Read(bytes.NewReader(data))

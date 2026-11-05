@@ -741,6 +741,9 @@ type Step struct {
 	// nameserver, and says whether it answered as EDNS says it should.
 	EDNS *EDNSTest
 
+	// Repeated is what --repeat got asking this hop's question again.
+	Repeated *Repeated
+
 	Children []*Step
 	Err      string
 }

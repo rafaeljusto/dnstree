@@ -213,6 +213,42 @@ func TestRenderProbes(t *testing.T) {
 	}
 }
 
+// TestRenderRepeats covers --repeat: how many repeats each hop was asked and
+// answered, and the median time only where something answered.
+func TestRenderRepeats(t *testing.T) {
+	hop := func(ip string, repeated *trace.Repeated) *trace.Step {
+		return &trace.Step{
+			Zone: "test.", Kind: trace.KindAnswer, Rcode: "NOERROR",
+			Server:   trace.Server{Name: "ns.test.", IP: netip.MustParseAddr(ip)},
+			Asked:    trace.Question{Name: "www.test.", Type: "A"},
+			Repeated: repeated,
+		}
+	}
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{
+			hop("192.0.2.5", &trace.Repeated{Asked: 20, Answered: 13, TimedOut: 7, Median: 140 * time.Millisecond}),
+			hop("192.0.2.6", &trace.Repeated{Asked: 20, TimedOut: 20}),
+		}},
+	}
+
+	out := render(t, tr)
+	valid(t, out)
+	for _, want := range []string{
+		`dnstree_repeat_asked{name="www.test.",type="A",zone="test.",server="ns.test.",address="192.0.2.5",asked="www.test.",asked_type="A"} 20`,
+		`dnstree_repeat_answered{name="www.test.",type="A",zone="test.",server="ns.test.",address="192.0.2.5",asked="www.test.",asked_type="A"} 13`,
+		`dnstree_repeat_answered{name="www.test.",type="A",zone="test.",server="ns.test.",address="192.0.2.6",asked="www.test.",asked_type="A"} 0`,
+		`dnstree_repeat_median_seconds{name="www.test.",type="A",zone="test.",server="ns.test.",address="192.0.2.5",asked="www.test.",asked_type="A"} 0.14`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("got\n%s\nwant %s", out, want)
+		}
+	}
+	if strings.Contains(out, `dnstree_repeat_median_seconds{name="www.test.",type="A",zone="test.",server="ns.test.",address="192.0.2.6"`) {
+		t.Errorf("got\n%s\nwant no time for the server that never answered", out)
+	}
+}
+
 // TestRenderEDNS covers --check-edns: a sample for every test that was read,
 // none for a server that answered nothing, and a dropped test counted once.
 func TestRenderEDNS(t *testing.T) {

@@ -351,6 +351,14 @@ footer a:hover{color:var(--ink)}
       </p>
 
       <p class="section-lede" style="margin-top:1.4rem">
+        <code>--repeat 20</code> asks every hop's question twenty more times, the way
+        <code>mtr</code> does for a route, and says how many came back and how long they
+        took: <code>20/20 answered  225ms best  234ms median  302ms worst</code>. A fault
+        that shows one time in ten, such as one anycast instance that drops queries,
+        is one a single walk can miss.
+      </p>
+
+      <p class="section-lede" style="margin-top:1.4rem">
         <code>--cookie</code> sends every server a DNS cookie (RFC&nbsp;7873) and says how
         it answered: <code>cookie</code> where it sent ours back with one of its own,
         <code>no cookie</code> where it sent none, and <code>cookie not ours</code>,

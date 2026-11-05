@@ -153,6 +153,14 @@ type Config struct {
 	// where the first name got nothing.
 	Software bool
 
+	// Repeat asks every question of the walk's own hops again this many
+	// times, once each and without a retry, and keeps on each hop how many
+	// came back and how long they took. Some faults only show some of the
+	// time: one anycast instance that drops queries, a server that limits how
+	// fast it answers. The repeats come after the walk and are no part of it,
+	// and spend no budget: trace.MaxRepeat bounds them instead.
+	Repeat int
+
 	// Cookie sends a DNS cookie to every server (RFC 7873) and records how it
 	// answered. Like a client that supports them, the walk sends each server
 	// back the cookie it handed out. It costs no query of its own, except a
@@ -378,6 +386,7 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 	run.dsync(ctx)
 	run.software(ctx)
 	run.trace.Elapsed = run.since()
+	run.repeat(ctx)
 	return run.trace, nil
 }
 

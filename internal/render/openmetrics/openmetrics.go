@@ -304,6 +304,7 @@ func (e *Exposition) Add(tr *trace.Trace) {
 	}
 
 	probes(m, tr)
+	repeats(m, tr)
 	ednsTests(m, tr)
 	resolvers(m, tr)
 
@@ -347,6 +348,55 @@ func probes(m *metrics, tr *trace.Trace) {
 			label{"zone", step.Zone},
 			label{"server", step.Server.Name},
 			label{"address", address(step.Server)})
+	}
+}
+
+// repeats writes what --repeat counted, one sample per hop asked again, so
+// that a monitor can alert on a server that answers some of the time. The
+// time is left out where nothing answered: a zero would read as a fast one.
+func repeats(m *metrics, tr *trace.Trace) {
+	type hop struct {
+		labels   []label
+		repeated *trace.Repeated
+	}
+	// A series is its labels, and the same question can have gone to one
+	// address over two transports.
+	var hops []hop
+	seen := map[[5]label]bool{}
+	answered := false
+	for _, step := range tr.Repeats() {
+		key := [5]label{
+			{"zone", step.Zone},
+			{"server", step.Server.Name},
+			{"address", address(step.Server)},
+			{"asked", step.Asked.Name},
+			{"asked_type", step.Asked.Type},
+		}
+		if !seen[key] {
+			seen[key] = true
+			hops = append(hops, hop{key[:], step.Repeated})
+			answered = answered || step.Repeated.Answered > 0
+		}
+	}
+	if len(hops) == 0 {
+		return
+	}
+	m.family("dnstree_repeat_asked", "", "how many times --repeat asked a hop's question again")
+	for _, h := range hops {
+		m.sample("dnstree_repeat_asked", strconv.Itoa(h.repeated.Asked), h.labels...)
+	}
+	m.family("dnstree_repeat_answered", "", "how many of a hop's repeats were answered")
+	for _, h := range hops {
+		m.sample("dnstree_repeat_answered", strconv.Itoa(h.repeated.Answered), h.labels...)
+	}
+	if !answered {
+		return
+	}
+	m.family("dnstree_repeat_median_seconds", "seconds", "the median round trip of a hop's answered repeats")
+	for _, h := range hops {
+		if h.repeated.Answered > 0 {
+			m.sample("dnstree_repeat_median_seconds", seconds(h.repeated.Median), h.labels...)
+		}
 	}
 }
 

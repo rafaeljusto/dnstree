@@ -776,3 +776,36 @@ func TestRenderEDNS(t *testing.T) {
 		t.Errorf("got no broken test painted as a fault:\n%q", out.String())
 	}
 }
+
+// TestRenderRepeats covers what --repeat counted: a line for each hop asked
+// again, and a fault's colour on the ones that did not all come back.
+func TestRenderRepeats(t *testing.T) {
+	tr := resolution()
+	tr.Root.Children[0].Repeated = &trace.Repeated{
+		Asked: 20, Answered: 20, Best: 9 * time.Millisecond, Median: 11 * time.Millisecond, Worst: 18 * time.Millisecond,
+		Rcodes: []trace.Count{{Value: tr.Root.Children[0].Rcode, Times: 20}},
+	}
+	answer := tr.Result()
+	answer.Repeated = &trace.Repeated{
+		Asked: 20, Answered: 13, TimedOut: 7, Best: 81 * time.Millisecond, Median: 140 * time.Millisecond, Worst: 1200 * time.Millisecond,
+		Rcodes:    []trace.Count{{Value: "NOERROR", Times: 12}, {Value: "SERVFAIL", Times: 1}},
+		Instances: []trace.Count{{Value: "fra1", Times: 9}, {Value: "ams2", Times: 1}, {Value: "lhr1", Times: 1}, {Value: "par1", Times: 1}, {Value: "mad1", Times: 1}},
+	}
+
+	var out bytes.Buffer
+	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII, Color: tree.ColorAlways}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, want := range []string{
+		"repeat: " + tr.Root.Children[0].Asked.Name,
+		"20/20 answered  9ms best  11ms median  18ms worst\x1b",
+		"13/20 answered  81ms best  140ms median  1.2s worst  7 timed out  NOERROR 12, SERVFAIL 1  @fra1 9, @ams2 1, @lhr1 1, @par1 1 and 1 more",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("got no %q in:\n%q", want, out.String())
+		}
+	}
+	if !strings.Contains(out.String(), "\x1b[33mrepeat: "+answer.Asked.Name) {
+		t.Errorf("got the answer's misses drawn as though nothing were wrong:\n%q", out.String())
+	}
+}

@@ -72,6 +72,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--format", "web", "--web-addr", "0.0.0.0:8080", "--no-browser", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "web", WebAddr: "0.0.0.0:8080"},
 		},
+		"every hop asked again": {
+			args: []string{"--repeat", "20", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Repeat: 20},
+		},
 		"a walk explained": {
 			args: []string{"--explain", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Explain: true},
@@ -494,6 +498,8 @@ func TestParseRejects(t *testing.T) {
 		"an unknown colour":                         {"--color", "sometimes", "example.com"},
 		"a timeout of nothing":                      {"--timeout", "0", "example.com"},
 		"a negative retry count":                    {"--retries", "-1", "example.com"},
+		"fewer than no repeats":                     {"--repeat", "-1", "example.com"},
+		"more repeats than a walk may ask":          {"--repeat", "101", "example.com"},
 		"no zone cuts to follow":                    {"--max-depth", "0", "example.com"},
 		"no queries to make":                        {"--max-queries", "0", "example.com"},
 		"no aliases to chase":                       {"--max-cname", "0", "example.com"},

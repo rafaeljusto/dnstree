@@ -42,6 +42,18 @@ func TestReadRoundTrip(t *testing.T) {
 					State: trace.SignalPending, Reason: "the zone asks for key 9", Requested: []uint16{9}, Held: []uint16{7}}},
 			}}},
 		},
+		"a hop asked again, with what came back": {
+			Question: trace.Question{Name: "www.example.", Type: "A", Class: "IN"},
+			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindAnswer, Rcode: "NOERROR",
+				Server: trace.Server{Name: "ns.example.", IP: netip.MustParseAddr("192.0.2.3"), Port: 53},
+				Asked:  trace.Question{Name: "www.example.", Type: "A"},
+				Repeated: &trace.Repeated{Asked: 20, Answered: 13, TimedOut: 6, Failed: 1, Truncated: 2,
+					Rcodes:    []trace.Count{{Value: "NOERROR", Times: 12}, {Value: "SERVFAIL", Times: 1}},
+					Instances: []trace.Count{{Value: "fra1", Times: 10}},
+					Best:      81 * time.Millisecond, Median: 140 * time.Millisecond, Worst: 1200 * time.Millisecond},
+			}}},
+		},
 		"a denial proven with salted NSEC3": {
 			Question: trace.Question{Name: "nope.example.", Type: "A", Class: "IN"},
 			Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
@@ -708,6 +720,21 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"root": {"zone": ".", "kind": "zone", "apart": true}}`,
 			want: "apart",
+		},
+		"repeats that do not add up": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "repeated": {"asked": 5, "answered": 9}}}`,
+			want: "add up",
+		},
+		"more answers by rcode than came back": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "repeated": {"asked": 2, "answered": 2, "rcodes": [{"value": "NOERROR", "times": 2}, {"value": "\u001b", "times": 1}]}}}`,
+			want: "rcodes",
+		},
+		"more repeats than a walk may ask": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"root": {"zone": ".", "kind": "zone", "repeated": {"asked": 1000, "answered": 1000}}}`,
+			want: "no more than",
 		},
 		"something after the trace": {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1} [1]`,

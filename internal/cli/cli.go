@@ -67,6 +67,7 @@ one after another, each from the root servers down.
   --check                 run the checks that grade a zone, and grade its health
   --nsid                  ask each server which of itself answered (RFC 5001)
   --software              ask each server which software it runs (version.bind)
+  --repeat N              ask each hop's question N more times; count what came back
   --cookie                send each server a DNS cookie and say how it answered
   --qmin                  ask each zone for no more of the name than it needs
   --without SERVER        treat a nameserver, address or prefix as down; repeat it
@@ -591,6 +592,17 @@ is a choice, not a fault. The text is the server's own, often a joke or a lie,
 and is quoted, never judged. It costs a query a server, and a second where
 version.bind gets nothing and version.server is asked instead.
 
+--repeat asks every question of the walk's own hops N more times, of the server
+that was asked it and over the same transport, and says under the tree how many
+came back and how long they took: best, median and worst. Some faults only show
+some of the time, such as one anycast instance that drops queries or a server
+that limits how fast it answers, and a single walk either meets them or does
+not. Each repeat is asked once, with no retry after a silence, and the rounds
+go out a tenth of a second apart. With --nsid each answer names the instance
+that sent it. A server that missed any is warned about. The repeats come after
+the walk and change nothing about it, its answer and exit code included; they
+spend no part of --max-queries, and N is at most 100.
+
 --cookie sends every server a DNS cookie (RFC 7873) and says on each hop how it
 answered: cookie, no cookie, cookie not ours, cookie malformed or cookie
 rejected. A server that supports cookies is sent back the one it handed out, the
@@ -692,6 +704,7 @@ type Config struct {
 
 	NSID     bool
 	Software bool
+	Repeat   int
 	Cookie   bool
 	Minimise bool
 	ASN      bool
@@ -931,6 +944,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&cfg.Check, "check", false, "run the checks that grade a zone, and grade its health")
 	flags.BoolVar(&cfg.NSID, "nsid", false, "ask each server which of itself answered")
 	flags.BoolVar(&cfg.Software, "software", false, "ask each server which software it runs")
+	flags.IntVar(&cfg.Repeat, "repeat", 0, "ask each hop's question again this many times")
 	flags.BoolVar(&cfg.Cookie, "cookie", false, "send each server a DNS cookie and say how it answered")
 	flags.BoolVar(&cfg.Minimise, "qmin", false, "ask each zone for no more of the name than it needs")
 	flags.StringVar(&subnet, "subnet", "", "ask as though from this client subnet")
@@ -1192,6 +1206,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: %sa timeout of %s leaves no time to answer", ErrUsage, inFile("timeout"), timeout)
 	}
 	cfg.Timeout = timeout
+	if cfg.Repeat < 0 || cfg.Repeat > trace.MaxRepeat {
+		return nil, fmt.Errorf("%w: %s--repeat %d is not a number of repeats; the most is %d", ErrUsage, inFile("repeat"), cfg.Repeat, trace.MaxRepeat)
+	}
 	if cfg.Retries < 0 {
 		return nil, fmt.Errorf("%w: %s%d retries is not a number of retries", ErrUsage, inFile("retries"), cfg.Retries)
 	}
@@ -1441,7 +1458,7 @@ var askOutside = map[string]bool{
 // one already made.
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
-	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "srv": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "cookie": true, "qmin": true,
+	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "srv": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "repeat": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "try-ds": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,

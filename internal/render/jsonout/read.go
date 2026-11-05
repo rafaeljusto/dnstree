@@ -255,6 +255,9 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	if to.EDNS, err = readEDNS(from.EDNS); err != nil {
 		return nil, err
 	}
+	if to.Repeated, err = readRepeated(from.Repeated); err != nil {
+		return nil, err
+	}
 	for _, child := range from.Children {
 		read, err := readStep(child, depth+1)
 		if err != nil {

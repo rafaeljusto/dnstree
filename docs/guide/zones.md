@@ -21,6 +21,7 @@ server says about its own answer.
 - [What a server said about its answer](#what-a-server-said-about-its-answer)
 - [Which machine answered](#which-machine-answered)
 - [Which software a server runs](#which-software-a-server-runs)
+- [Whether it answers every time](#whether-it-answers-every-time)
 - [Which servers support DNS cookies](#which-servers-support-dns-cookies)
 - [Asking only what each zone needs](#asking-only-what-each-zone-needs)
 - [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
@@ -1194,6 +1195,50 @@ to try; `version hidden` is that choice, and not a fault. What a server says is
 its own words, often a joke or a lie, and is drawn quoted, escaped and cut to a
 line's room, never judged. With `--check-edns`, a server that fails a test is
 named with what it says it runs, for the fix to start from.
+
+## Whether it answers every time
+
+Some faults only show some of the time: one nameserver of four that drops
+queries, one anycast instance of many that is broken, a server that limits how
+fast it answers one source. A walk asks each server once, and either meets the
+fault or does not. `--repeat N` asks every question of the walk's own hops N
+more times, of the same server over the same transport, the way `mtr` sends
+many packets to every hop of a route, and says under the tree how many came
+back and how long they took:
+
+```
+$ dnstree --repeat 20 --nsid --no-asn www.example.com A
+. (root)
+├── a.root-servers.net. 198.41.0.4  @a.r.ams5.nlams-0  244ms  NOERROR  referral → com.
+│   ├── l.gtld-servers.net. 192.41.162.30  @nnn1-defra-7a  243ms  NOERROR  referral → example.com.
+│   │   ├── hera.ns.cloudflare.com. 108.162.192.162  @52m261  222ms  NOERROR  AA
+...
+repeat: www.example.com. A at a.root-servers.net. 198.41.0.4  20/20 answered  241ms best  249ms median  302ms worst  @a.r.ams5.nlams-0 20
+repeat: www.example.com. A at l.gtld-servers.net. 192.41.162.30  20/20 answered  241ms best  253ms median  302ms worst  @nnn1-defra-7a 16, @nnn1-defra-7b 4
+repeat: www.example.com. A at hera.ns.cloudflare.com. 108.162.192.162  20/20 answered  225ms best  234ms median  302ms worst  @918m95 2, @52m105 1, @52m134 1, @52m146 1 and 15 more
+✔ answered in 710ms · resolver in 240ms · 3 queries · 3 servers
+```
+
+Each repeat is asked once, with no retry after a silence, since a retry is
+what hides the loss being looked for; the rounds go out a tenth of a second
+apart, so the check does not set off the rate limiting it may be looking for.
+A server that missed any is warned about, by how many timed out or failed,
+and so is one that answered some repeats with an rcode other than the walk's.
+With `--nsid`, each answer names the instance that sent it, which is what
+turns "ns2 drops a third" into "one site of ns2 drops everything"; a repeat
+that timed out names nobody, so the instances count answers only. The counts
+are drawn as they are, 13/20 and not 65%: twenty tries are evidence, not a
+rate.
+
+Only the walk's own hops are asked again. The keys, the lookups other checks
+make and the probes are left alone, and with `--all` every server of every
+zone is. The repeats come after the walk and change nothing about it, its
+answer and its exit code included. They spend no part of `--max-queries`; N is
+at most 100 instead, and that times the hops the budget let the walk make is
+what bounds them. `--format openmetrics` writes them as
+`dnstree_repeat_asked`, `dnstree_repeat_answered` and
+`dnstree_repeat_median_seconds`, for a monitor to alert on loss rather than
+only on a total failure.
 
 ## Which servers support DNS cookies
 

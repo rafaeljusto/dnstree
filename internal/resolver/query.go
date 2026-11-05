@@ -185,23 +185,11 @@ func outOfTime(ctx context.Context) bool {
 func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.Transport, qname string, qtype uint16, udpSize, port uint16, shape ...func(*dns.Msg)) (*dns.Msg, error) {
 	server := netip.AddrPortFrom(step.Server.IP, cmp.Or(port, carrier.Port()))
 
-	var err error
 	silences := -1 // the note that counts them, once there is one
 	for attempt := 0; ; attempt++ {
-		var req *dns.Msg
-		if req, err = transport.NewQuery(qname, qtype, udpSize, r.cfg.DNSSEC); err != nil {
+		req, cookie, err := r.newQuery(carrier, server, qname, qtype, udpSize, shape...)
+		if err != nil {
 			return nil, err
-		}
-		transport.WithSubnet(req, r.cfg.Subnet)
-		for _, change := range shape {
-			change(req)
-		}
-		if r.cfg.NSID {
-			transport.WithNSID(req)
-		}
-		cookie := r.cfg.Cookie && transport.CarriesCookie(carrier.Proto())
-		if cookie {
-			transport.WithCookie(req, r.clientCookie(server.Addr()), r.cookie(server.Addr()))
 		}
 
 		var (
@@ -234,6 +222,27 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 			step.Notes[silences] = fmt.Sprintf("asked again after %d silences", attempt+1)
 		}
 	}
+}
+
+// newQuery is the query exchange sends, with everything the run rides along on
+// it, and whether it carries a cookie.
+func (r *run) newQuery(carrier transport.Transport, server netip.AddrPort, qname string, qtype uint16, udpSize uint16, shape ...func(*dns.Msg)) (*dns.Msg, bool, error) {
+	req, err := transport.NewQuery(qname, qtype, udpSize, r.cfg.DNSSEC)
+	if err != nil {
+		return nil, false, err
+	}
+	transport.WithSubnet(req, r.cfg.Subnet)
+	for _, change := range shape {
+		change(req)
+	}
+	if r.cfg.NSID {
+		transport.WithNSID(req)
+	}
+	cookie := r.cfg.Cookie && transport.CarriesCookie(carrier.Proto())
+	if cookie {
+		transport.WithCookie(req, r.clientCookie(server.Addr()), r.cookie(server.Addr()))
+	}
+	return req, cookie, nil
 }
 
 // clientCookie is the client half of the cookie a server is sent.

@@ -160,6 +160,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--check`](docs/guide/zones.md#all-of-it-at-once) | run the checks that grade a zone together, and grade its health one area at a time: passed, worth a look, broken or skipped |
 | [`--nsid`](docs/guide/zones.md#which-machine-answered) | ask each server which of itself answered, and draw it beside the address |
 | [`--software`](docs/guide/zones.md#which-software-a-server-runs) | ask each server which software it runs (`version.bind`), and draw what it says beside the address |
+| [`--repeat N`](docs/guide/zones.md#whether-it-answers-every-time) | ask each hop's question N more times (at most 100), and say how many came back and how long they took |
 | [`--cookie`](docs/guide/zones.md#which-servers-support-dns-cookies) | send each server a DNS cookie (RFC 7873), and say how it answered |
 | [`--qmin`](docs/guide/zones.md#asking-only-what-each-zone-needs) | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
 | [`--without`](docs/guide/zones.md#whether-it-still-answers-with-a-server-down) | walk as though this nameserver, address or prefix were down, and see whether the name still answers; repeat it |
@@ -318,7 +319,7 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
   issue certificates, SPF, DANE, DMARC and DKIM, which servers a browser
   connects to, where a service's SRV records lead, what a name depends on, when its registration runs out, how
   long a change takes to reach every cache, extended errors, NSID,
-  `--software`, cookies, `--qmin`, `--without`, `--try-ns`, `--try-ds` and
+  `--software`, `--repeat`, cookies, `--qmin`, `--without`, `--try-ns`, `--try-ds` and
   answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, why one answers SERVFAIL, from here or from another subnet,

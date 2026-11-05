@@ -1071,6 +1071,7 @@
         "dangling": { "$ref": "#/$defs/dangling" },
         "probe": { "$ref": "#/$defs/probe" },
         "edns": { "$ref": "#/$defs/edns" },
+        "repeated": { "$ref": "#/$defs/repeated" },
         "error": { "type": "string" },
         "children": {
           "description": "The hops this one led to, in the order they were made.",
@@ -1096,6 +1097,42 @@
         },
         "asn": { "$ref": "#/$defs/asn" },
         "software": { "$ref": "#/$defs/software" }
+      }
+    },
+    "repeated": {
+      "description": "What --repeat got asking this hop's question again of the same server, over the same transport, once each and with no retry after a silence. The hop itself is not one of them. Set on the walk's own hops only, never on an aside, and on the first hop where the walk put the same question to the same server twice. answered, timed_out and failed add up to asked.",
+      "type": "object",
+      "required": ["asked", "answered"],
+      "properties": {
+        "asked": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "answered": { "type": "integer", "minimum": 0 },
+        "timed_out": { "type": "integer", "minimum": 0 },
+        "failed": {
+          "description": "Repeats that went wrong other than by silence: refused at the socket, or a reply that would not unpack.",
+          "type": "integer", "minimum": 0
+        },
+        "truncated": { "description": "Answers that came back with TC set.", "type": "integer", "minimum": 0 },
+        "rcodes": {
+          "description": "The answers counted by rcode, the most common first.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/tally" }
+        },
+        "best_ms": { "description": "The round trips of the answers; absent where nothing answered.", "type": "number", "minimum": 0 },
+        "median_ms": { "type": "number", "minimum": 0 },
+        "worst_ms": { "type": "number", "minimum": 0 },
+        "instances": {
+          "description": "The answers counted by the NSID they carried, the most common first, where --nsid asked. A repeat that timed out names no instance.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/tally" }
+        }
+      }
+    },
+    "tally": {
+      "type": "object",
+      "required": ["value", "times"],
+      "properties": {
+        "value": { "type": "string" },
+        "times": { "type": "integer", "minimum": 1 }
       }
     },
     "software": {
