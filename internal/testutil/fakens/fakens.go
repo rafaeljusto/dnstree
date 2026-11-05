@@ -39,6 +39,7 @@ type Behaviour struct {
 	TruncateUDP bool          // set TC over UDP, answer in full over TCP
 	FormErrEDNS bool          // answer FORMERR to any query carrying EDNS0
 	Delay       time.Duration // answer this late
+	DropEvery   int           // stay silent on every Nth query, the way a lossy path does
 
 	// OutOfBailiwickGlue hands out addresses for nameservers outside the zone
 	// delegated, the way the root servers do for the gTLD servers. A resolver
@@ -522,9 +523,10 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		CD:      req.CheckingDisabled,
 		Cookie:  sentCookie(req),
 	})
+	dropped := s.behaviour.DropEvery > 0 && len(s.queries)%s.behaviour.DropEvery == 0
 	s.mu.Unlock()
 
-	if s.behaviour.Drop || s.behaviour.DropEDNSFlags && req.Z != 0 {
+	if s.behaviour.Drop || dropped || s.behaviour.DropEDNSFlags && req.Z != 0 {
 		return
 	}
 	if s.behaviour.Delay > 0 {
