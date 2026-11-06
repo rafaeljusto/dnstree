@@ -38,7 +38,8 @@ func (r *renderer) repeats(tr *trace.Trace) []string {
 		if got.Truncated > 0 {
 			fields = append(fields, fmt.Sprintf("%d truncated", got.Truncated))
 		}
-		mixed := len(got.Rcodes) > 1 || len(got.Rcodes) == 1 && got.Rcodes[0].Value != step.Rcode
+		// Only an answer the walk got has anything for the repeats to differ from.
+		mixed := step.Rcode != "" && (len(got.Rcodes) > 1 || len(got.Rcodes) == 1 && got.Rcodes[0].Value != step.Rcode)
 		if mixed {
 			fields = append(fields, tallied(got.Rcodes, ""))
 		}

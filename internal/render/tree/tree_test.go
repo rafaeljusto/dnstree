@@ -809,3 +809,22 @@ func TestRenderRepeats(t *testing.T) {
 		t.Errorf("got the answer's misses drawn as though nothing were wrong:\n%q", out.String())
 	}
 }
+
+// TestRenderRepeatsOfAHopThatTimedOut covers a hop the walk got no answer
+// from: there is nothing for the rcodes of its repeats to differ from.
+func TestRenderRepeatsOfAHopThatTimedOut(t *testing.T) {
+	tr := resolution()
+	answer := tr.Result()
+	answer.Kind, answer.Rcode, answer.Records = trace.KindTimeout, "", nil
+	answer.Repeated = &trace.Repeated{Asked: 10, Answered: 5, TimedOut: 5,
+		Best: 238 * time.Millisecond, Median: 244 * time.Millisecond, Worst: 249 * time.Millisecond,
+		Rcodes: []trace.Count{{Value: "NOERROR", Times: 5}}}
+
+	var out bytes.Buffer
+	if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if want := "5/10 answered  238ms best  244ms median  249ms worst  5 timed out\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("got no %q in:\n%s", want, out.String())
+	}
+}

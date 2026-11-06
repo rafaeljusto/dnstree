@@ -151,23 +151,23 @@ func (r *run) warnRepeats(step *trace.Step) {
 	}
 	question := step.Asked.Name + " " + step.Asked.Type
 
-	if got.Missed() > 0 && got.Asked > 0 {
-		var why []string
-		if got.TimedOut > 0 {
-			why = append(why, fmt.Sprintf("%d timed out", got.TimedOut))
-		}
-		if got.Failed > 0 {
-			why = append(why, fmt.Sprintf("%d failed", got.Failed))
-		}
+	var why []string
+	if step.Rcode == "" && got.Answered > 0 {
+		why = append(why, "where the walk's own question went unanswered")
+	}
+	if got.TimedOut > 0 {
+		why = append(why, fmt.Sprintf("%d timed out", got.TimedOut))
+	}
+	if got.Failed > 0 {
+		why = append(why, fmt.Sprintf("%d failed", got.Failed))
+	}
+	if len(why) > 0 {
 		r.warnIn(trace.AreaServers, step.Zone, "%s answered %d of %d repeats of %s; %s",
 			server, got.Answered, got.Asked, question, strings.Join(why, ", "))
 	}
 
+	// What the repeats said is only held against an answer the walk got.
 	if step.Rcode == "" {
-		if got.Answered > 0 {
-			r.warnIn(trace.AreaServers, step.Zone, "%s answered %d of %d repeats of %s, where the walk's own question went unanswered",
-				server, got.Answered, got.Asked, question)
-		}
 		return
 	}
 	for _, rcode := range got.Rcodes {
