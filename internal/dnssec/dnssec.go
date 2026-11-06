@@ -226,7 +226,7 @@ func (c *Chain) enter(zone string, authority, dnskeys []dns.RR, answered bool) *
 	if err != nil {
 		// Only here, where a DS the parent signed names the key: in an answer,
 		// a signature claiming such a key would let a forgery go unchecked.
-		if key := unloadableSigner(pointed, signatures); key != nil {
+		if key := c.unloadableSigner(zone, pointed, signatures); key != nil {
 			return c.settleAs(status, trace.Indeterminate, fmt.Sprintf(
 				"the DNSKEY set could not be checked: key %d has an RSA exponent too large to check here", key.KeyTag()), nil)
 		}
@@ -525,15 +525,17 @@ func (c *Chain) verify(rrset []dns.RR, signatures []*dns.RRSIG, keys []*dns.DNSK
 }
 
 // unloadableSigner is a key the DS points at that signed the set, as far as
-// its signature says, and that the codec cannot load.
-func unloadableSigner(pointed []*dns.DNSKEY, signatures []*dns.RRSIG) *dns.DNSKEY {
+// its signature says, and that the codec cannot load. A signature that could
+// never hold, out of its window or made by another zone, claims nothing.
+func (c *Chain) unloadableSigner(zone string, pointed []*dns.DNSKEY, signatures []*dns.RRSIG) *dns.DNSKEY {
 	for _, key := range pointed {
 		if !unloadable(key) {
 			continue
 		}
 		for _, signature := range signatures {
 			if signature.KeyTag == key.KeyTag() && signature.Algorithm == key.Algorithm &&
-				signature.TypeCovered == dns.TypeDNSKEY {
+				signature.TypeCovered == dns.TypeDNSKEY && dns.EqualName(signature.SignerName, zone) &&
+				signature.ValidPeriod(c.now()) {
 				return key
 			}
 		}

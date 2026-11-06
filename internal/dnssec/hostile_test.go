@@ -2,6 +2,7 @@ package dnssec_test
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -211,12 +212,16 @@ func TestUnloadableRSAKey(t *testing.T) {
 	tests := []struct {
 		name     string
 		exponent []byte
+		window   string
+		signer   string
 		want     trace.DNSSECState
 	}{
-		{"an exponent of 2^32+1, as lv. publishes, is out of reach", []byte{0x01, 0, 0, 0, 0x01}, trace.Indeterminate},
-		{"an exponent of 2^31 is out of reach", []byte{0x80, 0, 0, 0}, trace.Indeterminate},
-		{"an exponent with a leading zero is malformed", []byte{0, 0x01, 0, 0x01}, trace.Bogus},
-		{"an exponent of 65537 is checked, and the signature fails", []byte{0x01, 0, 0x01}, trace.Bogus},
+		{"an exponent of 2^32+1, as lv. publishes, is out of reach", []byte{0x01, 0, 0, 0, 0x01}, "", "", trace.Indeterminate},
+		{"an exponent of 2^31 is out of reach", []byte{0x80, 0, 0, 0}, "", "", trace.Indeterminate},
+		{"an exponent with a leading zero is malformed", []byte{0, 0x01, 0, 0x01}, "", "", trace.Bogus},
+		{"an exponent of 65537 is checked, and the signature fails", []byte{0x01, 0, 0x01}, "", "", trace.Bogus},
+		{"a signature out of reach that expired long ago is bogus", []byte{0x01, 0, 0, 0, 0x01}, "20010101000000 20000101000000", "", trace.Bogus},
+		{"a signature out of reach made by another zone is bogus", []byte{0x01, 0, 0, 0, 0x01}, "", "other.", trace.Bogus},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -230,9 +235,10 @@ func TestUnloadableRSAKey(t *testing.T) {
 			key := &dns.DNSKEY{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET, TTL: 3600}}
 			key.Flags, key.Protocol, key.Algorithm = 257, 3, dns.RSASHA256
 			key.PublicKey = base64.StdEncoding.EncodeToString(raw)
+			window, signer := cmp.Or(tt.window, "20300101000000 20200101000000"), cmp.Or(tt.signer, "example.")
 			signature := record(t, fmt.Sprintf(
-				"example. 3600 IN RRSIG DNSKEY 8 1 3600 20300101000000 20200101000000 %d example. %s",
-				key.KeyTag(), base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x2a}, 256))))
+				"example. 3600 IN RRSIG DNSKEY 8 1 3600 %s %d %s %s",
+				window, key.KeyTag(), signer, base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x2a}, 256))))
 			ds := key.ToDS(dns.SHA256)
 			authority := []dns.RR{ds, root.sign(t, []dns.RR{ds}, time.Now().Add(time.Hour))}
 
