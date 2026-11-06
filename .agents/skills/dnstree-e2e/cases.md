@@ -60,8 +60,11 @@ These need no network: every one exits before a query goes out.
 | json-several | `$D --format dot example.com A AAAA` | exit 1: one walk only. Also mermaid, waterfall-mermaid, dig, web and web-3d. json writes a line per walk and openmetrics one file, both exit 0 |
 | from-name | `$D --from ex.json example.com` | exit 1: no name to resolve |
 | from-shape | `$D --from ex.json --no-asn` | exit 1: a walk already made cannot be changed |
+| from-junk | `$D --from README.md` | exit 1, `--from README.md: not a trace: …`, no package name |
+| repeat-bad | `$D --repeat 101 example.com`, then `x` and `-1` | exit 1 each, `is not a number of repeats; the most is 100`. `--from ex.json --repeat 2` and `--replay x.pcap --repeat 2 example.com` exit 1 too |
+| compare-ns-bad | `$D --compare-ns nonsense example.com` | exit 1, `is not ZONE=SERVER`. With `--try-ns`, `--format json`, `--expect secure`, or `--names` holding a name outside the zone, exit 1 each |
 | names-expect | `$D --names list --expect secure` | exit 1 |
-| names-missing | `$D --names nope.txt` | exit 1, `--names nope.txt: no such file or directory`. `--from`, `--against`, `--tls-ca`, `--trust-anchors` and `--config` the same, each naming its flag |
+| names-missing | `$D --names nope.txt` | exit 1, `--names nope.txt: no such file or directory`. `--from`, `--against`, `--tls-ca` (with `--dot`, or it says only `--dot` and `--doh` use TLS), `--trust-anchors` and `--config` the same, each naming its flag |
 | hints-missing | `$D --root-hints nope.txt example.com` | exit 1, same |
 | web-addr | `$D --format web --web-addr nonsense example.com` | exit 1 before any walk, `--web-addr "nonsense" is not a host and port` |
 | report-alone | `$D --report example.com` | exit 1: it needs `--dnssec` |
@@ -164,6 +167,8 @@ cached, not a bug. Run it again.
 | serial-glueless | `$D $B --serial zonetransfer.me SOA` | exit 0, a serial from both `nsztm1` and `nsztm2` |
 | try-ns | `$D $B --try-ns example.com=hera.ns.cloudflare.com@108.162.192.162 example.com` | exit 0, the referral marked `(replaced by --try-ns)`, the summary `as though delegated to hera.ns.cloudflare.com.` |
 | try-ns-lame | `$D $B --try-ns example.com=ns1.google.com example.com` | exit 2, the server looked up and drawn `REFUSED  lame` |
+| compare-ns | `$D $B --compare-ns example.com=hera.ns.cloudflare.com example.com` | exit 0, `example.com. A  same` and `1 the same, 0 differ`. Against `ns1.isc.org`, exit 2 and `the new servers answered none of them: they may not serve example.com. yet` |
+| repeat | `$D $B --repeat 3 --nsid example.com` | exit 0, a `repeat: … 3/3 answered … best … median … worst` line per hop, `@instance N` where a server gives NSID. `--repeat 0` is a plain walk |
 | try-ds | `$D $B --dnssec --try-ds "example.com=$(dig +short DS example.com \| head -1)" www.example.com` | exit 0, the referral to example.com. marked `(DS replaced by --try-ds)`, the summary `as though the parent held the DS --try-ds gave`, `--explain` saying the parent can be given it |
 | try-ds-wrong-key | `$D $B --dnssec --explain --try-ds "example.com=<the DS of a key of flags 256>" www.example.com` | exit 3, bogus at example.com. with `which signs the zone's data, not its keys; give the parent the DS of key N`, N being the key `dig +short DS example.com` names |
 | try-ds-refused | `$D --try-ds "example.com=2371 13 2 $(printf 'C9%.0s' {1..32})" example.com`, then `$D --dnssec --try-ds 'example.com=2371 13 2 C988' example.com` | exit 1 both: the first `--try-ds tries a DS, which only --dnssec checks`, the second `"C988" is 2 octets, and digest type 2 makes 32`. A digest cut short is refused while flags are read, before the check for `--dnssec` |
@@ -172,7 +177,7 @@ cached, not a bug. Run it again.
 | axfr-open | `$D $B --check-axfr zonetransfer.me SOA` | exit 0, `axfr open` on both of its nameservers, which come with no glue: the probe looks up the one the walk did not need. Nothing of the zone drawn |
 | axfr-closed | `$D $B --check-axfr example.com` | exit 0, none open |
 | axfr-doh | `$D $B --check-axfr --doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |
-| listing | `$D $B --check-axfr --explain isc.org` | exit 0, `listing nsec` per nameserver and a note that anyone can list the zone by following its denials; `www.ietf.org` gives `listing made-up`, `zonetransfer.me` `listing none`. Never painted or graded as a fault |
+| listing | `$D $B --check-axfr --explain isc.org` | exit 0, `listing nsec` per nameserver and a note that anyone can list the zone by following its denials; `www.ietf.org` gives `listing made-up`, `zonetransfer.me` `listing none`. Never painted red or graded as a fault |
 | recursion | `$D $B --check-recursion example.com` | exit 0, `recursion closed` per nameserver |
 | edns | `$D $B --check-edns --explain www.isc.org` | exit 0, `edns0 ok`, `BADVERS  edns version 1 ok`, `edns option 100 ok`, `edns flag 0x40 ok`, `tcp ok` per address, `every nameserver of isc.org. that was asked passed the RFC 8906 tests` |
 | edns-budget | `$D $B --check-edns qq.com` | exit 0, `the budget ran out before every nameserver of qq.com. could be checked for how it handles edns; raise --max-queries` |
@@ -283,6 +288,7 @@ format with `$D --color never --from ex.json --format F`. `--from` takes no
 | expect-miss | `$D $B --expect 203.0.113.8 example.com` | exit 4, `expected 203.0.113.8, got …` on stderr |
 | expect-eq | `$D $B --expect =answer example.com TXT` | exit 4: `=` forces rdata, and no TXT reads `answer`. Said back as `expected =answer` |
 | expect-no-chain | `$D $B --expect secure example.com` | exit 4: `got a walk that followed no chain of trust` |
+| expect-same | `$D $B --compare-ns example.com=hera.ns.cloudflare.com --expect same example.com` | exit 0 while the answers match; exit 4 where they differ |
 | expect-fresh-3d | `$D $B --dnssec --expect fresh:3d example.com` | exit 4 while Cloudflare signs for a day at a time: `run out in 1 day …` |
 | names-file | a file with `example.com A`, a `#` comment, a blank line and `iana.org MX`, passed as `--names list` | exit 0, two walks each under its name, the comment and the blank skipped |
 | names-stdin | the same piped to `--names -` | the same |
