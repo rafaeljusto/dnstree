@@ -73,6 +73,7 @@ one after another, each from the root servers down.
   --without SERVER        treat a nameserver, address or prefix as down; repeat it
   --try-ns ZONE=SERVER    walk as though ZONE were delegated to SERVER; repeat it
   --try-ds ZONE=DS        walk as though ZONE's parent held this DS; repeat it
+  --compare-ns ZONE=NS    compare what NS serves of ZONE with its servers; repeat it
   --subnet PREFIX         ask as though from this client subnet (RFC 7871)
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
@@ -373,6 +374,8 @@ registered, not held, and with at least that long left to run, which is how a
 renewal nobody paid is caught; registered alone asks only the first two.
 check:ok asks that --check found nothing broken, and check:clean that it found
 nothing to look at either, which is how a zone is held to its health in CI.
+same asks that --compare-ns found every question served alike, which is how a
+script waits for a copy of a zone to be complete.
 Or else it takes the rdata of a record that has to be among the answers, such as an
 address. Repeat it for every one that has to hold.
 Those words win where a value could be read either way, so a record whose rdata
@@ -577,6 +580,22 @@ not hold says which key it points at and which it should. It needs --dnssec,
 takes the same zone as --try-ns, and the two together try a whole move to a
 provider that signs.
 
+--compare-ns asks every question twice, of the servers ZONE is delegated to and
+of the ones named, as --try-ns names them, and prints a line to each question
+instead of a tree: same, or what the new servers are missing, what only they
+serve, and a TTL that moved. It is how to check a copy of a zone before the
+parent is told to move it, and with --names a whole list of names at once:
+the records lost in a move are rarely the website, but a TXT proving ownership,
+a DKIM key or a CAA set. What a zone's servers say is read from the first of
+them to answer, aliases included, and their signatures are left out, since a
+new provider signs with keys of its own. Only the questions asked are compared,
+and every one of them has to be in ZONE. The run exits with the worst of both
+walks of every question, and then 4 where --expect same finds one served
+otherwise. New servers that answer none of them are said to in one line:
+many providers refuse a zone until it is delegated to them. It takes --try-ds,
+writes tree or ascii, and refuses what only a tree would draw; the file of
+defaults cannot set it.
+
 --nsid asks every server for the name it goes by (RFC 5001), and draws it
 beside the address. One anycast address is a great many machines in a great many
 places, and the identifier is the only thing in a reply that says which of them
@@ -765,6 +784,10 @@ type Config struct {
 	// where the walk is of the DNS as it is.
 	Try *trace.Trial
 
+	// CompareNS walks each question twice, as the DNS is and as Try has it,
+	// and prints how the answers differ instead of either walk.
+	CompareNS bool
+
 	// WebAddr is where --format web and web-3d serve the page, and Browser whether one is
 	// opened at it. A walk names the servers it asked and the addresses they
 	// answered from, so the page stays on this machine unless it is moved.
@@ -914,6 +937,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		without       downList
 		selectors     selectorList
 		trial         trialList
+		comparing     bool
 	)
 	flags.StringVar(&reverse, "x", "", "resolve the PTR of this address")
 	flags.StringVar(&names, "names", "", "walk every question in this file")
@@ -951,6 +975,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.Var(&without, "without", "walk as though this server or network were down")
 	flags.Var(&trial, "try-ns", "walk as though ZONE were delegated to this nameserver")
 	flags.Var(&trialDS{&trial}, "try-ds", "walk as though ZONE's parent held this DS")
+	flags.Var(compareNS{&trial, &comparing}, "compare-ns", "compare what this nameserver serves of ZONE with its servers")
 	flags.BoolVar(&noASN, "no-asn", false, "skip the origin AS lookups")
 	flags.BoolVar(&noCompare, "no-compare", false, "do not time the question against a resolver")
 	flags.BoolVar(&cfg.DDR, "ddr", false, "ask each resolver which encrypted resolvers stand for it")
@@ -1076,7 +1101,16 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			cfg.More = questions[1:]
 		}
 	}
-	if err := several(&cfg, len(wanted.want) > 0); err != nil {
+	if comparing {
+		cfg.CompareNS = true
+		if err := compareOnly(&cfg, typed, fromFile, wanted.want); err != nil {
+			return nil, err
+		}
+	} else if slices.ContainsFunc(wanted.want, expect.Expectation.Same) {
+		return nil, fmt.Errorf("%w: --expect same holds the servers --compare-ns names against a zone's own", ErrUsage)
+	}
+	expecting := slices.ContainsFunc(wanted.want, func(e expect.Expectation) bool { return !e.Same() })
+	if err := several(&cfg, expecting); err != nil {
 		return nil, err
 	}
 
@@ -1316,8 +1350,92 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.TLSCA != "" && cfg.TLSInsecure {
 		return nil, fmt.Errorf("%w: --tls-insecure verifies nothing, so --tls-ca has nothing to verify against", ErrUsage)
 	}
+	if cfg.CompareNS {
+		// Nothing is drawn but the answers, so nothing is asked that only a
+		// tree would show.
+		cfg.ASN, cfg.Compare = false, false
+	}
 
 	return &cfg, nil
+}
+
+// drawnOnly are the flags that add to a tree, which --compare-ns does not draw,
+// with what turns each off.
+func drawnOnly(cfg *Config) map[string]func() {
+	off := func(b *bool) func() { return func() { *b = false } }
+	return map[string]func(){
+		"check-ns": off(&cfg.CheckNS), "check-ds": off(&cfg.CheckDS), "serial": off(&cfg.Serial),
+		"check-axfr": off(&cfg.CheckAXFR), "check-recursion": off(&cfg.CheckRecursion), "check-edns": off(&cfg.CheckEDNS),
+		"caa": off(&cfg.CAA), "spf": off(&cfg.SPF), "mail": off(&cfg.Mail), "tlsa": off(&cfg.TLSA),
+		"dkim": func() { cfg.DKIM = nil }, "svcb": off(&cfg.SVCB), "srv": off(&cfg.SRV), "deps": off(&cfg.Deps),
+		"rdap": off(&cfg.RDAP), "check": off(&cfg.Check), "nsid": off(&cfg.NSID), "software": off(&cfg.Software),
+		"repeat": func() { cfg.Repeat = 0 }, "cookie": off(&cfg.Cookie), "ddr": off(&cfg.DDR),
+		"check-resolver": off(&cfg.Behave), "report": off(&cfg.Report), "explain": off(&cfg.Explain),
+		"propagation": off(&cfg.Propagation), "rollover": off(&cfg.Rollover), "live": off(&cfg.Live),
+		// The resolvers are read later, and asked nothing once the lookups and
+		// the timing are off.
+		"resolver": func() {}, "asn-resolver": func() {},
+	}
+}
+
+// compareOnly checks --compare-ns against the rest of the run. It walks each
+// question twice and prints a line for it, so whatever only a tree would draw
+// is refused where it was typed, and left off where the file of defaults set it.
+func compareOnly(cfg *Config, typed []string, fromFile map[string]bool, wanted []expect.Expectation) error {
+	if slices.Contains(typed, "try-ns") {
+		return fmt.Errorf("%w: --compare-ns and --try-ns both name the new servers; --compare-ns walks with and without them", ErrUsage)
+	}
+	if cfg.Format != "tree" && cfg.Format != "ascii" {
+		if !fromFile["format"] {
+			return fmt.Errorf("%w: --compare-ns prints a line to each question, which only tree and ascii write", ErrUsage)
+		}
+		cfg.Format = "tree"
+	}
+	if slices.ContainsFunc(wanted, func(e expect.Expectation) bool { return !e.Same() }) {
+		return fmt.Errorf("%w: --compare-ns holds two walks of each question against each other, and --expect same is all it can be held to", ErrUsage)
+	}
+	for _, refused := range []struct {
+		set  bool
+		flag string
+	}{
+		{cfg.From != "", "--from"}, {cfg.Against != "", "--against"}, {cfg.Diff, "--diff"},
+		{cfg.Watch != 0, "--watch"}, {cfg.Pcap != "", "--pcap"}, {cfg.Replay != "", "--replay"},
+	} {
+		if refused.set && !fromFile[strings.TrimPrefix(refused.flag, "--")] {
+			return fmt.Errorf("%w: --compare-ns compares two walks it makes now, and draws neither, so it takes no %s", ErrUsage, refused.flag)
+		}
+	}
+	cfg.Diff, cfg.Watch = false, 0
+	drawn := drawnOnly(cfg)
+	for _, name := range typed {
+		if _, ok := drawn[name]; ok {
+			return fmt.Errorf("%w: --compare-ns draws no tree, so it takes no --%s", ErrUsage, name)
+		}
+	}
+	for _, off := range drawn {
+		off()
+	}
+	cfg.Confirm = netip.Addr{} // -x's own check of the name it found, drawn only on a tree
+	return nil
+}
+
+// compareNS reads --compare-ns into the trial --try-ns builds, which is walked
+// beside the DNS as it is rather than in its place.
+type compareNS struct {
+	*trialList
+	comparing *bool
+}
+
+func (c compareNS) String() string {
+	if c.trialList == nil {
+		return ""
+	}
+	return c.trialList.String()
+}
+
+func (c compareNS) Set(value string) error {
+	*c.comparing = true
+	return c.trialList.Set(value)
 }
 
 // AllMaxQueries is the query budget of a run with --all that names none.
@@ -1459,7 +1577,7 @@ var askOutside = map[string]bool{
 var walkFlags = map[string]bool{
 	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "srv": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "repeat": true, "cookie": true, "qmin": true,
-	"subnet": true, "without": true, "try-ns": true, "try-ds": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
+	"subnet": true, "without": true, "try-ns": true, "try-ds": true, "compare-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
 	"root": true, "trust-anchors": true, "resolver": true, "asn-resolver": true,
 	"tls-ca": true, "tls-insecure": true, "replay": true,

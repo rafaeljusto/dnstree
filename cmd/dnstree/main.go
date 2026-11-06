@@ -45,6 +45,7 @@ import (
 	"github.com/rafaeljusto/dnstree/v2/internal/render/web"
 	"github.com/rafaeljusto/dnstree/v2/internal/resolver"
 	"github.com/rafaeljusto/dnstree/v2/internal/roothints"
+	"github.com/rafaeljusto/dnstree/v2/internal/served"
 	"github.com/rafaeljusto/dnstree/v2/internal/spf"
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 	"github.com/rafaeljusto/dnstree/v2/internal/transport"
@@ -101,6 +102,10 @@ var version = "dev"
 
 // stdin is where --from - reads a saved walk from.
 var stdin io.Reader = os.Stdin
+
+// carried is every transport a walk is given, which a test puts its own
+// servers behind.
+var carried = func(t transport.Transport) transport.Transport { return t }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -178,6 +183,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintln(stderr, cli.Message(err))
 		return exitUsage
+	}
+	if cfg.CompareNS {
+		return compared(ctx, cfg, log, questions, stdout, stderr)
 	}
 
 	var replay *transport.Replay
@@ -260,6 +268,9 @@ func asked(cfg *cli.Config) ([]cli.Question, error) {
 			err = fmt.Errorf("%s %s is asked twice, and openmetrics holds one series of each question", key.Name, key.Type)
 		}
 		seen[key] = true
+		if zone := cfg.Try; err == nil && cfg.CompareNS && key.Name != zone.Zone && !strings.HasSuffix(key.Name, "."+zone.Zone) {
+			err = fmt.Errorf("%s is not in %s, which --compare-ns tries", fqdn(question.Name), zone.Zone)
+		}
 		if err != nil {
 			if cfg.Names != "" {
 				return nil, fmt.Errorf("%w: --names %s: %w", cli.ErrUsage, cfg.Names, err)
@@ -292,6 +303,48 @@ func names(path string) ([]cli.Question, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return questions, nil
+}
+
+// compared is a run of --compare-ns: every question walked as the DNS is, and
+// again as though the zone were delegated as the run tries, with a line to
+// each saying how the two answers differ. It exits with the worst either walk
+// earned, then with an unmet --expect same.
+func compared(ctx context.Context, cfg *cli.Config, log *slog.Logger, questions []cli.Question, stdout, stderr io.Writer) int {
+	worst := exitAnswer
+	var matches []served.Match
+	for _, question := range questions {
+		if ctx.Err() != nil {
+			break
+		}
+		walk := *cfg
+		walk.Name, walk.Type, walk.Try = question.Name, question.Type, nil
+		current, err := resolve(ctx, &walk, log, nil, nil, nil, nil)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		walk.Try = cfg.Try
+		tried, err := resolve(ctx, &walk, log, nil, nil, nil, nil)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		worst = worse(worst, worse(verdict(current), verdict(tried)))
+		matches = append(matches, served.Hold(current, tried))
+	}
+	tree.Compared(stdout, matches, treeOptions(cfg))
+
+	differ := 0
+	for _, match := range matches {
+		if !match.Same() {
+			differ++
+		}
+	}
+	if worst == exitAnswer && differ > 0 && slices.ContainsFunc(cfg.Expect, expect.Expectation.Same) {
+		fmt.Fprintf(stderr, "expected same, got %d of %d questions served otherwise\n", differ, len(matches))
+		return exitExpect
+	}
+	return worst
 }
 
 // worse is the exit code that says more of two walks: a broken chain of trust,
@@ -771,7 +824,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		if replay != nil {
 			return replay.Carrier(proto, cmp.Or(cfg.Port, transport.PortDNS))
 		}
-		return carry(proto, carrier)
+		return carried(carry(proto, carrier))
 	}
 	outage := newOutage(cfg.Without)
 	config := resolver.Config{

@@ -344,6 +344,20 @@ func TestParseDefaultsCheck(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsCompareNS covers a file that asks for what a tree draws on
+// a run that draws none: the settings wait for a run that does.
+func TestParseDefaultsCompareNS(t *testing.T) {
+	path := write(t, "format = emoji\ncheck\nmail\nexplain\nrepeat = 3\nlive\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--compare-ns", "example.com=ns1.new.net", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Format != "tree" || got.Check || got.All || got.Mail || got.Explain || got.Repeat != 0 || got.Live || got.ASN || got.Compare {
+		t.Errorf("got %+v, want only the comparison", *got)
+	}
+}
+
 // TestParseDefaultsDDR covers a file that asks for the designations on a run
 // that asks no resolver anything: the setting waits for a run that does.
 func TestParseDefaultsDDR(t *testing.T) {
@@ -518,6 +532,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"a file that lists the names to walk":      {file: "names = names.txt\n"},
 		"a file that reports to third parties":     {file: "dnssec\nreport\n"},
 		"a file that moves a zone":                 {file: "try-ns = example.com=ns1.new.net\n"},
+		"a file that compares a zone every run":    {file: "compare-ns = example.com=ns1.new.net\n"},
 		"a file that writes a capture every run":   {file: "pcap = walk.pcap\n"},
 		"a file that replays a capture every run":  {file: "replay = walk.pcap\n"},
 	}

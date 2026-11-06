@@ -66,7 +66,8 @@ dnstree --check --expect check:ok --format markdown example.com
 `--expect` also takes `nxdomain`, `nodata` and `fresh:3d` (no signature runs
 out within 3 days, with `--dnssec`). The words about a check need the check's
 flag, or they fail as unmet: `--caa --expect caa:letsencrypt.org`,
-`--spf --expect spf:ok`, `--rdap --expect registered:30d`.
+`--spf --expect spf:ok`, `--rdap --expect registered:30d`,
+`--compare-ns ZONE=NEWSERVER --expect same`.
 
 Use `--format json` only to pull out a field the markdown does not show. A
 single walk is tens of kilobytes, so filter it with `jq` rather than reading it
@@ -88,6 +89,7 @@ whole; `dnstree --schema` describes every field.
 | which software and version each nameserver runs | `dnstree --format markdown --software --all NAME` |
 | why a name fails only some of the time, or which nameserver or anycast instance drops queries | `dnstree --format markdown --repeat 20 --nsid --all NAME` |
 | whether a nameserver move will work, before it is made | `dnstree --format markdown --dnssec --try-ns ZONE=NEWSERVER NAME` |
+| whether new nameservers serve every record the old ones do, before a move (a line per question; markdown is refused) | `dnstree --format ascii --compare-ns ZONE=NEWSERVER --names FILE`, FILE a name and its types to a line |
 | whether a DS will hold, before it is given to the registrar | `dnstree --format markdown --dnssec --try-ds 'ZONE=DS' NAME`, DS written as the registrar's form takes it: key tag, algorithm, digest type, digest |
 | how long a change takes to reach every cache | `dnstree --format markdown --dnssec --check-ns --serial --propagation NAME` |
 | why mail is refused or delayed | `dnstree --format markdown --dnssec --mail --spf NAME` |

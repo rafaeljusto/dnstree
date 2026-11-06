@@ -473,3 +473,31 @@ func TestRegistered(t *testing.T) {
 		})
 	}
 }
+
+// TestSame covers --expect same, which --compare-ns judges: a walk on its own
+// neither meets nor fails it, and a TXT record reading "same" is asked for
+// with a leading "=".
+func TestSame(t *testing.T) {
+	tests := map[string]struct {
+		value string
+		same  bool
+	}{
+		"the word, in any case":     {value: "Same", same: true},
+		"rdata that reads like it":  {value: "=same"},
+		"rdata that only begins so": {value: "sameness"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := expect.Parse(test.value)
+			if err != nil {
+				t.Fatalf("Parse(%q): %v", test.value, err)
+			}
+			if got.Same() != test.same {
+				t.Errorf("Parse(%q).Same() = %t, want %t", test.value, got.Same(), test.same)
+			}
+		})
+	}
+	if unmet := expect.Unmet(walk("A", answered("A", "192.0.2.1")), parse(t, "same")); unmet != nil {
+		t.Errorf("got %q, want a walk on its own to leave it to the comparison", unmet)
+	}
+}

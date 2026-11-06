@@ -32,6 +32,7 @@ const (
 	sender                 // a sender policy no check fails on
 	registry               // a registration with time left to run
 	health                 // a zone --check found nothing broken in, or nothing at all
+	sameness               // new nameservers serving what the old ones do
 )
 
 // Expectation is one thing the command line asked to be true of the walk.
@@ -53,6 +54,10 @@ type Expectation struct {
 // a message about it: somebody who typed it has to recognise it.
 func (e Expectation) String() string { return cmp.Or(e.escaped, e.want) }
 
+// Same reports whether this is --expect same, which holds two walks of each
+// question against each other and so is met by --compare-ns, not by a walk.
+func (e Expectation) Same() bool { return e.about == sameness }
+
 // Parse reads one --expect value. It is either one of the words that names how
 // far the chain of trust got — secure, insecure, bogus, indeterminate — or what
 // the walk came to — answer, cname, nodata, nxdomain — or fresh, which asks for
@@ -62,7 +67,8 @@ func (e Expectation) String() string { return cmp.Or(e.escaped, e.want) }
 // name; or spf:ok, a sender policy no check fails on; or registered, a
 // domain the registry holds and does not hold back, with registered:30d asking
 // that it has that long left; or check:ok, a zone --check found nothing broken
-// in, or check:clean, one it found nothing to look at in either; or else the
+// in, or check:clean, one it found nothing to look at in either; or same, the
+// new nameservers --compare-ns names serving what the old ones do; or else the
 // rdata of a record that has to be among the answers.
 //
 // The words win, because they are what is nearly always meant. A zone that
@@ -101,6 +107,9 @@ func Parse(text string) (Expectation, error) {
 	}
 	if lower == "check:ok" || lower == "check:clean" {
 		return Expectation{about: health, want: lower}, nil
+	}
+	if lower == "same" {
+		return Expectation{about: sameness, want: lower}, nil
 	}
 	if lower == "registered" {
 		return Expectation{about: registry, want: lower}, nil
@@ -179,6 +188,9 @@ func (e Expectation) met(tr *trace.Trace) (got string, ok bool) {
 
 	case health:
 		return e.healthy(tr)
+
+	case sameness:
+		return "", true // the comparison judges it, and no one walk can
 	}
 
 	result := tr.Result()

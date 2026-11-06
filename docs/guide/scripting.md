@@ -29,8 +29,8 @@ $ echo $?
 It takes one of the words that name how far the chain of trust got — `secure`,
 `insecure`, `bogus`, `indeterminate` — or what the walk came to — `answer`,
 `cname`, `nodata`, `nxdomain` — or `fresh`, below — or `caa:` and a
-certificate authority, below that — or `spf:ok`, `check:ok` or
-`registered:30d`, below that — or else the rdata of a record that has to be among the answers. Repeat it for each thing that has to
+certificate authority, below that — or `spf:ok`, `check:ok`,
+`registered:30d` or `same`, below that — or else the rdata of a record that has to be among the answers. Repeat it for each thing that has to
 hold:
 
 ```
@@ -96,6 +96,11 @@ expected registered:365d, got example.com. running out in 310 days 16 hours
 $ echo $?
 4
 ```
+
+`same` asks that [`--compare-ns`](zones.md#whether-new-nameservers-serve-what-the-old-ones-do)
+found every question served alike by the zone's servers and the new ones, and
+is the one expectation a list of questions takes, since it is about all of
+them.
 
 Addresses are compared as addresses and names the way DNS compares names, so
 `2001:0db8::1` finds a record written `2001:db8::1`, the case of a name does not

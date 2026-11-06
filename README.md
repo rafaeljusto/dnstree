@@ -165,6 +165,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--qmin`](docs/guide/zones.md#asking-only-what-each-zone-needs) | ask each zone for no more of the name than it needs, the way resolvers do (RFC 9156) |
 | [`--without`](docs/guide/zones.md#whether-it-still-answers-with-a-server-down) | walk as though this nameserver, address or prefix were down, and see whether the name still answers; repeat it |
 | [`--try-ns`](docs/guide/zones.md#whether-it-will-answer-on-new-nameservers) | walk as though `ZONE` were already delegated to `SERVER`, before the registry is told; repeat it for each new nameserver |
+| [`--compare-ns`](docs/guide/zones.md#whether-new-nameservers-serve-what-the-old-ones-do) | ask each question of `ZONE`'s servers and of the new ones named, and say per question what differs, TTLs included; with `--names`, a whole list |
 | [`--try-ds`](docs/guide/zones.md#whether-a-ds-will-hold-before-the-parent-has-it) | walk as though the parent of `ZONE` already held this DS, and say which key it should point at when it does not hold; repeat it for a set; needs `--dnssec` |
 | [`--subnet`](docs/guide/resolvers.md#asking-from-somewhere-else) | ask as though from this client subnet, and say what each server made of it |
 | [`--no-asn`](docs/guide/configuring.md#pointing-it-somewhere-else) | skip the origin AS lookups |
@@ -319,7 +320,7 @@ Each feature has a section of its own in [`docs/guide/`](docs/guide/), with real
   issue certificates, SPF, DANE, DMARC and DKIM, which servers a browser
   connects to, where a service's SRV records lead, what a name depends on, when its registration runs out, how
   long a change takes to reach every cache, extended errors, NSID,
-  `--software`, `--repeat`, cookies, `--qmin`, `--without`, `--try-ns`, `--try-ds` and
+  `--software`, `--repeat`, cookies, `--qmin`, `--without`, `--try-ns`, `--try-ds`, `--compare-ns` and
   answer sizes.
 - [Resolvers](docs/guide/resolvers.md): how the walk compares with the resolvers
   people use, why one answers SERVFAIL, from here or from another subnet,

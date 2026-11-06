@@ -26,6 +26,7 @@ server says about its own answer.
 - [Asking only what each zone needs](#asking-only-what-each-zone-needs)
 - [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
 - [Whether it will answer on new nameservers](#whether-it-will-answer-on-new-nameservers)
+- [Whether new nameservers serve what the old ones do](#whether-new-nameservers-serve-what-the-old-ones-do)
 - [Whether a DS will hold before the parent has it](#whether-a-ds-will-hold-before-the-parent-has-it)
 - [How much room an answer had](#how-much-room-an-answer-had)
 
@@ -1423,9 +1424,8 @@ IANA's servers still serve `example.com`, with keys of their own; the parent's
 DS is for the ones Cloudflare signs with, so moving the zone back today would
 break it for every resolver that validates. The exit code is the walk's, so a
 script can hold a move to `--expect` before making it. To see what the new
-servers say differently, save a walk of the zone as it is with `--format json`
-and hold the trial against it with `--against`; `--names` tries a whole list
-of names in one run. The DS the parent should be given for the new provider's
+servers serve differently, question by question, use
+[`--compare-ns`](#whether-new-nameservers-serve-what-the-old-ones-do). The DS the parent should be given for the new provider's
 keys can be tried in the same walk with [`--try-ds`](#whether-a-ds-will-hold-before-the-parent-has-it).
 
 The summary says the walk was a simulation, and so does `--format json`, as
@@ -1433,6 +1433,67 @@ The summary says the walk was a simulation, and so does `--format json`, as
 nothing and says so. One zone is tried at a time, the root cannot be, since it
 has no parent to delegate it; `--diff`, which remembers the DNS as it is, will
 not take it, and nor will the file of defaults.
+
+## Whether new nameservers serve what the old ones do
+
+A copy of a zone is rarely perfect, and what goes missing in a move is rarely
+the website: a TXT record proving ownership to a mail or cloud service, a DKIM
+key under a selector nobody remembered, a CAA set, so the next certificate is
+refused weeks later, or a TTL that came across as the new provider's default.
+
+`--compare-ns ZONE=SERVER` asks every question twice: of the servers the parent
+delegates the zone to, and as [`--try-ns`](#whether-it-will-answer-on-new-nameservers)
+would, of the servers named. Instead of two trees it prints a line to each
+question, and with `--names` that is a whole list in one run. Here `example.com`
+is held against IANA's servers, which still serve a copy of it:
+
+```
+$ cat names.txt
+example.com A AAAA MX TXT CAA
+www.example.com A
+_dmarc.example.com TXT
+$ dnstree --compare-ns example.com=a.iana-servers.net --compare-ns example.com=b.iana-servers.net --names names.txt
+example.com. at the servers it is delegated to, against a.iana-servers.net., b.iana-servers.net.: 7 questions
+  example.com. A           missing at the new servers: A 104.20.23.154, A 172.66.147.243; only at the new servers: A 23.192.228.80, A 23.192.228.84, A 23.215.0.136, A 23.215.0.138, A 23.220.75.232, A 23.220.75.245
+  example.com. AAAA        missing at the new servers: AAAA 2606:4700:10::6814:179a, AAAA 2606:4700:10::ac42:93f3; only at the new servers: AAAA 2600:1406:5e00:6::17ce:bc12, AAAA 2600:1406:5e00:6::17ce:bc1b, AAAA 2600:1406:bc00:53::b81e:94c8, AAAA 2600:1406:bc00:53::b81e:94ce, AAAA 2600:1408:ec00:36::1736:7f24, AAAA 2600:1408:ec00:36::1736:7f31
+  example.com. MX          ttl 300 → 86400
+  example.com. TXT         ttl 300 → 86400
+  example.com. CAA         same
+  www.example.com. A       cname at the new servers, answer at the old; missing at the new servers: A 104.20.23.154, A 172.66.147.243; only at the new servers: CNAME www.example.com.cdn.cloudflare.net.
+  _dmarc.example.com. TXT  ttl 300 → 3600
+1 the same, 6 differ · only the questions asked were compared
+```
+
+IANA's copy points the name at other addresses, keeps its records for a day
+where the zone's own servers keep them for five minutes, and serves `www` as
+the alias that Cloudflare, serving the zone now, flattens into addresses.
+
+A question is `same` where both sides gave the same records with the same TTLs.
+Otherwise the line says what the new servers are missing, what only they
+serve, a TTL that moved, and an answer of another kind — an `nxdomain` where
+the old servers answer, say. What a zone's servers say is read from the first
+of them to answer the question, so an alias the zone serves is compared as the
+alias, and one flattened into addresses in the copy shows as a CNAME missing
+and an address only at the new servers. A cut further down is compared as the
+NS set the zone delegates it to. Signatures and denials are left out, since a
+new provider signs with keys of its own; with `--dnssec`, the chain of trust to
+the new servers is still followed, and
+[`--try-ds`](#whether-a-ds-will-hold-before-the-parent-has-it) gives it the DS
+the parent will be given.
+
+Only the questions asked are compared, which the last line says, and every one
+has to be in `ZONE`: a zone that cannot be transferred cannot be listed, so the
+list is yours to make, from the export the copy was made from, say. A server
+that answers by where it is asked from may differ only for that reason, and is
+compared as it answered. Many providers refuse a zone until it is delegated to
+them; new servers that answer none of the questions are said to in one line,
+not one line a question.
+
+The run exits with the worst of both walks of every question — 2 where the new
+servers did not answer, 3 where a chain of trust broke — and then 4 where
+`--expect same` finds a question served otherwise, so a script can wait until
+the copy is complete. It writes `tree` or `ascii`, refuses what only a tree
+would draw, and like `--try-ns` is not taken from the file of defaults.
 
 ## Whether a DS will hold before the parent has it
 

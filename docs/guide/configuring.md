@@ -27,7 +27,7 @@ comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
 `no-config`, `version`, `schema`, `from`, `against`, `x`, `names`, `without`,
-`report`, `try-ns`, `try-ds`, `pcap` and `replay`: those fourteen ask something of the
+`report`, `try-ns`, `try-ds`, `compare-ns`, `pcap` and `replay`: those fifteen ask something of the
 run rather than set a default for it.
 
 > [!NOTE]
