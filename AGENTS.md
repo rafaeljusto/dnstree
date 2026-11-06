@@ -79,8 +79,8 @@ tagging by hand skips the calculation, and the tag carries no changelog.
   renderers and the AS lookups is what makes them testable without a network.
   `internal/layering` fails on any other import of it, and on the trace, the
   renderers, explain, expect, history, the capture, the AS lookups, the SPF
-  check, the DKIM key reader, the registry lookup or the TLSA check reaching it
-  through another package.
+  check, the DKIM key reader, the registry lookup, the TLSA check or the
+  comparison `--compare-ns` prints reaching it through another package.
 - `cmd/dnstree` wires things together and owns nothing.
 - Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
   terminal size, and `golang.org/x/net` for names typed in any script
@@ -245,7 +245,8 @@ Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
   without TC, seven ways to
   break a chain of trust, signatures near expiry, NXDOMAIN for an empty
   non-terminal, SERVFAIL for a single type, a validating resolver's SERVFAIL
-  and AD bit, broken cookies and CDS, eight ways
+  and AD bit, a resolver reading the root key sentinel, broken cookies and
+  CDS, a lossy path dropping every Nth query, eight ways
   to mishandle EDNS (RFC 8906), TCP dropped or reset, and zone transfers and
   recursion open to strangers or reset. A change to the way a delegation is followed belongs
   with a scenario that reproduces it on purpose.

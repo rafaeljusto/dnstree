@@ -257,20 +257,15 @@ resolver: 9.9.9.9 reaches zones from AS20326, not its own AS19281
   resolver to validate everything but it, and the line says it cannot tell.
 - **The root's key** matters since October 2026, when the root began signing
   with KSK-2024 (key tag 38696) in place of KSK-2017 (20326). A resolver that
-  never took the new key in, built with a fixed copy of the old one or unable
-  to keep what it learned ([RFC 5011](https://www.rfc-editor.org/rfc/rfc5011)),
+  never took the new key in ([RFC 5011](https://www.rfc-editor.org/rfc/rfc5011))
   fails the root's own SOA as well as `dnssec-failed.org`, and answers both
   once told not to check: a yellow line says it does not trust the key the
-  root signs with. Where the resolver reads the root key sentinel
-  ([RFC 8509](https://www.rfc-editor.org/rfc/rfc8509)), it is also asked
-  about each root key the run trusts, by name under `dnstest.dev`, a zone
-  Cloudflare keeps for it: a resolver that trusts the key answers
-  `root-key-sentinel-is-ta-38696` and fails `root-key-sentinel-not-ta-38696`,
-  one that does not does the opposite. Many resolvers do not read the
-  sentinel and answer both, which says nothing either way, and the line says
-  so. With `--dnssec` the walk sees which key signs the root, and a resolver
-  the sentinel shows not trusting that one is a warning under `--explain`.
-  A resolver that does not validate trusts no key, and gets no line for them.
+  root signs with. A resolver that reads the root key sentinel
+  ([RFC 8509](https://www.rfc-editor.org/rfc/rfc8509), names under Cloudflare's
+  `dnstest.dev`) is also asked about each root key the run trusts; one that
+  answers both names reads nothing, and the line says so. With `--dnssec`, a
+  resolver the sentinel shows not trusting the key the root signs with is a
+  warning under `--explain`. A resolver that does not validate gets no line.
 - **NXDOMAIN rewriting** rests on a name made up for the run under `com.`. An
   NXDOMAIN is the truth; an address is a rewrite, and the line names it.
 - **ECS** ([RFC 7871](https://www.rfc-editor.org/rfc/rfc7871)) rests on two

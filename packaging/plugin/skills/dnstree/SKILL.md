@@ -132,6 +132,8 @@ These reach beyond the DNS, touch the user's machine, or never return:
   to check.
 - `--tlsa` connects to each DANE mail host on port 25.
 - `--rdap`, and `--check` with it, asks the domain's registry over HTTPS.
+- `--repeat N` asks every hop N more times, every server with `--all`: keep N
+  small on servers the user does not run, which may rate-limit it.
 - `--pcap` and `--diff` write to the disk.
 - `--format web` and `--format web-3d` serve a page and open a browser, and do
   not return until interrupted.

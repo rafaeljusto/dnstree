@@ -450,7 +450,8 @@ $ dnstree --check-axfr --explain --no-asn --no-compare www.ietf.org
 
 Some zones list their names on purpose, the root among them, so none of these
 is a fault: they are notes, `--check` grades them as passed, and the exit code
-is left alone. Servers part way through a change of signer can deny in
+is left alone. A server that could not be asked is worth a look, as any check
+that could not run is. Servers part way through a change of signer can deny in
 different ways, and each way is a line of its own. The listing is asked over
 whatever carries the walk, `--doh` included, and nothing of the denial is
 kept.

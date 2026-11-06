@@ -1154,8 +1154,7 @@ dig @108.162.192.162 example.com. DNSKEY +norecurse +bufsize=1232 +dnssec</pre>
       marked as not verified.</p>
       <p class="section-lede"><code>--check-resolver</code> sees what each of them does with
       what it is asked: whether it refuses <code>dnssec-failed.org</code>, whose chain of
-      trust is broken on purpose, whether it trusts the key the root signs with, which the
-      root key sentinel (RFC&nbsp;8509) asks of those that read it, and whether a made-up
+      trust is broken on purpose, whether it trusts the key the root signs with, and whether a made-up
       name comes back NXDOMAIN or as the address of a page of its own. It also asks zones that report what reaches them whether
       it passes your subnet on (ECS) and whether it asks a name a label at a time (QNAME
       minimisation), and whether it makes up IPv6 addresses for names that have only IPv4 ones

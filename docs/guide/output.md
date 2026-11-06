@@ -336,8 +336,8 @@ beside the path, a zone's keys or the other servers `--all` asked, gets a
 sentence in the hop that needed it, and the lookups the checks make of their
 own are left out. It says only what the walk recorded, so it cannot disagree
 with the tree, and `--explain` still says under it what the walk came to.
-With `--from`, a walk saved once, an alias chain or a broken delegation, can
-be taught again with every class.
+`--from` tells a saved walk again, an alias chain or a broken delegation
+included.
 
 <details>
 <summary>A walk, told hop by hop</summary>
@@ -719,9 +719,8 @@ drawn, like `--explain` or a `--format`, work as they always do.
 Nothing outside the walk is asked. The comparison with a resolver and the
 origin AS lookups are off, and `--rdap`, `--spf`, `--tlsa`, `--resolver`,
 `--ddr`, `--check-resolver` and `--report` are refused, as are `--dot` and
-`--doh`, which a capture of plain DNS holds nothing for. So are `--watch`,
-since a replay answers the same
-every time, and `--diff`, which would remember an old walk as the latest. Only
+`--doh`, which a capture of plain DNS holds nothing for. So are `--watch` and
+`--repeat`, since a replay answers the same every time, and `--diff`, which would remember an old walk as the latest. Only
 a capture `--pcap` wrote can be replayed, not one taken with tcpdump, and the
 file of defaults cannot set `--replay`.
 
