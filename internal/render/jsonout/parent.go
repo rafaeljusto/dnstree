@@ -116,7 +116,7 @@ func readCSYNC(from *csync) (*trace.CSYNC, error) {
 	switch state {
 	case trace.CSYNCNone, trace.CSYNCReady, trace.CSYNCManual, trace.CSYNCWaiting, trace.CSYNCUnproven, trace.CSYNCUnchecked:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what a CSYNC can come to", from.State)
+		return nil, fmt.Errorf("%q is not what a CSYNC can come to", from.State)
 	}
 	to := &trace.CSYNC{State: state, Reason: from.Reason, Serial: from.Serial, Immediate: from.Immediate,
 		SOAMinimum: from.SOAMinimum, Types: from.Types, ZoneSerial: from.ZoneSerial}
@@ -134,7 +134,7 @@ func readDSYNC(from *dsync) (*trace.DSYNC, error) {
 	switch state {
 	case trace.DSYNCFound, trace.DSYNCNone, trace.DSYNCBogus, trace.DSYNCUnchecked:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what a DSYNC search can come to", from.State)
+		return nil, fmt.Errorf("%q is not what a DSYNC search can come to", from.State)
 	}
 	to := &trace.DSYNC{State: state, Reason: from.Reason, Parent: from.Parent, Name: from.Name}
 	for _, l := range from.Lookups {
@@ -169,7 +169,7 @@ func readBootstrap(from *bootstrap) (*trace.Bootstrap, error) {
 	switch state {
 	case trace.BootstrapReady, trace.BootstrapRefused, trace.BootstrapUnchecked:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what a bootstrap can come to", from.State)
+		return nil, fmt.Errorf("%q is not what a bootstrap can come to", from.State)
 	}
 	to := &trace.Bootstrap{State: state, Reason: from.Reason}
 	for _, signal := range from.Signals {
@@ -178,7 +178,7 @@ func readBootstrap(from *bootstrap) (*trace.Bootstrap, error) {
 		case trace.SignalingMatched, trace.SignalingDiffers, trace.SignalingMissing, trace.SignalingUnproven,
 			trace.SignalingFailed, trace.SignalingUnasked:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not what a bootstrap signal can come to", signal.State)
+			return nil, fmt.Errorf("%q is not what a bootstrap signal can come to", signal.State)
 		}
 		lookup, err := readLookupRef(signal.Lookup)
 		if err != nil {

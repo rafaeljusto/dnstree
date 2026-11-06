@@ -42,15 +42,15 @@ func readCheck(from *check) (*trace.Check, error) {
 	to := &trace.Check{Zone: from.Zone}
 	for _, area := range from.Areas {
 		if !slices.Contains(trace.Areas, trace.Area(area.Area)) {
-			return nil, fmt.Errorf("jsonout: %q is not an area --check grades", area.Area)
+			return nil, fmt.Errorf("%q is not an area --check grades", area.Area)
 		}
 		switch grade := trace.Grade(area.Grade); grade {
 		case trace.GradePassed, trace.GradeLook, trace.GradeBroken, trace.GradeSkipped:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not a grade --check gives", area.Grade)
+			return nil, fmt.Errorf("%q is not a grade --check gives", area.Grade)
 		}
 		if area.More < 0 {
-			return nil, fmt.Errorf("jsonout: %d is not a number of findings", area.More)
+			return nil, fmt.Errorf("%d is not a number of findings", area.More)
 		}
 		to.Areas = append(to.Areas, trace.Graded{Area: trace.Area(area.Area), Grade: trace.Grade(area.Grade),
 			Text: area.Text, More: area.More})

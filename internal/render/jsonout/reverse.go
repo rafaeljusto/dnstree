@@ -43,7 +43,7 @@ func readReverse(from *reverse) (*trace.Reverse, error) {
 	}
 	addr, err := netip.ParseAddr(from.Addr)
 	if err != nil {
-		return nil, fmt.Errorf("jsonout: the address of the reverse check: %w", err)
+		return nil, fmt.Errorf("the address of the reverse check: %w", err)
 	}
 	to := &trace.Reverse{Addr: addr, Cut: from.Cut}
 	if to.PTR, err = readLookup(from.PTR); err != nil {

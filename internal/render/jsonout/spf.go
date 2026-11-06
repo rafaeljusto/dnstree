@@ -74,7 +74,7 @@ func readSPF(from *spf) (*trace.SPF, error) {
 	switch result {
 	case trace.SPFOK, trace.SPFNone, trace.SPFPermError, trace.SPFTempError, trace.SPFUndecided:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what an SPF check can come to", from.Result)
+		return nil, fmt.Errorf("%q is not what an SPF check can come to", from.Result)
 	}
 	server, err := readServer(from.Server)
 	if err != nil {
@@ -92,7 +92,7 @@ func readSPF(from *spf) (*trace.SPF, error) {
 
 func readTerms(from []spfTerm, depth int) ([]trace.SPFTerm, error) {
 	if depth > maxNesting {
-		return nil, fmt.Errorf("jsonout: spf terms nested deeper than %d, which no check goes", maxNesting)
+		return nil, fmt.Errorf("spf terms nested deeper than %d, which no check goes", maxNesting)
 	}
 	var to []trace.SPFTerm
 	for _, term := range from {

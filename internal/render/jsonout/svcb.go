@@ -65,9 +65,9 @@ func readServicePath(from *servicePath) (*trace.ServicePath, error) {
 	}
 	switch {
 	case from.Type != "HTTPS" && from.Type != "SVCB":
-		return nil, fmt.Errorf("jsonout: a service path follows HTTPS or SVCB records, not %q", from.Type)
+		return nil, fmt.Errorf("a service path follows HTTPS or SVCB records, not %q", from.Type)
 	case len(from.Chain) == 0:
-		return nil, fmt.Errorf("jsonout: a service path starts with the set of its name, and has none")
+		return nil, fmt.Errorf("a service path starts with the set of its name, and has none")
 	}
 	to := &trace.ServicePath{Name: from.Name, Type: from.Type,
 		Fallback: from.Fallback, None: from.None, Stopped: from.Stopped, Cut: from.Cut}
@@ -78,7 +78,7 @@ func readServicePath(from *servicePath) (*trace.ServicePath, error) {
 		}
 		for _, rr := range set.Records {
 			if rr.Service == nil {
-				return nil, fmt.Errorf("jsonout: the %q record of a service path at %q is not decoded", rr.Type, rr.Name)
+				return nil, fmt.Errorf("the %q record of a service path at %q is not decoded", rr.Type, rr.Name)
 			}
 		}
 		records, err := readRecords(set.Records)

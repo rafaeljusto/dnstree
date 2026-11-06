@@ -17,7 +17,7 @@ import (
 
 // ErrVersion is a document of another schema_version, which has had a field
 // change meaning or go away since, and cannot be read as this one.
-var ErrVersion = errors.New("jsonout: the document is of another schema version")
+var ErrVersion = errors.New("the document is of another schema version")
 
 // Read is the way back from [Render]: a trace as --format json wrote it, to be
 // drawn again. What it gives back is the copy that was fit to draw, so its names
@@ -32,17 +32,17 @@ func Read(r io.Reader) (*trace.Trace, error) {
 	decoder := json.NewDecoder(limited)
 	err := decoder.Decode(&doc)
 	if limited.N == 0 {
-		return nil, fmt.Errorf("jsonout: not a trace: it is larger than %d MiB", maxDocument>>20)
+		return nil, fmt.Errorf("not a trace: it is larger than %d MiB", maxDocument>>20)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("jsonout: not a trace: %w", err)
+		return nil, fmt.Errorf("not a trace: %w", err)
 	}
 	switch next, err := decoder.Token(); {
 	case errors.Is(err, io.EOF):
 	case next == json.Delim('{'):
-		return nil, errors.New("jsonout: not a trace: it holds several walks, one to a line as --names writes them; give it one line")
+		return nil, errors.New("not a trace: it holds several walks, one to a line as --names writes them; give it one line")
 	default:
-		return nil, errors.New("jsonout: not a trace: something follows it after it ends")
+		return nil, errors.New("not a trace: something follows it after it ends")
 	}
 	if doc.SchemaVersion != SchemaVersion {
 		return nil, fmt.Errorf("%w: it is version %d, and this build reads %d",
@@ -58,7 +58,7 @@ func Read(r io.Reader) (*trace.Trace, error) {
 		return nil, err
 	}
 	if tr.Started, err = moment(doc.Started); err != nil {
-		return nil, fmt.Errorf("jsonout: started: %w", err)
+		return nil, fmt.Errorf("started: %w", err)
 	}
 	for _, from := range doc.Resolvers {
 		answer, err := readResolver(from, true)
@@ -132,7 +132,7 @@ func readCAA(from *caa) (*trace.CAA, error) {
 		switch found {
 		case trace.CAANone, trace.CAASet, trace.CAAFailed:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not what a CAA lookup can come to", lookup.Found)
+			return nil, fmt.Errorf("%q is not what a CAA lookup can come to", lookup.Found)
 		}
 		to.Asked = append(to.Asked, trace.CAALookup{Name: lookup.Name, Found: found, Alias: lookup.Alias, Err: lookup.Error})
 	}
@@ -167,13 +167,13 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		return nil, nil
 	}
 	if depth > maxNesting {
-		return nil, fmt.Errorf("jsonout: steps nested deeper than %d, which no walk goes", maxNesting)
+		return nil, fmt.Errorf("steps nested deeper than %d, which no walk goes", maxNesting)
 	}
 
 	// Apart takes the steps below out of the run's verdict, so only the root
 	// of a lookup the walk set aside can be one.
 	if from.Apart && !from.Aside {
-		return nil, fmt.Errorf("jsonout: a step apart from the walk has to be an aside")
+		return nil, fmt.Errorf("a step apart from the walk has to be an aside")
 	}
 
 	kind := trace.StepKind(from.Kind)
@@ -181,7 +181,7 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	case trace.KindZone, trace.KindReferral, trace.KindAnswer, trace.KindCNAME, trace.KindNoData,
 		trace.KindNXDomain, trace.KindLame, trace.KindFiltered, trace.KindTimeout, trace.KindError, trace.KindSkipped:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not a kind of step", from.Kind)
+		return nil, fmt.Errorf("%q is not a kind of step", from.Kind)
 	}
 
 	records, err := readRecords(from.Records)
@@ -228,7 +228,7 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 	switch to.Cookie {
 	case "", trace.CookieSupported, trace.CookieAbsent, trace.CookieMismatch, trace.CookieMalformed, trace.CookieRejected:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not a way to answer a cookie", from.Cookie)
+		return nil, fmt.Errorf("%q is not a way to answer a cookie", from.Cookie)
 	}
 
 	if to.Server, err = readServer(from.Server); err != nil {
@@ -286,31 +286,31 @@ func timed(from *step) bool {
 // itself may carry a behaviour: the answers a behaviour rests on are its own.
 func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 	if from == nil {
-		return nil, errors.New("jsonout: a resolver with nothing in it")
+		return nil, errors.New("a resolver with nothing in it")
 	}
 	if from.Behaviour != nil && !top {
-		return nil, errors.New("jsonout: a behaviour inside the answers another rests on")
+		return nil, errors.New("a behaviour inside the answers another rests on")
 	}
 	match := trace.Match(from.Match)
 	switch match {
 	case "", trace.MatchSame, trace.MatchDiffers:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not how a resolver's answer can match", from.Match)
+		return nil, fmt.Errorf("%q is not how a resolver's answer can match", from.Match)
 	}
 	kept := trace.Kept(from.Kept)
 	switch kept {
 	case "", trace.KeptLonger, trace.KeptStale:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what a resolver's TTL can say", from.Kept)
+		return nil, fmt.Errorf("%q is not what a resolver's TTL can say", from.Kept)
 	}
 	if from.Synthesised && match != "" {
-		return nil, errors.New("jsonout: an answer made up where the zone has none, matched against the zone's")
+		return nil, errors.New("an answer made up where the zone has none, matched against the zone's")
 	}
 	failed := trace.Failure(from.Failed)
 	switch failed {
 	case "", trace.FailedBogus, trace.FailedValidation, trace.FailedCached, trace.FailedUnreachable:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what a resolver's failure can come of", from.Failed)
+		return nil, fmt.Errorf("%q is not what a resolver's failure can come of", from.Failed)
 	}
 
 	records, err := readRecords(from.Records)
@@ -350,7 +350,7 @@ func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 		return nil, err
 	}
 	if to.Behaviour != nil && !located(to.Server.ASN, to.Behaviour) {
-		return nil, fmt.Errorf("jsonout: elsewhere %q is not what the networks it names say", to.Behaviour.Elsewhere)
+		return nil, fmt.Errorf("elsewhere %q is not what the networks it names say", to.Behaviour.Elsewhere)
 	}
 	return to, nil
 }
@@ -380,20 +380,20 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 	}
 	for _, seen := range []trace.Observed{to.Validates, to.Rewrites} {
 		if !observed(seen) {
-			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
+			return nil, fmt.Errorf("%q is not what a resolver can be seen to do", seen)
 		}
 	}
 	// Absent from a walk saved before they were asked.
 	for _, seen := range []trace.Observed{to.Subnet, to.Minimises, to.Synthesises, to.Elsewhere, to.Anchored, to.ReadsSentinel} {
 		if seen != "" && !observed(seen) {
-			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to do", seen)
+			return nil, fmt.Errorf("%q is not what a resolver can be seen to do", seen)
 		}
 	}
 	for _, text := range from.Prefixes {
 		prefix, err := netip.ParsePrefix(text)
 		if err != nil || !prefix.Addr().Is6() || prefix.Addr().Is4In6() ||
 			!slices.Contains(trace.DNS64Lengths, prefix.Bits()) || prefix != prefix.Masked() {
-			return nil, fmt.Errorf("jsonout: %q is no prefix AAAA records can be made up under", text)
+			return nil, fmt.Errorf("%q is no prefix AAAA records can be made up under", text)
 		}
 		to.Prefixes = append(to.Prefixes, prefix)
 	}
@@ -403,30 +403,30 @@ func readBehaviour(from *behaviour) (*trace.Behaviour, error) {
 			return nil, err
 		}
 		if !source.IP.IsValid() {
-			return nil, errors.New("jsonout: a source with no address")
+			return nil, errors.New("a source with no address")
 		}
 		to.Sources = append(to.Sources, source)
 	}
 	if to.Elsewhere != "" && len(to.Sources) == 0 {
-		return nil, errors.New("jsonout: a resolver judged by where its questions came from, with none named")
+		return nil, errors.New("a resolver judged by where its questions came from, with none named")
 	}
 	for _, seen := range from.Echoes {
 		sent := trace.Observed(seen.Sent)
 		if (sent != trace.ObservedYes && sent != trace.ObservedNo) || seen.Operator == "" {
-			return nil, fmt.Errorf("jsonout: %q is not what a zone can have been sent", seen.Sent)
+			return nil, fmt.Errorf("%q is not what a zone can have been sent", seen.Sent)
 		}
 		if seen.Bits < 0 || seen.Bits > 128 {
-			return nil, fmt.Errorf("jsonout: /%d is no prefix length", seen.Bits)
+			return nil, fmt.Errorf("/%d is no prefix length", seen.Bits)
 		}
 		to.Echoes = append(to.Echoes, trace.Echo{Operator: seen.Operator, Sent: sent, Bits: seen.Bits})
 	}
 	for _, seen := range from.Sentinels {
 		read := trace.Sentinel{Tag: seen.Tag, Trusted: trace.Observed(seen.Trusted), Signs: seen.Signs}
 		if !observed(read.Trusted) {
-			return nil, fmt.Errorf("jsonout: %q is not what a resolver can be seen to trust", seen.Trusted)
+			return nil, fmt.Errorf("%q is not what a resolver can be seen to trust", seen.Trusted)
 		}
 		if slices.ContainsFunc(to.Sentinels, func(s trace.Sentinel) bool { return s.Tag == read.Tag }) {
-			return nil, fmt.Errorf("jsonout: root key %d asked about twice", read.Tag)
+			return nil, fmt.Errorf("root key %d asked about twice", read.Tag)
 		}
 		for _, answer := range []struct {
 			from *resolver
@@ -484,7 +484,7 @@ func readDiscovery(from *discovery) (*trace.Discovery, error) {
 		for _, hint := range offer.Hints {
 			addr, err := netip.ParseAddr(hint)
 			if err != nil {
-				return nil, fmt.Errorf("jsonout: %q is not an address a designated resolver can be at", hint)
+				return nil, fmt.Errorf("%q is not an address a designated resolver can be at", hint)
 			}
 			read.Hints = append(read.Hints, addr)
 		}
@@ -501,7 +501,7 @@ func readServer(from *server) (trace.Server, error) {
 	if from.IP != "" {
 		ip, err := netip.ParseAddr(from.IP)
 		if err != nil {
-			return trace.Server{}, fmt.Errorf("jsonout: server %q: %w", from.IP, err)
+			return trace.Server{}, fmt.Errorf("server %q: %w", from.IP, err)
 		}
 		to.IP = ip
 	}
@@ -526,7 +526,7 @@ func readSubnet(from *subnet) (*trace.Subnet, error) {
 	}
 	prefix, err := netip.ParsePrefix(from.Prefix)
 	if err != nil {
-		return nil, fmt.Errorf("jsonout: subnet %q: %w", from.Prefix, err)
+		return nil, fmt.Errorf("subnet %q: %w", from.Prefix, err)
 	}
 	return &trace.Subnet{Prefix: prefix, Scope: from.Scope}, nil
 }
@@ -543,7 +543,7 @@ func readSent(from *sent) (*trace.Sent, error) {
 	if from.Subnet != "" {
 		prefix, err := netip.ParsePrefix(from.Subnet)
 		if err != nil {
-			return nil, fmt.Errorf("jsonout: sent subnet %q: %w", from.Subnet, err)
+			return nil, fmt.Errorf("sent subnet %q: %w", from.Subnet, err)
 		}
 		to.Subnet = prefix
 	}
@@ -579,7 +579,7 @@ func parseAddrs(field string, from []string) ([]netip.Addr, error) {
 	for _, addr := range from {
 		ip, err := netip.ParseAddr(addr)
 		if err != nil {
-			return nil, fmt.Errorf("jsonout: %s: %w", field, err)
+			return nil, fmt.Errorf("%s: %w", field, err)
 		}
 		to = append(to, ip)
 	}
@@ -605,21 +605,21 @@ func readProbe(from *probe) (*trace.Probe, error) {
 	switch kind {
 	case trace.ProbeTransfer, trace.ProbeRecursion, trace.ProbeListing:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not something a nameserver can be asked for", from.Kind)
+		return nil, fmt.Errorf("%q is not something a nameserver can be asked for", from.Kind)
 	}
 	switch state {
 	case trace.ProbeOpen, trace.ProbeClosed, trace.ProbeUnchecked:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what can come of asking a nameserver", from.State)
+		return nil, fmt.Errorf("%q is not what can come of asking a nameserver", from.State)
 	}
 	denial := trace.Denial(from.Denial)
 	switch {
 	case denial == "":
 	case kind != trace.ProbeListing:
-		return nil, fmt.Errorf("jsonout: a %s probe carries no denial", kind)
+		return nil, fmt.Errorf("a %s probe carries no denial", kind)
 	case denial == trace.DenialNSEC, denial == trace.DenialNSEC3, denial == trace.DenialMadeUp, denial == trace.DenialNone:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not a way a zone proves a name missing", from.Denial)
+		return nil, fmt.Errorf("%q is not a way a zone proves a name missing", from.Denial)
 	}
 	return &trace.Probe{Kind: kind, State: state, Denial: denial}, nil
 }
@@ -634,21 +634,21 @@ func readEDNS(from *edns) (*trace.EDNSTest, error) {
 	switch test.Kind {
 	case trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag, trace.EDNSTCP:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not a shape a nameserver is asked in", from.Kind)
+		return nil, fmt.Errorf("%q is not a shape a nameserver is asked in", from.Kind)
 	}
 	switch test.State {
 	case trace.EDNSOK, trace.EDNSUnchecked:
 		if test.Fault != "" {
-			return nil, fmt.Errorf("jsonout: an edns test that is %s cannot have a fault", from.State)
+			return nil, fmt.Errorf("an edns test that is %s cannot have a fault", from.State)
 		}
 	case trace.EDNSBroken:
 		switch test.Fault {
 		case trace.EDNSSilent, trace.EDNSRcode, trace.EDNSNoOPT, trace.EDNSBadVers, trace.EDNSNoSOA, trace.EDNSEchoed, trace.EDNSAnswer, trace.EDNSClosed:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not what an edns test can get wrong", from.Fault)
+			return nil, fmt.Errorf("%q is not what an edns test can get wrong", from.Fault)
 		}
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what can come of an edns test", from.State)
+		return nil, fmt.Errorf("%q is not what can come of an edns test", from.State)
 	}
 	return test, nil
 }
@@ -661,7 +661,7 @@ func readDangling(from *dangling) (*trace.Dangling, error) {
 	switch kind {
 	case trace.DanglingNameserver, trace.DanglingAlias, trace.DanglingLame:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not a way to be left dangling", from.Kind)
+		return nil, fmt.Errorf("%q is not a way to be left dangling", from.Kind)
 	}
 	return &trace.Dangling{Kind: kind, Name: from.Name, Target: from.Target, Missing: from.Missing, Zone: from.Zone}, nil
 }
@@ -709,7 +709,7 @@ func readAddrs(field string, from map[string][]string) (map[string][]netip.Addr,
 		for _, addr := range addrs {
 			ip, err := netip.ParseAddr(addr)
 			if err != nil {
-				return nil, fmt.Errorf("jsonout: %s for %q: %w", field, name, err)
+				return nil, fmt.Errorf("%s for %q: %w", field, name, err)
 			}
 			to[name] = append(to[name], ip)
 		}
@@ -725,7 +725,7 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 	switch state {
 	case trace.Secure, trace.Insecure, trace.Bogus, trace.Indeterminate:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not how far a chain of trust can get", from.State)
+		return nil, fmt.Errorf("%q is not how far a chain of trust can get", from.State)
 	}
 	to := &trace.DNSSECStatus{
 		State:     state,
@@ -743,7 +743,7 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 		case trace.SignalNone, trace.SignalMatch, trace.SignalPending, trace.SignalDelete,
 			trace.SignalInconsistent, trace.SignalUnchecked:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not what a zone's request of its parent can come to", from.Signal.State)
+			return nil, fmt.Errorf("%q is not what a zone's request of its parent can come to", from.Signal.State)
 		}
 		boot, err := readBootstrap(from.Signal.Bootstrap)
 		if err != nil {
@@ -764,18 +764,18 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 		switch match {
 		case trace.DSMatched, trace.DSUnmatched, trace.DSUnchecked:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not what a DS can come to against the keys", d.Match)
+			return nil, fmt.Errorf("%q is not what a DS can come to against the keys", d.Match)
 		}
 		to.DS = append(to.DS, trace.DS{Tag: d.Tag, Algorithm: d.Algorithm, Digest: d.Digest, Match: match})
 	}
 	for _, signed := range from.Signatures {
 		inception, err := moment(signed.Inception)
 		if err != nil {
-			return nil, fmt.Errorf("jsonout: inception: %w", err)
+			return nil, fmt.Errorf("inception: %w", err)
 		}
 		expiration, err := moment(signed.Expiration)
 		if err != nil {
-			return nil, fmt.Errorf("jsonout: expiration: %w", err)
+			return nil, fmt.Errorf("expiration: %w", err)
 		}
 		to.Signatures = append(to.Signatures, trace.Lifetime{Inception: inception, Expiration: expiration})
 	}
@@ -788,7 +788,7 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 // one past the range of a Duration converts to whatever the platform makes of it.
 func duration(field string, ms float64) (time.Duration, error) {
 	if ms < 0 || ms > float64(maxDuration/time.Millisecond) {
-		return 0, fmt.Errorf("jsonout: %s is %g, and no walk takes less than nothing or more than a year", field, ms)
+		return 0, fmt.Errorf("%s is %g, and no walk takes less than nothing or more than a year", field, ms)
 	}
 	return time.Duration(math.Round(ms*1000)) * time.Microsecond, nil
 }

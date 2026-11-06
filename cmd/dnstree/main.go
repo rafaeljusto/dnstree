@@ -641,7 +641,7 @@ func saved(flag, path string) (*trace.Trace, error) {
 	if path == "-" {
 		tr, err := jsonout.Read(stdin)
 		if err != nil {
-			return nil, fmt.Errorf("the standard input: %w", err)
+			return nil, fmt.Errorf("%s the standard input: %w", flag, err)
 		}
 		return tr, nil
 	}
@@ -654,7 +654,7 @@ func saved(flag, path string) (*trace.Trace, error) {
 
 	tr, err := jsonout.Read(file)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s %s: %w", flag, path, err)
 	}
 	return tr, nil
 }

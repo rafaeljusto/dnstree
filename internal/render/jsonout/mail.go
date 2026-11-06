@@ -175,9 +175,9 @@ func readMail(from *mail) (*trace.Mail, error) {
 	}
 	switch {
 	case from.Implicit && len(from.Hosts) != 1:
-		return nil, fmt.Errorf("jsonout: a mail path with no MX set has its name as its one host, not %d", len(from.Hosts))
+		return nil, fmt.Errorf("a mail path with no MX set has its name as its one host, not %d", len(from.Hosts))
 	case from.Null && len(from.Hosts) > 0:
-		return nil, fmt.Errorf("jsonout: a mail path with a null MX has no hosts, not %d", len(from.Hosts))
+		return nil, fmt.Errorf("a mail path with a null MX has no hosts, not %d", len(from.Hosts))
 	}
 	to := &trace.Mail{Name: from.Name, MX: mx, Null: from.Null, Implicit: from.Implicit, Absent: from.Absent,
 		ReportsLeft: from.Left, Stopped: from.Stopped, Cut: from.Cut}
@@ -187,7 +187,7 @@ func readMail(from *mail) (*trace.Mail, error) {
 		case trace.DANEVerified, trace.DANEUnusable, trace.DANENone, trace.DANEInsecure, trace.DANEFailed,
 			trace.DANEUnreachable, trace.DANELiteral, trace.DANEUnchecked, trace.DANEIndeterminate:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not what DANE can do for a host", host.DANE)
+			return nil, fmt.Errorf("%q is not what DANE can do for a host", host.DANE)
 		}
 		h := trace.MailHost{Name: host.Name, Preference: host.Preference, DANE: state, Why: host.Why}
 		if h.Address, err = readLookupRef(host.Address); err != nil {
@@ -220,7 +220,7 @@ func readMail(from *mail) (*trace.Mail, error) {
 		return nil, err
 	}
 	if len(from.Reports) > 0 && to.DMARC == nil {
-		return nil, fmt.Errorf("jsonout: a mail path with hosts DMARC reports go to has no DMARC record")
+		return nil, fmt.Errorf("a mail path with hosts DMARC reports go to has no DMARC record")
 	}
 	for _, r := range from.Reports {
 		read, err := readReport(r)
@@ -248,14 +248,14 @@ func readDKIM(from dkimKey) (trace.DKIMKey, error) {
 		switch state {
 		case trace.DKIMUsable, trace.DKIMRevoked, trace.DKIMWeak, trace.DKIMSHA1:
 		default:
-			return trace.DKIMKey{}, fmt.Errorf("jsonout: %q is not what a receiver makes of a DKIM key", from.State)
+			return trace.DKIMKey{}, fmt.Errorf("%q is not what a receiver makes of a DKIM key", from.State)
 		}
 	case trace.PolicyNone, trace.PolicyInvalid, trace.PolicyFailed:
 		if state != "" {
-			return trace.DKIMKey{}, fmt.Errorf("jsonout: a DKIM key that was %s cannot be %q", found, from.State)
+			return trace.DKIMKey{}, fmt.Errorf("a DKIM key that was %s cannot be %q", found, from.State)
 		}
 	default:
-		return trace.DKIMKey{}, fmt.Errorf("jsonout: %q is not what a DKIM key lookup can come to", from.Found)
+		return trace.DKIMKey{}, fmt.Errorf("%q is not what a DKIM key lookup can come to", from.Found)
 	}
 	read, err := readLookup(from.Lookup)
 	if err != nil {
@@ -277,10 +277,10 @@ func readReport(from reportHost) (trace.ReportHost, error) {
 	case trace.ReportAccepted, trace.ReportUnknown, trace.ReportUnasked:
 	case trace.ReportRefused:
 		if from.Lookup == nil {
-			return trace.ReportHost{}, fmt.Errorf("jsonout: a host refusing DMARC reports has no lookup")
+			return trace.ReportHost{}, fmt.Errorf("a host refusing DMARC reports has no lookup")
 		}
 	default:
-		return trace.ReportHost{}, fmt.Errorf("jsonout: %q is not what a host DMARC reports go to can come to", from.State)
+		return trace.ReportHost{}, fmt.Errorf("%q is not what a host DMARC reports go to can come to", from.State)
 	}
 	read, err := readLookupRef(from.Lookup)
 	if err != nil {
@@ -298,19 +298,19 @@ func readPresented(from []presented, records int) ([]trace.Presented, error) {
 		switch state {
 		case trace.PresentedMatch, trace.PresentedMismatch, trace.PresentedUnreached:
 		default:
-			return nil, fmt.Errorf("jsonout: %q is not what checking an address can come to", p.State)
+			return nil, fmt.Errorf("%q is not what checking an address can come to", p.State)
 		}
 		addr, err := netip.ParseAddr(p.Address)
 		if err != nil {
-			return nil, fmt.Errorf("jsonout: presented: %w", err)
+			return nil, fmt.Errorf("presented: %w", err)
 		}
 		since, err := moment(p.Since)
 		if err != nil {
-			return nil, fmt.Errorf("jsonout: presented since: %w", err)
+			return nil, fmt.Errorf("presented since: %w", err)
 		}
 		for _, i := range p.Matched {
 			if i < 0 || i >= records {
-				return nil, fmt.Errorf("jsonout: presented matches record %d of a set of %d", i, records)
+				return nil, fmt.Errorf("presented matches record %d of a set of %d", i, records)
 			}
 		}
 		to = append(to, trace.Presented{Addr: addr, State: state, Subject: p.Subject, Since: since, Matched: p.Matched, Why: p.Why})
@@ -345,7 +345,7 @@ func readPolicy(from *mailPolicy) (*trace.MailPolicy, error) {
 	switch found {
 	case trace.PolicyPublished, trace.PolicyNone, trace.PolicyInvalid, trace.PolicyFailed:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what a mail policy lookup can come to", from.Found)
+		return nil, fmt.Errorf("%q is not what a mail policy lookup can come to", from.Found)
 	}
 	read, err := readLookup(from.Lookup)
 	if err != nil {

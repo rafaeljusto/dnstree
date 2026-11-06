@@ -59,11 +59,11 @@ func readRepeated(from *repeated) (*trace.Repeated, error) {
 		TimedOut: from.TimedOut, Failed: from.Failed, Truncated: from.Truncated,
 	}
 	if to.Asked > trace.MaxRepeat {
-		return nil, fmt.Errorf("jsonout: asked again %d times, and --repeat asks no more than %d", to.Asked, trace.MaxRepeat)
+		return nil, fmt.Errorf("asked again %d times, and --repeat asks no more than %d", to.Asked, trace.MaxRepeat)
 	}
 	if min(to.Answered, to.TimedOut, to.Failed, to.Truncated) < 0 ||
 		to.Answered+to.TimedOut+to.Failed != to.Asked || to.Truncated > to.Answered {
-		return nil, fmt.Errorf("jsonout: %d asked again do not add up to %d answered, %d timed out and %d failed",
+		return nil, fmt.Errorf("%d asked again do not add up to %d answered, %d timed out and %d failed",
 			to.Asked, to.Answered, to.TimedOut, to.Failed)
 	}
 	var err error
@@ -92,13 +92,13 @@ func readTallies(field string, from []tally, answered int, every bool) ([]trace.
 	sum := 0
 	for _, t := range from {
 		if t.Times < 1 || t.Times > answered {
-			return nil, fmt.Errorf("jsonout: %s counts %q %d times, of %d answers", field, t.Value, t.Times, answered)
+			return nil, fmt.Errorf("%s counts %q %d times, of %d answers", field, t.Value, t.Times, answered)
 		}
 		sum += t.Times
 		to = append(to, trace.Count{Value: t.Value, Times: t.Times})
 	}
 	if sum > answered || every && len(from) > 0 && sum != answered {
-		return nil, fmt.Errorf("jsonout: %s count %d answers, of %d", field, sum, answered)
+		return nil, fmt.Errorf("%s count %d answers, of %d", field, sum, answered)
 	}
 	return to, nil
 }

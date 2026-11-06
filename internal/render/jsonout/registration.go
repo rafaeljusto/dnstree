@@ -52,15 +52,15 @@ func readRegistration(from *registration) (*trace.Registration, error) {
 	switch state {
 	case trace.Registered, trace.Unregistered, trace.Unpublished, trace.Unreached:
 	default:
-		return nil, fmt.Errorf("jsonout: %q is not what a registry can say", from.State)
+		return nil, fmt.Errorf("%q is not what a registry can say", from.State)
 	}
 	registered, err := moment(from.Registered)
 	if err != nil {
-		return nil, fmt.Errorf("jsonout: registration: %w", err)
+		return nil, fmt.Errorf("registration: %w", err)
 	}
 	expires, err := moment(from.Expires)
 	if err != nil {
-		return nil, fmt.Errorf("jsonout: registration: %w", err)
+		return nil, fmt.Errorf("registration: %w", err)
 	}
 	return &trace.Registration{
 		Domain: from.Domain, Server: from.Server, State: state, Why: from.Why,

@@ -53,7 +53,7 @@ func readSRV(from *srv) (*trace.SRV, error) {
 		return nil, nil
 	}
 	if from.Left < 0 {
-		return nil, fmt.Errorf("jsonout: the SRV check of %q left %d targets", from.Name, from.Left)
+		return nil, fmt.Errorf("the SRV check of %q left %d targets", from.Name, from.Left)
 	}
 	read, err := readLookup(from.Lookup)
 	if err != nil {
