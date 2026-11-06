@@ -2,37 +2,38 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `86bc3bd`
-- **Date**: 2026-10-30
-- **Scope**: the commits since `7eeec81` (`--format dig` and the `Sent`
-  record behind it, `--srv`, the DMARC report hosts, JSON Lines and one
-  OpenMetrics file for `--names`, where a resolver's questions come from,
-  the `--try-ds` key-set reason, the clipped-version fix, the TTL delta, the
-  live summary). The fuzz search was left out: it ran apart, at the same
+- **Commit**: `ec3bc5c`
+- **Date**: 2026-11-06
+- **Scope**: the commits since `86bc3bd` (the `--format dig` type and class
+  fix, the unloadable RSA exponent, the IPv4-mapped capture server, the root
+  key sentinel, `--format teach`, the listing probe, `--repeat`,
+  `--compare-ns`). The fuzz search was left out: it ran apart, at the same
   time, for this release.
 
 ## Open findings
 
-- Medium: `--format dig` writes a saved walk's `asked.type` as a bare dig
-  argument, and `jsonout.Read` checks no type, so `--from` a hostile file
-  prints `dig @ip name -f/etc/passwd`, which reads that file and sends its
-  lines as queries
-  ([dig.go:85](../../../internal/render/dig/dig.go#L85),
-  [read.go:165](../../../internal/render/jsonout/read.go#L165)); `sent.class`
-  is unchecked too, but `-c` takes it as its value.
-- Low: `--format dig` from `--from` escapes the backslash of a name the file
-  holds escaped, so `a\032b.example.` is asked as `a\092032b.example.`
-  ([dig.go:197](../../../internal/render/dig/dig.go#L197)).
+- Low: a DNSKEY set whose only signature claims a DS-named key with an
+  unloadable RSA exponent is `indeterminate` even when that signature is
+  outside its window or names another signer, both of which are checkable
+  ([dnssec.go:229](../../../internal/dnssec/dnssec.go#L229),
+  [dnssec.go:529](../../../internal/dnssec/dnssec.go#L529)).
+- Low: `octets` reads a `\DDD` in a saved name as an octet, but `Shown`
+  leaves a backslash the name really holds, so a walk that asked
+  `a\001b.example.` (a literal backslash) is printed by `--format dig` from
+  `--from` as asking for an 0x01 octet
+  ([read.go:838](../../../internal/render/jsonout/read.go#L838),
+  [shown.go:14](../../../internal/trace/shown.go#L14)).
 - Low: names, CAA issuer values, SPF names, the report agent, MX hosts in the
   `--tlsa` finding, the `--serial` servers, resolver operators, DKIM
   selectors, the software a server says it runs, the names a PTR set gives,
-  and now the DMARC report hosts and SRV targets in the markdown report's
-  finding sentences are open to GitHub's autolinks, `@mentions` and `#refs`;
-  fixing it means marking them apart from the prose explain writes
+  the DMARC report hosts, SRV targets, and now the zone and servers in the
+  listing notes in the markdown report's finding sentences are open to
+  GitHub's autolinks, `@mentions` and `#refs`; fixing it means marking them
+  apart from the prose explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
   bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea`,
-  `db990d4`, `7eeec81` and `86bc3bd`, were clean.
+  `db990d4`, `7eeec81`, `86bc3bd` and `ec3bc5c`, were clean.
 
 ## Checked and sound
 
@@ -449,7 +450,9 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   answered one; `Class` goes through `Shown`; `read.go` parses the subnet.
 - `--format dig`: every argument POSIX single-quoted unless all safe, names
   as `\DDD` with a leading `+`, `-` and `@` escaped, comments through `Shown`
-  so no newline leaves a comment line (the type is the open finding).
+  so no newline leaves a comment line; a saved type or class that is not an
+  upper-case mnemonic gets no command (`TestRenderSaved`), so `--from` can no
+  longer put `-f` on the line.
 - JSON Lines: one `Encode` per walk, so no raw newline inside one; `Read`
   refuses a second document. OpenMetrics over `--names`: families written
   once, a question asked twice (case and final dot folded, IDN already
@@ -460,3 +463,30 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   read a nil `ASN`.
 - `supposedReason`'s new case only rewords the reason; no state reads it.
 - `go test -race -count=2 ./...` and `go vet` are clean at `86bc3bd`.
+- Unloadable RSA exponent: read only in `enter`, after the parent's signed
+  DS points at the key; an answer claiming such a key stays bogus
+  (`TestForgedAnswerClaimingUnloadableKey`); `unloadable` indexes only inside
+  the decoded key (the window is the open finding).
+- Capture: an IPv6 header's addresses are unmapped as `Record` writes them.
+- `--repeat`: only `Mainline` hops (Apart is also Aside), at most
+  `MaxRepeat` rounds of hops the budget already bounded, spaced and stopped
+  on ctx; each goroutine writes its own `again`, cookies under `r.mu`, and
+  `Repeated` and the warnings join from the walking goroutine; `read.go`
+  bounds `asked` and makes the counts add up; rcodes and NSIDs go through
+  `Shown`; off in dnstree-web.
+- Listing probe: only with `--check-axfr`, spent through `afford`, the root
+  left out; DO only with EDNS0; non-AA, EDNS-less or other rcodes are
+  unchecked; never a fault in explain, check, the scene or openmetrics'
+  failure count; `read.go` takes a denial only on a listing probe.
+- Root key sentinel: names built from the run's anchors under a fixed zone,
+  each goroutine writing its own `Sentinels[i]`; `Behave` runs after the walk;
+  `read.go` checks `trusted`, `anchored`, `reads_sentinel` and a tag asked
+  twice; `Behaviour.Shown` covers `Is` and `Not`.
+- `--format teach`: reads `tr.Shown()` only, words from the trace and
+  explain, depth bounded by the trace; `wrap` cannot loop.
+- `--compare-ns`: two walks per question through the same `resolve`, every
+  question checked inside the zone (lower-cased, IDN as punycode), the file
+  of defaults cannot set it, every drawn-only check refused or off;
+  `served` reads `Shown` traces and imports no codec (`apart`); exit code
+  the worst of both walks, `--expect same` only after it.
+- `go test -race -count=2 ./...` is clean at `ec3bc5c`.
