@@ -373,6 +373,7 @@ func (r *run) askDS(ctx context.Context, chain *dnssec.Chain, under *trace.Step,
 // The DS can sit further down than zone. A server that also serves a zone in
 // between answers from it, signed with its keys, and that zone is crossed
 // first; one that does not serve it refers to it, and its servers are asked.
+// The root serves root-servers.net., and the servers of au. serve nsw.edu.au.
 // Each turn stands strictly closer to cut, so the descent ends.
 func (r *run) settleCut(ctx context.Context, chain *dnssec.Chain, reached *trace.Step, zone string, ds *hop, cut string) *zoneCut {
 	// A DS that is not there is denied in the authority section rather than

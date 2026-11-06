@@ -3,6 +3,10 @@
 //
 // It is the one place besides the resolver and the DNSSEC packages that needs
 // the DNS codec: a fake nameserver has to speak the wire format.
+//
+// Handlers run concurrently and the codec writes to the records it signs, so
+// the zone is replaced whole, signing is serialised, and only copies are
+// signed. New state needs the same care.
 package fakens
 
 import (

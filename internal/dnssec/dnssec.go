@@ -657,7 +657,8 @@ func ordered(rrset []dns.RR) []dns.RR {
 
 // misordered reports whether the codec sorts a set of this type out of
 // canonical order. NAPTR and HIP compare their text the same way, but hold
-// names, which the generic form would not lowercase.
+// names, which the generic form would not lowercase. A new type that ends in a
+// variable field or text belongs here once a round trip shows it misordered.
 func misordered(rrtype uint16) bool {
 	switch rrtype {
 	case dns.TypeCAA, dns.TypeURI, dns.TypeNULL, dns.TypeTXT, dns.TypeSPF,

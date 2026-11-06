@@ -8,85 +8,49 @@ pull requests and the commit prefixes that decide the version.
 
 ## Skills
 
-The repository ships its own skills in `.agents/skills/` (linked from
-`.claude/skills/`): `dnstree-commit`, `dnstree-pr`, `dnstree-review`, `dnstree-audit`,
-`dnstree-docs`, `dnstree-e2e`, `dnstree-dig`, `dnstree-modernise` and
-`dnstree-release`. When one of them covers the task, use it
-over a general-purpose skill that does something similar: they know the rules
-this file sets down, and the others do not.
-
+The `dnstree-*` skills in `.agents/skills/` know the rules this file sets down;
+when one covers the task, use it over a general-purpose skill.
 `packaging/plugin/skills/dnstree` is not one of them: it ships to users, and
 teaches their models to run the tool, not to work on it.
 
 ## Before handing work back
 
-```bash
-make check   # build, go vet, golangci-lint, go test -race ./..., the pages' tests under node, govulncheck
-```
+`make check` is what CI runs, less hadolint, the packaging dry run and the image
+builds. Three things it does not run:
 
-That is what CI runs, less hadolint (`make lint-docker`), the packaging dry
-run (`make dist` and `make web-lambda`) and the two image builds. Three things it does not run:
-
-- `make live` goes out to the real root servers. It is never part of `check`;
-  CI runs it weekly, because the embedded hints and trust anchors go stale
-  silently and nothing else notices.
+- `make live` goes out to the real root servers. CI runs it weekly, because the
+  embedded hints and trust anchors go stale silently.
 - `go test -race -count=2 ./...` after touching anything concurrent or anything
   in `internal/testutil/fakens`. Both data races this repository has had only
   showed up on the second run.
-- `make fuzz` searches with the fuzz tests, where `check` only replays what
-  they found. CI searches weekly for five minutes each, carrying the corpus
-  over; after changing a package one covers, search it for a minute with
+- `make fuzz` searches, where `check` only replays. After changing a package a
+  fuzz test covers, search it for a minute with
   `FUZZPKG=internal/<pkg> FUZZTIME=1m`.
 
-Renderer goldens are rewritten with `make goldens`.
-Read the diff before keeping it: those files are the user-visible output. The
-same command writes `docs/trace.schema.json`, the copy of the JSON Schema the
-pages workflow serves: that workflow uploads what is committed and builds
-nothing, beyond naming the latest release in the page's package lines, so the
-copy is in the tree and a test fails when it and `--schema`
-have drifted apart.
+Renderer goldens, and `docs/trace.schema.json`, are rewritten with
+`make goldens`. Read the diff before keeping it: those files are the
+user-visible output.
 
-## Releasing
+## Releasing and committing
 
-`dnstree-release` gets a release ready: it runs the gates every release
-needs, and decides from the diff since the last tag which of the other skills
-the release needs. Run it rather than every skill, every time.
-
-`make dist` builds everything but the images and the Lambda zip: the archives, a Debian, RPM and
-Alpine package per Linux architecture, the Homebrew formula and the checksums
-over all of them. It is the same target the release workflow runs, so what ships
-can be reproduced without a runner. The two images come from `make image-push
-image-web-push`, in a job of their own. [`packaging/README.md`](packaging/README.md) says
-how the pieces fit; `nfpm`, like golangci-lint, comes from the PATH or is
-fetched at the version the Makefile pins, and is not a dependency of the module.
-The Lambda zip comes from `make web-lambda`, and nothing publishes it.
-
-## Do not commit
-
-The maintainer reviews and signs every commit. Write the message, print it, and
-stop — no `git commit`, `git push` or `git tag`. Releases are cut by a workflow
-that reads the commit subjects since the last tag and works out the version;
-tagging by hand skips the calculation, and the tag carries no changelog.
-`dnstree-commit` writes the messages with the prefixes that workflow reads.
+The maintainer reviews and signs every commit. Write the message with
+`dnstree-commit`, print it, and stop — no `git commit`, `git push` or `git tag`.
+A workflow cuts releases and works out the version from the commit subjects
+since the last tag; a tag made by hand skips that and carries no changelog.
+`dnstree-release` gets a release ready.
 
 ## Layering
 
 - `internal/trace` is the model. The resolver writes it; every renderer only
   reads it. A renderer that re-derives a DNS fact, rather than drawing what the
   walk recorded, is a bug waiting for the two to disagree.
-- Only `transport`, `resolver` and `dnssec` — plus `fakens`, which has to speak
-  the wire format — may import the DNS codec. Keeping it out of the trace, the
-  renderers and the AS lookups is what makes them testable without a network.
-  `internal/layering` fails on any other import of it, and on the trace, the
-  renderers, explain, expect, history, the capture, the AS lookups, the SPF
-  check, the DKIM key reader, the registry lookup, the TLSA check or the
-  comparison `--compare-ns` prints reaching it through another package.
+- Only `transport`, `resolver`, `dnssec` and `fakens` import the DNS codec, so
+  everything else is testable without a network. `internal/layering` enforces
+  it.
 - `cmd/dnstree` wires things together and owns nothing.
-- Three dependencies, on purpose: the DNS codec, `golang.org/x/sys` for the
-  terminal size, and `golang.org/x/net` for names typed in any script
-  (`idna`), which the codec leaves to its callers. DMARC finds the policy
-  above a name by walking up the tree (RFC 9989), not from a public suffix
-  list. Adding a fourth needs an argument.
+- The three dependencies in `go.mod` are on purpose; a fourth needs an
+  argument. DMARC finds the policy above a name by walking up the tree
+  (RFC 9989), not from a public suffix list.
 
 ## Invariants
 
@@ -101,111 +65,64 @@ Each of these has been a bug, or would be a silent regression.
 - **A trace is always drawn.** A failure is a step, not an abort: lame servers,
   timeouts and exhausted budgets are recorded where they happened.
 - **Steps join the trace only through `run.attach`, and only from the goroutine
-  doing the walking.** The parallel queries `--all` makes are joined before any
-  of their hops is attached. `Config.Stepped` watchers read the whole trace
-  inside that call, which is safe for exactly that reason; a hop attached from
-  anywhere else is a data race against the live drawing.
-- **DNSSEC never claims more than it checked.** An algorithm this build does not
-  know, or a denial of existence it cannot compute, is `indeterminate` — never
-  `bogus`. Bogus is exit code 3 and has to keep meaning something. Only a
-  record the zone above has signed can earn `indeterminate`: an unsigned DS is
-  anyone's, whatever algorithm it names, and is `bogus`. An RSA key whose
-  exponent the codec cannot load (`lv.` signs with 2^32+1) is unchecked only
-  where a signed DS names it; an answer claiming one is `bogus`.
-- **A signed response is checked against the zone its signer names.** A server
-  serving both sides of a cut it never referred the walk across answers, and
-  refers, with the child's keys. The chain crosses into the signer's zone first,
-  with its DS asked of the same server and proved like any other, and only for a
-  signer between the answering zone and the name. Checked against the zone the
-  walk was referred to, every delegation below `net.br.` came out bogus. An
-  unsigned answer names its zone by its SOA or apex NS set instead, and is
-  believed only as far as the parent's signed denial of a DS. A DS signed
-  from further down crosses that zone first, and a DS query referred elsewhere
-  is asked of the zone it was referred to: `root-servers.net.` is served by
-  the root, `nsw.edu.au.` by the servers of `au.`.
+  doing the walking.** `--all`'s parallel queries are joined before any hop is
+  attached. `Config.Stepped` and the live drawing read the trace inside that
+  call; a hop attached from anywhere else is a data race. `Config.Asking` runs
+  on several goroutines and never reads the trace.
+- **DNSSEC never claims more than it checked.** What this build cannot check —
+  an unknown algorithm, an RSA exponent the codec cannot load, a denial it
+  cannot compute — is `indeterminate`, never `bogus`, and only for a record the
+  zone above signed. An unsigned DS is anyone's, and is `bogus`. Bogus is exit
+  code 3 and has to keep meaning something.
+- **A signed response is checked against the zone its signer names**, not the
+  zone the walk was referred to: one server can serve both sides of a cut. See
+  `crossCut` in `internal/resolver/walk.go`. Getting this wrong made every
+  delegation below `net.br.` bogus.
 - **What a zone does not say is checked like what it does.** An insecure
   delegation, an NXDOMAIN, a NODATA and a wildcard all rest on a proof the zone
-  signed, never on an absence: an absence is what anyone able to drop records
-  from a response can manufacture.
-- **A minimised hop is never the answer.** Under `--qmin` a zone is asked about
-  a shorter name, and its NODATA or NXDOMAIN is about that name. `Step.Minimised`
-  keeps `Trace.Result` — and so the exit code, `--expect` and `--diff` — from
-  reading one as the resolution's own.
-- **A signature's time left is read against `Trace.Started`, never the clock.**
-  That is what makes a trace drawn again with `--from` say what it said when it
-  was made, and keeps the goldens still. Staleness is a share of the life a
-  signature was made for, not a fixed margin: online signers hand out
-  signatures that last a day, fresh every time. A walk `--replay` makes is
-  timed by the capture: `Config.At` sets `Trace.Started` and `Config.Clock`
-  every step's start, so a new timing goes through `run.since`, never
-  `time.Since`.
+  signed, never on an absence: anyone able to drop records can manufacture one.
+- **A minimised hop is never the answer.** Under `--qmin` a zone's NODATA or
+  NXDOMAIN is about a shorter name. `Step.Minimised` keeps `Trace.Result`, and
+  so the exit code, `--expect` and `--diff`, from reading one as the answer.
+- **Time is read against `Trace.Started`, never the clock**, so a trace drawn
+  again with `--from` says what it said, and the goldens stay still. Under
+  `--replay` the capture sets the clock: a new timing goes through `run.since`,
+  never `time.Since`. Staleness is a share of a signature's life, not a fixed
+  margin.
 - **Nothing reaches the disk unless `--diff` or `--pcap` asks for it.**
-  `internal/history` is the only writer of the cache: it keeps one file per
-  question, and the file names what was looked up and when. `--pcap` writes
-  the one file it is named, and the file of defaults cannot name one. A capture
-  is rebuilt, never sniffed: it holds plain DNS only, so it refuses `--dot` and
-  `--doh` rather than misrepresent TLS. A cache that cannot be read or written costs the
-  comparison and says so in one line, never the resolution. What the file does
-  not carry cannot be compared, which is what keeps a comparison from claiming
-  to have watched something no walk recorded.
+  `internal/history` is the only writer of the cache. A capture is rebuilt,
+  never sniffed, so it refuses `--dot` and `--doh`. A cache that cannot be read
+  or written costs the comparison, in one line, never the resolution.
 - **dnstree-web runs walks for strangers.** Every transport it hands the
   resolver goes through `transport.Guard` with `transport.Public`, and every
   other resolver option stays at zero, so a new flag reaches the service only
   on purpose. Redirects are rebuilt from the checked view, name and type, never
   from the path asked, and a forwarded client address is the header's last
   entry.
-- **The AS lookups are best effort.** They start as the walk discovers each
-  server, are waited on briefly after it, and never fail a resolution. When they
-  come back empty they say in one line which of the two things went wrong: the
-  lookups could not get through, or they ran out of time.
-- **`--rdap` and `--tlsa` are the only requests that are not DNS.** `--rdap`
-  goes over HTTPS to the services IANA's bootstrap file names, refuses a
-  redirect off HTTPS and reads a bounded answer. `--tlsa` connects on port 25
-  only to the public addresses DNSSEC proved for the MX hosts DANE covers,
-  with a timeout and a bound on what it reads. Both are best effort like the AS
-  lookups: what cannot be asked costs the check, in one line, never the walk,
-  and an address that cannot be reached is never a mismatch. dnstree-web
-  imports neither, and `internal/layering` fails if it comes to.
-- **The file of defaults is parsed as arguments, ahead of the command line.**
-  A flag added to the flag set works in the file without being written out a
-  second time, and the command line wins by being read last. Flags that answer
-  the same question in different ways — the family, the transport — are listed
-  in `groups` in `internal/cli/config.go`, so naming one on the command line
-  replaces what the file chose instead of colliding with it.
+- **Best-effort checks never fail a walk.** The AS lookups, `--rdap` and
+  `--tlsa` cost their own check, in one line that says why, and an address that
+  cannot be reached is never a mismatch. `--rdap` and `--tlsa` are the only
+  requests that are not DNS: HTTPS only, bounded reads, and `--tlsa` connects
+  only to public addresses DNSSEC proved. dnstree-web imports neither.
+- **The file of defaults is parsed as arguments, ahead of the command line**,
+  so a new flag works there for free. Flags that answer the same question in
+  different ways go in `groups` in `internal/cli/config.go`.
 - **Exit codes are a contract**: 0 an answer, 1 the command line, 2 no answer,
-  3 a broken chain of trust, 4 an `--expect` that did not hold. Scripts read them; do not repurpose one.
-  A run of several walks exits with the worst of them, ranked 3, 2, 4, 0 — not
-  the highest number.
-- **A check's own lookups are not the run's.** The walks `--mail`, `--dkim`,
-  `--svcb`, `--srv`, `--deps`, `-x`'s reverse check, the bootstrap signals and
-  the DSYNC lookups make start at a step marked `Apart` (`run.look`), and the
-  chain of trust, signature lifetimes and the exit code read only
-  `Trace.judged`, so somebody else's broken zone never exits 3.
-- **`--format ascii` emits nothing above codepoint 127** — a test asserts it,
-  because the format exists for pasting into documents.
+  3 a broken chain of trust, 4 an `--expect` that did not hold. A run of several
+  walks exits with the worst, ranked 3, 2, 4, 0 — not the highest number.
+- **A check's own lookups are not the run's.** Walks made for `--mail`,
+  `--dkim`, `--deps` and the like start at a step marked `Apart` (`run.look`);
+  the chain of trust and the exit code read only `Trace.judged`, so somebody
+  else's broken zone never exits 3.
+- **`--format ascii` emits nothing above codepoint 127**: it exists for pasting
+  into documents.
 - **`schema_version` in the JSON output** is bumped whenever a field changes
   meaning or goes away.
 - **Emoji belong in labels, never in branch prefixes.** A two-cell glyph in a
   prefix pulls every line below it out of alignment.
-- **Live frames are cut to the terminal width, counting display cells rather
-  than bytes**: escapes take no room and an emoji takes two. A line that wrapped
-  would occupy two rows, and the next redraw would come up one row short and
-  smear the drawing down the terminal. The frames are scratch — they are wiped
-  and the finished tree is written where they stood, byte for byte what a run
-  without `--live` prints.
-- **A live frame is a tree and a tail, and only the tree may read the trace.**
-  The tail — the queries in flight and the footer — is redrawn on a timer, from
-  a goroutine that never touches the trace the walk is still building; it works
-  off the counters `Config.Asking` feeds it and the lines the last `Stepped`
-  rendered. A tick goes back over the tail rows alone and leaves the tree where
-  it is; a screen that has been resized falls back to a whole frame, since the
-  cut and the width every line was drawn to have both just changed.
-- **`Config.Asking` is the only thing that says a walk is waiting.** Nothing
-  joins the trace until an answer is in, so between one hop and the next
-  `Stepped` has nothing to report and a slow server is indistinguishable from a
-  hang. The hook returns the function that ends the query; `--all` has several
-  out at once, so it is called from several goroutines and may not read the
-  trace.
+- **Live frames are cut to the terminal width in display cells, not bytes.** A
+  line that wraps smears the next redraw down the terminal. The finished tree
+  is byte for byte what a run without `--live` prints.
 
 ## The DNS library
 
@@ -216,96 +133,54 @@ the name helpers are in `dnsutil`. A handler is given a message with only the
 header and the question unpacked — call `Unpack()` before reading anything else,
 or the EDNS0 fields read as zero.
 
-Names come back as the raw octets the server sent, unescaped: owners and every
-name inside rdata (NS, CNAME, MX, SOA, SVCB targets). Text rdata — TXT, CAA,
-HINFO, NAPTR, URI, SVCB values — comes back escaped. A name has to be escaped
-before it is drawn, but not before it is queried or checked against TLS, which
-need the octets themselves: the trace keeps the octets, and every renderer
-draws the copy `Trace.Shown` makes of it.
+Names come back as the raw octets the server sent, unescaped; text rdata comes
+back escaped. The trace keeps the octets, which queries and TLS need, and every
+renderer draws the escaped copy `Trace.Shown` makes.
 
-The codec sorts the trailing value of CAA, URI and NULL records shortest first,
-TXT records, and the types built on them (AVC, RESINFO, WALLET, CLA), by how
-many strings they hold, text by its escaped form, and CSYNC by the types its
-bitmap lists, rather than by octet, so those sets, and HINFO and the other
-types of text alone, are verified, and signed in fakens, in the RFC 3597
-generic form. NAPTR and HIP compare text the same way but hold names, which
-that form would not lowercase, so they are left as they are. A new type with a trailing variable field or text
-needs the same check. Check any other belief about what the codec does with a pack and unpack
-round trip before building on it.
+The codec sorts some types out of canonical order; `misordered` in
+`internal/dnssec/dnssec.go` lists them. Check any other belief about the codec
+with a pack and unpack round trip before building on it.
 
-Go 1.27 is the baseline, and the code uses it: `sync.WaitGroup.Go`,
-`slog.DiscardHandler`, `new(expr)`, `strings.Lines` and `strings.SplitSeq`.
+Use Go 1.27 idioms: `sync.WaitGroup.Go`, `new(expr)`, `strings.Lines`,
+`strings.SplitSeq`.
 
 ## Tests
 
-- The engine is tested offline against in-process authoritative servers
-  (`internal/testutil/fakens`), signed hierarchies included. `fakens.Behaviour`
-  has a knob for each way a server misbehaves — silence, REFUSED, lameness,
-  truncation, FORMERR on EDNS0, latency, out-of-bailiwick glue, glue clipped
-  without TC, seven ways to
-  break a chain of trust, signatures near expiry, NXDOMAIN for an empty
-  non-terminal, SERVFAIL for a single type, a validating resolver's SERVFAIL
-  and AD bit, a resolver reading the root key sentinel, broken cookies and
-  CDS, a lossy path dropping every Nth query, eight ways
-  to mishandle EDNS (RFC 8906), TCP dropped or reset, and zone transfers and
-  recursion open to strangers or reset. A change to the way a delegation is followed belongs
-  with a scenario that reproduces it on purpose.
+- The engine is tested offline against `internal/testutil/fakens`, which has a
+  `Behaviour` knob for each way a server misbehaves. A change to the way a
+  delegation is followed comes with a scenario that reproduces it.
 - Tests against the real internet go behind `//go:build live`.
 - What a zone or a stranger wrote and is parsed or escaped by hand is fuzzed
-  against a property, not an example: the SPF check, the DKIM key reader, the
-  hosts a DMARC `rua` names, the echoes `--check-resolver` reads, a
-  capture `--replay` reads, the TXT the resolver tests' zones write, a
-  saved walk read into every renderer, the live line cut, the escaper of each
-  format, and the names dnstree-web redirects to. `make check` replays the seeds and the
-  inputs kept under `testdata/fuzz`; `make fuzz` searches. An input a search
-  finds stays in `testdata/fuzz` once it is fixed.
-- The pages' logic lives in `walk.js` beside each page (and `space.js`,
-  `pack.js` and `film.js` beside the scene), which touch neither the DOM nor
-  WebGL; the page scripts only draw what those return. `internal/render/web/jstest` tests them
-  with node's own runner and the JSON golden as the walk, and there is no
-  `package.json`: the tests import nothing node does not ship. A new module
-  goes in the file list in `internal/render/web/web.go`, or
-  `TestImportsAreServed` fails.
+  against a property, not an example. An input a search finds stays in
+  `testdata/fuzz` once it is fixed.
+- The pages' logic lives in the `.js` modules beside each page, which touch
+  neither the DOM nor WebGL. `internal/render/web/jstest` tests them with node's
+  own runner; there is no `package.json`, so they import only what node ships.
 - Table tests are keyed by a sentence that says what the case is, not by index.
-- `fakens` replaces its zone whole through an `atomic.Pointer`, serialises
-  signing behind a mutex and signs copies of the zone's records, because
-  handlers run concurrently and the library writes to the records it signs.
-  New state in there needs the same care.
 
 ## Keeping the surface in sync
 
 A new flag or format shows up in four places, and missing one is the usual
 review comment: the usage string in `internal/cli/cli.go`, the flag table in
-`README.md`, the landing page in `docs/` (published by the pages workflow), and
-the tests. A flag that needs more than a row is explained in `docs/guide/`, and
-its row links there. Every example in the README, the guide and on the page is
-real output, pasted from an actual run — regenerate it rather than editing it by
-hand.
+`README.md`, the landing page in `docs/`, and the tests. A flag that needs more
+than a row is explained in `docs/guide/`, and its row links there. Every example
+in the README, the guide and on the page is real output, pasted from an actual
+run — regenerate it rather than editing it by hand.
 
-The man page is not a fifth place. `cmd/mkman` renders it from `cli.Usage` in
-`make man`, which CI's packaging job runs on every pull request, and refuses to
-render a usage text whose shape it cannot read, so a flag added to the usage
-string reaches the packages on its own.
-
-
-`dnstreerc.example` is written by hand, but it is not a fifth place either.
-`TestExampleParses` reads it as it ships and then reads every run of adjacent
-setting lines in it with the comment markers taken off, so a flag that is
-renamed or dropped, or an example value that stops being one, fails there. That
-is why every setting in the file is written as `name = value` and why settings
-that contradict each other are kept apart by a line of prose. What the test
-cannot notice is a new flag missing from the file: it is a menu rather than the
-surface, and a flag worth setting every day belongs on it.
-
-The plugin's skill is held the same way: `TestSkillFlagsExist` fails on a flag
-it names that the usage does not, and `TestSkillCommandsParse` parses every
-command it shows. A flag that answers a question users bring to a model belongs
-in its table.
+The man page is rendered from the usage string. Tests catch a stale flag in
+`dnstreerc.example` or the plugin's skill, but not a missing one: a flag worth
+setting every day belongs in the example, and one users ask a model about
+belongs in the skill's table.
 
 ## Style
 
 - Comments explain why, in sentences, and only where the reason is not on the
-  page. The code already says what.
+  page.
 - Output copy is plain and lowercase: it names what happened instead of
   apologising for it, and a warning says what to do about it.
-- Commit messages are short. So are the comments.
+- Commit messages and comments are short.
+- What an agent writes for people — replies, the reports the skills produce,
+  commit messages, PR bodies, discussion posts — is in ASD-STE100 (Simplified
+  Technical English), for readers whose first language is not English. Code,
+  commands, flags and pasted output stay as they are. This file and the skills
+  are not held to it.
