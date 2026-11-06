@@ -9,7 +9,7 @@ pull requests and the commit prefixes that decide the version.
 ## Skills
 
 The repository ships its own skills in `.agents/skills/` (linked from
-`.claude/skills/`): `dnstree-commit`, `dnstree-review`, `dnstree-audit`,
+`.claude/skills/`): `dnstree-commit`, `dnstree-pr`, `dnstree-review`, `dnstree-audit`,
 `dnstree-docs`, `dnstree-e2e`, `dnstree-dig`, `dnstree-modernise` and
 `dnstree-release`. When one of them covers the task, use it
 over a general-purpose skill that does something similar: they know the rules
