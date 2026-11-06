@@ -507,6 +507,7 @@ func TestParseRejects(t *testing.T) {
 		"a replay of queries carried in tls":              {"--dot", "--replay", "walk.pcap", "example.com"},
 		"a replay of queries carried in https":            {"--doh", "--replay", "walk.pcap", "example.com"},
 		"a replay watched for changes":                    {"--watch", "30s", "--replay", "walk.pcap", "example.com"},
+		"a replay asked again and counted":                {"--repeat", "3", "--replay", "walk.pcap", "example.com"},
 		"a replay remembered as the latest walk":          {"--diff", "--replay", "walk.pcap", "example.com"},
 		"a replay timed against a resolver":               {"--resolver", "192.0.2.1", "--replay", "walk.pcap", "example.com"},
 		"a replay that asks the registry":                 {"--rdap", "--replay", "walk.pcap", "example.com"},

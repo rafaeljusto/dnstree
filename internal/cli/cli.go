@@ -1556,12 +1556,14 @@ func replayable(cfg *Config, typed []string) error {
 		return fmt.Errorf("%w: --replay answers from a capture of plain DNS, which --%s does not send", ErrUsage, cfg.Proto)
 	case cfg.Watch != 0:
 		return fmt.Errorf("%w: --replay answers the same every time, so there is nothing to watch change", ErrUsage)
+	case cfg.Repeat > 0 && slices.Contains(typed, "repeat"):
+		return fmt.Errorf("%w: --replay answers the same every time, so there is nothing to count by --repeat", ErrUsage)
 	case cfg.Diff:
 		return fmt.Errorf("%w: --diff remembers the walk, and a replayed one is not what the name does now", ErrUsage)
 	}
 	cfg.ASN, cfg.Compare, cfg.DDR, cfg.Behave = false, false, false, false
 	cfg.SPF, cfg.RDAP, cfg.TLSA, cfg.Report = false, false, false, false
-	cfg.Resolvers = nil
+	cfg.Resolvers, cfg.Repeat = nil, 0
 	return nil
 }
 

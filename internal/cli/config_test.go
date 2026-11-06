@@ -358,6 +358,21 @@ func TestParseDefaultsCompareNS(t *testing.T) {
 	}
 }
 
+// TestParseDefaultsReplay covers a file that repeats every hop on a run that
+// replays a capture, which answers the same every time: the setting waits for
+// a run that asks the servers.
+func TestParseDefaultsReplay(t *testing.T) {
+	path := write(t, "repeat = 3\n")
+
+	got, err := cli.Parse([]string{"--config", path, "--replay", "walk.pcap", "example.com"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Repeat != 0 {
+		t.Errorf("got --repeat %d, want the file's left out of a replay", got.Repeat)
+	}
+}
+
 // TestParseDefaultsDDR covers a file that asks for the designations on a run
 // that asks no resolver anything: the setting waits for a run that does.
 func TestParseDefaultsDDR(t *testing.T) {
