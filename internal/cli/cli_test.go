@@ -64,6 +64,12 @@ func TestParse(t *testing.T) {
 				CheckDS: true, Serial: true, CheckEDNS: true, Cookie: true, CAA: true, SPF: true, Mail: true, RDAP: true,
 				CheckAXFR: true, MaxQueries: 100},
 		},
+		"a zone checked whole, written for a monitoring system": {
+			args: []string{"--check", "--format", "openmetrics", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Format: "openmetrics", Check: true, DNSSEC: true, All: true,
+				CheckNS: true, CheckDS: true, Serial: true, CheckEDNS: true, Cookie: true, CAA: true, SPF: true, Mail: true,
+				RDAP: true, MaxQueries: cli.CheckMaxQueries},
+		},
 		"a walk in a scene": {
 			args: []string{"--format", "web-3d", "--no-browser", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Format: "web-3d", WebAddr: "127.0.0.1:0"},
@@ -426,7 +432,7 @@ func TestParseRejects(t *testing.T) {
 		"a rollover drawn as dot":                         {"--format", "dot", "--rollover", "--dnssec", "example.com"},
 		"a zone graded on no budget at all":               {"--check", "--max-queries", "0", "example.com"},
 		"a zone graded, drawn as dot":                     {"--format", "dot", "--check", "example.com"},
-		"a zone graded, measured":                         {"--format", "openmetrics", "--check", "example.com"},
+		"how long a change takes, measured":               {"--format", "openmetrics", "--propagation", "example.com"},
 		"a zone graded again from a saved walk":           {"--from", "walk.json", "--check"},
 		"compared json":                                   {"--format", "json", "--diff", "example.com"},
 		"compared dot":                                    {"--format", "dot", "--diff", "example.com"},

@@ -100,7 +100,7 @@ func about(tr *trace.Trace, area trace.Area) (findings []Finding, ran bool, pass
 
 	case trace.AreaDelegation:
 		findings = takeover(tr)
-		delegation := delegated(tr, zone)
+		delegation := tr.DelegationOf(zone)
 		if delegation == nil || (delegation.ZoneTTL == 0 && delegation.ZoneAddrs == nil) {
 			return findings, false, ""
 		}
@@ -111,25 +111,20 @@ func about(tr *trace.Trace, area trace.Area) (findings []Finding, ran bool, pass
 		return findings, true, passed
 
 	case trace.AreaConsistency:
-		names, addrs, serials := map[string]bool{}, 0, map[uint32]bool{}
-		for step := range tr.Steps() {
-			if step.Aside && step.Asked.Type == "SOA" && strings.EqualFold(step.Asked.Name, zone) && step.SOA != nil {
-				names[strings.ToLower(at(step))] = true
-				addrs++
-				serials[step.SOA.Serial] = true
-			}
-		}
-		if addrs == 0 {
+		asked := tr.Serials(zone)
+		if len(asked) == 0 {
 			return nil, false, ""
+		}
+		names := map[string]bool{}
+		for _, step := range asked {
+			names[strings.ToLower(at(step))] = true
 		}
 		findings = timers(tr)
 		passed = "every nameserver asked serves one copy of " + zone
-		if len(serials) == 1 {
-			for serial := range serials {
-				passed += fmt.Sprintf(", serial %d", serial)
-			}
+		if tr.Copies(zone) == 1 {
+			passed += fmt.Sprintf(", serial %d", asked[0].SOA.Serial)
 		}
-		passed += fmt.Sprintf(" (%s, %s)", plural(len(names), "nameserver", "nameservers"), plural(addrs, "address", "addresses"))
+		passed += fmt.Sprintf(" (%s, %s)", plural(len(names), "nameserver", "nameservers"), plural(len(asked), "address", "addresses"))
 		return findings, true, passed
 
 	case trace.AreaDNSSEC:

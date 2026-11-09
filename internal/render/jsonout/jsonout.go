@@ -427,6 +427,7 @@ type delegation struct {
 	TTL            uint32              `json:"ttl"`
 	ZoneTTL        uint32              `json:"zone_ttl,omitempty"`
 	NS             []string            `json:"ns,omitempty"`
+	ZoneNS         []string            `json:"zone_ns,omitempty"`
 	Glue           map[string][]string `json:"glue,omitempty"`
 	ZoneAddrs      map[string][]string `json:"zone_addrs,omitempty"`
 	Withheld       map[string][]string `json:"withheld,omitempty"`
@@ -827,6 +828,7 @@ func convertDelegation(from *trace.Delegation) *delegation {
 		TTL:            from.TTL,
 		ZoneTTL:        from.ZoneTTL,
 		NS:             from.NS,
+		ZoneNS:         from.ZoneNS,
 		GlueLess:       from.GlueLess,
 		OutOfBailiwick: from.OutOfBailiwick,
 		DSPresent:      from.DSPresent,

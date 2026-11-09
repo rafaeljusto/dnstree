@@ -1289,6 +1289,11 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "zone_ns": {
+          "description": "The nameserver names the zone itself lists, present only where --check-ns asked and the zone gave them.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "glue": {
           "description": "The addresses from the additional section that this zone was allowed to hand out, meaning the in-bailiwick ones. Bailiwick is judged against the zone the answering server serves, which is what lets the root hand out gTLD server addresses.",
           "type": "object",

@@ -934,6 +934,10 @@ type Delegation struct {
 	// NS are the nameserver names, in the order they were received.
 	NS []string
 
+	// ZoneNS are the nameserver names the zone itself lists, set only where
+	// --check-ns asked and the zone gave them.
+	ZoneNS []string
+
 	// Glue holds the addresses from the additional section that this zone was
 	// allowed to hand out, meaning the in-bailiwick ones.
 	Glue map[string][]netip.Addr

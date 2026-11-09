@@ -222,6 +222,7 @@ func (s *Step) Shown() *Step {
 		d := *s.Delegation
 		d.Zone = Shown(d.Zone)
 		d.NS = shownAll(d.NS)
+		d.ZoneNS = shownAll(d.ZoneNS)
 		d.GlueLess = shownAll(d.GlueLess)
 		d.OutOfBailiwick = shownAll(d.OutOfBailiwick)
 		d.Glue = shownAddrs(s.Delegation.Glue)

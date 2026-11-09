@@ -216,9 +216,9 @@ line says the worst of what it found. Zone transfers and recursion are asked of
 the servers as a stranger would, which is for the zone's owner to choose, so
 they are graded only when --check-axfr or --check-recursion is named as well.
 A name that is an alias is graded at the zone its target is in, which is where
-the checks run. It is drawn by tree, ascii, emoji, markdown and json, and
---from draws a saved one again. The exit code is the walk's own; --expect
-check:ok fails on anything broken.
+the checks run. It is drawn by tree, ascii, emoji, markdown and json, written
+as numbers by openmetrics, and --from draws a saved one again. The exit code
+is the walk's own; --expect check:ok fails on anything broken.
 
 --report tells a zone its chain of trust is broken, the way RFC 9567 lets a
 zone ask: when the walk comes out bogus and the broken zone named a reporting
@@ -266,8 +266,10 @@ passed, who --caa found free to issue, how many lookups --spf counted, how many
 MX hosts --mail found DANE covering and which mail policies it found, how many
 of the targets --svcb found have an address and how many of their hints are
 stray, how many of the hosts --srv found have an address, how long
---rdap found the registration has left and what the resolvers answered, each
-labelled with the question. Run from cron into the
+--rdap found the registration has left, the grades --check gave, how many
+copies of the zone --serial found served, whether --check-ns found the parent
+and the zone naming the same nameservers, and what the resolvers answered,
+each labelled with the question. Run from cron into the
 directory of node_exporter's textfile collector, it is what Prometheus alerts
 on; with --names one file holds every name, written once the last walk ends.
 
@@ -1136,10 +1138,10 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			ErrUsage, cfg.Format)
 	}
 	// A default from the file is heeded only by the formats that draw it.
-	if cfg.Check && !propagates(cfg.Format) {
+	if cfg.Check && !grades(cfg.Format) {
 		if !fromFile["check"] {
 			return nil, fmt.Errorf("%w: %s does not draw what --check grades; use %s",
-				ErrUsage, cfg.Format, orList(formatNames(propagates)))
+				ErrUsage, cfg.Format, orList(formatNames(grades)))
 		}
 		cfg.Check = false
 	}
@@ -1594,10 +1596,12 @@ type format struct {
 	// because it is pasted whole.
 	once bool
 	// propagates is a format that draws what --propagation and --rollover
-	// work out, and what --check grades.
+	// work out.
 	propagates bool
-	serves     bool // a page served to a browser
-	programs   bool // read by a program rather than a person
+	// grades is a format that carries what --check grades.
+	grades   bool
+	serves   bool // a page served to a browser
+	programs bool // read by a program rather than a person
 	// several is a format read by a program that can still hold more than one
 	// walk: JSON a line to each, and one OpenMetrics file over all of them.
 	several bool
@@ -1606,18 +1610,18 @@ type format struct {
 // formats are every --format there is, in the order the help lists them. A
 // new one is a row here, a renderer in main, and the usage text.
 var formats = []format{
-	{name: "tree", propagates: true},
-	{name: "ascii", propagates: true},
-	{name: "emoji", propagates: true},
+	{name: "tree", propagates: true, grades: true},
+	{name: "ascii", propagates: true, grades: true},
+	{name: "emoji", propagates: true, grades: true},
 	{name: "waterfall", once: true},
 	{name: "waterfall-ascii", once: true},
 	{name: "waterfall-mermaid", once: true, programs: true},
-	{name: "markdown", once: true, propagates: true},
+	{name: "markdown", once: true, propagates: true, grades: true},
 	{name: "teach", once: true},
-	{name: "json", once: true, propagates: true, programs: true, several: true},
+	{name: "json", once: true, propagates: true, grades: true, programs: true, several: true},
 	{name: "dot", once: true, programs: true},
 	{name: "mermaid", once: true, programs: true},
-	{name: "openmetrics", once: true, programs: true, several: true},
+	{name: "openmetrics", once: true, grades: true, programs: true, several: true},
 	{name: "dig", once: true, programs: true},
 	{name: "web", once: true, serves: true},
 	{name: "web-3d", once: true, serves: true},
@@ -1659,6 +1663,11 @@ func once(name string) bool {
 func propagates(name string) bool {
 	f, _ := lookupFormat(name)
 	return f.propagates
+}
+
+func grades(name string) bool {
+	f, _ := lookupFormat(name)
+	return f.grades
 }
 
 // Serves reports whether a format is a page served to a browser rather than

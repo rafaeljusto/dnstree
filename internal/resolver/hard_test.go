@@ -410,8 +410,9 @@ www   IN A    192.0.2.10
 	tests := map[string]struct {
 		zone     string
 		warnings int
+		agree    bool
 	}{
-		"they agree":    {zone: exampleZone},
+		"they agree":    {zone: exampleZone, agree: true},
 		"they disagree": {zone: strayZone, warnings: 1},
 	}
 
@@ -445,6 +446,9 @@ www   IN A    192.0.2.10
 			}
 			if len(check.Records) != 0 {
 				t.Errorf("got records %+v on the check, want only its verdict", check.Records)
+			}
+			if agree, known := tr.DelegationOf("example.com.").NSAgree(); !known || agree != test.agree {
+				t.Errorf("got agree %t, known %t, want agree %t, known", agree, known, test.agree)
 			}
 		})
 	}

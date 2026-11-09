@@ -79,6 +79,8 @@ anything to look at as well, which is how a zone is held to its health in CI
 ([Asking rather than reading](scripting.md#asking-rather-than-reading)).
 Tree, ascii, emoji, markdown and json draw the grades; `--format json` carries
 them as `check`, and `--from` draws a saved one again without being asked.
+`--format openmetrics` writes them as `dnstree_check`, for a monitoring system
+to alert on ([Numbers for a monitoring system](scripting.md#numbers-for-a-monitoring-system)).
 
 ## Whether the parent and the child agree
 

@@ -42,6 +42,9 @@ func (r *run) checkNS(ctx context.Context, chain *dnssec.Chain, answer *trace.St
 		}
 	}
 	step.Records = nil // the comparison is the point, not the records
+	if len(child) > 0 {
+		delegated.ZoneNS = child
+	}
 
 	if len(child) == 0 {
 		r.warnf(trace.AreaDelegation, "%s did not return its own NS records", delegated.Zone)

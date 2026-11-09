@@ -303,6 +303,7 @@ func (e *Exposition) Add(tr *trace.Trace) {
 		}
 	}
 
+	zone(m, tr)
 	probes(m, tr)
 	repeats(m, tr)
 	ednsTests(m, tr)
@@ -326,6 +327,31 @@ func (e *Exposition) Write(w io.Writer) error {
 	// A bufio writer holds the first error it meets until Flush.
 	_, _ = out.WriteString("# EOF\n")
 	return out.Flush()
+}
+
+// zone writes the health of the zone the walk ended in: the grades --check
+// gave it, how many copies --serial found served, and whether --check-ns found
+// the parent and the zone naming the same nameservers. Each is left out where
+// nothing asked, so that a dashboard never reads it as healthy.
+func zone(m *metrics, tr *trace.Trace) {
+	if check := tr.Check; check != nil {
+		m.family("dnstree_check", "", "the grade --check gave each area of the zone, one of passed, look, broken or skipped")
+		for _, area := range check.Areas {
+			for _, value := range []trace.Grade{trace.GradePassed, trace.GradeLook, trace.GradeBroken, trace.GradeSkipped} {
+				m.sample("dnstree_check", flag(value == area.Grade),
+					label{"zone", check.Zone}, label{"area", string(area.Area)}, label{"grade", string(value)})
+			}
+		}
+	}
+	ended := tr.Ended()
+	if copies := tr.Copies(ended); copies > 0 {
+		m.family("dnstree_zone_copies", "", "how many different copies of the zone, by SOA serial, the nameservers --serial asked serve")
+		m.sample("dnstree_zone_copies", strconv.Itoa(copies), label{"zone", ended})
+	}
+	if agree, known := tr.DelegationOf(ended).NSAgree(); known {
+		m.family("dnstree_delegation_agrees", "", "1 where the parent and the zone name the same nameservers")
+		m.sample("dnstree_delegation_agrees", flag(agree), label{"zone", ended})
+	}
 }
 
 // probes writes what --check-axfr and --check-recursion found, one sample per

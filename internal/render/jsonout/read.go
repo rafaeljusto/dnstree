@@ -675,6 +675,7 @@ func readDelegation(from *delegation) (*trace.Delegation, error) {
 		TTL:            from.TTL,
 		ZoneTTL:        from.ZoneTTL,
 		NS:             from.NS,
+		ZoneNS:         from.ZoneNS,
 		GlueLess:       from.GlueLess,
 		OutOfBailiwick: from.OutOfBailiwick,
 		DSPresent:      from.DSPresent,

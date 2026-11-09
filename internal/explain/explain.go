@@ -270,7 +270,7 @@ func cache(tr *trace.Trace) []Finding {
 // so a difference is the ordinary case and not a fault.
 func nameservers(tr *trace.Trace) (Finding, bool) {
 	zone := tr.Ended()
-	delegation := delegated(tr, zone)
+	delegation := tr.DelegationOf(zone)
 	if delegation == nil || delegation.ZoneTTL == 0 || delegation.ZoneTTL == delegation.TTL {
 		return Finding{}, false
 	}
@@ -293,7 +293,7 @@ func lifetimes(tr *trace.Trace) (Finding, bool) {
 
 	var cut uint32
 	zone := tr.Ended()
-	if delegation := delegated(tr, zone); delegation != nil {
+	if delegation := tr.DelegationOf(zone); delegation != nil {
 		cut = delegation.TTL
 	}
 
@@ -683,7 +683,7 @@ func zoneOf(step *trace.Step) string {
 // spread is not news.
 func spread(tr *trace.Trace) []Finding {
 	zone := tr.Ended()
-	delegation := delegated(tr, zone)
+	delegation := tr.DelegationOf(zone)
 	if delegation == nil || len(delegation.NS) == 0 {
 		return nil
 	}
@@ -744,17 +744,6 @@ func shared(glue []netip.Addr, v4 bool) (netip.Prefix, bool) {
 		network, count = prefix, count+1
 	}
 	return network, count > 1
-}
-
-// delegated is the referral that pointed the walk at zone, nil for a zone
-// nothing referred it to: the root, or wherever a walk was told to start.
-func delegated(tr *trace.Trace, zone string) *trace.Delegation {
-	for step := range tr.Mainline() {
-		if step.Delegation != nil && strings.EqualFold(step.Delegation.Zone, zone) {
-			return step.Delegation
-		}
-	}
-	return nil
 }
 
 // asked is the servers of the zone the walk actually put a question to, by the

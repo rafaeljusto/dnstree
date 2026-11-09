@@ -351,7 +351,10 @@ of the servers `--svcb` found have an address and how many of the hints for
 them are stray, how many of the hosts `--srv` found have an address, whether a name the PTR of an address `-x` asked about points
 back to it, how long
 `--rdap` found the registration has left, whether it is held and whether it
-agrees with the TLD, the TTL the zone gives the answer, and how long each
+agrees with the TLD, the grades [`--check`](zones.md#all-of-it-at-once) gave
+each area of the zone, how many copies of the zone `--serial` found served,
+whether `--check-ns` found the parent and the zone naming the same
+nameservers, the TTL the zone gives the answer, and how long each
 resolver took, whether it failed, whether it agreed and the TTL it handed out. Only gauges are used, so the older
 Prometheus text format reads it too. A family the walk has nothing to say about
 is left out rather than written as zero: a walk without `--dnssec` says nothing
@@ -433,6 +436,39 @@ dnstree_warnings{name="www.example.com.",type="A"} 0
 ```
 
 </details>
+
+A zone's health is one series per area, with a sample for each grade, so an
+alert reads `dnstree_check{grade="broken"} == 1` with no string matching, and
+an area nothing checked is `skipped`, never a pass. The area names are kept
+the way the fields of the JSON are: a rename or a removal moves
+`schema_version`. `dnstree_zone_copies` counts the serials the nameservers
+serve, and does not say which is older, since serials wrap (RFC 1982):
+`dnstree_zone_copies > 1` is a secondary left behind. Each of the three is
+labelled with the zone that was checked, which for an alias is its target's.
+
+```
+$ dnstree --check --no-compare --format openmetrics example.com
+...
+# TYPE dnstree_check gauge
+# HELP dnstree_check the grade --check gave each area of the zone, one of passed, look, broken or skipped
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="answer",grade="passed"} 1
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="answer",grade="look"} 0
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="answer",grade="broken"} 0
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="answer",grade="skipped"} 0
+...
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="mail",grade="passed"} 0
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="mail",grade="look"} 1
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="mail",grade="broken"} 0
+dnstree_check{name="example.com.",type="A",zone="example.com.",area="mail",grade="skipped"} 0
+...
+# TYPE dnstree_zone_copies gauge
+# HELP dnstree_zone_copies how many different copies of the zone, by SOA serial, the nameservers --serial asked serve
+dnstree_zone_copies{name="example.com.",type="A",zone="example.com."} 1
+# TYPE dnstree_delegation_agrees gauge
+# HELP dnstree_delegation_agrees 1 where the parent and the zone name the same nameservers
+dnstree_delegation_agrees{name="example.com.",type="A",zone="example.com."} 1
+...
+```
 
 `--names` puts a whole list in one file, which is how a registrar, a hosting
 company or anybody with a drawer of brand domains watches all of them at once:
