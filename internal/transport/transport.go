@@ -5,6 +5,7 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -208,6 +209,62 @@ func clip(text string) string {
 		return text
 	}
 	return text[:MaxNSID] + "..."
+}
+
+// WithZoneVersion asks the server to say which copy of the zone its answer came
+// from (RFC 9660). The serial then rides in the answer itself, so it is about
+// the machine that answered, where a separate SOA query may reach another one
+// behind the same anycast address. It needs EDNS0 to ride in, as WithNSID does.
+func WithZoneVersion(req *dns.Msg) {
+	if req.UDPSize == 0 {
+		return
+	}
+	req.Pseudo = append(req.Pseudo, &dns.ZONEVERSION{})
+}
+
+// EchoedZoneVersion is the serial a server said its answer to qname came from,
+// nil where it gave none it could mean. Only an SOA serial is read, four
+// octets, of a zone that is qname or above it; a server may send one for
+// each zone the answer touches, and the deepest is the one that answered.
+func EchoedZoneVersion(resp *dns.Msg, qname string) *trace.ZoneVersion {
+	if resp == nil {
+		return nil
+	}
+	labels := dnsutil.Labels(qname)
+	var kept *dns.ZONEVERSION
+	for _, rr := range resp.Pseudo {
+		zv, ok := rr.(*dns.ZONEVERSION)
+		if !ok || zv.Type != 0 || len(zv.Version) != 4 || int(zv.Labels) > labels {
+			continue
+		}
+		if kept == nil || zv.Labels > kept.Labels {
+			kept = zv
+		}
+	}
+	if kept == nil {
+		return nil
+	}
+	return &trace.ZoneVersion{
+		Zone:   lastLabels(dnsutil.Fqdn(qname), int(kept.Labels)),
+		Serial: binary.BigEndian.Uint32(kept.Version),
+	}
+}
+
+// lastLabels is the name made of the last n labels of name, the way RFC 9660
+// names a zone by its label count.
+func lastLabels(name string, n int) string {
+	if n <= 0 || name == "." {
+		return "."
+	}
+	off := len(name)
+	for range n {
+		var start bool
+		off, start = dnsutil.Prev(name, off)
+		if start {
+			break
+		}
+	}
+	return name[off:]
 }
 
 // Extended reads what a server said about its own answer: the extended errors

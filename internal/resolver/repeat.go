@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ type again struct {
 	rtts    []time.Duration
 	rcodes  []string
 	nsids   []string
+	copies  []string
 	got     trace.Repeated
 }
 
@@ -85,7 +87,7 @@ func (r *run) repeat(ctx context.Context) {
 
 // askAgain puts a hop's question once more, and counts what came back. Like
 // every query of the run it carries what the run rides along on: the cookie,
-// the NSID and the client subnet.
+// the NSID, the zone version and the client subnet.
 func (r *run) askAgain(ctx context.Context, a *again) {
 	step := a.step
 	server := netip.AddrPortFrom(step.Server.IP, cmp.Or(step.Server.Port, a.carrier.Port()))
@@ -124,12 +126,16 @@ func (r *run) askAgain(ctx context.Context, a *again) {
 	if nsid := transport.EchoedNSID(resp); nsid != "" {
 		a.nsids = append(a.nsids, nsid)
 	}
+	if copied := transport.EchoedZoneVersion(resp, step.Asked.Name); copied != nil && strings.EqualFold(copied.Zone, step.Zone) {
+		a.copies = append(a.copies, strconv.FormatUint(uint64(copied.Serial), 10))
+	}
 }
 
 func (a *again) summary() *trace.Repeated {
 	got := a.got
 	got.Rcodes = trace.Tally(a.rcodes)
 	got.Instances = trace.Tally(a.nsids)
+	got.Copies = trace.Tally(a.copies)
 	if len(a.rtts) > 0 {
 		slices.Sort(a.rtts)
 		got.Best, got.Worst = a.rtts[0], a.rtts[len(a.rtts)-1]
@@ -164,6 +170,19 @@ func (r *run) warnRepeats(step *trace.Step) {
 	if len(why) > 0 {
 		r.warnIn(trace.AreaServers, step.Zone, "%s answered %d of %d repeats of %s; %s",
 			server, got.Answered, got.Asked, question, strings.Join(why, ", "))
+	}
+
+	if len(got.Copies) > 1 {
+		held := make([]string, 0, len(got.Copies))
+		for _, c := range got.Copies {
+			held = append(held, fmt.Sprintf("%s (%d)", c.Value, c.Times))
+		}
+		r.warnIn(trace.AreaConsistency, step.Zone, "%s answered repeats of %s out of %d copies of %s: %s",
+			server, question, len(got.Copies), step.Zone, strings.Join(held, ", "))
+	} else if own := step.ZoneVersion; len(got.Copies) == 1 && own != nil && strings.EqualFold(own.Zone, step.Zone) &&
+		strconv.FormatUint(uint64(own.Serial), 10) != got.Copies[0].Value {
+		r.warnIn(trace.AreaConsistency, step.Zone, "%s answered %s out of copy %d of %s, and its repeats out of copy %s",
+			server, question, own.Serial, step.Zone, got.Copies[0].Value)
 	}
 
 	// What the repeats said is only held against an answer the walk got.

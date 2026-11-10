@@ -511,6 +511,7 @@ export function factsOf(step, started) {
     row("prefix", [as.prefix, as.country_code, as.registry].filter(Boolean).join(" · "));
   }
   row("instance", step.nsid);
+  if (step.zone_version) row("zone copy", `${step.zone_version.serial} of ${step.zone_version.zone}`);
   const said = step.server?.software;
   if (said) row("software", said.version ? `"${said.version}"` : "hidden");
   if (step.cookie) row("cookie", `${step.cookie}: ${COOKIES[step.cookie] ?? ""}`, ["mismatch", "rejected"].includes(step.cookie) ? "bad" : null);

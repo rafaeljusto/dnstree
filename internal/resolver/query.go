@@ -125,6 +125,7 @@ func (r *run) query(ctx context.Context, zone string, server trace.Server, qname
 	step.Extended = transport.Extended(resp)
 	step.Subnet = transport.EchoedSubnet(resp)
 	step.NSID = transport.EchoedNSID(resp)
+	step.ZoneVersion = transport.EchoedZoneVersion(resp, qname)
 	step.ReportTo = transport.ReportChannel(resp)
 	if r.cfg.Cookie && udpSize > 0 && transport.CarriesCookie(step.Proto) {
 		step.Cookie, _ = transport.EchoedCookie(resp, r.clientCookie(step.Server.IP))
@@ -237,6 +238,12 @@ func (r *run) newQuery(carrier transport.Transport, server netip.AddrPort, qname
 	}
 	if r.cfg.NSID {
 		transport.WithNSID(req)
+	}
+	// A shaped query is a probe with a question of its own: the RFC 8906
+	// tests, the CHAOS version, the recursion check. The option would change
+	// what it tests, and the serial is only wanted beside a zone's answers.
+	if r.cfg.Serial && len(shape) == 0 {
+		transport.WithZoneVersion(req)
 	}
 	cookie := r.cfg.Cookie && transport.CarriesCookie(carrier.Proto())
 	if cookie {

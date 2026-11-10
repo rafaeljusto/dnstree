@@ -124,6 +124,7 @@ export function haystack(step) {
   return [
     step.zone, step.kind, step.server?.name, step.server?.ip, step.rcode, step.proto,
     step.server?.asn && `AS${step.server.asn.number}`, step.delegation?.zone, step.nsid,
+    step.zone_version && String(step.zone_version.serial),
     softwareOf(step.server),
     step.cookie && cookieOf(step.cookie).text,
     step.dnssec?.state, step.error, ...(step.notes ?? []),
@@ -157,6 +158,7 @@ export function chipsOf(step) {
   if (flags.length) chip(flags.join(" "), "quiet", "the header bits that are set");
   if (step.subnet) chip(`ecs /${step.subnet.scope}`, "quiet", `answered for ${step.subnet.prefix}`);
   if (step.nsid) chip(`@${step.nsid}`, "quiet", "the instance behind this address, as it names itself");
+  if (step.zone_version) chip(`serial ${step.zone_version.serial}`, "quiet", `the copy of ${step.zone_version.zone} this answer came from, as the server says`);
   if (softwareOf(step.server)) chip(softwareOf(step.server), "quiet", "the software the server says it runs, in its own words");
   if (step.cookie) {
     const cookie = cookieOf(step.cookie);

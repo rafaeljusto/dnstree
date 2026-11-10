@@ -44,15 +44,14 @@ func (r *renderer) repeats(tr *trace.Trace) []string {
 			fields = append(fields, tallied(got.Rcodes, ""))
 		}
 		if len(got.Instances) > 0 {
-			instances := tallied(got.Instances[:min(len(got.Instances), shownInstances)], "@")
-			if more := len(got.Instances) - shownInstances; more > 0 {
-				instances += fmt.Sprintf(" and %d more", more)
-			}
-			fields = append(fields, instances)
+			fields = append(fields, mostOf(got.Instances, "@"))
+		}
+		if len(got.Copies) > 0 {
+			fields = append(fields, "serial "+mostOf(got.Copies, ""))
 		}
 
 		text := strings.Join(fields, "  ")
-		if got.Missed() > 0 || mixed {
+		if got.Missed() > 0 || mixed || len(got.Copies) > 1 {
 			lines = append(lines, r.paint.paint(text, yellow))
 		} else {
 			lines = append(lines, r.paint.dim(text))
@@ -61,9 +60,19 @@ func (r *renderer) repeats(tr *trace.Trace) []string {
 	return lines
 }
 
-// shownInstances is how many of the instances that answered a line names, the
-// most frequent; an anycast address can have a different one answer every time.
+// shownInstances is how many of the instances, or copies of the zone, that
+// answered a line names, the most frequent; an anycast address can have a
+// different one answer every time.
 const shownInstances = 4
+
+// mostOf is the most frequent of the counts, and how many more there were.
+func mostOf(counts []trace.Count, prefix string) string {
+	text := tallied(counts[:min(len(counts), shownInstances)], prefix)
+	if more := len(counts) - shownInstances; more > 0 {
+		text += fmt.Sprintf(" and %d more", more)
+	}
+	return text
+}
 
 // tallied is each value with the number of times it came back.
 func tallied(counts []trace.Count, prefix string) string {

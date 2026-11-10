@@ -52,6 +52,32 @@ func (r *run) checkSerial(ctx context.Context, answer *trace.Step, zone string, 
 		r.warnf(trace.AreaConsistency, "the budget ran out before every nameserver of %s could be asked for its serial", zone)
 	}
 	r.compareSerials(zone, hops)
+	r.compareCopies(zone, hops)
+}
+
+// compareCopies warns where a server answered the walk out of one copy of the
+// zone and its SOA out of another. The serial in an answer came with that
+// answer, so the two are one address reaching two machines, the way anycast
+// does, and the SOA alone would never have shown the older one.
+func (r *run) compareCopies(zone string, hops []*hop) {
+	soas := make(map[netip.AddrPort]uint32)
+	for _, hop := range hops {
+		if hop.step.SOA != nil {
+			soas[netip.AddrPortFrom(hop.step.Server.IP, hop.step.Server.Port)] = hop.step.SOA.Serial
+		}
+	}
+	for step := range r.trace.Mainline() {
+		copied := step.ZoneVersion
+		if copied == nil || !strings.EqualFold(copied.Zone, zone) {
+			continue
+		}
+		serial, ok := soas[netip.AddrPortFrom(step.Server.IP, step.Server.Port)]
+		if !ok || serial == copied.Serial {
+			continue
+		}
+		r.warnf(trace.AreaConsistency, "%s (%s) answered %s %s out of copy %d of %s, and its SOA out of copy %d",
+			at(step), step.Server.IP, step.Asked.Name, step.Asked.Type, copied.Serial, zone, serial)
+	}
 }
 
 // serialNote labels the aside for a reader of the tree. A server that answered

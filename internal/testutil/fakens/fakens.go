@@ -115,6 +115,12 @@ type Behaviour struct {
 	// nothing, which is the other case worth testing.
 	NSID string
 
+	// ZoneVersion is the option the server answers a query that asks for one
+	// with (RFC 9660), given the name asked; nil sends none. Being a function,
+	// it can name a copy other than the zone's SOA, the way a second machine
+	// behind one anycast address does, or send one no client should believe.
+	ZoneVersion func(qname string) *dns.ZONEVERSION
+
 	// Version is what the server says it runs when asked version.bind in the
 	// CHAOS class, and VersionServer what it says when asked version.server,
 	// having refused version.bind, the way servers other than BIND do. Both
@@ -682,6 +688,11 @@ func (s *Server) echo(reply, req *dns.Msg) {
 	}
 	if s.behaviour.NSID != "" && asks[*dns.NSID](req) {
 		reply.Pseudo = append(reply.Pseudo, &dns.NSID{Nsid: hex.EncodeToString([]byte(s.behaviour.NSID))})
+	}
+	if s.behaviour.ZoneVersion != nil && asks[*dns.ZONEVERSION](req) && len(req.Question) > 0 {
+		if zv := s.behaviour.ZoneVersion(req.Question[0].Header().Name); zv != nil {
+			reply.Pseudo = append(reply.Pseudo, zv)
+		}
 	}
 	if !s.behaviour.EchoSubnet {
 		return

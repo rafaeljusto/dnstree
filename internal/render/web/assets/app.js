@@ -406,6 +406,7 @@ class DnsInspector extends HTMLElement {
       ["flags", flagsOf(step.flags).join(" ")],
       ["subnet", step.subnet && `${step.subnet.prefix} scope /${step.subnet.scope}`],
       ["instance", step.nsid],
+      ["zone copy", step.zone_version && `${step.zone_version.serial} of ${step.zone_version.zone}`],
       ["software", softwareOf(step.server)],
       ["cookie", step.cookie && cookieOf(step.cookie).says],
       ["origin", as && `AS${as.number} ${as.prefix ?? ""}`.trim()],

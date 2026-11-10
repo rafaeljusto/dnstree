@@ -216,6 +216,9 @@ func (s *Step) Shown() *Step {
 	shown.Extended = shownExtended(s.Extended)
 	shown.Notes = shownAll(s.Notes)
 	shown.NSID = Shown(s.NSID)
+	if s.ZoneVersion != nil {
+		shown.ZoneVersion = &ZoneVersion{Zone: Shown(s.ZoneVersion.Zone), Serial: s.ZoneVersion.Serial}
+	}
 	shown.ReportTo = Shown(s.ReportTo)
 	shown.Err = Shown(s.Err)
 	if s.Delegation != nil {

@@ -398,7 +398,12 @@ of each one named outside the zone that the walk did not need, and which of the
 serials is the newer one is not claimed, because serial arithmetic wraps. It
 also reads the timers in the SOA, and says where refresh, retry, expire and the
 negative TTL would hurt: a secondary dropping the zone after one missed check,
-or a new name staying missing for a day.
+or a new name staying missing for a day. Every query of the walk, and of
+--repeat, also asks which copy its answer came from (RFC 9660), and a server
+that says is drawn with its serial. That serial came with the answer, so where
+it is not the one the server's SOA gave, two machines behind one address hold
+different copies. A server that cannot take the option is asked again without
+EDNS0, as for --nsid.
 
 --check-axfr asks every nameserver of the zone the walk ends in for the whole
 zone (AXFR), the way anybody could, and says on each which of them hand it

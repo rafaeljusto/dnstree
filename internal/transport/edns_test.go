@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"codeberg.org/miekg/dns"
+	"codeberg.org/miekg/dns/dnsutil"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 	"github.com/rafaeljusto/dnstree/v2/internal/transport"
@@ -372,4 +373,91 @@ func TestReportName(t *testing.T) {
 	if _, ok := transport.ReportName(trace.Question{Name: "x.test", Type: "NOSUCHTYPE"}, 6, "agent.example."); ok {
 		t.Error("got a name for a type nobody knows, want none")
 	}
+}
+
+func TestEchoedZoneVersion(t *testing.T) {
+	t.Parallel()
+
+	serial := []byte{0x78, 0x8f, 0x6a, 0x36} // 2022664758
+	tests := map[string]struct {
+		options []dns.RR
+		want    *trace.ZoneVersion
+	}{
+		"a serial names the zone by its label count": {
+			options: []dns.RR{&dns.ZONEVERSION{Labels: 2, Version: serial}},
+			want:    &trace.ZoneVersion{Zone: "example.com.", Serial: 2022664758},
+		},
+		"a label count of zero is the root": {
+			options: []dns.RR{&dns.ZONEVERSION{Labels: 0, Version: serial}},
+			want:    &trace.ZoneVersion{Zone: ".", Serial: 2022664758},
+		},
+		"the deepest zone of several is the one that answered": {
+			options: []dns.RR{
+				&dns.ZONEVERSION{Labels: 1, Version: []byte{0, 0, 0, 1}},
+				&dns.ZONEVERSION{Labels: 3, Version: []byte{0, 0, 0, 3}},
+				&dns.ZONEVERSION{Labels: 2, Version: []byte{0, 0, 0, 2}},
+			},
+			want: &trace.ZoneVersion{Zone: "www.example.com.", Serial: 3},
+		},
+		"a label count above the name's is no zone of it": {
+			options: []dns.RR{&dns.ZONEVERSION{Labels: 4, Version: serial}},
+		},
+		"a type other than the SOA serial is not read": {
+			options: []dns.RR{&dns.ZONEVERSION{Labels: 2, Type: 1, Version: serial}},
+		},
+		"a serial of other than four octets is not read": {
+			options: []dns.RR{&dns.ZONEVERSION{Labels: 2, Version: serial[:3]}},
+		},
+		"the empty option a client sends says nothing": {
+			options: []dns.RR{&dns.ZONEVERSION{}},
+		},
+		"a reply with no option says nothing": {},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			resp := new(dns.Msg)
+			resp.Pseudo = tt.options
+			got := transport.EchoedZoneVersion(resp, "www.example.com.")
+			if (got == nil) != (tt.want == nil) || got != nil && *got != *tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+	if got := transport.EchoedZoneVersion(nil, "www.example.com."); got != nil {
+		t.Errorf("got %+v from no reply, want nothing", got)
+	}
+}
+
+// FuzzEchoedZoneVersion reads what a server wrote into the option off the
+// wire: a reply that unpacks never names a zone that is not the name asked or
+// above it.
+func FuzzEchoedZoneVersion(f *testing.F) {
+	f.Add("www.example.com.", []byte{2, 0, 0, 0, 0, 1})
+	f.Add("example.com.", []byte{9, 0, 0, 0, 0, 1})
+	f.Add(".", []byte{0, 0, 1, 2, 3, 4})
+	f.Add("a..b.", []byte{1, 0, 1, 2, 3, 4})
+	f.Add("x.", []byte{1})
+	f.Fuzz(func(t *testing.T, qname string, option []byte) {
+		req := dns.NewMsg("example.", dns.TypeSOA)
+		req.UDPSize = 1232
+		req.Pseudo = []dns.RR{&dns.ERFC3597{EDNS0Code: dns.CodeZONEVERSION, Code: hex.EncodeToString(option)}}
+		if req.Pack() != nil {
+			return
+		}
+		resp := new(dns.Msg)
+		resp.Data = req.Data
+		if resp.Unpack() != nil {
+			return
+		}
+		got := transport.EchoedZoneVersion(resp, qname)
+		if got == nil {
+			return
+		}
+		name := dnsutil.Fqdn(qname)
+		if got.Zone != "." && got.Zone != name && !strings.HasSuffix(name, "."+got.Zone) {
+			t.Fatalf("zone %q is not %q or above it", got.Zone, name)
+		}
+	})
 }

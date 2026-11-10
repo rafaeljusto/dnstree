@@ -120,7 +120,9 @@ type Config struct {
 	// start of authority, and holds the answers against each other. It costs a
 	// query per nameserver, and it is the only way from outside to see a
 	// secondary that is serving an older copy of a zone: it answers everything
-	// correctly, and answers it out of date.
+	// correctly, and answers it out of date. Every query of the walk also asks
+	// which copy its answer came from (RFC 9660), which is what catches two
+	// machines behind one anycast address holding different copies.
 	Serial bool
 
 	// CheckTransfer asks every nameserver of the zone the walk ends in for the

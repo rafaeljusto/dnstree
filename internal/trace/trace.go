@@ -691,6 +691,12 @@ type Step struct {
 	// which of them answered is the whole of what this says.
 	NSID string
 
+	// ZoneVersion is the copy of the zone the server said this answer came
+	// from (RFC 9660), nil when the query did not ask or the server did not
+	// say. Like NSID it belongs to the answer: it rode in the same reply, so
+	// it is about the machine that answered.
+	ZoneVersion *ZoneVersion
+
 	// Cookie is how the server handled the DNS cookie the query carried (RFC
 	// 7873), empty when the query carried none.
 	Cookie CookieState
@@ -746,6 +752,12 @@ type Step struct {
 
 	Children []*Step
 	Err      string
+}
+
+// ZoneVersion is a zone's serial as a server gave it beside an answer.
+type ZoneVersion struct {
+	Zone   string
+	Serial uint32
 }
 
 // Sent is the header bits and EDNS a query went out with. It is read off the

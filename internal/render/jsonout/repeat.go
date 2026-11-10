@@ -2,6 +2,7 @@ package jsonout
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -17,6 +18,7 @@ type repeated struct {
 	MedianMS  float64 `json:"median_ms,omitempty"`
 	WorstMS   float64 `json:"worst_ms,omitempty"`
 	Instances []tally `json:"instances,omitempty"`
+	Copies    []tally `json:"copies,omitempty"`
 }
 
 type tally struct {
@@ -37,6 +39,7 @@ func convertRepeated(from *trace.Repeated) *repeated {
 		WorstMS:  milliseconds(from.Worst),
 
 		Instances: convertTallies(from.Instances),
+		Copies:    convertTallies(from.Copies),
 	}
 }
 
@@ -72,6 +75,14 @@ func readRepeated(from *repeated) (*trace.Repeated, error) {
 	}
 	if to.Instances, err = readTallies("instances", from.Instances, to.Answered, false); err != nil {
 		return nil, err
+	}
+	if to.Copies, err = readTallies("copies", from.Copies, to.Answered, false); err != nil {
+		return nil, err
+	}
+	for _, c := range to.Copies {
+		if _, err := strconv.ParseUint(c.Value, 10, 32); err != nil {
+			return nil, fmt.Errorf("copies counts %q, which is no serial", c.Value)
+		}
 	}
 	if to.Best, err = duration("best_ms", from.BestMS); err != nil {
 		return nil, err

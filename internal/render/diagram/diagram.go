@@ -87,6 +87,9 @@ func Details(step *trace.Step) []string {
 	if step.NSID != "" {
 		lines = append(lines, "@"+step.NSID)
 	}
+	if copied := step.ZoneVersion; copied != nil {
+		lines = append(lines, fmt.Sprintf("serial %d", copied.Serial))
+	}
 	if said := trace.SaidSoftware(step.Server.Software); said != "" {
 		lines = append(lines, said)
 	}

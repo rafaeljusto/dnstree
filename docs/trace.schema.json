@@ -1042,6 +1042,7 @@
           "description": "What the server called itself, as RFC 5001 asks it to, absent where the query asked for no identifier or the server published none. It belongs to the answer rather than to the server: one anycast address is many machines, and this says which of them answered. An identifier whose bytes spell no printable name is carried as the hex it arrived as, and one longer than 32 bytes is cut and ends in an ellipsis.",
           "type": "string"
         },
+        "zone_version": { "$ref": "#/$defs/zone_version" },
         "report_to": {
           "description": "The agent the server asks DNS failures in its zone to be reported to (RFC 9567), absent where it named none. Servers send it unasked, and nothing vouches for it.",
           "type": "string"
@@ -1124,7 +1125,22 @@
           "description": "The answers counted by the NSID they carried, the most common first, where --nsid asked. A repeat that timed out names no instance.",
           "type": "array",
           "items": { "$ref": "#/$defs/tally" }
+        },
+        "copies": {
+          "description": "The answers counted by the serial of the hop's zone they said they came from (RFC 9660), the most common first, where --serial asked. Which serial is the newer is not claimed: serials wrap.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/tally" }
         }
+      }
+    },
+    "zone_version": {
+      "description": "The copy of a zone the server said this answer came from, as RFC 9660 asks it to, absent where the query did not ask (--serial asks) or the server said nothing it could mean. Only an SOA serial of a zone that is the name asked or above it is read; where a server names several zones, this is the deepest. It came in the same reply as the answer, so it is about the machine that answered.",
+      "type": "object",
+      "required": ["zone", "serial"],
+      "additionalProperties": false,
+      "properties": {
+        "zone": { "type": "string" },
+        "serial": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
       }
     },
     "tally": {

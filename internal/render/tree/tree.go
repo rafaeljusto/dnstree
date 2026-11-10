@@ -257,6 +257,13 @@ func (r *renderer) stepLabel(step *trace.Step) string {
 	if step.NSID != "" {
 		fields = append(fields, r.paint.dim("@"+step.NSID))
 	}
+	if copied := step.ZoneVersion; copied != nil {
+		serial := fmt.Sprintf("serial %d", copied.Serial)
+		if !strings.EqualFold(copied.Zone, step.Zone) {
+			serial += " of " + copied.Zone
+		}
+		fields = append(fields, r.paint.dim(serial))
+	}
 	if said := trace.SaidSoftware(step.Server.Software); said != "" {
 		fields = append(fields, r.paint.dim(said))
 	}

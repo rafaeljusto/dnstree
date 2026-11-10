@@ -50,6 +50,10 @@
         "limit_bytes": 1232,
         "rcode": "NOERROR",
         "nsid": "fra2",
+        "zone_version": {
+          "zone": ".",
+          "serial": 2026110900
+        },
         "cookie": "supported",
         "delegation": {
           "zone": "com.",

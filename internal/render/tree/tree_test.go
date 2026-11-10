@@ -54,17 +54,18 @@ func resolution() *trace.Trace {
 		Err:    "udp 192.33.14.30:53: i/o timeout",
 	}
 	root := &trace.Step{
-		Zone:       ".",
-		Server:     server("a.root-servers.net.", "198.41.0.4", 397197),
-		Proto:      "udp",
-		RTT:        12 * time.Millisecond,
-		Rcode:      "NOERROR",
-		Kind:       trace.KindReferral,
-		NSID:       "fra2",
-		Cookie:     trace.CookieSupported,
-		Delegation: &trace.Delegation{Zone: "com.", DSPresent: true},
-		DNSSEC:     &trace.DNSSECStatus{State: trace.Secure},
-		Children:   []*trace.Step{timeout, tld},
+		Zone:        ".",
+		Server:      server("a.root-servers.net.", "198.41.0.4", 397197),
+		Proto:       "udp",
+		RTT:         12 * time.Millisecond,
+		Rcode:       "NOERROR",
+		Kind:        trace.KindReferral,
+		NSID:        "fra2",
+		ZoneVersion: &trace.ZoneVersion{Zone: ".", Serial: 2026110900},
+		Cookie:      trace.CookieSupported,
+		Delegation:  &trace.Delegation{Zone: "com.", DSPresent: true},
+		DNSSEC:      &trace.DNSSECStatus{State: trace.Secure},
+		Children:    []*trace.Step{timeout, tld},
 	}
 
 	root.Server.Software = &trace.Software{Version: "9.18.24"}
@@ -790,6 +791,7 @@ func TestRenderRepeats(t *testing.T) {
 		Asked: 20, Answered: 13, TimedOut: 7, Best: 81 * time.Millisecond, Median: 140 * time.Millisecond, Worst: 1200 * time.Millisecond,
 		Rcodes:    []trace.Count{{Value: "NOERROR", Times: 12}, {Value: "SERVFAIL", Times: 1}},
 		Instances: []trace.Count{{Value: "fra1", Times: 9}, {Value: "ams2", Times: 1}, {Value: "lhr1", Times: 1}, {Value: "par1", Times: 1}, {Value: "mad1", Times: 1}},
+		Copies:    []trace.Count{{Value: "2026110902", Times: 9}, {Value: "2026110901", Times: 4}},
 	}
 
 	var out bytes.Buffer
@@ -799,7 +801,7 @@ func TestRenderRepeats(t *testing.T) {
 	for _, want := range []string{
 		"repeat: " + tr.Root.Children[0].Asked.Name,
 		"20/20 answered  9ms best  11ms median  18ms worst\x1b",
-		"13/20 answered  81ms best  140ms median  1.2s worst  7 timed out  NOERROR 12, SERVFAIL 1  @fra1 9, @ams2 1, @lhr1 1, @par1 1 and 1 more",
+		"13/20 answered  81ms best  140ms median  1.2s worst  7 timed out  NOERROR 12, SERVFAIL 1  @fra1 9, @ams2 1, @lhr1 1, @par1 1 and 1 more  serial 2026110902 9, 2026110901 4",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got no %q in:\n%q", want, out.String())

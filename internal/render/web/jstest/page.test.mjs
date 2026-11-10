@@ -80,7 +80,7 @@ test("a hop is found by what the trace says of it", () => {
 test("the chips a hop wears", () => {
   const hops = flatten(golden().root);
   const texts = (hop) => chipsOf(hop.step).map((chip) => chip.text);
-  assert.deepEqual(texts(hops[1]), ["→ com.", "12 ms", "@fra2", 'version "9.18.24"', "cookie", "insecure"]);
+  assert.deepEqual(texts(hops[1]), ["→ com.", "12 ms", "@fra2", "serial 2026110900", 'version "9.18.24"', "cookie", "insecure"]);
   assert.deepEqual(texts(hops[2]), ["timeout", "2.00 s"]);
   assert.deepEqual(texts(hops[4]), ["9.4 ms", "1187 of 1232 bytes", "AS10745", "AA DO", "secure"]);
   assert.deepEqual(texts(hops[5]), ["8.0 ms", "AA", "aside", "DNSKEY of example.com."]);
@@ -99,6 +99,7 @@ test("a chip is coloured by what is wrong", () => {
     "a cookie not ours": [{ cookie: "mismatch" }, "cookie not ours", "bad"],
     "a withheld extended error": [{ extended: [{ code: 15, withheld: true }] }, "ede", "warn"],
     "a bogus cut": [{ dnssec: { state: "bogus" } }, "bogus", "bad"],
+    "the copy of the zone an answer came from": [{ zone_version: { zone: "example.", serial: 7 } }, "serial 7", "quiet"],
   };
   for (const [name, [fields, text, want]] of Object.entries(cases)) assert.equal(tone(fields, text), want, name);
   assert.ok(!chipsOf(step("answer", { rcode: "NOERROR" })).some((chip) => chip.text === "NOERROR"));

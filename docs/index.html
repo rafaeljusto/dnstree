@@ -417,7 +417,7 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">out of date</span>
           <h3>Nameservers holding different zones</h3>
-          <p><code>--serial</code> asks every nameserver of the zone which copy it is serving. A secondary a transfer left behind answers with authority, out of an older zone. It judges the SOA's timers too.</p>
+          <p><code>--serial</code> asks every nameserver of the zone which copy it is serving. A secondary a transfer left behind answers with authority, out of an older zone. Every hop also asks which copy its own answer came from (RFC 9660), which catches two machines behind one anycast address that disagree. It judges the SOA's timers too.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">exposed</span>

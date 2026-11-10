@@ -73,17 +73,18 @@ func Graph() *trace.Trace {
 		Err:    "udp 192.33.14.30:53: i/o timeout",
 	}
 	root := &trace.Step{
-		Zone:       ".",
-		Server:     trace.Server{Name: "a.root-servers.net.", IP: netip.MustParseAddr("198.41.0.4"), Port: 53},
-		Proto:      "udp",
-		RTT:        12 * time.Millisecond,
-		Rcode:      "NOERROR",
-		Kind:       trace.KindReferral,
-		NSID:       "fra2",
-		Cookie:     trace.CookieSupported,
-		Delegation: &trace.Delegation{Zone: "com.", NS: []string{"a.gtld-servers.net."}, DSPresent: true},
-		DNSSEC:     &trace.DNSSECStatus{State: trace.Insecure, Reason: "the parent published no DS"},
-		Children:   []*trace.Step{timeout, tld},
+		Zone:        ".",
+		Server:      trace.Server{Name: "a.root-servers.net.", IP: netip.MustParseAddr("198.41.0.4"), Port: 53},
+		Proto:       "udp",
+		RTT:         12 * time.Millisecond,
+		Rcode:       "NOERROR",
+		Kind:        trace.KindReferral,
+		NSID:        "fra2",
+		ZoneVersion: &trace.ZoneVersion{Zone: ".", Serial: 2026110900},
+		Cookie:      trace.CookieSupported,
+		Delegation:  &trace.Delegation{Zone: "com.", NS: []string{"a.gtld-servers.net."}, DSPresent: true},
+		DNSSEC:      &trace.DNSSECStatus{State: trace.Insecure, Reason: "the parent published no DS"},
+		Children:    []*trace.Step{timeout, tld},
 	}
 
 	root.Server.Software = &trace.Software{Version: "9.18.24"}

@@ -207,6 +207,9 @@ func readStep(from *step, depth int) (*trace.Step, error) {
 		Compact:   from.Compact,
 		Err:       from.Error,
 	}
+	if from.Version != nil {
+		to.ZoneVersion = &trace.ZoneVersion{Zone: from.Version.Zone, Serial: from.Version.Serial}
+	}
 	if to.RTT, err = duration("rtt_ms", from.RTTMS); err != nil {
 		return nil, err
 	}

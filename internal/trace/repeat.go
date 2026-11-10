@@ -39,6 +39,10 @@ type Repeated struct {
 	// first, where the walk asked for one. A repeat that timed out names no
 	// instance, so these count answers only.
 	Instances []Count
+
+	// Copies counts the answers by the serial of the hop's zone they said
+	// they came from, the most common first, where the walk asked (RFC 9660).
+	Copies []Count
 }
 
 // Count is how many times one value came back.
@@ -90,6 +94,7 @@ func (r *Repeated) shown() *Repeated {
 	shown := *r
 	shown.Rcodes = shownCounts(r.Rcodes)
 	shown.Instances = shownCounts(r.Instances)
+	shown.Copies = shownCounts(r.Copies)
 	return &shown
 }
 

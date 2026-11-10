@@ -353,6 +353,7 @@ type step struct {
 	Subnet     *subnet         `json:"subnet,omitempty"`
 	SOA        *soa            `json:"soa,omitempty"`
 	NSID       string          `json:"nsid,omitempty"`
+	Version    *zoneVersion    `json:"zone_version,omitempty"`
 	Cookie     string          `json:"cookie,omitempty"`
 	ReportTo   string          `json:"report_to,omitempty"`
 	Aside      bool            `json:"aside,omitempty"`
@@ -567,6 +568,7 @@ func convert(from *trace.Step, timed bool) *step {
 		Subnet:     convertSubnet(from.Subnet),
 		SOA:        convertSOA(from.SOA),
 		NSID:       from.NSID,
+		Version:    convertZoneVersion(from.ZoneVersion),
 		Cookie:     string(from.Cookie),
 		ReportTo:   from.ReportTo,
 		Aside:      from.Aside,
@@ -922,4 +924,17 @@ func timestamp(t time.Time) string {
 // rounded to the microsecond so that the number stays short.
 func milliseconds(d time.Duration) float64 {
 	return math.Round(float64(d)/float64(time.Microsecond)) / 1000
+}
+
+// zoneVersion is the copy of a zone a server said an answer came from.
+type zoneVersion struct {
+	Zone   string `json:"zone"`
+	Serial uint32 `json:"serial"`
+}
+
+func convertZoneVersion(from *trace.ZoneVersion) *zoneVersion {
+	if from == nil {
+		return nil
+	}
+	return &zoneVersion{Zone: from.Zone, Serial: from.Serial}
 }

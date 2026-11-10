@@ -338,6 +338,35 @@ arithmetic wraps around (RFC 1982), so the larger number is not reliably the
 later zone, and a tool that guessed would send somebody to restart the wrong
 server.
 
+The SOA is a second question, and behind an anycast address it can reach
+another machine than the answer did. So with `--serial` every query of the walk
+also asks the server which copy its answer came from (ZONEVERSION, RFC 9660).
+A server that says is drawn with the serial, beside the answer it came with:
+
+```
+$ dnstree --serial --no-asn www.nlnetlabs.nl A
+. (root)
+├── a.root-servers.net. 198.41.0.4  257ms  NOERROR  referral → nl.  ede Not Authoritative (20)
+│   ├── ns3.dns.nl. 194.0.25.24  serial 2026111020  273ms  NOERROR  referral → nlnetlabs.nl.
+│   │   ├── ns.nlnetlabs.nl. 185.49.140.60  240ms  NOERROR  AA
+│   │   │   ├── www.nlnetlabs.nl. 240 A 128.140.76.106
+│   │   │   ├── ns.nlnetlabs.nl. 185.49.140.60  250ms  NOERROR  AA  (SOA of nlnetlabs.nl.: 2026110900)
+│   │   │   ├── ns.nlnetlabs.nl. 2a04:b900::8:0:0:60  213ms  NOERROR  AA  (SOA of nlnetlabs.nl.: 2026110900)
+│   │   │   ├── ns1.sidn.nl. 192.174.68.144  226ms  NOERROR  AA  (SOA of nlnetlabs.nl.: 2026110900)
+│   │   │   ├── ns1.sidn.nl. 2001:67c:1bc::144  serial 2026110900  15ms  NOERROR  AA  (SOA of nlnetlabs.nl.: 2026110900)
+...
+```
+
+The serial of a referral is the zone that referred, `nl.` above. Where the
+serial of an answer is not the one the same address gave for its SOA, the walk
+says so:
+
+> ns.test. (192.0.2.5) answered www.test. A out of copy 7 of test., and its SOA out of copy 1
+
+With `--repeat`, each repeat asks too, and the repeat line counts the answers
+by the serial they came with. A server that does not know the option says
+nothing, and the hop reads as it did before.
+
 The same answers carry the timers the zone gives its secondaries, and the sweep
 reads them too: refresh, how often a secondary checks for a new copy; retry, how
 soon it checks again after a check failed; expire, how long it goes on serving a
