@@ -5,7 +5,7 @@ go 1.27.0
 toolchain go1.27.3
 
 require (
-	codeberg.org/miekg/dns v0.6.128
+	codeberg.org/miekg/dns v0.6.131
 	golang.org/x/net v0.62.0
 	golang.org/x/sys v0.50.0
 )
