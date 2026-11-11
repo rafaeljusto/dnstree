@@ -1427,23 +1427,33 @@ func (t *Trace) Result() *Step {
 }
 
 func result(step *Step) *Step {
+	found, _ := deepest(step, 0)
+	return found
+}
+
+// deepest is the result under step and its depth. Depth, not order, decides:
+// under --all the other servers' copies of an alias come after the walk it
+// started, and the last of them would hide the answer that walk found. Between
+// two at one depth the later wins.
+func deepest(step *Step, depth int) (*Step, int) {
 	if step.Aside {
-		return nil
+		return nil, -1
 	}
 
 	var found *Step
+	at := -1
 	switch step.Kind {
 	case KindAnswer, KindCNAME, KindNoData, KindNXDomain:
 		if !step.Minimised {
-			found = step
+			found, at = step, depth
 		}
 	}
 	for _, child := range step.Children {
-		if deeper := result(child); deeper != nil {
-			found = deeper
+		if deeper, d := deepest(child, depth+1); deeper != nil && d >= at {
+			found, at = deeper, d
 		}
 	}
-	return found
+	return found, at
 }
 
 // Answers is the rdata of the records that answer a question of this type,

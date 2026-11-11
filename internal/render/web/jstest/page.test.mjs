@@ -25,6 +25,8 @@ test("the page and the scene come to the same verdict", () => {
     "a walk that got nowhere": zone(step("timeout")),
     "an answer only inside an aside": zone(step("referral", { aside: true }, step("answer"))),
     "a minimised NODATA": zone(step("nodata", { minimised: true })),
+    "an alias that every server answered": zone(
+      step("cname", {}, zone(step("answer"))), step("cname"), step("cname")),
   };
   for (const [name, root] of Object.entries(walks)) {
     const flat = flatten(root);
@@ -32,6 +34,12 @@ test("the page and the scene come to the same verdict", () => {
     assert.deepEqual(verdictOf(flat), scene.verdictOf(drawn, scene.resultOf(drawn[0])), name);
     assert.equal(resultOf(root), scene.resultOf(drawn[0])?.step ?? null, name);
   }
+});
+
+test("the answer an alias led to is the result, not the other servers' copies of the alias", () => {
+  const root = zone(step("cname", {}, zone(step("answer"))), step("cname"), step("cname"));
+  assert.equal(resultOf(root)?.kind, "answer");
+  assert.equal(scene.resultOf(scene.flatten(root)[0])?.step.kind, "answer");
 });
 
 test("what this build does not know is shown as itself", () => {

@@ -727,3 +727,60 @@ func TestResolveOnItsOwnClock(t *testing.T) {
 		t.Fatal("got no hop that was asked")
 	}
 }
+
+// TestResolveAliasAskedOfEveryServer covers --all on an alias whose zone has
+// two servers: the second one's copy of the alias comes after the walk the
+// first one started, and must not stand in for the answer that walk found.
+func TestResolveAliasAskedOfEveryServer(t *testing.T) {
+	t.Parallel()
+
+	const rootZone = `
+@                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
+@                   IN NS   a.root-servers.net.
+a.root-servers.net. IN A    192.0.2.1
+example.            IN NS   ns1.example.
+example.            IN NS   ns2.example.
+ns1.example.        IN A    192.0.2.2
+ns2.example.        IN A    192.0.2.3
+other.              IN NS   ns.other.
+ns.other.           IN A    192.0.2.4
+`
+	const exampleZone = `
+@   IN SOA   ns1 hostmaster 1 7200 3600 1209600 3600
+@   IN NS    ns1
+@   IN NS    ns2
+ns1 IN A     192.0.2.2
+ns2 IN A     192.0.2.3
+www IN CNAME www.other.
+`
+	const otherZone = `
+@   IN SOA ns hostmaster 1 7200 3600 1209600 3600
+@   IN NS  ns
+ns  IN A   192.0.2.4
+www IN A   192.0.2.10
+`
+
+	hierarchy := fakens.NewHierarchy(t)
+	root := hierarchy.Add(fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: rootZone, Declared: "192.0.2.1"})
+	hierarchy.Add(fakens.Config{Name: "ns1.example.", Origin: "example.", Zone: exampleZone, Declared: "192.0.2.2"})
+	hierarchy.Add(fakens.Config{Name: "ns2.example.", Origin: "example.", Zone: exampleZone, Declared: "192.0.2.3"})
+	hierarchy.Add(fakens.Config{Name: "ns.other.", Origin: "other.", Zone: otherZone, Declared: "192.0.2.4"})
+
+	tr, err := newResolver(t, harness{hierarchy, root}, resolver.Config{All: true}).Resolve(t.Context(), "www.example", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	result := tr.Result()
+	if result == nil || result.Kind != trace.KindAnswer || len(result.Records) != 1 || result.Records[0].Data != "192.0.2.10" {
+		t.Fatalf("got result %+v, want the address the alias led to: %s", result, format(steps(tr)))
+	}
+	aliases := 0
+	for _, step := range steps(tr) {
+		if step.Kind == trace.KindCNAME {
+			aliases++
+		}
+	}
+	if aliases != 2 {
+		t.Errorf("got %d copies of the alias, want one from each server: %s", aliases, format(steps(tr)))
+	}
+}

@@ -84,11 +84,19 @@ export const aside = (hop) => {
 };
 
 // resultOf is the hop the resolution ended on, read the way the trace itself
-// defines it: the deepest one that is neither an aside nor a minimised hop.
+// defines it: the deepest one that is neither an aside nor a minimised hop,
+// and the later of two at one depth.
 export function resultOf(step) {
+  return deepest(step, 0)?.step ?? null;
+}
+
+function deepest(step, depth) {
   if (!step || step.aside) return null;
-  let found = !step.minimised && ["answer", "cname", "nodata", "nxdomain"].includes(step.kind) ? step : null;
-  for (const child of step.children ?? []) found = resultOf(child) ?? found;
+  let found = !step.minimised && ["answer", "cname", "nodata", "nxdomain"].includes(step.kind) ? { step, depth } : null;
+  for (const child of step.children ?? []) {
+    const deeper = deepest(child, depth + 1);
+    if (deeper && (!found || deeper.depth >= found.depth)) found = deeper;
+  }
   return found;
 }
 

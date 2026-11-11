@@ -67,6 +67,20 @@ func TestResult(t *testing.T) {
 	if got := unanswered.Result(); got != nil {
 		t.Errorf("got %+v, want no result when nothing answered", got)
 	}
+
+	// Under --all the other servers answer the alias after the walk it
+	// started, and none of them may hide the answer that walk found.
+	answer := &trace.Step{Kind: trace.KindAnswer}
+	aliased := &trace.Trace{Root: &trace.Step{Kind: trace.KindZone, Children: []*trace.Step{
+		{Kind: trace.KindCNAME, Children: []*trace.Step{
+			{Kind: trace.KindZone, Children: []*trace.Step{answer}},
+		}},
+		{Kind: trace.KindCNAME},
+		{Kind: trace.KindCNAME},
+	}}}
+	if got := aliased.Result(); got != answer {
+		t.Errorf("got %+v, want the answer the alias led to", got)
+	}
 }
 
 // TestTight covers the one reading the recorded size is there for: whether an

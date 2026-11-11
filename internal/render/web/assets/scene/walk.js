@@ -98,11 +98,18 @@ export const asked = (step) => step.kind !== "zone" && step.kind !== "skipped";
 export const leaks = (hop) => hop.step.probe?.state === "open" && hop.step.probe.kind !== "listing";
 
 // resultOf is read the way the trace defines it: the deepest hop that is
-// neither an aside nor a minimised one.
+// neither an aside nor a minimised one, and the later of two at one depth.
 export function resultOf(hop) {
+  return deepest(hop, 0)?.hop ?? null;
+}
+
+function deepest(hop, depth) {
   if (!hop || hop.step.aside) return null;
-  let found = !hop.step.minimised && ["answer", "cname", "nodata", "nxdomain"].includes(hop.step.kind) ? hop : null;
-  for (const kid of hop.kids) found = resultOf(kid) ?? found;
+  let found = !hop.step.minimised && ["answer", "cname", "nodata", "nxdomain"].includes(hop.step.kind) ? { hop, depth } : null;
+  for (const kid of hop.kids) {
+    const deeper = deepest(kid, depth + 1);
+    if (deeper && (!found || deeper.depth >= found.depth)) found = deeper;
+  }
   return found;
 }
 
