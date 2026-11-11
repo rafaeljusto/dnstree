@@ -50,6 +50,10 @@ type Behaviour struct {
 	// that trusts them can be walked off a cliff.
 	OutOfBailiwickGlue bool
 
+	// LookedUp answers without AA, the way a resolver hands on an answer it
+	// looked up rather than one it serves.
+	LookedUp bool
+
 	// ClipGlue leaves the IPv6 glue out of a referral over UDP without setting
 	// TC, which RFC 9471 forbids and servers still do to make a reply fit.
 	ClipGlue bool
@@ -610,6 +614,9 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		}
 	}
 
+	if s.behaviour.LookedUp {
+		reply.Authoritative = false
+	}
 	if s.behaviour.Authentic && reply.Rcode == dns.RcodeSuccess {
 		reply.AuthenticatedData = true
 	}
