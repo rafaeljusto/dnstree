@@ -153,3 +153,45 @@ func TestZoneVersionStaysOffProbes(t *testing.T) {
 		t.Fatalf("got no EDNS probes: %s", format(steps(tr)))
 	}
 }
+
+// TestZoneVersionDropped covers a server that never answers a query asking for
+// the zone version, as some anycast providers do: --serial costs the serial,
+// never the walk, and the server is not asked with the option again.
+func TestZoneVersionDropped(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		retries int
+		repeat  int
+	}{
+		"a server that drops the option is asked again without it":    {},
+		"the retry without the option does not spend the retries":     {retries: 2},
+		"the repeats leave the option out once the server dropped it": {repeat: 3},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h, cfg := service(t, false, fakens.Behaviour{DropZoneVersion: true})
+			cfg.Serial, cfg.Retries, cfg.Repeat = true, tt.retries, tt.repeat
+
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			answer := tr.Result()
+			if answer == nil {
+				t.Fatalf("got no answer: %s", format(steps(tr)))
+			}
+			if !slices.Contains(answer.Notes, "asked again without ZONEVERSION after a silence") {
+				t.Errorf("got notes %q, want the retry without the option", answer.Notes)
+			}
+			if !warned(tr, "ns.test. did not answer a query that asks for the zone version") {
+				t.Errorf("got %q, want a warning naming the server", tr.Warnings)
+			}
+			if tt.repeat > 0 && (answer.Repeated == nil || answer.Repeated.Answered != tt.repeat) {
+				t.Errorf("got %+v, want every repeat answered", answer.Repeated)
+			}
+		})
+	}
+}

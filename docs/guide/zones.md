@@ -365,7 +365,9 @@ says so:
 
 With `--repeat`, each repeat asks too, and the repeat line counts the answers
 by the serial they came with. A server that does not know the option says
-nothing, and the hop reads as it did before.
+nothing, and the hop reads as it did before. Some drop the whole query
+instead, against RFC 6891: after the first silence the server is asked again
+without the option, for the rest of the run, and a warning names it.
 
 The same answers carry the timers the zone gives its secondaries, and the sweep
 reads them too: refresh, how often a secondary checks for a new copy; retry, how

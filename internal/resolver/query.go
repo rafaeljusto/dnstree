@@ -187,8 +187,13 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 	server := netip.AddrPortFrom(step.Server.IP, cmp.Or(port, carrier.Port()))
 
 	silences := -1 // the note that counts them, once there is one
+	// A shaped query is a probe with a question of its own: the RFC 8906
+	// tests, the CHAOS version, the recursion check. The option would change
+	// what it tests, and the serial is only wanted beside a zone's answers.
+	version := r.cfg.Serial && len(shape) == 0 && udpSize > 0 && !r.dropsVersion(server.Addr())
+	var dropped bool
 	for attempt := 0; ; attempt++ {
-		req, cookie, err := r.newQuery(carrier, server, qname, qtype, udpSize, shape...)
+		req, cookie, err := r.newQuery(carrier, server, qname, qtype, udpSize, version, shape...)
 		if err != nil {
 			return nil, err
 		}
@@ -213,8 +218,19 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 			"zone", step.Zone, "server", server, "proto", carrier.Proto(),
 			"name", qname, "type", qtype, "rtt", rtt, "error", err)
 
-		if err == nil || attempt >= r.cfg.Retries || !transport.IsTimeout(err) || outOfTime(ctx) {
+		if err == nil && dropped {
+			r.droppedVersion(step)
+		}
+		if err == nil || attempt >= r.cfg.Retries && !version || !transport.IsTimeout(err) || outOfTime(ctx) {
 			return resp, err
+		}
+		// Some servers drop a query that carries an option they do not know,
+		// though RFC 6891 says to ignore it, so the first silence is put down
+		// to the option: one that costs --serial the walk is a bug.
+		if version {
+			version, dropped = false, true
+			step.Notes = append(step.Notes, "asked again without ZONEVERSION after a silence")
+			continue
 		}
 		if silences < 0 {
 			silences = len(step.Notes)
@@ -227,7 +243,7 @@ func (r *run) exchange(ctx context.Context, step *trace.Step, carrier transport.
 
 // newQuery is the query exchange sends, with everything the run rides along on
 // it, and whether it carries a cookie.
-func (r *run) newQuery(carrier transport.Transport, server netip.AddrPort, qname string, qtype uint16, udpSize uint16, shape ...func(*dns.Msg)) (*dns.Msg, bool, error) {
+func (r *run) newQuery(carrier transport.Transport, server netip.AddrPort, qname string, qtype uint16, udpSize uint16, version bool, shape ...func(*dns.Msg)) (*dns.Msg, bool, error) {
 	req, err := transport.NewQuery(qname, qtype, udpSize, r.cfg.DNSSEC)
 	if err != nil {
 		return nil, false, err
@@ -239,10 +255,7 @@ func (r *run) newQuery(carrier transport.Transport, server netip.AddrPort, qname
 	if r.cfg.NSID {
 		transport.WithNSID(req)
 	}
-	// A shaped query is a probe with a question of its own: the RFC 8906
-	// tests, the CHAOS version, the recursion check. The option would change
-	// what it tests, and the serial is only wanted beside a zone's answers.
-	if r.cfg.Serial && len(shape) == 0 {
+	if version {
 		transport.WithZoneVersion(req)
 	}
 	cookie := r.cfg.Cookie && transport.CarriesCookie(carrier.Proto())
@@ -262,6 +275,25 @@ func (r *run) cookie(server netip.Addr) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.cookies[server]
+}
+
+// dropsVersion is whether a server was seen to drop a query that asks for the
+// zone version, and so is asked without it.
+func (r *run) dropsVersion(server netip.Addr) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.versionless[server]
+}
+
+// droppedVersion records a server that went silent while the query asked for
+// the zone version, and answered once it did not.
+func (r *run) droppedVersion(step *trace.Step) {
+	r.mu.Lock()
+	r.versionless[step.Server.IP] = true
+	r.mu.Unlock()
+	// Once per name: the addresses behind one run the same software.
+	r.warnOnceIn("", step.Zone, "%s did not answer a query that asks for the zone version, and answered one that does not, so --serial cannot read its copy; a server is meant to ignore an option it does not know (RFC 6891 section 6.1.2)",
+		at(step))
 }
 
 // remember keeps the server cookie a reply handed out, so that the server is

@@ -97,7 +97,8 @@ func (r *run) askAgain(ctx context.Context, a *again) {
 		}
 	}
 	a.got.Asked++
-	req, cookie, err := r.newQuery(a.carrier, server, step.Asked.Name, a.qtype, a.udpSize)
+	version := r.cfg.Serial && a.udpSize > 0 && !r.dropsVersion(server.Addr())
+	req, cookie, err := r.newQuery(a.carrier, server, step.Asked.Name, a.qtype, a.udpSize, version)
 	if err != nil {
 		a.got.Failed++
 		return

@@ -347,6 +347,9 @@ func (r *Resolver) Resolve(ctx context.Context, name, qtype string) (*trace.Trac
 		_, _ = rand.Read(run.secret) // never fails, as of Go 1.24
 		run.cookies = map[netip.Addr]string{}
 	}
+	if r.cfg.Serial {
+		run.versionless = map[netip.Addr]bool{}
+	}
 
 	run.trace.Trial = r.cfg.Try
 	if r.cfg.Try != nil {
@@ -432,6 +435,10 @@ type run struct {
 	secret  []byte
 	cookies map[netip.Addr]string
 
+	// versionless are the servers that drop a query asking for the zone
+	// version, which --serial then asks without it.
+	versionless map[netip.Addr]bool
+
 	// cuts are the zones the walk for the question entered, which the CAA
 	// lookups and the asides are asked of, and climbing is set while the CAA ones are
 	// being made.
@@ -462,8 +469,8 @@ type run struct {
 	internet  bool
 	unreached map[netip.Addr]string
 
-	// mu guards the warnings, the cookies and unreached, which the fanout
-	// writes to from several goroutines.
+	// mu guards the warnings, the cookies, versionless and unreached, which
+	// the fanout writes to from several goroutines.
 	mu sync.Mutex
 }
 

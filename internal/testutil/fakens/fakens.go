@@ -167,6 +167,7 @@ type Behaviour struct {
 	IgnoreEDNSVersion bool  // answer any version as though it were 0
 	FormErrEDNSOption bool  // answer FORMERR to an option it does not know
 	DropEDNSFlags     bool  // never answer a query with a flag it does not know
+	DropZoneVersion   bool  // never answer a query that asks for the zone version
 	EchoEDNSFlags     bool  // copy the flags it does not know back into the reply
 	EchoEDNSOption    bool  // copy an option it does not know back into the reply
 	BadVersAnswer     bool  // answer BADVERS, and the question along with it
@@ -540,7 +541,8 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	dropped := s.behaviour.DropEvery > 0 && len(s.queries)%s.behaviour.DropEvery == 0
 	s.mu.Unlock()
 
-	if s.behaviour.Drop || dropped || s.behaviour.DropEDNSFlags && req.Z != 0 {
+	if s.behaviour.Drop || dropped || s.behaviour.DropEDNSFlags && req.Z != 0 ||
+		s.behaviour.DropZoneVersion && asks[*dns.ZONEVERSION](req) {
 		return
 	}
 	if s.behaviour.Delay > 0 {
