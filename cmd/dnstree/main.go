@@ -1124,7 +1124,13 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		var wait sync.WaitGroup
 		for i, server := range servers {
 			if cfg.DDR {
-				wait.Go(func() { discovered[i] = transport.Discover(ctx, carrier, fallback, server) })
+				wait.Go(func() {
+					found := transport.Discover(ctx, carrier, fallback, server)
+					if cfg.Behave && len(found.Designated) > 0 {
+						found.Info = claims(ctx, cfg, server, found.Designated)
+					}
+					discovered[i] = found
+				})
 			}
 			if cfg.Behave {
 				wait.Go(func() { behaved[i] = transport.Probe(ctx, carrier, server, missingName(), anchors) })
@@ -1163,6 +1169,20 @@ func compare(ctx context.Context, cfg *cli.Config, log *slog.Logger) <-chan []*t
 		timed <- slices.DeleteFunc(answers, func(answer *trace.Resolver) bool { return answer == nil })
 	}()
 	return timed
+}
+
+// claims asks the resolver's encrypted self what it says of itself. RFC 9606
+// trusts the record only over a connection that was authenticated, so a run
+// that turned the check off does not ask.
+func claims(ctx context.Context, cfg *cli.Config, server netip.AddrPort, offers []trace.Designated) *trace.ResolverInfo {
+	if cfg.TLSInsecure {
+		return &trace.ResolverInfo{Err: "not asked: --tls-insecure leaves the certificate unchecked, and only a checked one makes the record the resolver's"}
+	}
+	tlsConfig, err := clientTLS(cfg)
+	if err != nil {
+		return &trace.ResolverInfo{Err: trace.Printable(err.Error(), trace.MaxErr)}
+	}
+	return transport.Claims(ctx, transport.Config{Timeout: cfg.Timeout, TLS: tlsConfig}, server, offers)
 }
 
 // rootKeys are the tags of the root keys the run trusts now, which the

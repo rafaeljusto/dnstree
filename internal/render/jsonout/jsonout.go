@@ -291,6 +291,29 @@ type discovery struct {
 	Rcode      string       `json:"rcode,omitempty"`
 	Error      string       `json:"error,omitempty"`
 	Designated []designated `json:"designated,omitempty"`
+	Info       *resinfo     `json:"resinfo,omitempty"`
+}
+
+// resinfo is what a designated resolver says of itself (RFC 9606), asked over
+// a connection whose certificate named target. minimises and unlisted hold the
+// claims against what --check-resolver saw: an unlisted code is one the
+// resolver returned and does not list.
+type resinfo struct {
+	Target    string      `json:"target"`
+	Server    *server     `json:"server,omitempty"`
+	Proto     string      `json:"proto,omitempty"`
+	Error     string      `json:"error,omitempty"`
+	Text      []string    `json:"text,omitempty"`
+	QNameMin  bool        `json:"qnamemin,omitempty"`
+	ExtErr    []codeRange `json:"exterr,omitempty"`
+	InfoURL   string      `json:"infourl,omitempty"`
+	Minimises string      `json:"minimises,omitempty"`
+	Unlisted  []uint16    `json:"unlisted,omitempty"`
+}
+
+type codeRange struct {
+	From uint16 `json:"from"`
+	To   uint16 `json:"to"`
 }
 
 type designated struct {
@@ -699,6 +722,19 @@ func convertDiscovery(from *trace.Discovery) *discovery {
 			converted.Hints = append(converted.Hints, hint.String())
 		}
 		to.Designated = append(to.Designated, converted)
+	}
+	if info := from.Info; info != nil {
+		to.Info = &resinfo{
+			Target: info.Target, Proto: info.Proto, Error: info.Err, Text: info.Text,
+			QNameMin: info.QNameMin, InfoURL: info.InfoURL,
+			Minimises: string(info.Minimises), Unlisted: info.Unlisted,
+		}
+		if info.Server.IP.IsValid() {
+			to.Info.Server = convertServer(info.Server)
+		}
+		for _, r := range info.ExtErr {
+			to.Info.ExtErr = append(to.Info.ExtErr, codeRange{From: r.From, To: r.To})
+		}
 	}
 	return to
 }

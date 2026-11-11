@@ -12,6 +12,7 @@ import (
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsconf"
+	"codeberg.org/miekg/dns/dnshttp"
 	"codeberg.org/miekg/dns/dnsutil"
 	"codeberg.org/miekg/dns/rdata"
 	"codeberg.org/miekg/dns/svcb"
@@ -272,6 +273,92 @@ func Discover(ctx context.Context, carrier, fallback Transport, server netip.Add
 		}
 	}
 	return found
+}
+
+// Claims asks one of the encrypted resolvers offers names for the RESINFO
+// record at its own name (RFC 9606), over dot where one is offered and doh at
+// the standard path otherwise. It dials the offer's hint of the same family as
+// server, or server itself where the offer gives none. A hint is taken only at
+// a public address or at server's own: it came over plain DNS, and anyone on
+// the path could point it inside the network. The certificate has to
+// name the target: the hint is only the plain resolver's word, and the check
+// is what makes the record the encrypted resolver's own. cfg.TLS loosening the
+// check is the caller's to refuse. Nil where no offer can be asked.
+func Claims(ctx context.Context, cfg Config, server netip.AddrPort, offers []trace.Designated) *trace.ResolverInfo {
+	offer, carrier, ok := claimable(cfg, offers)
+	if !ok {
+		return nil
+	}
+	addr := server.Addr()
+	for _, hint := range offer.Hints {
+		if hint.Unmap().Is4() == addr.Unmap().Is4() && (Public(hint) || hint.Unmap() == addr.Unmap()) {
+			addr = hint
+			break
+		}
+	}
+	port := offer.Port
+	if port == 0 {
+		port = carrier.Port()
+	}
+	info := &trace.ResolverInfo{
+		Target: offer.Target,
+		Server: trace.Server{Name: offer.Target, IP: addr, Port: port},
+		Proto:  carrier.Proto(),
+	}
+
+	req, err := NewQuery(offer.Target, dns.TypeRESINFO, DefaultUDPSize, false)
+	if err != nil {
+		info.Err = trace.Printable(err.Error(), trace.MaxErr)
+		return info
+	}
+	resp, _, err := carrier.Exchange(ctx, req, netip.AddrPortFrom(addr, port), offer.Target)
+	switch {
+	case err != nil:
+		info.Err = trace.Printable(err.Error(), trace.MaxErr)
+		return info
+	case resp.Rcode != dns.RcodeSuccess && resp.Rcode != dns.RcodeNameError:
+		info.Err = "answered " + dnsutil.RcodeToString(resp.Rcode)
+		return info
+	}
+
+	var records []*dns.RESINFO
+	for _, rr := range resp.Answer {
+		if record, ok := rr.(*dns.RESINFO); ok && strings.EqualFold(rr.Header().Name, offer.Target) {
+			records = append(records, record)
+		}
+	}
+	// Without a record there is no claim to drop: a resolver that publishes
+	// none answers like any other name it looked up, without the AA bit.
+	switch {
+	case len(records) == 0:
+	case !resp.Authoritative:
+		info.Err = trace.NotAuthoritative
+	case len(records) > 1:
+		info.Err = fmt.Sprintf("answered with %d records, where RFC 9606 allows one", len(records))
+	default:
+		info.Text = slices.Clone(records[0].Txt)
+	}
+	return info
+}
+
+// claimable is the offer Claims asks, the lowest priority that speaks dot
+// and, failing that, doh at the path every DoH server answers on. The DoH
+// transport sends to that path alone.
+func claimable(cfg Config, offers []trace.Designated) (trace.Designated, Transport, bool) {
+	cfg.Port = 0
+	sorted := slices.Clone(offers)
+	slices.SortStableFunc(sorted, func(a, b trace.Designated) int { return int(a.Priority) - int(b.Priority) })
+	for _, offer := range sorted {
+		if slices.Contains(offer.Protocols, ProtoDoT) {
+			return offer, NewDoT(cfg), true
+		}
+	}
+	for _, offer := range sorted {
+		if slices.Contains(offer.Protocols, ProtoDoH) && strings.TrimSuffix(offer.DoHPath, "{?dns}") == dnshttp.Path {
+			return offer, NewDoH(cfg), true
+		}
+	}
+	return trace.Designated{}, nil, false
 }
 
 // understood are the keys a designation is read by. A record that makes any

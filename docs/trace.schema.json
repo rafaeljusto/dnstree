@@ -930,7 +930,7 @@
       }
     },
     "discovery": {
-      "description": "What the resolver answered for _dns.resolver.arpa (RFC 9462), present only where --ddr asked. Nothing connected to what it offers, so no offer here is verified.",
+      "description": "What the resolver answered for _dns.resolver.arpa (RFC 9462), present only where --ddr asked. No offer here is verified: resinfo is asked over one, but that checks the certificate for the target, not for the resolver's address.",
       "type": "object",
       "properties": {
         "rcode": { "type": "string" },
@@ -942,7 +942,62 @@
           "description": "The encrypted resolvers it designates, in the order they arrived. Absent for a resolver that answered and designates none.",
           "type": "array",
           "items": { "$ref": "#/$defs/designated" }
+        },
+        "resinfo": { "$ref": "#/$defs/resinfo" }
+      }
+    },
+    "resinfo": {
+      "description": "What one designated resolver says of itself in its RESINFO record (RFC 9606), present only where --ddr and --check-resolver both asked. It is asked over dot, or doh at /dns-query, with a certificate checked for target, and an answer without the AA bit is dropped.",
+      "type": "object",
+      "required": ["target"],
+      "properties": {
+        "target": {
+          "description": "The name asked, which the certificate had to name. Empty where nothing was asked, and error says why.",
+          "type": "string"
+        },
+        "server": { "$ref": "#/$defs/server" },
+        "proto": { "type": "string", "enum": ["dot", "doh"] },
+        "error": {
+          "description": "Why there is no record to read. Absent with no text is a resolver that publishes none.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The record's strings as they arrived, escaped.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "qnamemin": {
+          "description": "The record claims QNAME minimisation.",
+          "type": "boolean"
+        },
+        "exterr": {
+          "description": "The extended errors (RFC 8914) the record claims it returns. Absent where it makes no such claim.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/code_range" }
+        },
+        "infourl": {
+          "description": "The record's link, only ever https, never fetched.",
+          "type": "string"
+        },
+        "minimises": {
+          "description": "How the qnamemin claim stood against what --check-resolver saw the plain resolver do. Absent without the claim.",
+          "type": "string",
+          "enum": ["yes", "no", "unknown"]
+        },
+        "unlisted": {
+          "description": "Extended error codes the plain resolver returned during the run and the record does not list. Absent without an exterr claim, or where none was returned.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 65535 }
         }
+      }
+    },
+    "code_range": {
+      "description": "A run of extended error codes, from to to inclusive.",
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "to": { "type": "integer", "minimum": 0, "maximum": 65535 }
       }
     },
     "designated": {

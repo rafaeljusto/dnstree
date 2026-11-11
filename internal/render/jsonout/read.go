@@ -493,6 +493,30 @@ func readDiscovery(from *discovery) (*trace.Discovery, error) {
 		}
 		to.Designated = append(to.Designated, read)
 	}
+	if info := from.Info; info != nil {
+		read := &trace.ResolverInfo{
+			Target: info.Target, Proto: info.Proto, Err: info.Error, Text: info.Text,
+			QNameMin: info.QNameMin, InfoURL: info.InfoURL,
+			Minimises: trace.Observed(info.Minimises), Unlisted: info.Unlisted,
+		}
+		if read.Minimises != "" && !observed(read.Minimises) {
+			return nil, fmt.Errorf("%q is not how a claim can stand", info.Minimises)
+		}
+		if info.Server != nil {
+			server, err := readServer(info.Server)
+			if err != nil {
+				return nil, err
+			}
+			read.Server = server
+		}
+		for _, r := range info.ExtErr {
+			if r.From > r.To {
+				return nil, fmt.Errorf("%d-%d is not a range of extended errors", r.From, r.To)
+			}
+			read.ExtErr = append(read.ExtErr, trace.CodeRange{From: r.From, To: r.To})
+		}
+		to.Info = read
+	}
 	return to, nil
 }
 

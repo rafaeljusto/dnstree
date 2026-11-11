@@ -408,6 +408,56 @@ type Discovery struct {
 	// Designated are the offers in the order they arrived, empty for a server
 	// that answered and offers none.
 	Designated []Designated
+
+	// Info is what one of the designated resolvers says of itself, nil where
+	// nothing asked: only --check-resolver has anything to hold it against.
+	Info *ResolverInfo
+}
+
+// ResolverInfo is the RESINFO record a resolver publishes at the name its
+// certificate is for (RFC 9606). It is asked over a connection whose
+// certificate was checked for Target, since that is all that makes the record
+// the resolver's. What it says are claims; Minimises and Unlisted hold them
+// against what --check-resolver saw.
+type ResolverInfo struct {
+	// Target is the name asked, Server and Proto where and how.
+	Target string
+	Server Server
+	Proto  string
+
+	// Err is why there is no record to read: a connection or certificate
+	// that failed, or an answer RFC 9606 says to drop. Empty with no Text is a
+	// resolver that answered and publishes none.
+	Err  string
+	Text []string
+
+	// The claims read out of Text. ExtErr is nil where the record makes no
+	// claim about extended errors; InfoURL is only ever an https URL, and is
+	// never fetched.
+	QNameMin bool
+	ExtErr   []CodeRange
+	InfoURL  string
+
+	// Minimises is how the qnamemin claim stood against what was seen, empty
+	// without the claim. Unlisted are the extended errors the resolver
+	// returned during the run and does not list, nil without the claim.
+	Minimises Observed
+	Unlisted  []uint16
+}
+
+// NotAuthoritative is the Err of a RESINFO answer without the AA bit, which
+// RFC 9606 section 3 says to drop: a resolver that looked its record up,
+// rather than serving it, handed over somebody else's word.
+const NotAuthoritative = "answered without the AA bit, which RFC 9606 says to drop"
+
+// CodeRange is a run of extended error codes, From to To inclusive.
+type CodeRange struct {
+	From, To uint16
+}
+
+// Lists reports whether code is one of the ranges.
+func Lists(ranges []CodeRange, code uint16) bool {
+	return slices.ContainsFunc(ranges, func(r CodeRange) bool { return r.From <= code && code <= r.To })
 }
 
 // Designated is one encrypted resolver a plain one points at.

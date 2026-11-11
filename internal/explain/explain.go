@@ -1227,7 +1227,39 @@ func designations(tr *trace.Trace) []Finding {
 			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
 				"%s says it can also be reached encrypted, over %s at %s; trust it only once the certificate there names %s, which --ddr does not check",
 				who, offers, list(targets), who)})
+			findings = append(findings, claims(who, found.Info)...)
 		}
+	}
+	return findings
+}
+
+// claims are what a resolver says of itself in RESINFO (RFC 9606) and did not
+// hold to, or said in a way no client may read. A code it lists and never
+// returned is not one: nothing in the run gave it cause to.
+func claims(who string, info *trace.ResolverInfo) []Finding {
+	if info == nil {
+		return nil
+	}
+	target := strings.TrimSuffix(info.Target, ".")
+	var findings []Finding
+	if info.Err == trace.NotAuthoritative {
+		findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+			"%s serves its RESINFO without the AA bit, so a client that follows RFC 9606 drops what it claims; serve the record as the resolver's own data for that name",
+			target)})
+	}
+	if info.Minimises == trace.ObservedNo {
+		findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+			"%s says in RESINFO that it minimises queries, but internet.nl's test zone saw %s ask for the whole name; turn minimisation on, or take qnamemin out of the record",
+			target, who)})
+	}
+	if len(info.Unlisted) > 0 {
+		spelled := make([]string, 0, len(info.Unlisted))
+		for _, code := range info.Unlisted {
+			spelled = append(spelled, strconv.Itoa(int(code)))
+		}
+		findings = append(findings, Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+			"%s lists the extended errors it returns in RESINFO, but %s returned %s, which the list leaves out; add them to exterr",
+			target, who, list(spelled))})
 	}
 	return findings
 }

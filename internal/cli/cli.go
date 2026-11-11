@@ -641,9 +641,15 @@ costs none of its own.
 resolvers stand for it (RFC 9462), and says under the tree what each one
 offers: dot, doh or doq, at which name and port. It is how to learn whether a
 resolver handed out as a bare address could have been used encrypted. Nothing
-connects to what is offered, so no certificate is checked and an offer is only
-what the plain resolver claims. It costs a query per resolver, and needs the
-comparison that --no-compare turns off.
+checks that the offer's certificate names the plain resolver, so an offer is
+only what the plain resolver claims. With --check-resolver as well, the offer is
+asked over dot, or doh at /dns-query, for its RESINFO record (RFC 9606), and what
+it claims is set beside what was seen: QNAME minimisation, and the extended
+errors it lists against the ones it returned. The record counts only over a
+certificate checked for the offer's name, and with the AA bit; --tls-insecure
+asks nothing, and the link it gives is never fetched. It costs a query per
+resolver, one more over TLS with --check-resolver, and needs the comparison
+that --no-compare turns off.
 
 --check-resolver puts questions whose right answers are known to every resolver
 the question is timed against, and says under the tree what each one was seen

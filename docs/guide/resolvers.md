@@ -198,14 +198,56 @@ ddr: 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.qua
 · 1.1.1.1 says it can also be reached encrypted, over doh and dot at one.one.one.one.; trust it only once the certificate there names 1.1.1.1, which --ddr does not check
 ```
 
-It is one query per resolver, for `_dns.resolver.arpa`, and it only asks: it
-does not connect to what is offered. A client is meant to use an offer only once
+It is one query per resolver, for `_dns.resolver.arpa`, and on its own it only
+asks: it does not connect to what is offered. A client is meant to use an offer only once
 the certificate it finds there names the plain resolver's own address, since
 otherwise whoever answered the plain question could point it anywhere. That
 check is not made here, which is why every offer is marked as not verified.
 A resolver that designates nothing says so, and one that cannot be asked says
 why. Without `--resolver` the question goes to the host's own resolver;
 `--no-compare` leaves nothing to ask.
+
+### What a resolver says of itself
+
+A resolver can publish what it claims to do in a RESINFO record
+([RFC 9606](https://www.rfc-editor.org/rfc/rfc9606)): `qnamemin` for QNAME
+minimisation, `exterr` for the extended errors it returns, and `infourl` for a
+page about it. With `--ddr` and [`--check-resolver`](#how-a-resolver-behaves)
+together, dnstree asks for that record and sets each claim beside what the
+resolver was seen to do:
+
+```
+$ dnstree --ddr --check-resolver --resolver 194.0.5.3 --resolver 9.9.9.9 --explain www.isc.org
+...
+🔐 194.0.5.3 offers dot at resolver.dns4all.eu:853, doq at resolver.dns4all.eu:853, doh at https://resolver.dns4all.eu:443/dns-query{?dns} (not verified)
+📇 resolver.dns4all.eu over dot: answered without the AA bit, which RFC 9606 says to drop
+🔐 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
+📇 dns.quad9.net says it minimises queries, and 9.9.9.9 does
+📇 dns.quad9.net says it can return extended errors 17,29, but 9.9.9.9 returned 6, 7, which it does not list
+📇 dns.quad9.net has more at https://www.quad9.net/ (not fetched)
+...
+· resolver.dns4all.eu serves its RESINFO without the AA bit, so a client that follows RFC 9606 drops what it claims; serve the record as the resolver's own data for that name
+...
+· dns.quad9.net lists the extended errors it returns in RESINFO, but 9.9.9.9 returned 6 and 7, which the list leaves out; add them to exterr
+```
+
+The record is asked for at the name an offer designates, over dot where one
+is offered and doh at `/dns-query` otherwise, and only over a connection whose
+certificate names that name: the record is only the resolver's own word if
+the certificate is checked. `--tls-ca` and `--tls-insecure` reach it only
+beside `--dot` or `--doh`, as everywhere else: the first is trusted as an
+authority, and under the second nothing is asked. A hint is dialled only at a
+public address or at the plain resolver's own, since it came over plain DNS. As the RFC requires, the query has
+recursion off, and an answer without the AA bit is dropped, since it is
+somebody else's record that the resolver looked up.
+
+A claim is held against what `--check-resolver` saw of the plain resolver.
+Only an extended error that it returned and does not list is a mismatch: a
+code it lists and never returned had no cause to come up. The link is shown
+only when it is https, and is never fetched. A mismatch is a warning under
+`--explain`, and sets no exit code. Few resolvers publish the record yet, so
+"publishes no RESINFO", or the server's refusal of a query without recursion,
+is the usual line.
 
 ## How a resolver behaves
 

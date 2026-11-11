@@ -1081,6 +1081,48 @@ func TestDesignations(t *testing.T) {
 	}
 }
 
+// TestClaims covers what a resolver says of itself in RESINFO. Only a claim
+// it did not hold to, or one no client may read, is a finding.
+func TestClaims(t *testing.T) {
+	offers := []trace.Designated{{Priority: 1, Target: "dns.test.", Protocols: []string{"dot"}}}
+	tests := map[string]struct {
+		info *trace.ResolverInfo
+		want string
+	}{
+		"an answer without AA is one no client reads": {
+			info: &trace.ResolverInfo{Target: "dns.test.", Proto: "dot", Err: trace.NotAuthoritative},
+			want: "dns.test serves its RESINFO without the AA bit, so a client that follows RFC 9606 drops what it claims",
+		},
+		"a resolver that claims to minimise and does not": {
+			info: &trace.ResolverInfo{Target: "dns.test.", Text: []string{"qnamemin"}, QNameMin: true, Minimises: trace.ObservedNo},
+			want: "dns.test says in RESINFO that it minimises queries, but internet.nl's test zone saw 192.0.2.53 ask for the whole name",
+		},
+		"codes returned and not listed": {
+			info: &trace.ResolverInfo{Target: "dns.test.", Text: []string{"exterr=15"}, ExtErr: []trace.CodeRange{{From: 15, To: 15}}, Unlisted: []uint16{6, 9}},
+			want: "but 192.0.2.53 returned 6 and 9, which the list leaves out; add them to exterr",
+		},
+		"claims that held are no finding": {
+			info: &trace.ResolverInfo{Target: "dns.test.", Text: []string{"qnamemin"}, QNameMin: true, Minimises: trace.ObservedYes},
+		},
+		"a connection that failed is left to the line under the tree": {
+			info: &trace.ResolverInfo{Target: "dns.test.", Proto: "dot", Err: "tls: failed to verify certificate"},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tr := walk(answered(300))
+			tr.Resolvers = []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53}, Rcode: "NOERROR",
+				DDR: &trace.Discovery{Rcode: "NOERROR", Designated: offers, Info: tt.info},
+			}}
+			got := said(tr)
+			if tt.want == "" && strings.Contains(got, "RESINFO") || !strings.Contains(got, tt.want) {
+				t.Errorf("got %q, want it to say %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestBehaviours covers what --check-resolver caught resolvers doing. Only
 // the habits that cost whoever uses the resolver are findings.
 func TestBehaviours(t *testing.T) {

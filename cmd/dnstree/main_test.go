@@ -728,6 +728,54 @@ _dns.resolver.arpa. IN SVCB 1 dns.test. alpn=dot
 	}
 }
 
+// TestRunRESINFO asks the encrypted resolver --ddr found what it says of
+// itself, but only under --check-resolver, which has something to hold it
+// against. The test certificate verifies for nobody, so the good path is the
+// transport's to test, and this one shows a failed check costs one line.
+func TestRunRESINFO(t *testing.T) {
+	server := fakens.New(t, fakens.Config{Origin: ".", TLS: true, Zone: rootZone})
+	resolver := fakens.New(t, fakens.Config{Origin: ".", TLS: true, Zone: rootZone + fmt.Sprintf(`
+_dns.resolver.arpa. IN SVCB 1 dns.test. alpn=dot port=%d ipv4hint=127.0.0.1
+dns.test.           IN RESINFO qnamemin
+`, server.TLSAddr.Port())})
+
+	tests := map[string]struct {
+		extra []string
+		want  string
+	}{
+		"--ddr alone asks for no claims": {
+			want: "",
+		},
+		"a certificate that does not verify costs the claims, in one line": {
+			extra: []string{"--check-resolver"}, want: "resinfo: dns.test over dot: tcp 127.0.0.1:",
+		},
+		"--tls-insecure is not asked over, since nothing checks the record is the resolver's": {
+			extra: []string{"--check-resolver", "--dot", "--tls-insecure"}, want: "resinfo: not asked: --tls-insecure",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			root := resolver.Addr
+			if slices.Contains(tt.extra, "--dot") {
+				root = resolver.TLSAddr
+			}
+			code := run(t.Context(), append(tt.extra,
+				"--root", root.String(), "--resolver", resolver.Addr.String(),
+				"--ddr", "--no-asn", "--color", "never", "--format", "ascii", ".", "NS",
+			), &stdout, &stderr)
+
+			if code != exitAnswer {
+				t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, stdout.String(), stderr.String())
+			}
+			out := stdout.String()
+			if tt.want == "" && strings.Contains(out, "resinfo:") || !strings.Contains(out, tt.want) {
+				t.Errorf("got no %q:\n%s", tt.want, out)
+			}
+		})
+	}
+}
+
 // cymruZone answers for loopback the way Team Cymru answers for a real address.
 const cymruZone = `
 @         IN SOA  ns hostmaster 1 7200 3600 1209600 3600

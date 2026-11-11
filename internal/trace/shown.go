@@ -263,6 +263,14 @@ func (d *Discovery) Shown() *Discovery {
 		offer.Protocols, offer.ALPN = shownAll(offer.Protocols), shownAll(offer.ALPN)
 		shown.Designated = append(shown.Designated, offer)
 	}
+	if d.Info != nil {
+		info := *d.Info
+		info.Target, info.Proto, info.Err = Shown(info.Target), Shown(info.Proto), Shown(info.Err)
+		info.Server = info.Server.Shown()
+		info.Text, info.InfoURL = shownAll(info.Text), Shown(info.InfoURL)
+		info.ExtErr, info.Unlisted = slices.Clone(info.ExtErr), slices.Clone(info.Unlisted)
+		shown.Info = &info
+	}
 	return &shown
 }
 

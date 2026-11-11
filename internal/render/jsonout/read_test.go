@@ -156,7 +156,13 @@ func TestReadRoundTrip(t *testing.T) {
 				}, {
 					Priority: 2, Target: "dns.example.", Protocols: []string{"doh"}, ALPN: []string{"h2"},
 					DoHPath: "/dns-query{?dns}",
-				}}},
+				}}, Info: &trace.ResolverInfo{
+					Target: "dns.example.", Proto: "dot",
+					Server:   trace.Server{Name: "dns.example.", IP: netip.MustParseAddr("192.0.2.53"), Port: 853},
+					Text:     []string{"qnamemin", "exterr=15-17", "infourl=https://dns.example/guide"},
+					QNameMin: true, ExtErr: []trace.CodeRange{{From: 15, To: 17}}, InfoURL: "https://dns.example/guide",
+					Minimises: trace.ObservedNo, Unlisted: []uint16{9},
+				}},
 			}, {
 				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.54"), Port: 53},
 				Err:    "i/o timeout",

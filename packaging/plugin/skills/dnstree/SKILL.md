@@ -104,6 +104,7 @@ whole; `dnstree --schema` describes every field.
 | whether the zone survives losing a server | `dnstree --format markdown --without SERVER NAME` |
 | what public resolvers answer | `dnstree --format markdown --resolver 1.1.1.1 --resolver 8.8.8.8 NAME` |
 | whether a resolver validates DNSSEC, trusts the root's current key, rewrites NXDOMAIN, sends the client subnet (ECS), minimises queries, makes up IPv6 addresses (DNS64), or reaches zones from another network than its own | `dnstree --format markdown --check-resolver --resolver 1.1.1.1 NAME` |
+| whether a resolver does what its RESINFO record claims (RFC 9606) | `dnstree --format markdown --ddr --check-resolver --resolver 9.9.9.9 NAME` |
 | the name of an address, and whether it points back (forward-confirmed reverse DNS) | `dnstree --format markdown -x 192.0.2.1` |
 | the dig commands to send a DNS host or registry, so they can repeat what the walk saw | `dnstree --format dig --dnssec NAME TYPE` |
 | how DNS found a name, hop by hop, for somebody learning it (pass the story on as written) | `dnstree --format teach NAME TYPE` |

@@ -797,8 +797,79 @@ func (r *renderer) designations(tr *trace.Trace) []string {
 			lines = append(lines, r.paint.paint(mark+who+" offers "+strings.Join(offers, ", "), green)+
 				r.paint.dim(" (not verified)"))
 		}
+		lines = append(lines, r.claims(who, found.Info)...)
 	}
 	return lines
+}
+
+// claims are what the encrypted resolver says of itself (RFC 9606), each
+// beside what was seen of the plain one, which is the one --check-resolver
+// asked.
+func (r *renderer) claims(who string, info *trace.ResolverInfo) []string {
+	if info == nil {
+		return nil
+	}
+	mark := "resinfo: "
+	if r.glyphs.icons {
+		mark = spaced("📇")
+	}
+	target := strings.TrimSuffix(info.Target, ".")
+	switch {
+	case info.Err != "" && target == "":
+		return []string{r.paint.dim(mark + info.Err)}
+	case info.Err != "":
+		return []string{r.paint.dim(mark + target + " over " + info.Proto + ": " + info.Err)}
+	case len(info.Text) == 0:
+		return []string{r.paint.dim(mark + target + " publishes no RESINFO")}
+	}
+
+	var lines []string
+	if info.QNameMin {
+		switch info.Minimises {
+		case trace.ObservedYes:
+			lines = append(lines, r.paint.paint(mark+target+" says it minimises queries, and "+who+" does", green))
+		case trace.ObservedNo:
+			lines = append(lines, r.paint.paint(mark+target+" says it minimises queries, but "+who+" does not", yellow))
+		default:
+			lines = append(lines, r.paint.dim(mark+target+" says it minimises queries; the test could not tell whether "+who+" does"))
+		}
+	}
+	if info.ExtErr != nil {
+		listed := mark + target + " says it can return extended errors " + codeRanges(info.ExtErr)
+		if len(info.Unlisted) == 0 {
+			lines = append(lines, r.paint.paint(listed+", and "+who+" returned none it does not list", green))
+		} else {
+			lines = append(lines, r.paint.paint(listed+", but "+who+" returned "+codes(info.Unlisted)+", which it does not list", yellow))
+		}
+	}
+	if info.InfoURL != "" {
+		lines = append(lines, r.paint.dim(mark+target+" has more at "+info.InfoURL+" (not fetched)"))
+	}
+	if len(lines) == 0 {
+		lines = append(lines, r.paint.dim(mark+target+" publishes RESINFO with no claim this build reads"))
+	}
+	return lines
+}
+
+// codeRanges spells ranges of codes the way RESINFO writes them.
+func codeRanges(ranges []trace.CodeRange) string {
+	spelled := make([]string, 0, len(ranges))
+	for _, run := range ranges {
+		text := strconv.Itoa(int(run.From))
+		if run.To != run.From {
+			text += "-" + strconv.Itoa(int(run.To))
+		}
+		spelled = append(spelled, text)
+	}
+	return strings.Join(spelled, ",")
+}
+
+func codes(list []uint16) string {
+	spelled := make([]string, 0, len(list))
+	for _, code := range list {
+		spelled = append(spelled, strconv.Itoa(int(code)))
+	}
+	return strings.Join(spelled, ", ")
 }
 
 // behaviours are what --check-resolver saw each resolver do, one line each.

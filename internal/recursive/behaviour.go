@@ -33,6 +33,7 @@ func Behave(tr *trace.Trace) {
 			sentinel.Signs = signsRoot(tr, sentinel.Tag)
 		}
 		answer.Behaviour.ReadsSentinel = reads(answer.Behaviour.Sentinels)
+		claimed(answer)
 	}
 }
 

@@ -691,6 +691,85 @@ func TestRenderDesignations(t *testing.T) {
 	}
 }
 
+func TestRenderClaims(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		info *trace.ResolverInfo
+		want []string
+	}{
+		"claims that held are said beside what was seen": {
+			info: &trace.ResolverInfo{
+				Target: "dns.example.", Proto: "dot", Text: []string{"qnamemin", "exterr=15-17,20", "infourl=https://dns.example/guide"},
+				QNameMin: true, Minimises: trace.ObservedYes, ExtErr: []trace.CodeRange{{From: 15, To: 17}, {From: 20, To: 20}},
+				InfoURL: "https://dns.example/guide",
+			},
+			want: []string{
+				"resinfo: dns.example says it minimises queries, and 192.0.2.53 does\n",
+				"resinfo: dns.example says it can return extended errors 15-17,20, and 192.0.2.53 returned none it does not list\n",
+				"resinfo: dns.example has more at https://dns.example/guide (not fetched)\n",
+			},
+		},
+		"claims that did not hold say what was seen instead": {
+			info: &trace.ResolverInfo{
+				Target: "dns.example.", Proto: "dot", Text: []string{"qnamemin", "exterr=15"},
+				QNameMin: true, Minimises: trace.ObservedNo, ExtErr: []trace.CodeRange{{From: 15, To: 15}}, Unlisted: []uint16{6, 9},
+			},
+			want: []string{
+				"resinfo: dns.example says it minimises queries, but 192.0.2.53 does not\n",
+				"resinfo: dns.example says it can return extended errors 15, but 192.0.2.53 returned 6, 9, which it does not list\n",
+			},
+		},
+		"a test that could not tell says so": {
+			info: &trace.ResolverInfo{Target: "dns.example.", Proto: "dot", Text: []string{"qnamemin"}, QNameMin: true, Minimises: trace.ObservedUnknown},
+			want: []string{"resinfo: dns.example says it minimises queries; the test could not tell whether 192.0.2.53 does\n"},
+		},
+		"a record with nothing this build reads is said as such": {
+			info: &trace.ResolverInfo{Target: "dns.example.", Proto: "dot", Text: []string{"temp-x"}},
+			want: []string{"resinfo: dns.example publishes RESINFO with no claim this build reads\n"},
+		},
+		"a resolver that publishes none": {
+			info: &trace.ResolverInfo{Target: "dns.example.", Proto: "doh"},
+			want: []string{"resinfo: dns.example publishes no RESINFO\n"},
+		},
+		"an answer that was dropped says why": {
+			info: &trace.ResolverInfo{Target: "dns.example.", Proto: "dot", Err: trace.NotAuthoritative},
+			want: []string{"resinfo: dns.example over dot: " + trace.NotAuthoritative + "\n"},
+		},
+		"a record never asked for says why": {
+			info: &trace.ResolverInfo{Err: "not asked: x"},
+			want: []string{"resinfo: not asked: x\n"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tr := resolution()
+			tr.Resolvers = []*trace.Resolver{{
+				Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53}, Rcode: "NOERROR",
+				DDR: &trace.Discovery{Rcode: "NOERROR", Info: tt.info, Designated: []trace.Designated{
+					{Priority: 1, Target: "dns.example.", Protocols: []string{"dot"}, ALPN: []string{"dot"}},
+				}},
+			}}
+			var out bytes.Buffer
+			if err := tree.Render(&out, tr, tree.Options{Charset: tree.ASCII}); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			got := out.String()
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("got no %q in:\n%s", want, got)
+				}
+			}
+			if n := strings.Count(got, "resinfo: "); n != len(tt.want) {
+				t.Errorf("got %d resinfo lines, want %d:\n%s", n, len(tt.want), got)
+			}
+		})
+	}
+}
+
 // TestRenderProbes covers the asides --check-axfr and --check-recursion leave.
 // Each says what the server gave, and only an open one is coloured as a fault.
 func TestRenderProbes(t *testing.T) {

@@ -1150,8 +1150,8 @@ dig @108.162.192.162 example.com. DNSKEY +norecurse +bufsize=1232 +dnssec</pre>
       it, that is most of "does this name look the same from where my users are".</p>
       <p class="section-lede"><code>--ddr</code> asks each of them whether it can be used
       encrypted too (RFC&nbsp;9462), and says under the tree what it offers: DoT, DoH or DoQ,
-      at which name and port. It only asks, and connects to none of it, so every offer is
-      marked as not verified.</p>
+      at which name and port. Nothing checks that an offer's certificate names the plain
+      resolver, so every offer is marked as not verified.</p>
       <p class="section-lede"><code>--check-resolver</code> sees what each of them does with
       what it is asked: whether it refuses <code>dnssec-failed.org</code>, whose chain of
       trust is broken on purpose, whether it trusts the key the root signs with, and whether a made-up
@@ -1162,7 +1162,11 @@ dig @108.162.192.162 example.com. DNSKEY +norecurse +bufsize=1232 +dnssec</pre>
       address it sets the network its questions reach zones from beside its own: a different
       one can be a partner network, a forwarder, or something on the path answering in its
       place. What the answers leave open is said as "may or may not", never
-      guessed.</p>
+      guessed. With <code>--ddr</code> beside it, the encrypted resolver it offers is asked,
+      over a checked certificate, for the RESINFO record that says what it claims to do
+      (RFC&nbsp;9606), and each claim is set beside what was seen: one that says it
+      minimises queries and does not, or returns an extended error it does not list, is
+      a warning.</p>
 
       <h3 style="margin-top:2.2rem">Leave it running</h3>
       <p class="section-lede"><code>--watch 30s</code> draws the tree once and then keeps
