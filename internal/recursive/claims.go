@@ -9,8 +9,9 @@ import (
 )
 
 // claimed reads a resolver's RESINFO record and holds what it claims against
-// what --check-resolver saw it do. Only an error it returned and did not list
-// is a mismatch: one it lists and never returned had no reason to come up.
+// what --check-resolver saw it do. qnamemin from a resolver seen to ask for
+// the whole name is a mismatch, and so is an error it returned and did not
+// list; one it lists and never returned had no reason to come up.
 func claimed(answer *trace.Resolver) {
 	if answer.DDR == nil || answer.DDR.Info == nil {
 		return

@@ -237,13 +237,15 @@ certificate names that name: the record is only the resolver's own word if
 the certificate is checked. `--tls-ca` and `--tls-insecure` reach it only
 beside `--dot` or `--doh`, as everywhere else: the first is trusted as an
 authority, and under the second nothing is asked. A hint is dialled only at a
-public address or at the plain resolver's own, since it came over plain DNS. As the RFC requires, the query has
-recursion off, and an answer without the AA bit is dropped, since it is
-somebody else's record that the resolver looked up.
+public address or at the plain resolver's own, since it came over plain DNS.
+As the RFC requires, the query has recursion off, and an answer without the AA
+bit is dropped, since it is somebody else's record that the resolver looked
+up.
 
 A claim is held against what `--check-resolver` saw of the plain resolver.
-Only an extended error that it returned and does not list is a mismatch: a
-code it lists and never returned had no cause to come up. The link is shown
+Two things are a mismatch: `qnamemin` from a resolver seen to ask for the
+whole name, and an extended error it returned and does not list. A code it
+lists and never returned had no cause to come up. The link is shown
 only when it is https, and is never fetched. A mismatch is a warning under
 `--explain`, and sets no exit code. Few resolvers publish the record yet, so
 "publishes no RESINFO", or the server's refusal of a query without recursion,
