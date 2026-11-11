@@ -2,38 +2,34 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `ec3bc5c`
-- **Date**: 2026-11-06
-- **Scope**: the commits since `86bc3bd` (the `--format dig` type and class
-  fix, the unloadable RSA exponent, the IPv4-mapped capture server, the root
-  key sentinel, `--format teach`, the listing probe, `--repeat`,
-  `--compare-ns`). The fuzz search was left out: it ran apart, at the same
-  time, for this release.
+- **Commit**: `ec1961c`
+- **Date**: 2026-11-11
+- **Scope**: the commits since `ec3bc5c` (the unloadable RSA signer fix,
+  `--repeat` refused on a replay, the flag named in `--from` errors, `--check`
+  in OpenMetrics, `--serial` asking for ZONEVERSION (RFC 9660), fakens
+  `LookedUp`, RESINFO under `--check-resolver` (RFC 9606)). The fuzz search
+  was left out: it ran apart, at the same time, for this release.
 
 ## Open findings
 
-- Low: a DNSKEY set whose only signature claims a DS-named key with an
-  unloadable RSA exponent is `indeterminate` even when that signature is
-  outside its window or names another signer, both of which are checkable
-  ([dnssec.go:229](../../../internal/dnssec/dnssec.go#L229),
-  [dnssec.go:529](../../../internal/dnssec/dnssec.go#L529)).
 - Low: `octets` reads a `\DDD` in a saved name as an octet, but `Shown`
   leaves a backslash the name really holds, so a walk that asked
   `a\001b.example.` (a literal backslash) is printed by `--format dig` from
   `--from` as asking for an 0x01 octet
-  ([read.go:838](../../../internal/render/jsonout/read.go#L838),
+  ([read.go:866](../../../internal/render/jsonout/read.go#L866),
   [shown.go:14](../../../internal/trace/shown.go#L14)).
 - Low: names, CAA issuer values, SPF names, the report agent, MX hosts in the
   `--tlsa` finding, the `--serial` servers, resolver operators, DKIM
   selectors, the software a server says it runs, the names a PTR set gives,
-  the DMARC report hosts, SRV targets, and now the zone and servers in the
-  listing notes in the markdown report's finding sentences are open to
-  GitHub's autolinks, `@mentions` and `#refs`; fixing it means marking them
-  apart from the prose explain writes
+  the DMARC report hosts, SRV targets, the zone and servers in the listing
+  notes, and now the RESINFO target in the markdown report's finding
+  sentences are open to GitHub's autolinks, `@mentions` and `#refs`; fixing
+  it means marking them apart from the prose explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
-  bogus under `-race`; 260 runs after it, and `-count=2` at `d0eefea`,
-  `db990d4`, `7eeec81`, `86bc3bd` and `ec3bc5c`, were clean.
+  bogus under `-race`; 260 runs after it, `-count=2` at `d0eefea`, `db990d4`,
+  `7eeec81`, `86bc3bd`, `ec3bc5c` and `ec1961c`, and `-count=30` at
+  `ec1961c`, were clean.
 
 ## Checked and sound
 
@@ -489,4 +485,25 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   of defaults cannot set it, every drawn-only check refused or off;
   `served` reads `Shown` traces and imports no codec (`apart`); exit code
   the worst of both walks, `--expect same` only after it.
-- `go test -race -count=2 ./...` is clean at `ec3bc5c`.
+- `unloadableSigner` claims a key only for a signature in its window and made
+  by the zone; one that could never hold is bogus (`TestUnloadableRSAKey`).
+- ZONEVERSION: asked only with EDNS0 and never on a shaped probe; only type 0
+  with four octets and a label count at or below the qname's is read; the
+  zone is a suffix of the qname, escapes kept (a 45 s property fuzz of
+  `EchoedZoneVersion` found no panic and no other name); `Zone` through
+  `Shown`; renderers print the serial as a number.
+- `compareCopies` and the repeat copies warn on the walking goroutine, keyed
+  by address; the serial is uint32 throughout.
+- RESINFO (`transport.Claims`): CLI only, never in dnstree-web; not asked
+  under `--tls-insecure`; dials a hint only at a public address or the
+  resolver's own; TLS `ServerName` is the target, so a target with `/` or `@`
+  fails verification rather than moving the URL; DoH at `/dns-query` only;
+  more than one record or no AA is dropped. `codeRanges` parses with
+  `ParseUint(…, 16)`; `httpsURL` keeps printable ASCII without `\"<>` and
+  backtick, at most 255 octets, and it is never fetched. `Info` strings and
+  `ZoneNS` go through `Shown`; `read.go` checks `minimises`, the server and
+  each range.
+- OpenMetrics `dnstree_check`, `dnstree_zone_copies` and
+  `dnstree_delegation_agrees` take escaped labels over the shown trace, and a
+  family is declared once across several walks.
+- `go test -race -count=2 ./...` is clean at `ec1961c`.
