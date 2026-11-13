@@ -1011,7 +1011,7 @@ func listing(zone string, denials map[trace.Denial][]string, unchecked []string)
 // could not be asked, one for the servers the budget left with the baseline
 // alone, and one to say so when every server was asked everything and passed.
 func ednsTests(tr *trace.Trace) []Finding {
-	kinds := []trace.EDNSKind{trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag, trace.EDNSTCP}
+	kinds := []trace.EDNSKind{trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag, trace.EDNSCase, trace.EDNSTCP}
 	type held struct {
 		addresses []string
 		states    map[string]map[trace.EDNSKind]trace.EDNSState
@@ -1048,6 +1048,8 @@ func ednsTests(tr *trace.Trace) []Finding {
 		trace.EDNSVersion: "did not answer EDNS version 1 with BADVERS and nothing else, which leaves a resolver that tries a newer version no way back" + fix,
 		trace.EDNSOption:  "did not ignore an EDNS option nobody has defined, which breaks resolvers the day they send a new one" + fix,
 		trace.EDNSFlag:    "did not ignore an EDNS flag nobody has defined, which breaks resolvers the day they set a new one" + fix,
+		trace.EDNSCase: "did not answer a name asked in mixed case as they answer it in lower case, so resolvers that mix the case to resist forged answers, " +
+			"Google Public DNS among them, get no answer from them or a wrong one; have the server answer a name in any case, and copy the question back as it was sent (RFC 4343)",
 		// An anycast site that drops TCP is seen only from where it is reached.
 		trace.EDNSTCP: "answered over udp but not over tcp, from here, so any answer from them too big for one packet fails; allow tcp on port 53 to them (RFC 7766, RFC 9210)",
 	}
@@ -1090,6 +1092,9 @@ func ednsTests(tr *trace.Trace) []Finding {
 			case kind == trace.EDNSTCP:
 				findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
 					"%s did not answer over tcp, nor over udp when asked again, so whether tcp reaches them is unknown", list(servers))})
+			case kind == trace.EDNSCase:
+				findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
+					"%s gave no usable answer to a name in mixed case, which a lost packet could explain, so whether they answer one is unknown", list(servers))})
 			default:
 				findings = append(findings, Finding{Topic: Servers, Level: Note, Unknown: true, Text: fmt.Sprintf(
 					"%s answered EDNS0 but could not be asked the %s test, so whether they handle it is unknown", list(servers), kind)})

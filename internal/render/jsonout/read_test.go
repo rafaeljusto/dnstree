@@ -142,6 +142,10 @@ func TestReadRoundTrip(t *testing.T) {
 				Zone: "example.", Kind: trace.KindError, Aside: true, Proto: "tcp", Err: "connection reset by peer",
 				Asked: trace.Question{Name: "example.", Type: "SOA"},
 				EDNS:  &trace.EDNSTest{Kind: trace.EDNSTCP, State: trace.EDNSBroken, Fault: trace.EDNSClosed},
+			}, {
+				Zone: "example.", Kind: trace.KindAnswer, Aside: true, Rcode: "NOERROR",
+				Asked: trace.Question{Name: "ExAmPlE.", Type: "SOA"},
+				EDNS:  &trace.EDNSTest{Kind: trace.EDNSCase, State: trace.EDNSBroken, Fault: trace.EDNSRecased},
 			}}},
 		},
 		"a resolver asked which encrypted resolvers it designates": {

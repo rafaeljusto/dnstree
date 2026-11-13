@@ -666,7 +666,7 @@ func readEDNS(from *edns) (*trace.EDNSTest, error) {
 		Kind: trace.EDNSKind(from.Kind), State: trace.EDNSState(from.State), Fault: trace.EDNSFault(from.Fault),
 	}
 	switch test.Kind {
-	case trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag, trace.EDNSTCP:
+	case trace.EDNSPlain, trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag, trace.EDNSCase, trace.EDNSTCP:
 	default:
 		return nil, fmt.Errorf("%q is not a shape a nameserver is asked in", from.Kind)
 	}
@@ -677,7 +677,7 @@ func readEDNS(from *edns) (*trace.EDNSTest, error) {
 		}
 	case trace.EDNSBroken:
 		switch test.Fault {
-		case trace.EDNSSilent, trace.EDNSRcode, trace.EDNSNoOPT, trace.EDNSBadVers, trace.EDNSNoSOA, trace.EDNSEchoed, trace.EDNSAnswer, trace.EDNSClosed:
+		case trace.EDNSSilent, trace.EDNSRcode, trace.EDNSNoOPT, trace.EDNSBadVers, trace.EDNSNoSOA, trace.EDNSEchoed, trace.EDNSAnswer, trace.EDNSClosed, trace.EDNSRecased:
 		default:
 			return nil, fmt.Errorf("%q is not what an edns test can get wrong", from.Fault)
 		}

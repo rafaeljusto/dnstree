@@ -579,6 +579,45 @@ func TestRunEDNS(t *testing.T) {
 	}
 }
 
+// TestRunEDNSCase puts the zone in mixed case to a nameserver that copies the
+// question back in lower case, then replays the capture: the baseline and the
+// mixed-case query are the same question to the capture, and come back in the
+// order they were asked.
+func TestRunEDNSCase(t *testing.T) {
+	root := fakens.New(t, fakens.Config{Name: "a.root-servers.net.", Origin: ".", Zone: splitRootZone})
+	child := fakens.New(t, fakens.Config{Name: "ns.test.", Origin: "test.", Zone: splitChildZone,
+		Behaviour: fakens.Behaviour{LowerQuestion: true}})
+	path := filepath.Join(t.TempDir(), "walk.pcap")
+	walk := []string{
+		"--root", "a.root-servers.net@" + root.Addr.String(),
+		"--port", strconv.Itoa(int(child.Addr.Port())),
+		"--check-edns", "--explain", "--color", "never", "--format", "ascii", "www.test", "A",
+	}
+
+	var made, stderr bytes.Buffer
+	if code := run(t.Context(), append([]string{"--pcap", path, "--no-asn", "--no-compare"}, walk...), &made, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, made.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"edns0 ok", "mixed case broken: case not kept",
+		"did not answer a name asked in mixed case as they answer it in lower case",
+	} {
+		if !strings.Contains(made.String(), want) {
+			t.Errorf("got no %q:\n%s", want, made.String())
+		}
+	}
+
+	var replayed bytes.Buffer
+	stderr.Reset()
+	if code := run(t.Context(), append([]string{"--replay", path}, walk...), &replayed, &stderr); code != exitAnswer {
+		t.Fatalf("got exit %d, want %d\n%s%s", code, exitAnswer, replayed.String(), stderr.String())
+	}
+	took := regexp.MustCompile(`answered in [^ ]+`)
+	if got, want := took.ReplaceAllString(replayed.String(), ""), took.ReplaceAllString(made.String(), ""); got != want {
+		t.Errorf("got the replay\n%s\nwant the walk it replays\n%s", got, want)
+	}
+}
+
 // TestRunRootWithoutName leaves the name off, which is all a walk needs when
 // nothing has to verify a certificate.
 func TestRunRootWithoutName(t *testing.T) {

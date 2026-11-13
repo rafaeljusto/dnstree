@@ -3,6 +3,7 @@ package resolver
 import (
 	"cmp"
 	"context"
+	"strings"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
@@ -49,8 +50,8 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 		steps[i] = []*trace.Step{r.askEDNS(ctx, zone, server, trace.EDNSPlain)}
 	})
 
-	// The rest are spent whole or not at all: three queries a server, and a
-	// fourth where TCP tells something the baseline did not.
+	// The rest are spent whole or not at all: four queries a server, and a
+	// fifth where TCP tells something the baseline did not.
 	rest := make([][]trace.EDNSKind, len(steps))
 	var passed []int
 	for i, hops := range steps {
@@ -58,6 +59,10 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 			continue
 		}
 		kinds := []trace.EDNSKind{trace.EDNSVersion, trace.EDNSOption, trace.EDNSFlag}
+		if strings.ContainsFunc(zone, isLetter) {
+			kinds = append(kinds, trace.EDNSCase)
+		}
+		// The TCP test goes last: what a failed one is asked again reads it so.
 		if r.cfg.TCP != nil && hops[0].Proto == "udp" {
 			kinds = append(kinds, trace.EDNSTCP)
 		}
@@ -79,6 +84,48 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 			}
 			steps[i] = append(steps[i], step)
 		}
+	})
+
+	// A server that drops a name in mixed case drops it every time, where a
+	// lossy path drops a query now and then: a silent case test is asked
+	// again, and then the baseline, before it stands. One that cannot be is
+	// unchecked, since a resolver's users are told it fails them.
+	var silent []*trace.Step
+	for _, hops := range steps {
+		for _, step := range hops {
+			if step.EDNS.Kind != trace.EDNSCase || step.EDNS.Fault != trace.EDNSSilent {
+				continue
+			}
+			for range 2 {
+				if budget == nil {
+					budget = r.counters.query()
+				}
+			}
+			if budget != nil {
+				step.EDNS.State, step.EDNS.Fault = trace.EDNSUnchecked, ""
+				step.Notes = append(step.Notes, "the budget left it unasked again")
+				continue
+			}
+			silent = append(silent, step)
+		}
+	}
+	askEach(silent, func(_ int, step *trace.Step) {
+		again := r.askEDNS(ctx, zone, step.Server, trace.EDNSCase)
+		if again.Kind != trace.KindTimeout {
+			note := "asked again"
+			if again.Kind == trace.KindAnswer {
+				note = "answered when asked again"
+			}
+			again.Notes = append(again.Notes, note)
+			*step = *again
+			return
+		}
+		if r.askEDNS(ctx, zone, step.Server, trace.EDNSPlain).EDNS.State == trace.EDNSOK {
+			step.Notes = append(step.Notes, "silent again, though it answered in lower case")
+			return
+		}
+		step.EDNS.State, step.EDNS.Fault = trace.EDNSUnchecked, ""
+		step.Notes = append(step.Notes, "did not answer in lower case again either")
 	})
 
 	var failing []*trace.Step
@@ -122,6 +169,10 @@ func (r *run) checkEDNS(ctx context.Context, answer *trace.Step, zone string, se
 // anything but TCP.
 func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kind trace.EDNSKind) *trace.Step {
 	carrier := r.cfg.Transport
+	qname := zone
+	if kind == trace.EDNSCase {
+		qname = mixCase(zone)
+	}
 	port := server.Port
 	server.Port = cmp.Or(port, carrier.Port())
 	if r.cfg.Asking != nil {
@@ -133,7 +184,7 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 		Zone:   zone,
 		Server: server,
 		Proto:  carrier.Proto(),
-		Asked:  trace.Question{Name: zone, Type: "SOA"},
+		Asked:  trace.Question{Name: qname, Type: "SOA"},
 		Start:  r.since(),
 		Aside:  true,
 		EDNS:   &trace.EDNSTest{Kind: kind, State: trace.EDNSUnchecked},
@@ -155,9 +206,9 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 	}
 
 	udpSize := r.cfg.UDPSize
-	resp, err := r.exchange(ctx, step, carrier, zone, dns.TypeSOA, udpSize, port, shape)
+	resp, err := r.exchange(ctx, step, carrier, qname, dns.TypeSOA, udpSize, port, shape)
 	if err != nil && r.cfg.Fallback != nil && kind != trace.EDNSTCP {
-		if retry, fallbackErr := r.exchange(ctx, step, r.cfg.Fallback, zone, dns.TypeSOA, udpSize, port, shape); fallbackErr == nil {
+		if retry, fallbackErr := r.exchange(ctx, step, r.cfg.Fallback, qname, dns.TypeSOA, udpSize, port, shape); fallbackErr == nil {
 			step.Notes = append(step.Notes, carrier.Proto()+" did not get through, asked over "+r.cfg.Fallback.Proto())
 			carrier = r.cfg.Fallback
 			step.Proto = carrier.Proto()
@@ -166,7 +217,7 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 		}
 	}
 	if err == nil && resp.Truncated && r.cfg.TCP != nil && carrier.Proto() != r.cfg.TCP.Proto() {
-		if retry, retryErr := r.exchange(ctx, step, r.cfg.TCP, zone, dns.TypeSOA, udpSize, port, shape); retryErr == nil {
+		if retry, retryErr := r.exchange(ctx, step, r.cfg.TCP, qname, dns.TypeSOA, udpSize, port, shape); retryErr == nil {
 			resp = retry
 			step.Proto = r.cfg.TCP.Proto()
 			step.Notes = append(step.Notes, "truncated over "+carrier.Proto())
@@ -192,7 +243,7 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 	}
 	step.Size = len(resp.Data)
 	step.Flags = trace.Flags{AA: resp.Authoritative, EDNS: resp.UDPSize > 0}
-	step.EDNS.State, step.EDNS.Fault = trace.EDNSOK, ednsFault(resp, zone, kind)
+	step.EDNS.State, step.EDNS.Fault = trace.EDNSOK, ednsFault(resp, zone, qname, kind)
 	if step.EDNS.Fault == "" {
 		return step
 	}
@@ -214,8 +265,9 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 // of it, empty when nothing. Every shape is answered with an OPT record of
 // version 0; an unknown version is BADVERS without the answer (RFC 6891
 // 6.1.3), and everything else NOERROR with the SOA, the unknown option or flag
-// ignored rather than copied back.
-func ednsFault(resp *dns.Msg, zone string, kind trace.EDNSKind) trace.EDNSFault {
+// ignored rather than copied back, and the question copied back octet for
+// octet (RFC 1035 7.3, RFC 4343 4.1).
+func ednsFault(resp *dns.Msg, zone, qname string, kind trace.EDNSKind) trace.EDNSFault {
 	want := dns.RcodeSuccess
 	if kind == trace.EDNSVersion {
 		want = dns.RcodeBadVers
@@ -251,9 +303,36 @@ func ednsFault(resp *dns.Msg, zone string, kind trace.EDNSKind) trace.EDNSFault 
 				return trace.EDNSEchoed
 			}
 		}
+	case trace.EDNSCase:
+		if len(resp.Question) != 1 || resp.Question[0].Header().Name != qname {
+			return trace.EDNSRecased
+		}
 	}
 	if !carries {
 		return trace.EDNSNoSOA
 	}
 	return ""
+}
+
+// mixCase writes name's ASCII letters in alternating case, counted across
+// the labels, the way a resolver that mixes the case of its questions does
+// (the 0x20 bit). The mix is fixed, not random, so a walk drawn again from a
+// capture asks what it asked.
+func mixCase(name string) string {
+	mixed := []byte(name)
+	upper := true
+	for i, c := range mixed {
+		if isLetter(rune(c)) {
+			mixed[i] = c | 0x20
+			if upper {
+				mixed[i] = c &^ 0x20
+			}
+			upper = !upper
+		}
+	}
+	return string(mixed)
+}
+
+func isLetter(c rune) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }

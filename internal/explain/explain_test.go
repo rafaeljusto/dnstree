@@ -1487,6 +1487,22 @@ func TestEDNSTests(t *testing.T) {
 			},
 			want: []string{"every nameserver of test. that was asked passed the RFC 8906 tests"},
 		},
+		"a server that does not copy a question in mixed case back as sent": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSCase, trace.EDNSOK),
+				test("ns2.test.", trace.EDNSCase, trace.EDNSBroken),
+			},
+			want:   []string{"ns2.test. (192.0.2.5) did not answer a name asked in mixed case as they answer it in lower case", "Google Public DNS among them", "copy the question back as it was sent (RFC 4343)"},
+			unsaid: []string{"ns1.test.", "passed the", "fix the server, or the firewall"},
+		},
+		"a server with no usable answer to a name in mixed case": {
+			tests: []*trace.Step{
+				test("ns1.test.", trace.EDNSPlain, trace.EDNSOK),
+				test("ns1.test.", trace.EDNSCase, trace.EDNSUnchecked),
+			},
+			want:   []string{"ns1.test. (192.0.2.5) gave no usable answer to a name in mixed case, which a lost packet could explain"},
+			unsaid: []string{"passed the", "Google Public DNS", "could not be asked the case test"},
+		},
 		"a server that answers over udp but not over tcp": {
 			tests: []*trace.Step{
 				test("ns1.test.", trace.EDNSTCP, trace.EDNSOK),

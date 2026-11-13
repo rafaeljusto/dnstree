@@ -433,12 +433,17 @@ BADVERS and ignore the option and the flag, and one that drops them instead, or
 a firewall in front of it that does, is unreachable for resolvers that stopped
 working around it on DNS Flag Day 2019. Only a server that passed the first is
 asked the rest: one that fails EDNS0, or does not serve the zone, would fail
-them all for the same reason. One that passed it over udp is asked it again
-over tcp, which every server has to answer (RFC 7766): an answer too big for one
-packet is fetched over tcp, so a server closed to it fails the day the zone
-grows. A server that fails it is asked over udp once more, to tell a server
-closed to tcp from one gone quiet, and what tcp reaches is only ever seen from
-here. It costs up to six queries per nameserver address.
+them all for the same reason. It is asked again with the name in mixed case,
+which the server has to copy back as sent (RFC 4343): resolvers that mix the
+case to make a forged answer harder to guess, Google Public DNS among them, drop
+an answer that does not. A server silent on it is asked it again, and then
+EDNS0 alone, so a lost packet is not taken for a fault. One that passed it over
+udp is asked it again over tcp, which every server has to answer (RFC 7766): an
+answer too big for one packet is fetched over tcp, so a server closed to it
+fails the day the zone grows. A server that fails it is asked over udp once
+more, to tell a server closed to tcp from one gone quiet, and what tcp reaches
+is only ever seen from here. It costs up to seven queries per nameserver
+address.
 
 --caa says which certificate authorities may issue a certificate for NAME, and
 which CAA set decides it (RFC 8659). An authority looks at the name, then at

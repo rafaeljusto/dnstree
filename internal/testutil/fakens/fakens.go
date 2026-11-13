@@ -173,6 +173,13 @@ type Behaviour struct {
 	BadVersAnswer     bool  // answer BADVERS, and the question along with it
 	NoEDNSReply       bool  // answer EDNS0 without an OPT record
 	EDNSReplyVersion  uint8 // answer with an OPT record of this version
+
+	// The ways a server mishandles a name asked in mixed case, which
+	// resolvers send to make a forged answer harder to guess (RFC 4343).
+	LowerQuestion   bool // copy the question back in lower case
+	RefuseMixedCase bool // answer NXDOMAIN to a name with an upper case letter
+	DropMixedCase   int  // stay silent on the first this many names with an upper case letter; -1 on every one
+
 	// ServFailType answers SERVFAIL to any question for this type, the way a
 	// server whose software or backend cannot serve a newer type does. Zero
 	// answers every type.
@@ -313,6 +320,7 @@ type Server struct {
 
 	mu      sync.Mutex
 	queries []Query
+	mixed   int // names with an upper case letter asked so far
 }
 
 // New starts a nameserver for cfg and stops it when the test ends.
@@ -539,6 +547,10 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		Cookie:  sentCookie(req),
 	})
 	dropped := s.behaviour.DropEvery > 0 && len(s.queries)%s.behaviour.DropEvery == 0
+	if name != strings.ToLower(name) {
+		s.mixed++
+		dropped = dropped || s.behaviour.DropMixedCase < 0 || s.mixed <= s.behaviour.DropMixedCase
+	}
 	s.mu.Unlock()
 
 	if s.behaviour.Drop || dropped || s.behaviour.DropEDNSFlags && req.Z != 0 ||
@@ -584,6 +596,8 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		}
 	case s.behaviour.FormErrEDNSOption && asks[*dns.ERFC3597](req):
 		reply.Rcode = dns.RcodeFormatError
+	case s.behaviour.RefuseMixedCase && name != strings.ToLower(name):
+		reply.Rcode = dns.RcodeNameError
 	case s.behaviour.Refuse:
 		reply.Rcode = dns.RcodeRefused
 	case req.Question[0].Header().Class == dns.ClassCHAOS:
@@ -637,6 +651,11 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	}
 	if s.behaviour.NoEDNSReply {
 		reply.UDPSize, reply.Pseudo = 0, nil
+	}
+	if s.behaviour.LowerQuestion {
+		for _, q := range reply.Question {
+			q.Header().Name = strings.ToLower(q.Header().Name)
+		}
 	}
 	if s.behaviour.ClipGlue && !reply.Authoritative && dnsutil.Network(w) == "udp" {
 		reply.Extra = slices.DeleteFunc(reply.Extra, func(rr dns.RR) bool { return dns.RRToType(rr) == dns.TypeAAAA })

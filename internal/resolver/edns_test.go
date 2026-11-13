@@ -29,7 +29,7 @@ func TestEDNS(t *testing.T) {
 	}
 	ok := verdict{trace.EDNSOK, ""}
 	passes := map[trace.EDNSKind]verdict{
-		trace.EDNSPlain: ok, trace.EDNSVersion: ok, trace.EDNSOption: ok, trace.EDNSFlag: ok, trace.EDNSTCP: ok,
+		trace.EDNSPlain: ok, trace.EDNSVersion: ok, trace.EDNSOption: ok, trace.EDNSFlag: ok, trace.EDNSCase: ok, trace.EDNSTCP: ok,
 	}
 	// but is the second server passing every test except the one named.
 	but := func(kind trace.EDNSKind, got verdict) map[trace.EDNSKind]verdict {
@@ -65,6 +65,22 @@ func TestEDNS(t *testing.T) {
 		"a server that copies a flag it does not know back": {
 			behaviour: fakens.Behaviour{EchoEDNSFlags: true},
 			want:      but(trace.EDNSFlag, verdict{trace.EDNSBroken, trace.EDNSEchoed}),
+		},
+		"a server that copies a question in mixed case back in lower case": {
+			behaviour: fakens.Behaviour{LowerQuestion: true},
+			want:      but(trace.EDNSCase, verdict{trace.EDNSBroken, trace.EDNSRecased}),
+		},
+		"a server that never answers a name asked in mixed case": {
+			behaviour: fakens.Behaviour{DropMixedCase: -1},
+			want:      but(trace.EDNSCase, verdict{trace.EDNSBroken, trace.EDNSSilent}),
+		},
+		"a lossy path that drops a name in mixed case once": {
+			behaviour: fakens.Behaviour{DropMixedCase: 1},
+			want:      passes,
+		},
+		"a server that denies a name asked in mixed case": {
+			behaviour: fakens.Behaviour{RefuseMixedCase: true},
+			want:      but(trace.EDNSCase, verdict{trace.EDNSBroken, trace.EDNSRcode}),
 		},
 		"a firewall that drops dns over tcp": {
 			behaviour: fakens.Behaviour{DropTCP: true},
@@ -124,6 +140,15 @@ func TestEDNS(t *testing.T) {
 			if step := got["ns1.test. version"]; step.Rcode != "BADVERS" {
 				t.Errorf("got %q, want the version test answered BADVERS", step.Rcode)
 			}
+			if step := got["ns1.test. case"]; step.Asked.Name != "TeSt." || step.Sent == nil {
+				t.Errorf("got %q asked, want the zone asked in mixed case and what was sent kept", step.Asked.Name)
+			}
+			if step := got["ns2.test. case"]; tt.behaviour.DropMixedCase < 0 && !slices.Contains(step.Notes, "silent again, though it answered in lower case") {
+				t.Errorf("got notes %q, want a silent case test confirmed against the baseline", step.Notes)
+			}
+			if step := got["ns2.test. case"]; tt.behaviour.DropMixedCase > 0 && !slices.Contains(step.Notes, "answered when asked again") {
+				t.Errorf("got notes %q, want a case test lost once asked again", step.Notes)
+			}
 			if step := got["ns1.test. tcp"]; step.Proto != "tcp" {
 				t.Errorf("got the tcp test over %s, want it over tcp", step.Proto)
 			}
@@ -175,7 +200,7 @@ func TestEDNSOverTCP(t *testing.T) {
 	}
 }
 
-// TestEDNSNotByDefault covers the cost: up to six queries a nameserver are asked
+// TestEDNSNotByDefault covers the cost: up to seven queries a nameserver are asked
 // only when they are asked for.
 func TestEDNSNotByDefault(t *testing.T) {
 	t.Parallel()
@@ -227,17 +252,39 @@ func TestEDNSSpendsTheBudget(t *testing.T) {
 
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{})
 	cfg.CheckEDNS = true
-	cfg.Budget.MaxQueries = 9 // the walk takes two, the baselines two more
+	cfg.Budget.MaxQueries = 10 // the walk takes two, the baselines two more
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	got := ednsTests(tr)
-	if len(got) != 6 || got["ns2.test. edns"] == nil || got["ns1.test. tcp"] == nil {
+	if len(got) != 7 || got["ns2.test. edns"] == nil || got["ns1.test. tcp"] == nil {
 		t.Errorf("got %d tests, want both baselines and the rest of one server: %s", len(got), format(steps(tr)))
 	}
 	if !warned(tr, "the budget ran out before every nameserver of test. could be checked for how it handles edns; raise --max-queries") {
+		t.Errorf("got %q, want the budget said", tr.Warnings)
+	}
+}
+
+// TestEDNSCaseUnconfirmed covers a silent case test the budget left no room
+// to ask again: silence once may be the path, so it is unchecked.
+func TestEDNSCaseUnconfirmed(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{DropMixedCase: -1})
+	cfg.CheckEDNS = true
+	cfg.Budget.MaxQueries = 14 // the walk, both baselines and both servers' rest
+
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	step := ednsTests(tr)["ns2.test. case"]
+	if step == nil || step.EDNS.State != trace.EDNSUnchecked || !slices.Contains(step.Notes, "the budget left it unasked again") {
+		t.Fatalf("got %+v, want the case test unchecked and said to be unconfirmed: %s", step, format(steps(tr)))
+	}
+	if !warned(tr, "the budget ran out before every nameserver of test. could be checked") {
 		t.Errorf("got %q, want the budget said", tr.Warnings)
 	}
 }
@@ -249,7 +296,7 @@ func TestEDNSTCPUnconfirmed(t *testing.T) {
 
 	h, cfg := exposed(t, fakens.Behaviour{}, fakens.Behaviour{DropTCP: true})
 	cfg.CheckEDNS = true
-	cfg.Budget.MaxQueries = 12 // the walk, both baselines and both servers' rest
+	cfg.Budget.MaxQueries = 14 // the walk, both baselines and both servers' rest
 
 	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "www.test", "A")
 	if err != nil {

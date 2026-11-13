@@ -833,6 +833,7 @@ func TestRenderEDNS(t *testing.T) {
 		test(trace.EDNSVersion, trace.EDNSBroken, trace.EDNSRcode, "NOERROR"),
 		test(trace.EDNSFlag, trace.EDNSBroken, trace.EDNSEchoed, "NOERROR"),
 		test(trace.EDNSOption, trace.EDNSUnchecked, "", ""),
+		test(trace.EDNSCase, trace.EDNSBroken, trace.EDNSRecased, "NOERROR"),
 		test(trace.EDNSTCP, trace.EDNSBroken, trace.EDNSClosed, ""),
 	)
 
@@ -842,6 +843,7 @@ func TestRenderEDNS(t *testing.T) {
 	}
 	for _, want := range []string{
 		"edns0 ok", "edns version 1 broken: not BADVERS", "edns flag 0x40 broken: copied back", "edns option 100 unchecked", "tcp broken: connection closed",
+		"mixed case broken: case not kept",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got no %q in:\n%s", want, out.String())
