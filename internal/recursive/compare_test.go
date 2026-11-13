@@ -1,6 +1,7 @@
 package recursive_test
 
 import (
+	"net/netip"
 	"testing"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/recursive"
@@ -393,5 +394,141 @@ func TestCompareKept(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.kept)
 			}
 		})
+	}
+}
+
+func TestCompareTrusts(t *testing.T) {
+	// chained is the walk with its answer at a chain of trust in state, and
+	// the resolver's answer marked AD or not.
+	chained := func(state trace.DNSSECState, authentic bool, answer *trace.Resolver) *trace.Trace {
+		answer.Authentic = authentic
+		tr := traceOf("NOERROR", []string{"192.0.2.10"}, answer)
+		tr.Root.Children[0].DNSSEC = &trace.DNSSECStatus{State: state}
+		return tr
+	}
+	same := func() *trace.Resolver { return answerOf("NOERROR", "192.0.2.10") }
+
+	for _, tt := range []struct {
+		name string
+		tr   *trace.Trace
+		want trace.Trusting
+	}{{
+		name: "the walk found it secure, and the resolver marked it AD",
+		tr:   chained(trace.Secure, true, same()),
+		want: "",
+	}, {
+		name: "the walk found it secure, and the resolver did not mark it AD",
+		tr:   chained(trace.Secure, false, same()),
+		want: trace.TrustsMissing,
+	}, {
+		name: "the walk found it secure, and the resolver answered differently without AD",
+		tr:   chained(trace.Secure, false, answerOf("NOERROR", "192.0.2.20")),
+		want: trace.TrustsMissing,
+	}, {
+		name: "the walk found it secure, and the resolver answered NXDOMAIN without AD",
+		tr:   chained(trace.Secure, false, answerOf("NXDOMAIN")),
+		want: trace.TrustsMissing,
+	}, {
+		name: "the walk found it insecure, and the resolver marked it AD",
+		tr:   chained(trace.Insecure, true, same()),
+		want: trace.TrustsUnproven,
+	}, {
+		name: "the walk found it bogus, and the resolver marked it AD",
+		tr:   chained(trace.Bogus, true, same()),
+		want: trace.TrustsUnproven,
+	}, {
+		name: "the walk found it insecure, and the resolver did not mark it AD",
+		tr:   chained(trace.Insecure, false, same()),
+		want: "",
+	}, {
+		name: "the walk found it bogus, and the resolver did not mark it AD",
+		tr:   chained(trace.Bogus, false, same()),
+		want: "",
+	}, {
+		name: "the walk could not check it, and the resolver marked it AD",
+		tr:   chained(trace.Indeterminate, true, same()),
+		want: trace.TrustsUnchecked,
+	}, {
+		name: "the walk could not check it, and the resolver did not mark it AD",
+		tr:   chained(trace.Indeterminate, false, same()),
+		want: "",
+	}, {
+		name: "the walk did not check the chain",
+		tr:   traceOf("NOERROR", []string{"192.0.2.10"}, same()),
+		want: "",
+	}, {
+		name: "the resolver answered SERVFAIL",
+		tr:   chained(trace.Secure, false, answerOf("SERVFAIL")),
+		want: "",
+	}, {
+		name: "the resolver answered REFUSED",
+		tr:   chained(trace.Secure, false, answerOf("REFUSED")),
+		want: "",
+	}, {
+		name: "the resolver did not answer",
+		tr:   chained(trace.Secure, false, &trace.Resolver{Err: "i/o timeout"}),
+		want: "",
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			recursive.Compare(tt.tr)
+			if got := tt.tr.Resolvers[0].Trusts; got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCompareTrustsAcrossAnAlias covers an answer whose end is secure behind
+// an alias nobody signed: AD covers the whole answer (RFC 6840 5.8), so a
+// resolver leaving it off agrees with the walk.
+func TestCompareTrustsAcrossAnAlias(t *testing.T) {
+	answer := answerOf("NOERROR", "192.0.2.10")
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A", Class: "IN"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: "test.", Kind: trace.KindCNAME, Rcode: "NOERROR",
+			DNSSEC:  &trace.DNSSECStatus{State: trace.Insecure},
+			Records: []trace.RR{{Name: "www.test.", Type: "CNAME", Data: "cdn.example."}},
+			Children: []*trace.Step{{
+				Zone: "example.", Kind: trace.KindAnswer, Rcode: "NOERROR",
+				DNSSEC:  &trace.DNSSECStatus{State: trace.Secure},
+				Records: []trace.RR{{Name: "cdn.example.", Type: "A", Data: "192.0.2.10"}},
+			}},
+		}}},
+		Resolvers: []*trace.Resolver{answer},
+	}
+
+	recursive.Compare(tr)
+	if got := answer.Trusts; got != "" {
+		t.Errorf("got %q, want no reading", got)
+	}
+}
+
+// TestCompareTrustsSynthesised covers an AAAA a resolver made up under DNS64:
+// it is never signed, so its missing AD says nothing of the resolver.
+func TestCompareTrustsSynthesised(t *testing.T) {
+	answer := &trace.Resolver{
+		Rcode:   "NOERROR",
+		Records: []trace.RR{{Name: "www.test.", Type: "AAAA", Data: "64:ff9b::c000:20a"}},
+		Behaviour: &trace.Behaviour{
+			Synthesises: trace.ObservedYes,
+			Prefixes:    []netip.Prefix{netip.MustParsePrefix("64:ff9b::/96")},
+		},
+	}
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "AAAA", Class: "IN"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: "test.", Kind: trace.KindNoData, Rcode: "NOERROR",
+			DNSSEC: &trace.DNSSECStatus{State: trace.Secure},
+		}}},
+		Resolvers: []*trace.Resolver{answer},
+	}
+
+	recursive.Compare(tr)
+	if !answer.Synthesised {
+		t.Fatal("want the answer read as synthesised")
+	}
+	if got := answer.Trusts; got != "" {
+		t.Errorf("got %q, want no reading", got)
 	}
 }

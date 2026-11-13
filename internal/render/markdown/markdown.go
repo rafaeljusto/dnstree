@@ -63,7 +63,7 @@ func Render(w io.Writer, tr *trace.Trace, findings []explain.Finding) error {
 				continue
 			}
 			fmt.Fprintf(out, "| %s | %s | %s |\n",
-				escape(resolverName(answer.Server)), said(shown, answer), elapsed(answer))
+				escape(resolverName(answer.Server)), said(shown, answer)+trusted(shown, answer), elapsed(answer))
 		}
 	}
 	return out.Flush()
@@ -121,6 +121,23 @@ func said(tr *trace.Trace, answer *trace.Resolver) string {
 		answers[i] = data(text)
 	}
 	return "differs: " + tree.List(answers)
+}
+
+// trusted is how the resolver's AD bit stands against the walk's chain of
+// trust, in the few words a table cell has room for, empty where they agree.
+func trusted(tr *trace.Trace, answer *trace.Resolver) string {
+	switch answer.Trusts {
+	case trace.TrustsMissing:
+		return "; no AD on an answer the walk found secure"
+	case trace.TrustsUnproven:
+		if chain := tr.Chain(); chain != nil {
+			return "; AD where the walk found the chain " + escape(string(chain.DNSSEC.State))
+		}
+		return "; AD where the walk did not find the chain secure"
+	case trace.TrustsUnchecked:
+		return "; AD where the walk could not check the chain"
+	}
+	return ""
 }
 
 // failure is what a SERVFAIL most likely came of, in the few words a table

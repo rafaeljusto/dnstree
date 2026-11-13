@@ -82,8 +82,49 @@ With several `--resolver`s each one gets its own line, which shows quickly
 whether one resolver fails or all of them do. `--format json` carries the second
 answer as `unchecked` and the reading as `failed`, and `--format openmetrics`
 as `dnstree_resolver_failed`. A resolver that answers while the walk finds the
-chain broken is the other way round — it does not validate — and is not read
-here.
+chain broken is the other way round — it does not validate — and is read by its
+AD bit, below.
+
+## When a resolver does not trust what the walk proved
+
+A validating resolver marks an answer it checked with the AD bit
+([RFC 4035](https://www.rfc-editor.org/rfc/rfc4035)). Under `--dnssec` the walk
+checks the chain itself, and a line under the tree says when the two disagree.
+The quiet case is an answer the walk found secure, handed back without AD: a
+resolver that cannot check an algorithm or a digest must treat the zone as
+unsigned, so the answer arrives and nothing looks wrong, but the signatures
+protect nobody who uses it.
+
+```
+$ dnstree --resolver 4.2.2.2 --dnssec --explain nic.nl SOA
+...
+trust: 4.2.2.2 gives the answer without AD, where the walk found it secure (RSASHA256, ECDSAP256SHA256, SHA256): it does not validate, or cannot check an algorithm or digest the chain uses
+✔ answered in 2.8s · resolver in 250ms · 12 queries · 5 servers
+...
+· 4.2.2.2 gives the answer the walk found secure without AD: it does not validate, or it cannot check RSASHA256, ECDSAP256SHA256 and SHA256 and treats the zone as unsigned; --check-resolver tells the two apart
+```
+
+The other way round, a resolver can mark authentic what this build could not
+check:
+
+```
+$ dnstree --resolver 1.1.1.1 --resolver 9.9.9.9 --dnssec ed448.nl SOA
+...
+trust: 9.9.9.9 says the answer is authentic (AD), where the walk could not check the chain (ED448): it checks something this build of dnstree cannot
+```
+
+| The line says | When |
+| --- | --- |
+| gives the answer without AD | the walk found the answer secure; with `--check-resolver` seeing it validate, the line points at the algorithm or digest, and a resolver seen not to validate gets no line, since `resolver:` already says so |
+| says the answer is authentic (AD), where the walk found the chain insecure or bogus | it trusts something the walk does not: a trust anchor of its own, another view of the zone, or a copy cached from before a change |
+| says the answer is authentic (AD), where the walk could not check the chain | it checks an algorithm or digest this build cannot |
+
+> [!NOTE]
+> AD is the resolver's claim, and anything on the path can set or clear it;
+> `--dot` and `--doh` make it stronger. The resolver is not the walk, so none of
+> this changes the exit code. When its answer differs from the walk's too, the
+> line says the two may be about different data. `--format json` carries the
+> reading as `trusts`, and `--format openmetrics` as `dnstree_resolver_trusts`.
 
 ## Asking from several places at once
 

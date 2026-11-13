@@ -296,6 +296,10 @@ type Resolver struct {
 	// path between here and the resolver.
 	Authentic bool
 
+	// Trusts is how its AD bit stands against the chain of trust the walk
+	// checked, empty where the two agree or there is nothing to compare.
+	Trusts Trusting
+
 	// Behaviour is how it handled the questions --check-resolver put to it, nil
 	// where nothing asked.
 	Behaviour *Behaviour
@@ -508,6 +512,27 @@ const (
 	// KeptStale is an answer no server of the zone gave the walk, carrying the
 	// few seconds serve-stale hands out (RFC 8767).
 	KeptStale Kept = "stale"
+)
+
+// Trusting is how a resolver's AD bit stands against the walk's own verdict.
+// The bit is a claim, so a disagreement is a reading, never a verdict: the
+// resolver's view of DNSSEC never touches the exit code.
+type Trusting string
+
+// How the two verdicts disagree.
+const (
+	// TrustsMissing is an answer the walk found secure, handed back without
+	// AD: a resolver that does not validate, or cannot check the algorithm or
+	// the digest the chain uses, and treats the zone as unsigned.
+	TrustsMissing Trusting = "missing"
+
+	// TrustsUnproven is an answer marked AD where the walk found the chain
+	// insecure or bogus: the resolver trusts something the walk does not.
+	TrustsUnproven Trusting = "unproven"
+
+	// TrustsUnchecked is an answer marked AD where the walk could not check
+	// the chain: the resolver checked what this build cannot.
+	TrustsUnchecked Trusting = "unchecked"
 )
 
 // Failure is what a resolver's SERVFAIL most likely came of, read from asking
@@ -1591,6 +1616,26 @@ func judge(step *Step, yield func(*Step) bool) bool {
 		}
 	}
 	return true
+}
+
+// Algorithms are the signing algorithms and DS digest types of every zone the
+// resolution held through, each once, in the order the walk met them. A
+// validator that cannot check any one of them reads the answer as unsigned.
+// The asides are left out: a nameserver's address is not part of the answer.
+func (t *Trace) Algorithms() (algorithms, digests []string) {
+	for step := range t.Mainline() {
+		status := step.DNSSEC
+		if status == nil || status.State != Secure {
+			continue
+		}
+		if status.Algorithm != "" && !slices.Contains(algorithms, status.Algorithm) {
+			algorithms = append(algorithms, status.Algorithm)
+		}
+		if status.Digest != "" && !slices.Contains(digests, status.Digest) {
+			digests = append(digests, status.Digest)
+		}
+	}
+	return algorithms, digests
 }
 
 // Broken reports whether the walk found a chain of trust that does not hold,

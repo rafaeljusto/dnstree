@@ -784,6 +784,11 @@
           "description": "The AD bit of its answer: the resolver says it validated what it handed back (RFC 4035). A claim, worth only as much as the path to the resolver.",
           "type": "boolean"
         },
+        "trusts": {
+          "description": "How its AD bit stands against the chain of trust the walk checked, absent where the two agree or there is nothing to compare: missing, no AD on an answer the walk found secure, from a resolver that does not validate or cannot check the algorithm or digest; unproven, AD on an answer the walk found insecure or bogus; unchecked, AD on an answer the walk could not check. A reading, never part of the exit code.",
+          "type": "string",
+          "enum": ["missing", "unproven", "unchecked"]
+        },
         "behaviour": { "$ref": "#/$defs/behaviour" }
       }
     },

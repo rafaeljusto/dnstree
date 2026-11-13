@@ -153,6 +153,7 @@ func Findings(tr *trace.Trace) []Finding {
 		findings = append(findings, finding)
 	}
 	findings = append(findings, failures(tr)...)
+	findings = append(findings, trusts(tr)...)
 	findings = append(findings, designations(tr)...)
 	findings = append(findings, behaviours(tr)...)
 	return findings
@@ -1189,6 +1190,84 @@ func failures(tr *trace.Trace) []Finding {
 		}
 		if len(answer.Extended) > 0 {
 			finding.Text += fmt.Sprintf(" (it says: %s)", answer.Extended[0])
+		}
+		findings = append(findings, finding)
+	}
+	return findings
+}
+
+// trusts say why each resolver's AD bit most likely disagrees with the chain
+// of trust the walk checked. The bit is only the resolver's claim, and the
+// resolver is not the walk: none of this touches the exit code.
+func trusts(tr *trace.Trace) []Finding {
+	chain := tr.Chain()
+	if chain == nil {
+		return nil
+	}
+	algorithms, digests := tr.Algorithms()
+	checks := list(append(slices.Clone(algorithms), digests...))
+	if checks == "" {
+		checks = "an algorithm or digest the chain uses"
+	}
+	var old []string
+	for _, algorithm := range algorithms {
+		if retired[algorithm] {
+			old = append(old, algorithm)
+		}
+	}
+	for _, digest := range digests {
+		if withdrawn[digest] {
+			old = append(old, digest)
+		}
+	}
+
+	var findings []Finding
+	for _, answer := range tr.Resolvers {
+		if answer == nil || answer.Trusts == "" {
+			continue
+		}
+		who := at2(answer.Server)
+		var finding Finding
+		switch answer.Trusts {
+		case trace.TrustsMissing:
+			validates := trace.Observed("")
+			if answer.Behaviour != nil {
+				validates = answer.Behaviour.Validates
+			}
+			switch validates {
+			case trace.ObservedYes:
+				finding = Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+					"%s validates DNSSEC, but gives the answer the walk found secure without AD: it most likely cannot check %s, "+
+						"so it treats the zone as unsigned and its users get no protection from the signatures",
+					who, checks)}
+			case trace.ObservedNo:
+				continue // what --check-resolver saw already says it
+			default:
+				finding = Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+					"%s gives the answer the walk found secure without AD: it does not validate, or it cannot check %s and treats the zone as unsigned; "+
+						"--check-resolver tells the two apart",
+					who, checks)}
+			}
+			if len(old) > 0 {
+				finding.Text += fmt.Sprintf("; RFC 8624 retires %s, and some validators no longer check it", list(old))
+			}
+		case trace.TrustsUnproven:
+			finding = Finding{Topic: Resolver, Level: Warn, Text: fmt.Sprintf(
+				"%s says the answer is authentic (AD), where the walk found the chain %s: it trusts something the walk does not, "+
+					"such as a trust anchor of its own, another view of the zone or a copy cached from before a change; "+
+					"AD is only its claim, and anything between here and it can set it",
+				who, chain.DNSSEC.State)}
+		case trace.TrustsUnchecked:
+			what := "an algorithm or digest"
+			if chain.DNSSEC.Algorithm != "" {
+				what = chain.DNSSEC.Algorithm
+			}
+			finding = Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
+				"%s says the answer is authentic (AD), where this build of dnstree could not check the chain: it most likely checks %s, which this build cannot",
+				who, what)}
+		}
+		if answer.Match == trace.MatchDiffers {
+			finding.Text += "; its answer differs from the walk's too, so the two verdicts may be about different data"
 		}
 		findings = append(findings, finding)
 	}

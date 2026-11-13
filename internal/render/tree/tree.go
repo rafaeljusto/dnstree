@@ -129,6 +129,7 @@ func (r *renderer) render(tr *trace.Trace) {
 	}
 	r.writeLines(r.differences(tr))
 	r.writeLines(r.failures(tr))
+	r.writeLines(r.trusts(tr))
 	r.writeLines(r.repeats(tr))
 	r.writeLines(r.kept(tr))
 	r.writeLines(r.designations(tr))

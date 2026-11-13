@@ -30,7 +30,34 @@ func Compare(tr *trace.Trace) {
 	}
 	for _, answer := range tr.Resolvers {
 		compare(tr, result, answer)
+		if answer != nil {
+			answer.Trusts = trusts(tr, answer)
+		}
 	}
+}
+
+// trusts is how a resolver's AD bit stands against the chain of trust the walk
+// checked. Only an answer counts: a SERVFAIL is read for why it failed, and a
+// record made up under DNS64 was never signed by anyone. The chain is read the
+// way Chain reads it, across every alias, as AD covers the whole answer (RFC
+// 6840 5.8).
+func trusts(tr *trace.Trace, answer *trace.Resolver) trace.Trusting {
+	if answer.Err != "" || answer.Synthesised || (answer.Rcode != "NOERROR" && answer.Rcode != "NXDOMAIN") {
+		return ""
+	}
+	chain := tr.Chain()
+	if chain == nil {
+		return "" // the walk checked nothing to hold it against
+	}
+	switch state := chain.DNSSEC.State; {
+	case state == trace.Secure && !answer.Authentic:
+		return trace.TrustsMissing
+	case (state == trace.Insecure || state == trace.Bogus) && answer.Authentic:
+		return trace.TrustsUnproven
+	case state == trace.Indeterminate && answer.Authentic:
+		return trace.TrustsUnchecked
+	}
+	return ""
 }
 
 // compare is one resolver's answer held against the walk's. Each of them is

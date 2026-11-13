@@ -151,6 +151,10 @@ func TestSchemaEnums(t *testing.T) {
 				string(trace.FailedCached), string(trace.FailedUnreachable),
 			},
 		},
+		"how a resolver's AD bit stood against the walk's chain of trust": {
+			def: "resolver", property: "trusts",
+			want: []string{string(trace.TrustsMissing), string(trace.TrustsUnproven), string(trace.TrustsUnchecked)},
+		},
 		"the shapes --check-edns asks in": {
 			def: "edns", property: "kind",
 			want: []string{

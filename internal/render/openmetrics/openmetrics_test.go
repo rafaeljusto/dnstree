@@ -348,6 +348,32 @@ func TestRenderFailed(t *testing.T) {
 	}
 }
 
+// TestRenderTrusts covers how a resolver's AD bit disagrees with the walk, as
+// the state set a monitor alerts on, and nothing for one that agrees.
+func TestRenderTrusts(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A"},
+		Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+		Resolvers: []*trace.Resolver{{
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53")}, Rcode: "NOERROR", Trusts: trace.TrustsMissing,
+		}, {
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.54")}, Rcode: "NOERROR", Authentic: true,
+		}},
+	}
+	out := render(t, tr)
+	valid(t, out)
+	for _, reason := range []string{"missing", "unproven", "unchecked"} {
+		want := fmt.Sprintf(`dnstree_resolver_trusts{name="www.test.",type="A",resolver="192.0.2.53",reason=%q} %s`,
+			reason, map[bool]string{true: "1", false: "0"}[reason == "missing"])
+		if !strings.Contains(out, want) {
+			t.Errorf("got\n%s\nwant %s", out, want)
+		}
+	}
+	if strings.Contains(out, `dnstree_resolver_trusts{name="www.test.",type="A",resolver="192.0.2.54"`) {
+		t.Errorf("got\n%s\nwant nothing for the resolver that agreed", out)
+	}
+}
+
 // TestRenderEscapes covers names the servers wrote, which must not be able to
 // end a label value early or start a line of their own.
 func TestRenderEscapes(t *testing.T) {

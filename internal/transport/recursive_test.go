@@ -67,6 +67,35 @@ func TestAskSilent(t *testing.T) {
 	}
 }
 
+// TestAskAuthentic covers the AD bit of a resolver's answer, which is what
+// its verdict is held against the walk's by.
+func TestAskAuthentic(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name      string
+		authentic bool
+	}{
+		{name: "a resolver that marks its answer authentic", authentic: true},
+		{name: "a resolver that leaves the mark off", authentic: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := fakens.New(t, fakens.Config{Origin: "test.", Zone: recursiveZone,
+				Behaviour: fakens.Behaviour{Authentic: tt.authentic}})
+			answer, err := transport.Ask(t.Context(), transport.NewUDP(transport.Config{}), server.Addr,
+				trace.Question{Name: "www.test", Type: "A", Class: "IN"}, true, netip.Prefix{})
+			if err != nil {
+				t.Fatalf("Ask: %v", err)
+			}
+			if answer.Rcode != "NOERROR" || answer.Authentic != tt.authentic {
+				t.Errorf("got %s with authentic %t, want NOERROR with %t", answer.Rcode, answer.Authentic, tt.authentic)
+			}
+		})
+	}
+}
+
 // TestRecheck covers asking again with checking disabled, which is what tells
 // a resolver that failed validation from one that could not get an answer.
 func TestRecheck(t *testing.T) {

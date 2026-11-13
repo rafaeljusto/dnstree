@@ -315,6 +315,12 @@ func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 	default:
 		return nil, fmt.Errorf("%q is not what a resolver's failure can come of", from.Failed)
 	}
+	trusts := trace.Trusting(from.Trusts)
+	switch trusts {
+	case "", trace.TrustsMissing, trace.TrustsUnproven, trace.TrustsUnchecked:
+	default:
+		return nil, fmt.Errorf("%q is not how a resolver's AD bit can stand against the walk", from.Trusts)
+	}
 
 	records, err := readRecords(from.Records)
 	if err != nil {
@@ -328,6 +334,7 @@ func readResolver(from *resolver, top bool) (*trace.Resolver, error) {
 		Match:    match,
 		Kept:     kept,
 		Failed:   failed,
+		Trusts:   trusts,
 
 		Synthesised: from.Synthesised,
 		Authentic:   from.Authentic,

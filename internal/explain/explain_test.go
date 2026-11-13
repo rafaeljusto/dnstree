@@ -1045,6 +1045,65 @@ func TestFailures(t *testing.T) {
 	}
 }
 
+func TestTrusts(t *testing.T) {
+	// trusting is the walk with its answer at a chain in state, signed with
+	// algorithm, and the resolver's AD bit read as trusts.
+	trusting := func(trusts trace.Trusting, state trace.DNSSECState, algorithm string, validates trace.Observed) *trace.Trace {
+		tr := walk(answered(300))
+		tr.Result().DNSSEC = &trace.DNSSECStatus{State: state, Algorithm: algorithm, Digest: "SHA256"}
+		answer := &trace.Resolver{
+			Server: trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+			Rcode:  "NOERROR",
+			Match:  trace.MatchSame,
+			Trusts: trusts,
+		}
+		if validates != "" {
+			answer.Behaviour = &trace.Behaviour{Validates: validates}
+		}
+		tr.Resolvers = []*trace.Resolver{answer}
+		return tr
+	}
+
+	for _, tt := range []struct {
+		name string
+		tr   *trace.Trace
+		want string
+	}{{
+		name: "no AD from a resolver seen to validate",
+		tr:   trusting(trace.TrustsMissing, trace.Secure, "ED448", trace.ObservedYes),
+		want: "192.0.2.53 validates DNSSEC, but gives the answer the walk found secure without AD: it most likely cannot check ED448 and SHA256, " +
+			"so it treats the zone as unsigned and its users get no protection from the signatures",
+	}, {
+		name: "no AD from a resolver nobody checked",
+		tr:   trusting(trace.TrustsMissing, trace.Secure, "ED448", ""),
+		want: "it does not validate, or it cannot check ED448 and SHA256 and treats the zone as unsigned; --check-resolver tells the two apart",
+	}, {
+		name: "no AD on a zone signed with a retired algorithm",
+		tr:   trusting(trace.TrustsMissing, trace.Secure, "RSASHA1", trace.ObservedYes),
+		want: "; RFC 8624 retires RSASHA1, and some validators no longer check it",
+	}, {
+		name: "AD where the walk found the chain bogus",
+		tr:   trusting(trace.TrustsUnproven, trace.Bogus, "", ""),
+		want: "192.0.2.53 says the answer is authentic (AD), where the walk found the chain bogus: it trusts something the walk does not",
+	}, {
+		name: "AD where the walk could not check the chain",
+		tr:   trusting(trace.TrustsUnchecked, trace.Indeterminate, "ECC-GOST", ""),
+		want: "where this build of dnstree could not check the chain: it most likely checks ECC-GOST, which this build cannot",
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := said(tt.tr); !strings.Contains(got, tt.want) {
+				t.Errorf("got %q, want it to say %q", got, tt.want)
+			}
+		})
+	}
+
+	// What --check-resolver saw of a resolver that does not validate already
+	// says it, so the AD bit adds nothing.
+	if got := said(trusting(trace.TrustsMissing, trace.Secure, "RSASHA1", trace.ObservedNo)); strings.Contains(got, "without AD") {
+		t.Errorf("got %q, want nothing of the AD bit from a resolver seen not to validate", got)
+	}
+}
+
 // TestDesignations covers what --ddr learned of each resolver. An offer is
 // said as the claim it is, since nothing connected to check its certificate,
 // and a resolver that could not be asked is left to the line under the tree.

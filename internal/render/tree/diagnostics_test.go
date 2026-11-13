@@ -724,3 +724,66 @@ func TestRenderRegistration(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderTrusts(t *testing.T) {
+	// trusting is the walk with its answer at a chain in state, signed with
+	// ED448 under a SHA256 DS, and the resolver's AD bit read as trusts.
+	trusting := func(trusts trace.Trusting, state trace.DNSSECState, validates trace.Observed, match trace.Match) *trace.Trace {
+		tr := differing([]string{"192.0.2.10"}, []string{"192.0.2.10"}, "NOERROR")
+		tr.Resolvers[0].Match, tr.Resolvers[0].Trusts = match, trusts
+		if validates != "" {
+			tr.Resolvers[0].Behaviour = &trace.Behaviour{Validates: validates}
+		}
+		tr.Root.Children[0].DNSSEC = &trace.DNSSECStatus{State: state, Algorithm: "ED448", Digest: "SHA256"}
+		return tr
+	}
+
+	for _, tt := range []struct {
+		name string
+		tr   *trace.Trace
+		want string
+	}{{
+		name: "no AD on a secure answer, from a resolver nobody checked",
+		tr:   trusting(trace.TrustsMissing, trace.Secure, "", trace.MatchSame),
+		want: "trust: 192.168.1.1 gives the answer without AD, where the walk found it secure (ED448, SHA256): " +
+			"it does not validate, or cannot check an algorithm or digest the chain uses",
+	}, {
+		name: "no AD on a secure answer, from a resolver seen to validate",
+		tr:   trusting(trace.TrustsMissing, trace.Secure, trace.ObservedYes, trace.MatchSame),
+		want: "(ED448, SHA256): it validates, so it most likely cannot check one of these, and its users get no protection from the signatures",
+	}, {
+		// The line --check-resolver draws already says it does not validate.
+		name: "no AD on a secure answer, from a resolver seen not to validate",
+		tr:   trusting(trace.TrustsMissing, trace.Secure, trace.ObservedNo, trace.MatchSame),
+	}, {
+		name: "no AD on a secure answer that differs too",
+		tr:   trusting(trace.TrustsMissing, trace.Secure, "", trace.MatchDiffers),
+		want: "; its answer differs too, so the two may be about different data",
+	}, {
+		name: "AD on an answer the walk found insecure",
+		tr:   trusting(trace.TrustsUnproven, trace.Insecure, "", trace.MatchSame),
+		want: "trust: 192.168.1.1 says the answer is authentic (AD), where the walk found the chain insecure: " +
+			"it trusts something the walk does not, such as a trust anchor of its own, another view of the zone or a copy cached from before a change",
+	}, {
+		name: "AD on an answer the walk could not check",
+		tr:   trusting(trace.TrustsUnchecked, trace.Indeterminate, "", trace.MatchSame),
+		want: "trust: 192.168.1.1 says the answer is authentic (AD), where the walk could not check the chain (ED448): " +
+			"it checks something this build of dnstree cannot",
+	}, {
+		name: "the two agree",
+		tr:   trusting("", trace.Secure, "", trace.MatchSame),
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			out := draw(t, tt.tr)
+			if tt.want == "" {
+				if strings.Contains(out, "trust:") {
+					t.Errorf("got %q, want nothing said of the AD bit", out)
+				}
+				return
+			}
+			if !strings.Contains(out, tt.want) {
+				t.Errorf("got %q, want it to carry %q", out, tt.want)
+			}
+		})
+	}
+}

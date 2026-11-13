@@ -2,6 +2,7 @@ package trace_test
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -242,7 +243,7 @@ var readChecked = map[string]bool{
 	"DanglingKind": true, "EDNSFault": true, "EDNSKind": true, "EDNSState": true,
 	"Failure": true, "Grade": true, "Kept": true, "Match": true,
 	"Observed": true, "ProbeKind": true, "ProbeState": true, "RegistrationState": true,
-	"SPFResult": true, "SignalState": true, "StepKind": true,
+	"SPFResult": true, "SignalState": true, "StepKind": true, "Trusting": true,
 }
 
 // fill sets every string reachable from v to text, one element deep in
@@ -412,6 +413,33 @@ func TestChain(t *testing.T) {
 				t.Errorf("got %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+// TestAlgorithms covers what a validator has to be able to check to call the
+// answer secure: each algorithm and digest once, and only from zones that held
+// on the way to the answer.
+func TestAlgorithms(t *testing.T) {
+	secure := func(algorithm, digest string) *trace.DNSSECStatus {
+		return &trace.DNSSECStatus{State: trace.Secure, Algorithm: algorithm, Digest: digest}
+	}
+	tr := &trace.Trace{Root: &trace.Step{Zone: ".", Kind: trace.KindZone, DNSSEC: secure("RSASHA256", ""), Children: []*trace.Step{{
+		Zone: ".", Kind: trace.KindReferral, DNSSEC: secure("ECDSAP256SHA256", "SHA256"), Children: []*trace.Step{{
+			Zone: "com.", Kind: trace.KindReferral, DNSSEC: secure("ED448", "SHA256"), Children: []*trace.Step{
+				{Zone: "example.com.", Kind: trace.KindAnswer, DNSSEC: secure("ED448", "SHA384")},
+				{Zone: "example.com.", Kind: trace.KindAnswer, DNSSEC: &trace.DNSSECStatus{State: trace.Bogus, Algorithm: "RSASHA1"}},
+				{Zone: "other.", Kind: trace.KindAnswer, Aside: true, Apart: true, DNSSEC: secure("RSASHA512", "SHA1")},
+				{Zone: "ns.example.", Kind: trace.KindAnswer, Aside: true, DNSSEC: secure("ECDSAP384SHA384", "GOST94")},
+			},
+		}},
+	}}}}
+
+	algorithms, digests := tr.Algorithms()
+	if want := []string{"RSASHA256", "ECDSAP256SHA256", "ED448"}; !slices.Equal(algorithms, want) {
+		t.Errorf("got the algorithms %q, want %q", algorithms, want)
+	}
+	if want := []string{"SHA256", "SHA384"}; !slices.Equal(digests, want) {
+		t.Errorf("got the digests %q, want %q", digests, want)
 	}
 }
 

@@ -240,6 +240,12 @@ type resolver struct {
 	// Authentic is the AD bit of its answer: what it says it validated.
 	Authentic bool `json:"authentic,omitempty"`
 
+	// Trusts is how that AD bit stands against the walk's chain of trust:
+	// "missing" on an answer the walk found secure, "unproven" on one it found
+	// insecure or bogus, "unchecked" on one it could not check, or absent
+	// where the two agree.
+	Trusts string `json:"trusts,omitempty"`
+
 	Behaviour *behaviour `json:"behaviour,omitempty"`
 }
 
@@ -637,6 +643,7 @@ func convertResolver(from *trace.Resolver) *resolver {
 		Failed:      string(from.Failed),
 		DDR:         convertDiscovery(from.DDR),
 		Authentic:   from.Authentic,
+		Trusts:      string(from.Trusts),
 		Behaviour:   convertBehaviour(from.Behaviour),
 	}
 }

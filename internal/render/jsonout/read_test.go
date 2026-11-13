@@ -262,6 +262,17 @@ func TestReadRoundTrip(t *testing.T) {
 				Failed: trace.FailedValidation,
 			}},
 		},
+		"a resolver that left AD off an answer the walk found secure": {
+			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
+			Root:     &trace.Step{Zone: ".", Kind: trace.KindZone},
+			Resolvers: []*trace.Resolver{{
+				Server:  trace.Server{IP: netip.MustParseAddr("192.0.2.53"), Port: 53},
+				Rcode:   "NOERROR",
+				Records: []trace.RR{{Name: "example.", TTL: 300, Type: "A", Data: "192.0.2.10"}},
+				Match:   trace.MatchSame,
+				Trusts:  trace.TrustsMissing,
+			}},
+		},
 		"a walk that kept when each query went out": {
 			Question: trace.Question{Name: "example.", Type: "A", Class: "IN"},
 			Timed:    true,
@@ -600,6 +611,11 @@ func TestReadRefuses(t *testing.T) {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
 				"resolvers": [{"elapsed_ms": 1, "rcode": "SERVFAIL", "failed": "gremlins"}]}`,
 			want: `"gremlins"`,
+		},
+		"a resolver's AD bit standing against the walk in a way nothing here knows": {
+			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,
+				"resolvers": [{"elapsed_ms": 1, "rcode": "NOERROR", "trusts": "blindly"}]}`,
+			want: `"blindly"`,
 		},
 		"a resolver asked again whose second answer says nothing here knows": {
 			document: `{"schema_version": 5, "question": {"name": "x.", "type": "A", "class": "IN"}, "elapsed_ms": 1,

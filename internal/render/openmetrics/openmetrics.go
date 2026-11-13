@@ -459,7 +459,7 @@ func resolvers(m *metrics, tr *trace.Trace) {
 		m.sample("dnstree_answer_ttl_seconds", strconv.FormatUint(uint64(zone), 10))
 	}
 
-	var timed, compared, kept, failed []*trace.Resolver
+	var timed, compared, kept, failed, trusting []*trace.Resolver
 	for _, answer := range tr.Resolvers {
 		if answer == nil || !answer.Server.IP.IsValid() || answer.Err != "" {
 			continue
@@ -470,6 +470,9 @@ func resolvers(m *metrics, tr *trace.Trace) {
 		}
 		if answer.Failed != "" {
 			failed = append(failed, answer)
+		}
+		if answer.Trusts != "" {
+			trusting = append(trusting, answer)
 		}
 		if trace.TTL(answer.Records, tr.Question.Type) > 0 {
 			kept = append(kept, answer)
@@ -502,6 +505,15 @@ func resolvers(m *metrics, tr *trace.Trace) {
 				trace.FailedBogus, trace.FailedValidation, trace.FailedCached, trace.FailedUnreachable,
 			} {
 				m.sample("dnstree_resolver_failed", flag(value == answer.Failed),
+					label{"resolver", answer.Server.IP.String()}, label{"reason", string(value)})
+			}
+		}
+	}
+	if len(trusting) > 0 {
+		m.family("dnstree_resolver_trusts", "", "how a recursive server's AD bit disagrees with the chain of trust the walk checked")
+		for _, answer := range trusting {
+			for _, value := range []trace.Trusting{trace.TrustsMissing, trace.TrustsUnproven, trace.TrustsUnchecked} {
+				m.sample("dnstree_resolver_trusts", flag(value == answer.Trusts),
 					label{"resolver", answer.Server.IP.String()}, label{"reason", string(value)})
 			}
 		}
