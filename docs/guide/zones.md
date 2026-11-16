@@ -27,6 +27,7 @@ server says about its own answer.
 - [Whether it still answers with a server down](#whether-it-still-answers-with-a-server-down)
 - [Whether it will answer on new nameservers](#whether-it-will-answer-on-new-nameservers)
 - [Whether new nameservers serve what the old ones do](#whether-new-nameservers-serve-what-the-old-ones-do)
+- [Whether the servers serve what the zone file says](#whether-the-servers-serve-what-the-zone-file-says)
 - [Whether a DS will hold before the parent has it](#whether-a-ds-will-hold-before-the-parent-has-it)
 - [How much room an answer had](#how-much-room-an-answer-had)
 
@@ -1545,6 +1546,76 @@ servers did not answer, 3 where a chain of trust broke — and then 4 where
 `--expect same` finds a question served otherwise, so a script can wait until
 the copy is complete. It writes `tree` or `ascii`, refuses what only a tree
 would draw, and like `--try-ns` is not taken from the file of defaults.
+
+## Whether the servers serve what the zone file says
+
+A zone grows over the years, and a record made for a campaign, the trial of a
+service or an old load balancer stays after the service is gone. An alias left
+pointing at a name nobody holds is how a name is taken over: whoever creates
+the missing name answers for yours. dnstree finds one only for the names it is
+asked about, and the ones nobody remembers are the ones not asked about.
+
+`--zone-file FILE` reads the file a DNS server loads, in the format of
+[RFC 1035, section 5](https://www.rfc-editor.org/rfc/rfc1035#section-5), and
+walks every name and type it holds from the root servers down. As with
+[`--compare-ns`](#whether-new-nameservers-serve-what-the-old-ones-do), it
+prints a line to each question instead of a tree. Name the zone after it where
+the file has relative names and no `$ORIGIN`, as files that `named.conf` gives
+the origin to do:
+
+```
+$ dnstree --zone-file db.example.com example.com
+example.com. from db.example.com, against its servers: 4 names, 8 questions; not asked: 1 wildcard
+  example.com. SOA         same
+  example.com. NS          same
+  example.com. A           same
+  example.com. MX          ttl 3600 in the file, 300 at the servers
+  example.com. TXT         only at the servers: TXT "_k2n1y4vw3qtb4skdx9e7dxt97qrmmq9"
+  www.example.com. A       only in the file: A 23.215.0.136; only at the servers: A 104.20.23.154, A 172.66.147.243
+  _dmarc.example.com. TXT  same
+  promo.example.com. A     nxdomain at the servers
+4 the same, 4 differ · serials are not compared
+```
+
+Here the file is behind what the servers serve: an old address for `www`, a
+TXT record added at the servers alone, an MX TTL changed on one side, and an
+alias the servers no longer have.
+
+A question is `same` where the servers gave the records the file holds, with
+the same TTLs. Otherwise the line says what only the file holds, what only the
+servers serve, a TTL that differs, or that the servers know no such name
+(`nxdomain`) or no such type (`nodata`). Where the walk finds the name left
+pointing at something nobody holds, the line says `dangling` and what is
+missing, as the tree would; `--explain` on a walk of that name says who could
+claim it.
+
+What is asked, and what is not:
+
+- An alias is asked as A, so the walk follows it to its target, and the CNAME
+  is compared as the alias the zone serves.
+- A cut further down is asked as its NS set, and its DS where the file holds
+  one. The glue below it, and records out of the zone, belong to other zones.
+- Signatures and denials are left out: they are the signer's, and change with
+  every signing.
+- A wildcard cannot be asked as it is written, a name with an escape would
+  reach the wire as text, and a type this build has no name for, such as the
+  private records a signer keeps its state in, cannot be asked at all; each is
+  counted on the first line and not asked.
+- The serial of a SOA is not compared, since a signer moves it. The rest of the
+  SOA is.
+- `$INCLUDE` is refused, so the run reads only the file it was given.
+
+The questions are walked one after another, each with its own budget, so a zone
+of a few thousand names takes a while, and its servers get every question. A
+file that holds names only an internal network serves will show them all as
+`nxdomain`, since the walk asks the servers the public DNS delegates to.
+
+The run exits with the worst walk of every question, and then 4 where
+`--expect same` finds a question served otherwise, so CI can hold a zone file to
+what is live. It takes [`--try-ns`](#whether-it-will-answer-on-new-nameservers),
+to hold the file against servers the zone is moving to, writes `tree` or
+`ascii`, refuses what only a tree would draw, and is not taken from the file of
+defaults.
 
 ## Whether a DS will hold before the parent has it
 

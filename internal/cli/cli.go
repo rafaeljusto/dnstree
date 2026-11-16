@@ -41,6 +41,7 @@ one after another, each from the root servers down.
 
   -x ADDR                 resolve the PTR of this address, instead of a name
   --names FILE            walk every NAME [TYPE...] line of FILE, or of - for stdin
+  --zone-file FILE        ask every name a zone file holds; compare with the file
   -4, -6                  ask only IPv4 or only IPv6 servers
   --udp, --tcp            carry the queries over plain DNS (--udp is the default)
   --dot, --doh            carry them encrypted, over TLS or HTTPS
@@ -377,7 +378,8 @@ renewal nobody paid is caught; registered alone asks only the first two.
 check:ok asks that --check found nothing broken, and check:clean that it found
 nothing to look at either, which is how a zone is held to its health in CI.
 same asks that --compare-ns found every question served alike, which is how a
-script waits for a copy of a zone to be complete.
+script waits for a copy of a zone to be complete, or that --zone-file found the
+servers serving what the file holds.
 Or else it takes the rdata of a record that has to be among the answers, such as an
 address. Repeat it for every one that has to hold.
 Those words win where a value could be read either way, so a record whose rdata
@@ -608,6 +610,23 @@ many providers refuse a zone until it is delegated to them. It takes --try-ds,
 writes tree or ascii, and refuses what only a tree would draw; the file of
 defaults cannot set it.
 
+--zone-file reads a zone file, in the format a DNS server loads (RFC 1035,
+section 5), and walks every name and type it holds from the root servers down.
+It prints a line to each question instead of a tree: same, what only the file
+holds, what only the servers serve, a TTL that differs, or a name the servers
+do not know. A name the walk finds left pointing at something nobody holds is
+said on its line too, which is how a record forgotten for years is found before
+somebody else claims what it points at. NAME is the zone, needed only where the
+file has relative names and no $ORIGIN. An alias is asked as A, so the walk
+follows it. Signatures, denials, glue below a cut and records out of the zone
+are not asked, nor are wildcards, names with an escape and types this build
+has no name for, which the first line counts. The serial of a SOA is not compared, since a signer changes it, and
+$INCLUDE is refused, so the run reads only the file it was given. The questions
+are walked one after another, each with its own budget, so a large zone takes a
+while. It exits as --compare-ns does, with --expect same failing on a question
+served otherwise; it takes --try-ns, writes tree or ascii, and the file of
+defaults cannot set it.
+
 --nsid asks every server for the name it goes by (RFC 5001), and draws it
 beside the address. One anycast address is a great many machines in a great many
 places, and the identifier is the only thing in a reply that says which of them
@@ -806,6 +825,11 @@ type Config struct {
 	// and prints how the answers differ instead of either walk.
 	CompareNS bool
 
+	// ZoneFile is the file --zone-file asks every name of, and Origin the zone
+	// its relative names start at where the command line named one. Like
+	// CompareNS, it prints how the answers differ instead of the walks.
+	ZoneFile, Origin string
+
 	// WebAddr is where --format web and web-3d serve the page, and Browser whether one is
 	// opened at it. A walk names the servers it asked and the addresses they
 	// answered from, so the page stays on this machine unless it is moved.
@@ -947,6 +971,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		subnet        string
 		reverse       string
 		names         string
+		zoneFile      string
 		timeout       time.Duration
 		port          uint
 		roots         rootList
@@ -959,6 +984,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	)
 	flags.StringVar(&reverse, "x", "", "resolve the PTR of this address")
 	flags.StringVar(&names, "names", "", "walk every question in this file")
+	flags.StringVar(&zoneFile, "zone-file", "", "ask every name this zone file holds, and compare")
 	flags.BoolVar(&four, "4", false, "ask only IPv4 servers")
 	flags.BoolVar(&six, "6", false, "ask only IPv6 servers")
 	flags.BoolVar(&udp, "udp", false, "carry the queries over UDP")
@@ -1091,9 +1117,22 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	}
 
 	switch n := flags.NArg(); {
-	case cfg.From != "" && (n > 0 || reverse != "" || names != ""):
+	case cfg.From != "" && (n > 0 || reverse != "" || names != "" || zoneFile != ""):
 		return nil, fmt.Errorf("%w: --from draws a walk already made, so there is no name to resolve", ErrUsage)
 	case cfg.From != "":
+	case zoneFile != "" && (names != "" || reverse != ""):
+		return nil, fmt.Errorf("%w: --zone-file says what to resolve, so --names and -x cannot as well", ErrUsage)
+	case zoneFile != "" && n > 1:
+		return nil, fmt.Errorf("%w: --zone-file takes one name, the zone's, and no types", ErrUsage)
+	case zoneFile != "":
+		cfg.ZoneFile = zoneFile
+		if n == 1 {
+			origin, err := idn.ASCII(flags.Arg(0))
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrUsage, err)
+			}
+			cfg.Origin = origin
+		}
 	case names != "" && (n > 0 || reverse != ""):
 		return nil, fmt.Errorf("%w: --names says what to resolve, so a name cannot be given as well", ErrUsage)
 	case names != "":
@@ -1119,13 +1158,23 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			cfg.More = questions[1:]
 		}
 	}
-	if comparing {
+	switch {
+	case comparing && cfg.ZoneFile != "":
+		return nil, fmt.Errorf("%w: --compare-ns and --zone-file each print a line to each question; run them apart", ErrUsage)
+	case comparing:
+		if slices.Contains(typed, "try-ns") {
+			return nil, fmt.Errorf("%w: --compare-ns and --try-ns both name the new servers; --compare-ns walks with and without them", ErrUsage)
+		}
 		cfg.CompareNS = true
-		if err := compareOnly(&cfg, typed, fromFile, wanted.want); err != nil {
+		if err := linesOnly(&cfg, "--compare-ns", "two walks of each question against each other", typed, fromFile, wanted.want); err != nil {
 			return nil, err
 		}
-	} else if slices.ContainsFunc(wanted.want, expect.Expectation.Same) {
-		return nil, fmt.Errorf("%w: --expect same holds the servers --compare-ns names against a zone's own", ErrUsage)
+	case cfg.ZoneFile != "":
+		if err := linesOnly(&cfg, "--zone-file", "the zone's servers against the file", typed, fromFile, wanted.want); err != nil {
+			return nil, err
+		}
+	case slices.ContainsFunc(wanted.want, expect.Expectation.Same):
+		return nil, fmt.Errorf("%w: --expect same holds the servers --compare-ns names against a zone's own, or a zone's servers against --zone-file", ErrUsage)
 	}
 	expecting := slices.ContainsFunc(wanted.want, func(e expect.Expectation) bool { return !e.Same() })
 	if err := several(&cfg, expecting); err != nil {
@@ -1368,7 +1417,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	if cfg.TLSCA != "" && cfg.TLSInsecure {
 		return nil, fmt.Errorf("%w: --tls-insecure verifies nothing, so --tls-ca has nothing to verify against", ErrUsage)
 	}
-	if cfg.CompareNS {
+	if cfg.CompareNS || cfg.ZoneFile != "" {
 		// Nothing is drawn but the answers, so nothing is asked that only a
 		// tree would show.
 		cfg.ASN, cfg.Compare = false, false
@@ -1377,7 +1426,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	return &cfg, nil
 }
 
-// drawnOnly are the flags that add to a tree, which --compare-ns does not draw,
+// drawnOnly are the flags that add to a tree, which --compare-ns and
+// --zone-file do not draw,
 // with what turns each off.
 func drawnOnly(cfg *Config) map[string]func() {
 	off := func(b *bool) func() { return func() { *b = false } }
@@ -1396,21 +1446,19 @@ func drawnOnly(cfg *Config) map[string]func() {
 	}
 }
 
-// compareOnly checks --compare-ns against the rest of the run. It walks each
-// question twice and prints a line for it, so whatever only a tree would draw
-// is refused where it was typed, and left off where the file of defaults set it.
-func compareOnly(cfg *Config, typed []string, fromFile map[string]bool, wanted []expect.Expectation) error {
-	if slices.Contains(typed, "try-ns") {
-		return fmt.Errorf("%w: --compare-ns and --try-ns both name the new servers; --compare-ns walks with and without them", ErrUsage)
-	}
+// linesOnly checks a run that prints a line to each question in place of its
+// walk, as --compare-ns and --zone-file do, against the rest of the run: what
+// only a tree would draw is refused where it was typed, and left off where the
+// file of defaults set it. Holds is what the lines hold against what.
+func linesOnly(cfg *Config, flag, holds string, typed []string, fromFile map[string]bool, wanted []expect.Expectation) error {
 	if cfg.Format != "tree" && cfg.Format != "ascii" {
 		if !fromFile["format"] {
-			return fmt.Errorf("%w: --compare-ns prints a line to each question, which only tree and ascii write", ErrUsage)
+			return fmt.Errorf("%w: %s prints a line to each question, which only tree and ascii write", ErrUsage, flag)
 		}
 		cfg.Format = "tree"
 	}
 	if slices.ContainsFunc(wanted, func(e expect.Expectation) bool { return !e.Same() }) {
-		return fmt.Errorf("%w: --compare-ns holds two walks of each question against each other, and --expect same is all it can be held to", ErrUsage)
+		return fmt.Errorf("%w: %s holds %s, and --expect same is all it can be held to", ErrUsage, flag, holds)
 	}
 	for _, refused := range []struct {
 		set  bool
@@ -1420,14 +1468,14 @@ func compareOnly(cfg *Config, typed []string, fromFile map[string]bool, wanted [
 		{cfg.Watch != 0, "--watch"}, {cfg.Pcap != "", "--pcap"}, {cfg.Replay != "", "--replay"},
 	} {
 		if refused.set && !fromFile[strings.TrimPrefix(refused.flag, "--")] {
-			return fmt.Errorf("%w: --compare-ns compares two walks it makes now, and draws neither, so it takes no %s", ErrUsage, refused.flag)
+			return fmt.Errorf("%w: %s compares walks it makes now, and draws none, so it takes no %s", ErrUsage, flag, refused.flag)
 		}
 	}
 	cfg.Diff, cfg.Watch = false, 0
 	drawn := drawnOnly(cfg)
 	for _, name := range typed {
 		if _, ok := drawn[name]; ok {
-			return fmt.Errorf("%w: --compare-ns draws no tree, so it takes no --%s", ErrUsage, name)
+			return fmt.Errorf("%w: %s draws no tree, so it takes no --%s", ErrUsage, flag, name)
 		}
 	}
 	for _, off := range drawn {
@@ -1527,11 +1575,11 @@ func (c *Config) Questions() []Question {
 	return append([]Question{{Name: c.Name, Type: c.Type}}, c.More...)
 }
 
-// Several reports whether the run may ask more than one question. --names
-// counts however many lines the file turns out to hold, so that what a run
-// accepts, and the shape of what it writes, do not hang on what is in it.
+// Several reports whether the run may ask more than one question. --names and
+// --zone-file count however many questions the file turns out to hold, so that
+// what a run accepts, and the shape of what it writes, do not hang on it.
 func (c *Config) Several() bool {
-	return len(c.More) > 0 || c.Names != ""
+	return len(c.More) > 0 || c.Names != "" || c.ZoneFile != ""
 }
 
 // several refuses what cannot be said of more than one walk.

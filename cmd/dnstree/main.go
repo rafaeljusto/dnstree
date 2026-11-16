@@ -179,6 +179,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return one(ctx, cfg, log, lookups, registry, nil, nil, reference, nil, stdout, stderr)
 	}
 
+	if cfg.ZoneFile != "" {
+		return filed(ctx, cfg, log, stdout, stderr)
+	}
 	questions, err := asked(cfg)
 	if err != nil {
 		fmt.Fprintln(stderr, cli.Message(err))
@@ -345,6 +348,65 @@ func compared(ctx context.Context, cfg *cli.Config, log *slog.Logger, questions 
 		return exitExpect
 	}
 	return worst
+}
+
+// filed is a run of --zone-file: every question the file holds walked as the
+// DNS is, with a line to each saying how the zone's servers differ from the
+// file. It exits with the worst walk, then with an unmet --expect same.
+func filed(ctx context.Context, cfg *cli.Config, log *slog.Logger, stdout, stderr io.Writer) int {
+	file, err := zoneFile(cfg.ZoneFile, cfg.Origin)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	for _, question := range file.Questions {
+		if err := resolver.Askable(question.Name, question.Type); err != nil {
+			fmt.Fprintf(stderr, "--zone-file %s: %v\n", cfg.ZoneFile, err)
+			return exitUsage
+		}
+	}
+
+	worst := exitAnswer
+	var questions []tree.FiledQuestion
+	for _, question := range file.Questions {
+		if ctx.Err() != nil {
+			break
+		}
+		walk := *cfg
+		walk.Name, walk.Type = question.Name, question.Type
+		tr, err := resolve(ctx, &walk, log, nil, nil, nil, nil)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		worst = worse(worst, verdict(tr))
+		match := served.AgainstFile(served.Filed(question.Records), tr, file.Zone)
+		questions = append(questions, tree.FiledQuestion{Match: match, Walk: tr})
+	}
+	filing := tree.Filing{Path: cfg.ZoneFile, Zone: file.Zone, Names: file.Names, Wildcards: file.Wildcards, Escaped: file.Escaped, Unaskable: file.Unaskable}
+	tree.Filed(stdout, filing, questions, treeOptions(cfg))
+
+	differ := 0
+	for _, question := range questions {
+		if !question.Match.Same() {
+			differ++
+		}
+	}
+	if worst == exitAnswer && differ > 0 && slices.ContainsFunc(cfg.Expect, expect.Expectation.Same) {
+		fmt.Fprintf(stderr, "expected same, got %d of %d questions served otherwise than the file says\n", differ, len(questions))
+		return exitExpect
+	}
+	return worst
+}
+
+// zoneFile reads the file --zone-file names.
+func zoneFile(path, origin string) (*resolver.ZoneFile, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, unopened("--zone-file", err)
+	}
+	defer file.Close()
+	return resolver.ReadZoneFile(file, origin, path)
 }
 
 // worse is the exit code that says more of two walks: a broken chain of trust,

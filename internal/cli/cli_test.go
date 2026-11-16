@@ -244,6 +244,14 @@ func TestParse(t *testing.T) {
 				Try: &trace.Trial{Zone: "example.com.", NS: []string{"ns1.new.net."}, Addrs: map[string][]netip.Addr{},
 					DS: []trace.TrialDS{{Tag: 12345, Algorithm: 13, DigestType: 2, Digest: strings.Repeat("AB", 32)}}}},
 		},
+		"a zone file asked of its servers, held to the same": {
+			args: []string{"--zone-file", "db.example", "--expect", "same", "--format", "ascii"},
+			want: cli.Config{Format: "ascii", ZoneFile: "db.example", Expect: expectations(t, "same")},
+		},
+		"a zone file whose zone is named in another script": {
+			args: []string{"--zone-file", "db.example", "bücher.example"},
+			want: cli.Config{ZoneFile: "db.example", Origin: "xn--bcher-kva.example"},
+		},
 		"a walk saved as a packet capture": {
 			args: []string{"--pcap", "walk.pcap", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Pcap: "walk.pcap"},
@@ -355,10 +363,10 @@ func TestParse(t *testing.T) {
 				want.Format = "tree"
 			}
 			given := strings.Join(test.args, " ")
-			if !strings.Contains(given, "--no-asn") && !strings.Contains(given, "--replay") && !want.CompareNS {
+			if !strings.Contains(given, "--no-asn") && !strings.Contains(given, "--replay") && !want.CompareNS && want.ZoneFile == "" {
 				want.ASN = true
 			}
-			if !strings.Contains(given, "--no-compare") && !strings.Contains(given, "--replay") && !want.CompareNS {
+			if !strings.Contains(given, "--no-compare") && !strings.Contains(given, "--replay") && !want.CompareNS && want.ZoneFile == "" {
 				want.Compare = true
 			}
 			if !strings.Contains(given, "--no-browser") {
@@ -489,6 +497,15 @@ func TestParseRejects(t *testing.T) {
 		"a comparison watched":                            {"--compare-ns", "example.com=ns1.new.net", "--watch", "30s", "example.com"},
 		"a comparison of a walk already made":             {"--compare-ns", "example.com=ns1.new.net", "--from", "walk.json"},
 		"a walk held to the same with nothing to compare": {"--expect", "same", "example.com"},
+		"a zone file with a type to ask":                  {"--zone-file", "db.example", "example.com", "MX"},
+		"a zone file beside a list of names":              {"--zone-file", "db.example", "--names", "names.txt"},
+		"a zone file beside an address":                   {"--zone-file", "db.example", "-x", "192.0.2.1"},
+		"a zone file compared at new nameservers":         {"--zone-file", "db.example", "--compare-ns", "example.com=ns1.new.net"},
+		"a zone file drawn as json":                       {"--zone-file", "db.example", "--format", "json"},
+		"a zone file with a tree's checks":                {"--zone-file", "db.example", "--dnssec", "--mail"},
+		"a zone file held to an answer":                   {"--zone-file", "db.example", "--expect", "192.0.2.1"},
+		"a zone file watched":                             {"--zone-file", "db.example", "--watch", "30s"},
+		"a zone file beside a walk already made":          {"--zone-file", "db.example", "--from", "walk.json"},
 		"a trial of two zones at once":                    {"--try-ns", "example.com=ns1.new.net", "--try-ns", "example.org=ns1.new.net", "example.com"},
 		"a trial of the root":                             {"--try-ns", ".=ns1.new.net", "example.com"},
 		"a trial remembered as the DNS as it is":          {"--try-ns", "example.com=ns1.new.net", "--diff", "example.com"},

@@ -548,6 +548,7 @@ func TestParseDefaultsRejects(t *testing.T) {
 		"a file that reports to third parties":     {file: "dnssec\nreport\n"},
 		"a file that moves a zone":                 {file: "try-ns = example.com=ns1.new.net\n"},
 		"a file that compares a zone every run":    {file: "compare-ns = example.com=ns1.new.net\n"},
+		"a file that walks a zone file every run":  {file: "zone-file = db.example\n"},
 		"a file that writes a capture every run":   {file: "pcap = walk.pcap\n"},
 		"a file that replays a capture every run":  {file: "replay = walk.pcap\n"},
 	}

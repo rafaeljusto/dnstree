@@ -115,17 +115,71 @@ func Hold(current, tried *trace.Trace) Match {
 		match.Zone, match.Servers = shown.Trial.Zone, shown.Trial.NS
 	}
 	match.Current, match.Tried = Of(current, match.Zone), Of(tried, match.Zone)
+	match.compare()
+	return match
+}
 
-	match.Missing = without(match.Current.Records, match.Tried.Records)
-	match.Extra = without(match.Tried.Records, match.Current.Records)
-	for _, set := range slices.Sorted(maps.Keys(match.Current.TTLs)) {
-		was := match.Current.TTLs[set]
-		is, ok := match.Tried.TTLs[set]
-		if ok && was != is && !changed(set, match.Missing, match.Extra) {
-			match.TTLs = append(match.TTLs, TTL{Set: set, Current: was, Tried: is})
+// Filed is what a zone file says the answer to a question is, read from the
+// records it holds for it.
+func Filed(records []trace.RR) Answer {
+	answer := Answer{Kind: string(trace.KindAnswer), TTLs: map[string]uint32{}}
+	for _, record := range records {
+		answer.add(trace.Shown(record.Name), trace.Shown(record.Type), trace.Shown(record.Data), record.TTL)
+	}
+	answer.sort()
+	return answer
+}
+
+// AgainstFile compares what a zone file says of a question, as Current, with
+// what the zone's servers said to it in the walk, as Tried. A serial is left
+// out of both: a signer that bumps it serves the same zone, and the rest of
+// the SOA still has to match.
+func AgainstFile(file Answer, walked *trace.Trace, zone string) Match {
+	match := Match{Question: walked.Shown().Question, Zone: zone, Current: file, Tried: Of(walked, zone)}
+	switch trace.StepKind(match.Tried.Kind) {
+	case trace.KindAnswer, trace.KindCNAME, trace.KindReferral:
+		// An alias or a cut is how a file's records are served, not a
+		// difference from them.
+		match.Current.Kind = match.Tried.Kind
+	}
+	match.Current, match.Tried = match.Current.unserial(), match.Tried.unserial()
+	match.compare()
+	return match
+}
+
+// unserial is the answer with the serial of each SOA record put as "-". The
+// serial is the fifth field from the end, whatever the names before it hold.
+func (a Answer) unserial() Answer {
+	var records []string
+	for _, record := range a.Records {
+		for set := range a.TTLs {
+			if strings.HasSuffix(set, " SOA") && strings.HasPrefix(record, set+" ") {
+				fields := strings.Split(record, " ")
+				if len(fields) >= 5 {
+					fields[len(fields)-5] = "-"
+					record = strings.Join(fields, " ")
+				}
+				break
+			}
+		}
+		records = append(records, record)
+	}
+	a.Records = records
+	a.sort()
+	return a
+}
+
+// compare fills what tells the two sides apart.
+func (m *Match) compare() {
+	m.Missing = without(m.Current.Records, m.Tried.Records)
+	m.Extra = without(m.Tried.Records, m.Current.Records)
+	for _, set := range slices.Sorted(maps.Keys(m.Current.TTLs)) {
+		was := m.Current.TTLs[set]
+		is, ok := m.Tried.TTLs[set]
+		if ok && was != is && !changed(set, m.Missing, m.Extra) {
+			m.TTLs = append(m.TTLs, TTL{Set: set, Current: was, Tried: is})
 		}
 	}
-	return match
 }
 
 // Same reports whether both sides answered alike, TTLs included: a TTL left

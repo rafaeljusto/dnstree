@@ -98,9 +98,10 @@ $ echo $?
 ```
 
 `same` asks that [`--compare-ns`](zones.md#whether-new-nameservers-serve-what-the-old-ones-do)
-found every question served alike by the zone's servers and the new ones, and
-is the one expectation a list of questions takes, since it is about all of
-them.
+found every question served alike by the zone's servers and the new ones, or
+that [`--zone-file`](zones.md#whether-the-servers-serve-what-the-zone-file-says)
+found the servers serving what the file holds. It is the one expectation a list
+of questions takes, since it is about all of them.
 
 Addresses are compared as addresses and names the way DNS compares names, so
 `2001:0db8::1` finds a record written `2001:db8::1`, the case of a name does not

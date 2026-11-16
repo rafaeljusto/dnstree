@@ -131,3 +131,73 @@ func TestOfEscapes(t *testing.T) {
 		t.Errorf("got %q, want %q", got.Records, want)
 	}
 }
+
+func TestAgainstFile(t *testing.T) {
+	soa := func(serial string, refresh string) trace.RR {
+		return trace.RR{Name: "www.example.com.", Type: "SOA", TTL: 3600,
+			Data: "ns1.example.com. hostmaster.example.com. " + serial + " " + refresh + " 3600 1209600 300"}
+	}
+	alias := trace.RR{Name: "www.example.com.", Type: "CNAME", TTL: 300, Data: "cdn.example.net."}
+
+	tests := map[string]struct {
+		file   []trace.RR
+		walked *trace.Trace
+		want   served.Match
+		same   bool
+	}{
+		"the servers serve what the file holds": {
+			file:   []trace.RR{a("192.0.2.1", 300), a("192.0.2.2", 300)},
+			walked: walk(false, answered(a("192.0.2.2", 300), a("192.0.2.1", 300))),
+			same:   true,
+		},
+		"an address changed at the servers and not in the file": {
+			file:   []trace.RR{a("192.0.2.25", 300)},
+			walked: walk(false, answered(a("192.0.2.26", 300))),
+			want: served.Match{
+				Missing: []string{"www.example.com. A 192.0.2.25"},
+				Extra:   []string{"www.example.com. A 192.0.2.26"},
+			},
+		},
+		"a TTL the servers lowered": {
+			file:   []trace.RR{a("192.0.2.1", 3600)},
+			walked: walk(false, answered(a("192.0.2.1", 300))),
+			want:   served.Match{TTLs: []served.TTL{{Set: "www.example.com. A", Current: 3600, Tried: 300}}},
+		},
+		"an alias the walk followed is the alias the file holds": {
+			file:   []trace.RR{alias},
+			walked: walk(false, &trace.Step{Kind: trace.KindCNAME, Records: []trace.RR{alias}}),
+			same:   true,
+		},
+		"a name the servers do not know": {
+			file:   []trace.RR{a("192.0.2.1", 300)},
+			walked: walk(false, &trace.Step{Kind: trace.KindNXDomain}),
+			want:   served.Match{Missing: []string{"www.example.com. A 192.0.2.1"}},
+		},
+		"a serial a signer bumped": {
+			file:   []trace.RR{soa("1", "7200")},
+			walked: walk(false, answered(soa("2026111601", "7200"))),
+			same:   true,
+		},
+		"a SOA changed beyond its serial": {
+			file:   []trace.RR{soa("1", "7200")},
+			walked: walk(false, answered(soa("2", "3600"))),
+			want: served.Match{
+				Missing: []string{"www.example.com. SOA ns1.example.com. hostmaster.example.com. - 7200 3600 1209600 300"},
+				Extra:   []string{"www.example.com. SOA ns1.example.com. hostmaster.example.com. - 3600 3600 1209600 300"},
+			},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := served.AgainstFile(served.Filed(test.file), test.walked, "example.com.")
+			if got.Same() != test.same {
+				t.Errorf("got same %t, want %t: %+v", got.Same(), test.same, got)
+			}
+			if !reflect.DeepEqual(got.Missing, test.want.Missing) || !reflect.DeepEqual(got.Extra, test.want.Extra) ||
+				!reflect.DeepEqual(got.TTLs, test.want.TTLs) {
+				t.Errorf("got missing %q, extra %q, ttls %v; want %q, %q, %v",
+					got.Missing, got.Extra, got.TTLs, test.want.Missing, test.want.Extra, test.want.TTLs)
+			}
+		})
+	}
+}
