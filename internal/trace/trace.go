@@ -1248,6 +1248,40 @@ type Key struct {
 	Signs   bool
 }
 
+// SharedTag is a key tag that more than one key of a set carries with the same
+// algorithm. A signature names its key by tag and algorithm alone, so a
+// validator has to try it with each of them (CVE-2023-50387, KeyTrap).
+type SharedTag struct {
+	Tag       uint16
+	Algorithm string
+	Keys      int
+}
+
+// SharedTags are the tags of the zone's keys that more than one key carries
+// with the same algorithm, in the order the keys came.
+func (s *DNSSECStatus) SharedTags() []SharedTag {
+	if s == nil {
+		return nil
+	}
+	type tagged struct {
+		tag       uint16
+		algorithm string
+	}
+	count := make(map[tagged]int, len(s.Keys))
+	for _, key := range s.Keys {
+		count[tagged{key.Tag, key.Algorithm}]++
+	}
+	var shared []SharedTag
+	for _, key := range s.Keys {
+		k := tagged{key.Tag, key.Algorithm}
+		if n := count[k]; n > 1 {
+			shared = append(shared, SharedTag{Tag: key.Tag, Algorithm: key.Algorithm, Keys: n})
+			delete(count, k)
+		}
+	}
+	return shared
+}
+
 // DS is one DS record a parent publishes for a zone.
 type DS struct {
 	Tag       uint16

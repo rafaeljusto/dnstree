@@ -60,6 +60,8 @@ func (r *renderer) dependencies(d *trace.Dependencies) []string {
 		start = end
 	}
 
+	lines = append(lines, r.work(mark, d.Work)...)
+
 	for _, ns := range d.Unresolved {
 		lines = append(lines, r.paint.paint(mark+"  "+ns.Name+", a nameserver of "+ns.For+": "+ns.Err, yellow))
 	}
@@ -67,6 +69,50 @@ func (r *renderer) dependencies(d *trace.Dependencies) []string {
 		lines = append(lines, r.paint.paint(mark+"stopped: "+d.Stopped, yellow))
 	}
 	return lines
+}
+
+// work says what a resolver with an empty cache must do to reach each zone on
+// the walk's way whose delegation, or one above it, came without glue, or the
+// last zone where every one came with it.
+func (r *renderer) work(mark string, work []trace.ZoneWork) []string {
+	var lines []string
+	for _, w := range work {
+		if w.Glueless == 0 {
+			continue
+		}
+		lines = append(lines,
+			r.paint.dim(fmt.Sprintf("%sa resolver with an empty cache makes at least %s before it can ask %s anything", mark, queries(w.Queries), w.Zone)),
+			r.paint.dim(fmt.Sprintf("%s  %d of them look up nameserver addresses no glue gave, %s, %s", mark, w.Glueless, through(w.Via), deep(w.Depth))))
+	}
+	if lines == nil && len(work) > 0 {
+		w := work[len(work)-1]
+		lines = append(lines, r.paint.dim(fmt.Sprintf("%sa resolver with an empty cache makes at least %s before it can ask %s anything, every delegation on the way with glue", mark, queries(w.Queries), w.Zone)))
+	}
+	return lines
+}
+
+func queries(n int) string {
+	if n == 1 {
+		return "1 query"
+	}
+	return fmt.Sprintf("%d queries", n)
+}
+
+// through names the nameserver the fewest queries reach a zone by, where its
+// own delegation came without glue.
+func through(via string) string {
+	if via == "" {
+		return "for a zone above it"
+	}
+	return "the fewest by " + via
+}
+
+// deep says how many delegations without glue are stacked on the way.
+func deep(depth int) string {
+	if depth == 1 {
+		return "1 delegation without glue deep"
+	}
+	return fmt.Sprintf("%d delegations without glue deep", depth)
 }
 
 // unsigned is what a zone's delegation is worth saying about, empty for one

@@ -462,7 +462,7 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">hidden</span>
           <h3>A zone nobody chose to depend on</h3>
-          <p><code>--deps</code> follows every nameserver of every zone on the way, and every nameserver of theirs, and lists each zone the name depends on with the nameserver that brought it in. Whoever controls any of them can make the name resolve somewhere else.</p>
+          <p><code>--deps</code> follows every nameserver of every zone on the way, and every nameserver of theirs, and lists each zone the name depends on with the nameserver that brought it in. Whoever controls any of them can make the name resolve somewhere else. It also counts the queries a resolver with an empty cache makes to reach each zone, where a delegation without glue makes it look up a nameserver first.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">expiring</span>

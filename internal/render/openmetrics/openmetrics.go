@@ -304,6 +304,7 @@ func (e *Exposition) Add(tr *trace.Trace) {
 	}
 
 	zone(m, tr)
+	work(m, tr)
 	probes(m, tr)
 	repeats(m, tr)
 	ednsTests(m, tr)
@@ -351,6 +352,42 @@ func zone(m *metrics, tr *trace.Trace) {
 	if agree, known := tr.DelegationOf(ended).NSAgree(); known {
 		m.family("dnstree_delegation_agrees", "", "1 where the parent and the zone name the same nameservers")
 		m.sample("dnstree_delegation_agrees", flag(agree), label{"zone", ended})
+	}
+}
+
+// work writes what a resolver must do to reach each zone on the walk's way:
+// the least queries from an empty cache that --deps counted, and the most keys
+// of a zone that share one tag and algorithm, which a validator tries one by
+// one. Both are counts for an alert to compare, not grades.
+func work(m *metrics, tr *trace.Trace) {
+	if d := tr.Dependencies; d != nil && len(d.Work) > 0 {
+		m.family("dnstree_deps_queries", "", "the least queries a resolver with an empty cache makes before it can ask the zone anything")
+		for _, w := range d.Work {
+			m.sample("dnstree_deps_queries", strconv.Itoa(w.Queries), label{"zone", w.Zone})
+		}
+		m.family("dnstree_deps_glueless_queries", "", "how many of those look up nameserver addresses no glue gave")
+		for _, w := range d.Work {
+			m.sample("dnstree_deps_glueless_queries", strconv.Itoa(w.Glueless), label{"zone", w.Zone})
+		}
+		m.family("dnstree_deps_glueless_depth", "", "how many delegations without glue are stacked on the way to the zone")
+		for _, w := range d.Work {
+			m.sample("dnstree_deps_glueless_depth", strconv.Itoa(w.Depth), label{"zone", w.Zone})
+		}
+	}
+
+	seen := map[string]bool{}
+	for step := range tr.Mainline() {
+		status := step.DNSSEC
+		if status == nil || len(status.Keys) == 0 || status.Zone == "" || seen[strings.ToLower(status.Zone)] {
+			continue
+		}
+		seen[strings.ToLower(status.Zone)] = true
+		most := 1
+		for _, shared := range status.SharedTags() {
+			most = max(most, shared.Keys)
+		}
+		m.family("dnstree_dnssec_keys_per_tag", "", "the most keys of the zone that share one tag and algorithm, 1 where none do")
+		m.sample("dnstree_dnssec_keys_per_tag", strconv.Itoa(most), label{"zone", status.Zone})
 	}
 }
 

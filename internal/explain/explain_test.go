@@ -762,6 +762,11 @@ func TestFindingsSetup(t *testing.T) {
 			level: explain.Note,
 			want:  []string{"test. publishes a key signing key that no DS points at and that signs none of its keys (tag 400)"},
 		},
+		"keys that share a tag and an algorithm are a count, not a fault": {
+			trace: entered([]trace.Key{signing, {Tag: 100, Algorithm: "ECDSAP256SHA256", Signs: true}}, []trace.DS{pointing}),
+			level: explain.Note,
+			want:  []string{"test. has 2 keys with tag 100 and algorithm ECDSAP256SHA256", "KeyTrap (CVE-2023-50387)"},
+		},
 		"a verdict that names no zone has nothing to be about": {
 			trace: func() *trace.Trace {
 				tr := entered([]trace.Key{signing, {Tag: 200, Algorithm: "RSASHA256", Bits: 1024}}, []trace.DS{pointing})
@@ -1723,5 +1728,49 @@ func TestRegistration(t *testing.T) {
 	}
 	if got := said(walk(answered(300))); strings.Contains(got, "registr") {
 		t.Errorf("got %q, want nothing said of a registry a walk did not ask", got)
+	}
+}
+
+func TestFindingsWork(t *testing.T) {
+	for name, test := range map[string]struct {
+		work []trace.ZoneWork
+		want []string
+	}{
+		"glue all the way says nothing": {
+			work: []trace.ZoneWork{{Zone: "test.", Queries: 1}},
+		},
+		"a zone behind a delegation without glue is counted, not judged": {
+			work: []trace.ZoneWork{{Zone: "test.", Queries: 5, Glueless: 3, Depth: 1, Via: "ns.other."}},
+			want: []string{"at least 5 queries before it can ask test. anything, 3 of them", "the fewest by ns.other.;", "NXNSAttack"},
+		},
+		"delegations without glue stacked on each other are said": {
+			work: []trace.ZoneWork{{Zone: "test.", Queries: 8, Glueless: 6, Depth: 2, Via: "ns.other."}},
+			want: []string{", 2 delegations without glue deep;"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := entered([]trace.Key{signing}, []trace.DS{pointing})
+			tr.Dependencies = &trace.Dependencies{Name: "www.test.", Work: test.work}
+			var said []explain.Finding
+			for _, finding := range explain.Findings(tr) {
+				if strings.Contains(finding.Text, "a resolver with nothing cached") {
+					said = append(said, finding)
+				}
+			}
+			if len(test.want) == 0 {
+				if len(said) > 0 {
+					t.Errorf("got %+v, want nothing", said)
+				}
+				return
+			}
+			if len(said) != 1 || said[0].Topic != explain.Servers || said[0].Level != explain.Note {
+				t.Fatalf("got %+v, want one note about the servers", said)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(said[0].Text, want) {
+					t.Errorf("got %q, want it to hold %q", said[0].Text, want)
+				}
+			}
+		})
 	}
 }

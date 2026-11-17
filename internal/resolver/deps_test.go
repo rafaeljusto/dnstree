@@ -1,6 +1,7 @@
 package resolver_test
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -13,7 +14,8 @@ import (
 // The dependency tests resolve names of com. served from other TLDs:
 // example.com. by a host in dnshost.net. and a backup in backup.org., which
 // lean on each other and on cheap-vps.io.; lost.com. by dnshost.net. and a
-// name in io. that does not exist.
+// name in io. that does not exist; deep.com. by backup.org. alone, which has
+// no glue either; stranded.com. by the name that does not exist alone.
 const (
 	depsRootZone = `
 @                   IN SOA  a.root-servers.net. hostmaster 1 7200 3600 1209600 3600
@@ -37,6 +39,8 @@ example IN NS  ns1.dnshost.net.
 example IN NS  ns2.backup.org.
 lost    IN NS  ns.dnshost.net.
 lost    IN NS  ns.gone.io.
+deep    IN NS  ns2.backup.org.
+stranded IN NS ns.gone.io.
 `
 
 	depsNetZone = `
@@ -94,6 +98,12 @@ ns1 IN A   192.0.2.10
 www IN A   192.0.2.80
 `
 
+	depsDeepZone = `
+@   IN SOA ns2.backup.org. hostmaster 1 7200 3600 1209600 3600
+@   IN NS  ns2.backup.org.
+www IN A   192.0.2.82
+`
+
 	depsLostZone = `
 @   IN SOA ns.dnshost.net. hostmaster 1 7200 3600 1209600 3600
 @   IN NS  ns.dnshost.net.
@@ -118,6 +128,7 @@ func depending(tb testing.TB, signed bool) (harness, resolver.Config) {
 		{Name: "ns.dnshost.net.", Origin: "backup.org.", Zone: depsBackupZone, Declared: "192.0.2.10"},
 		{Name: "ns1.dnshost.net.", Origin: "example.com.", Zone: depsExampleZone, Declared: "192.0.2.20"},
 		{Name: "ns.dnshost.net.", Origin: "lost.com.", Zone: depsLostZone, Declared: "192.0.2.10"},
+		{Name: "ns1.dnshost.net.", Origin: "deep.com.", Zone: depsDeepZone, Declared: "192.0.2.20"},
 	} {
 		zone.DNSSEC = signed
 		hierarchy.Add(zone)
@@ -274,5 +285,55 @@ func TestDependenciesOnlyWhenAsked(t *testing.T) {
 	}
 	if tr.Dependencies != nil {
 		t.Errorf("Dependencies = %+v without --deps", tr.Dependencies)
+	}
+}
+
+func TestDependencyWork(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		qname      string
+		maxQueries int
+		want       []string // zone: queries, glueless, depth, via
+	}{
+		"a zone with no glue costs the lookup of its cheapest nameserver": {
+			qname: "www.example.com",
+			want:  []string{"com.: 1 0 0 ", "example.com.: 5 3 1 ns1.dnshost.net."},
+		},
+		"a nameserver that does not exist is passed over for one that does": {
+			qname: "www.lost.com",
+			want:  []string{"com.: 1 0 0 ", "lost.com.: 5 3 1 ns.dnshost.net."},
+		},
+		"a nameserver in a zone with no glue of its own costs both lookups": {
+			qname: "www.deep.com",
+			want:  []string{"com.: 1 0 0 ", "deep.com.: 8 6 2 ns2.backup.org."},
+		},
+		"a zone no nameserver can be reached for is not counted": {
+			qname: "www.stranded.com",
+			want:  []string{"com.: 1 0 0 "},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h, cfg := depending(t, false)
+			if tt.maxQueries > 0 {
+				cfg.Budget.MaxQueries = tt.maxQueries
+			}
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), tt.qname, "A")
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if tr.Dependencies == nil {
+				t.Fatal("no dependencies were recorded")
+			}
+			var got []string
+			for _, w := range tr.Dependencies.Work {
+				got = append(got, fmt.Sprintf("%s: %d %d %d %s", w.Zone, w.Queries, w.Glueless, w.Depth, w.Via))
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("work:\n got %q\nwant %q", got, tt.want)
+			}
+		})
 	}
 }

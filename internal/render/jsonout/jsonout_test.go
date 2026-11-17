@@ -278,7 +278,7 @@ func resolution() *trace.Trace {
 		Dependencies: &trace.Dependencies{
 			Name: "www.example.com.",
 			Zones: []trace.DependencyZone{
-				{Zone: "com.", NS: []string{"a.gtld-servers.net."}, DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "com."}},
+				{Zone: "com.", NS: []string{"a.gtld-servers.net."}, Glue: true, DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "com."}},
 				{Zone: "net.", NS: []string{"a.gtld-servers.net."}, Via: "a.gtld-servers.net.", For: "com.",
 					DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "net."}},
 				{Zone: "example.net.", NS: []string{"ns.example.net."}, Via: "ns.example.net.", For: "example.com.",
@@ -286,6 +286,10 @@ func resolution() *trace.Trace {
 			},
 			Unresolved: []trace.UnresolvedNS{{Name: "ns.gone.example.", For: "example.com.", Err: "does not exist"}},
 			Stopped:    "the budget ran out before every nameserver was looked up",
+			Work: []trace.ZoneWork{
+				{Zone: "com.", Queries: 1},
+				{Zone: "example.com.", Queries: 6, Glueless: 4, Depth: 1, Via: "ns.example.net."},
+			},
 		},
 		Registration: &trace.Registration{
 			Domain: "example.com.", Server: "https://rdap.verisign.com/com/v1/", State: trace.Registered,

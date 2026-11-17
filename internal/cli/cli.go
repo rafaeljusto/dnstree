@@ -549,6 +549,10 @@ in, and with --dnssec which delegations are unsigned. A nameserver that does
 not exist is drawn like one the walk finds. Each lookup is a walk of its own,
 drawn in the tree as an aside, with a budget of 512 queries unless
 --max-queries says otherwise; a budget that runs out says the list is short.
+It also counts the least queries a resolver with an empty cache makes before
+it can ask each zone on the way anything, where a delegation without glue
+makes it look up a nameserver first: a count, not a verdict, since resolvers
+each cap that work at a limit of their own.
 
 --rdap asks the registry of the domain over RDAP (RFC 9083) when its
 registration runs out, which statuses it carries, and which nameservers and DS

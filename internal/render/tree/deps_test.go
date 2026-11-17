@@ -42,6 +42,30 @@ func TestRenderDependencies(t *testing.T) {
 				"deps: stopped: the budget ran out before every nameserver was looked up",
 			},
 		},
+		"a zone behind a delegation without glue says what reaching it takes": {
+			deps: &trace.Dependencies{Name: "www.deep.com.",
+				Zones: []trace.DependencyZone{{Zone: "com.", Glue: true}, {Zone: "deep.com."}},
+				Work: []trace.ZoneWork{
+					{Zone: "com.", Queries: 1},
+					{Zone: "deep.com.", Queries: 8, Glueless: 6, Depth: 2, Via: "ns2.backup.org."},
+				}},
+			want: []string{
+				"deps: www.deep.com. depends on 2 zones besides the root",
+				"deps:   com., deep.com.  the walk",
+				"deps: a resolver with an empty cache makes at least 8 queries before it can ask deep.com. anything",
+				"deps:   6 of them look up nameserver addresses no glue gave, the fewest by ns2.backup.org., 2 delegations without glue deep",
+			},
+		},
+		"with glue all the way, only the last zone's count is drawn": {
+			deps: &trace.Dependencies{Name: "www.example.com.",
+				Zones: []trace.DependencyZone{{Zone: "com.", Glue: true}, {Zone: "example.com.", Glue: true}},
+				Work:  []trace.ZoneWork{{Zone: "com.", Queries: 1}, {Zone: "example.com.", Queries: 2}}},
+			want: []string{
+				"deps: www.example.com. depends on 2 zones besides the root",
+				"deps:   com., example.com.  the walk",
+				"deps: a resolver with an empty cache makes at least 2 queries before it can ask example.com. anything, every delegation on the way with glue",
+			},
+		},
 		"from a crafted file, no zones at all": {
 			deps: &trace.Dependencies{Name: "test."},
 			want: []string{"deps: test. depends on 0 zones besides the root"},

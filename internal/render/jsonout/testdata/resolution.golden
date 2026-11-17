@@ -832,6 +832,7 @@
         "ns": [
           "a.gtld-servers.net."
         ],
+        "glue": true,
         "dnssec": {
           "state": "secure",
           "zone": "com."
@@ -869,7 +870,22 @@
         "error": "does not exist"
       }
     ],
-    "stopped": "the budget ran out before every nameserver was looked up"
+    "stopped": "the budget ran out before every nameserver was looked up",
+    "work": [
+      {
+        "zone": "com.",
+        "queries": 1,
+        "glueless_queries": 0,
+        "glueless_depth": 0
+      },
+      {
+        "zone": "example.com.",
+        "queries": 6,
+        "glueless_queries": 4,
+        "glueless_depth": 1,
+        "via": "ns.example.net."
+      }
+    ]
   },
   "registration": {
     "domain": "example.com.",

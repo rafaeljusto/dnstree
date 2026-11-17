@@ -1028,19 +1028,22 @@ nameserver of every zone the walk went through, and then every nameserver of
 every zone those lookups went through, until none is left:
 
 ```
-$ dnstree --deps --dnssec --explain --no-asn --no-compare www.example.com
+$ dnstree --deps --dnssec --explain --no-asn --no-compare www.ietf.org
 ...
-│   │   │   ├── com.  (A of hera.ns.cloudflare.com. for deps)
-│   │   │   │   ├── l.gtld-servers.net. 192.41.162.30  248ms  NOERROR  DO  referral → cloudflare.com.  [secure ECDSAP256SHA256/SHA256]
-│   │   │   │   │   ├── ns3.cloudflare.com. 162.159.0.33  229ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
-│   │   │   │   │   │   ├── hera.ns.cloudflare.com. 86353 A 173.245.58.162
+│   │   │   ├── . (root)  (A of ken.ns.cloudflare.com. for deps)
+│   │   │   │   ├── a.root-servers.net. 198.41.0.4  245ms  1181 of 1232 bytes  NOERROR  DO  referral → com.  [secure ECDSAP256SHA256/SHA256]
+│   │   │   │   │   ├── l.gtld-servers.net. 192.41.162.30  255ms  NOERROR  DO  referral → cloudflare.com.  [secure ECDSAP256SHA256/SHA256]
 ...
-deps: www.example.com. depends on 6 zones besides the root, 2 of them unsigned
-deps:   com., example.com.  the walk
+deps: www.ietf.org. depends on 7 zones besides the root, 2 of them unsigned
+deps:   org., ietf.org.  the walk
+deps:   com., cloudflare.com.  by ken.ns.cloudflare.com., a nameserver of ietf.org.
 deps:   net., gtld-servers.net. (unsigned)  by l.gtld-servers.net., a nameserver of com.
-deps:   cloudflare.com.  by hera.ns.cloudflare.com., a nameserver of example.com.
 deps:   nstld.com. (unsigned)  by av1.nstld.com., a nameserver of gtld-servers.net.
-✔ answered in 11s · 39 queries · 6 servers
+deps: a resolver with an empty cache makes at least 5 queries before it can ask ietf.org. anything
+deps:   3 of them look up nameserver addresses no glue gave, the fewest by ken.ns.cloudflare.com., 1 delegation without glue deep
+✔ answered in 11.7s · 47 queries · 7 servers
+...
+· a resolver with nothing cached makes at least 5 queries before it can ask ietf.org. anything, 3 of them to look up nameserver addresses no glue gave, the fewest by ken.ns.cloudflare.com.; resolvers cap this work since NXNSAttack (2020), so a zone near a cap can fail on one resolver and work on another, or fail only once a cache empties; glue at the parent, or nameservers in fewer zones, makes it less
 ```
 
 Each line names the zones one nameserver's lookup came to that no lookup
@@ -1063,6 +1066,30 @@ from other TLDs costs dozens of queries, so the budget is 512 unless
 `--max-queries` says otherwise, and a budget that runs out says the list is
 short, in a line and a warning. The exit code is left alone. `--format json`
 carries it as `dependencies`.
+
+### The work it takes to reach
+
+The lookups also say how much a resolver with an empty cache must do before
+it can ask each zone on the way anything: one query for each referral down
+from the root, and, where a delegation came without glue, the lookup of the
+nameserver that needs the fewest. A lookup can meet a delegation without glue
+of its own, so they stack, and the line says how deep. Since NXNSAttack (2020)
+resolvers cap this work, each at a limit of its own, and a zone near one can
+fail on one resolver and work on another, or only after a restart empties the
+cache. No RFC says how much is too much, so these are counts, never warnings,
+and many sound zones have no glue. Keys, signatures, the other address family
+and retries are not counted, so a resolver always makes at least this many.
+Where every delegation came with glue, one line gives the count for the last
+zone. `--format json` carries it as `work` under `dependencies`, and
+`--format openmetrics` as `dnstree_deps_queries`,
+`dnstree_deps_glueless_queries` and `dnstree_deps_glueless_depth`, for an
+alert to compare.
+
+With `--dnssec`, `--explain` also says when keys of a zone share a tag and an
+algorithm. A signature names its key by those two alone, so a validator tries
+each such key with it: the work KeyTrap (CVE-2023-50387) used, and resolvers
+cap since. Tags collide by chance, so it is a note. `--format openmetrics`
+carries it as `dnstree_dnssec_keys_per_tag`, 1 where no keys share one.
 
 ## Whether its registration is about to run out
 

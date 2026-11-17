@@ -2122,6 +2122,7 @@ www   IN A    192.0.2.10
 	want := []string{
 		"deps: www.example.test. depends on 1 zone besides the root",
 		"deps:   example.test.  the walk",
+		"deps: a resolver with an empty cache makes at least 1 query before it can ask example.test. anything, every delegation on the way with glue",
 		"deps:   ns.gone.test., a nameserver of example.test.: does not exist",
 	}
 	drawn := func(out string) []string {

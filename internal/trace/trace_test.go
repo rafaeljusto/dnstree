@@ -472,3 +472,34 @@ func TestShownCheck(t *testing.T) {
 		t.Errorf("got %d areas to look at, want 1", got)
 	}
 }
+
+func TestSharedTags(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		keys []trace.Key
+		want []trace.SharedTag
+	}{
+		"keys with tags of their own share none": {
+			keys: []trace.Key{{Tag: 1, Algorithm: "ED25519"}, {Tag: 2, Algorithm: "ED25519"}},
+		},
+		"one tag under two algorithms is not shared": {
+			keys: []trace.Key{{Tag: 1, Algorithm: "ED25519"}, {Tag: 1, Algorithm: "ECDSAP256SHA256"}},
+		},
+		"each shared tag is said once, in the order the keys came": {
+			keys: []trace.Key{
+				{Tag: 9, Algorithm: "ED25519"}, {Tag: 1, Algorithm: "ED25519"}, {Tag: 9, Algorithm: "ED25519"},
+				{Tag: 1, Algorithm: "ED25519"}, {Tag: 9, Algorithm: "ED25519"},
+			},
+			want: []trace.SharedTag{{Tag: 9, Algorithm: "ED25519", Keys: 3}, {Tag: 1, Algorithm: "ED25519", Keys: 2}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := (&trace.DNSSECStatus{Keys: tt.keys}).SharedTags()
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}

@@ -130,6 +130,7 @@ func Findings(tr *trace.Trace) []Finding {
 	findings = append(findings, timers(tr)...)
 	findings = append(findings, requests(tr)...)
 	findings = append(findings, servers(tr)...)
+	findings = append(findings, work(tr)...)
 	findings = append(findings, cookies(tr)...)
 	findings = append(findings, exposure(tr)...)
 	findings = append(findings, ednsTests(tr)...)
@@ -568,6 +569,12 @@ func setupOf(tr *trace.Trace, only string) []Finding {
 				"%s publishes a key signing key that no DS points at and that signs none of its keys (tag %s): one waiting to be rolled in, or left by a rollover that never finished",
 				zone, list(idle))})
 		}
+		// Tags collide by chance, so a shared one is a count, not a fault.
+		for _, shared := range status.SharedTags() {
+			findings = append(findings, Finding{Topic: Trust, Level: Note, Text: fmt.Sprintf(
+				"%s has %d keys with tag %d and algorithm %s, so a validator tries each of them with every signature that names the tag; validators cap that work since KeyTrap (CVE-2023-50387), and removing a key the zone no longer needs ends it",
+				zone, shared.Keys, shared.Tag, shared.Algorithm)})
+		}
 	}
 	return findings
 }
@@ -871,6 +878,33 @@ func serversOf(tr *trace.Trace, zone string) []Finding {
 			text += ", and this walk asked for no signatures: a resolver that does gets more than this"
 		}
 		findings = append(findings, Finding{Topic: Servers, Level: Warn, Text: text})
+	}
+	return findings
+}
+
+// work says what a resolver with an empty cache must do to reach each zone on
+// the walk's way that a delegation without glue stands in front of. It is a
+// count, not a verdict: no RFC says how much is too much, and many sound zones
+// have no glue.
+func work(tr *trace.Trace) []Finding {
+	if tr.Dependencies == nil {
+		return nil
+	}
+	var findings []Finding
+	for _, w := range tr.Dependencies.Work {
+		if w.Glueless == 0 {
+			continue
+		}
+		text := fmt.Sprintf("a resolver with nothing cached makes at least %d queries before it can ask %s anything, %d of them to look up nameserver addresses no glue gave",
+			w.Queries, w.Zone, w.Glueless)
+		if w.Via != "" {
+			text += ", the fewest by " + w.Via
+		}
+		if w.Depth > 1 {
+			text += fmt.Sprintf(", %d delegations without glue deep", w.Depth)
+		}
+		text += "; resolvers cap this work since NXNSAttack (2020), so a zone near a cap can fail on one resolver and work on another, or fail only once a cache empties; glue at the parent, or nameservers in fewer zones, makes it less"
+		findings = append(findings, Finding{Topic: Servers, Level: Note, Text: text})
 	}
 	return findings
 }
