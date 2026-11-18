@@ -553,7 +553,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 	}
 	s.mu.Unlock()
 
-	if s.behaviour.Drop || dropped || s.behaviour.DropEDNSFlags && req.Z != 0 ||
+	if s.behaviour.Drop || dropped || s.behaviour.DropEDNSFlags && req.Flags != 0 ||
 		s.behaviour.DropZoneVersion && asks[*dns.ZONEVERSION](req) {
 		return
 	}
@@ -637,7 +637,7 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		reply.AuthenticatedData = true
 	}
 	if s.behaviour.EchoEDNSFlags {
-		reply.Z = req.Z
+		reply.Flags = req.Flags
 	}
 	if s.behaviour.EchoEDNSOption {
 		for _, rr := range req.Pseudo {
