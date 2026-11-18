@@ -194,7 +194,7 @@ func replayKey(proto string, server netip.AddrPort, req *dns.Msg) string {
 		proto, netip.AddrPortFrom(server.Addr().Unmap(), server.Port()),
 		dnsutil.Canonical(q.Header().Name), dns.RRToType(q), q.Header().Class,
 		req.Opcode, req.RecursionDesired, req.CheckingDisabled,
-		req.UDPSize, req.Version, req.Security, req.Z, strings.Join(options, ","))
+		req.UDPSize, req.Version, req.Security, req.Flags, strings.Join(options, ","))
 }
 
 // silence is a server that said nothing when the capture was made, which a

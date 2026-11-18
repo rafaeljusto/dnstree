@@ -196,7 +196,7 @@ func (r *run) askEDNS(ctx context.Context, zone string, server trace.Server, kin
 		case trace.EDNSOption:
 			req.Pseudo = append(req.Pseudo, &dns.ERFC3597{EDNS0Code: ednsOption})
 		case trace.EDNSFlag:
-			req.Z = ednsFlag
+			req.Flags = ednsFlag
 		}
 	}
 
@@ -294,7 +294,7 @@ func ednsFault(resp *dns.Msg, zone, qname string, kind trace.EDNSKind) trace.EDN
 		}
 		return ""
 	case trace.EDNSFlag:
-		if resp.Z&ednsFlag != 0 {
+		if resp.Flags&ednsFlag != 0 {
 			return trace.EDNSEchoed
 		}
 	case trace.EDNSOption:

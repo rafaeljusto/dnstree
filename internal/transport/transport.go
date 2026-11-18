@@ -346,7 +346,7 @@ func Sent(req *dns.Msg) *trace.Sent {
 	if req.UDPSize > dns.MinMsgSize {
 		sent.UDPSize = req.UDPSize
 	}
-	sent.DO, sent.Version, sent.Flags = req.Security, req.Version, req.Z
+	sent.DO, sent.Version, sent.Flags = req.Security, req.Version, req.Flags
 	sent.EDNS = sent.EDNS || sent.UDPSize > 0 || sent.DO || sent.Version > 0 || sent.Flags > 0
 	return sent
 }
