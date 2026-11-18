@@ -91,6 +91,7 @@ one after another, each from the root servers down.
   --expect VALUE          require this of the walk, and exit 4 where it fails
   --from FILE             draw a walk --format json saved, instead of walking
   --against FILE          say how the walk differs from one --format json saved
+  --history DIR           say how NAME changed across the walks saved in DIR
   --pcap FILE             save the walk's queries and answers as a packet capture
   --replay FILE           walk again offline, answered from a capture --pcap made
   --color WHEN            auto, always or never (default auto)
@@ -300,6 +301,18 @@ walks made before and after a change, or from two places. The file is read as th
 walk before the one drawn, and the first line says how far apart the two were
 made. Both have to be of the same question, and nothing is written to the disk.
 It takes the place of --diff.
+
+--history reads every walk of NAME [TYPE] that --format json saved in DIR, as
+.json or .json.gz, draws the newest as --from would, and says under it how the
+question changed from one walk to the next. A change is placed between the two
+walks that saw it, never at a moment nothing watched, and a stretch much longer
+than the usual time between walks is said, since a change undone inside it was
+not seen. Where a key or a DS changed before the caches could let go of the
+set it replaced (RFC 7583), it says so, and for up to how long resolvers found
+no key; --rollover is timed from when the walks first saw each key. Files that
+hold no walk are skipped in one line. Nothing is asked of any server and
+nothing is written: the walks are kept by whatever saved them, such as a loop
+or a cron job around dnstree --format json.
 
 --pcap writes every query the walk sent, and every answer that came back, to
 FILE as a packet capture for Wireshark or tcpdump -r. The messages are the bytes
@@ -852,6 +865,10 @@ type Config struct {
 	// from it: a path, or "-" for the standard input.
 	Against string
 
+	// History is a directory of walks --format json saved, to say how the
+	// question changed across them and draw the last.
+	History string
+
 	// Pcap is the file --pcap writes the walk's packets to, empty for none.
 	Pcap string
 
@@ -1041,6 +1058,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.Var(&wanted, "expect", "require this of the walk")
 	flags.StringVar(&cfg.From, "from", "", "draw a walk --format json saved")
 	flags.StringVar(&cfg.Against, "against", "", "say how the walk differs from one --format json saved")
+	flags.StringVar(&cfg.History, "history", "", "say how NAME changed across the walks saved in DIR")
 	flags.StringVar(&cfg.Pcap, "pcap", "", "save the walk's queries and answers as a packet capture")
 	flags.StringVar(&cfg.Replay, "replay", "", "walk again offline, answered from a capture --pcap made")
 	flags.StringVar(&color, "color", string(tree.ColorAuto), "auto, always or never")
@@ -1124,6 +1142,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	case cfg.From != "" && (n > 0 || reverse != "" || names != "" || zoneFile != ""):
 		return nil, fmt.Errorf("%w: --from draws a walk already made, so there is no name to resolve", ErrUsage)
 	case cfg.From != "":
+	case cfg.History != "" && (names != "" || zoneFile != ""):
+		return nil, fmt.Errorf("%w: --history reads the walks of one question, so --names and --zone-file cannot ask others", ErrUsage)
 	case zoneFile != "" && (names != "" || reverse != ""):
 		return nil, fmt.Errorf("%w: --zone-file says what to resolve, so --names and -x cannot as well", ErrUsage)
 	case zoneFile != "" && n > 1:
@@ -1229,7 +1249,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.CheckDS = false
 	}
-	if cfg.Rollover && !cfg.DNSSEC && cfg.From == "" {
+	if cfg.Rollover && !cfg.DNSSEC && cfg.Made() {
 		if slices.Contains(typed, "rollover") {
 			return nil, fmt.Errorf("%w: --rollover reads the keys the chain of trust records, and only --dnssec follows it", ErrUsage)
 		}
@@ -1247,7 +1267,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.DKIM = nil
 	}
-	if cfg.From != "" {
+	if saved := cfg.saved(); saved != "" {
 		// Named on the command line, a flag that shapes the walk would read as
 		// though the saved one had been made with it. The file's are about the
 		// walks it makes, and are left alone.
@@ -1258,18 +1278,22 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 			}
 		}
 		if len(walking) > 0 {
-			return nil, fmt.Errorf("%w: --from draws a walk already made, which %s cannot change",
-				ErrUsage, strings.Join(walking, " and "))
+			return nil, fmt.Errorf("%w: %s draws a walk already made, which %s cannot change",
+				ErrUsage, saved, strings.Join(walking, " and "))
 		}
 		switch {
+		case cfg.From != "" && cfg.History != "":
+			return nil, fmt.Errorf("%w: --from and --history each name the walk to draw; give one", ErrUsage)
 		case cfg.Live:
-			return nil, fmt.Errorf("%w: --from draws a walk already made, so there is nothing to draw live", ErrUsage)
+			return nil, fmt.Errorf("%w: %s draws a walk already made, so there is nothing to draw live", ErrUsage, saved)
 		case cfg.Watch != 0:
-			return nil, fmt.Errorf("%w: --from draws a walk already made, so there is nothing to watch change", ErrUsage)
+			return nil, fmt.Errorf("%w: %s draws a walk already made, so there is nothing to watch change", ErrUsage, saved)
 		case cfg.Diff:
-			return nil, fmt.Errorf("%w: --from draws a walk already made, and remembering it would put an old walk in place of the last one", ErrUsage)
+			return nil, fmt.Errorf("%w: %s draws a walk already made, and remembering it would put an old walk in place of the last one", ErrUsage, saved)
 		case cfg.Pcap != "":
-			return nil, fmt.Errorf("%w: --from draws a walk already made, so nothing is sent to capture", ErrUsage)
+			return nil, fmt.Errorf("%w: %s draws a walk already made, so nothing is sent to capture", ErrUsage, saved)
+		case cfg.History != "" && cfg.Against != "":
+			return nil, fmt.Errorf("%w: --history already holds each walk against the one before it; --against has nothing to add", ErrUsage)
 		}
 	}
 	// Every round is a whole walk from the root servers down. There is nothing
@@ -1303,7 +1327,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.Rollover = false
 	}
-	if (cfg.Explain || cfg.Diff || cfg.Against != "") && Programs(cfg.Format) {
+	if (cfg.Explain || cfg.Diff || cfg.Against != "" || cfg.History != "") && Programs(cfg.Format) {
 		return nil, fmt.Errorf("%w: %s is read by a program, which has the whole trace already and no use for prose",
 			ErrUsage, cfg.Format)
 	}
@@ -1579,6 +1603,23 @@ func (c *Config) Questions() []Question {
 	return append([]Question{{Name: c.Name, Type: c.Type}}, c.More...)
 }
 
+// Made reports whether the run makes its walk, rather than drawing one
+// --from or --history read.
+func (c *Config) Made() bool {
+	return c.saved() == ""
+}
+
+// saved is the flag that names the walk to draw instead of making one.
+func (c *Config) saved() string {
+	switch {
+	case c.From != "":
+		return "--from"
+	case c.History != "":
+		return "--history"
+	}
+	return ""
+}
+
 // Several reports whether the run may ask more than one question. --names and
 // --zone-file count however many questions the file turns out to hold, so that
 // what a run accepts, and the shape of what it writes, do not hang on it.
@@ -1600,6 +1641,8 @@ func several(cfg *Config, expecting bool) error {
 		return fmt.Errorf("%w: --against holds a walk of one question, and several were asked", ErrUsage)
 	case cfg.Watch != 0:
 		return fmt.Errorf("%w: --watch follows one question, and several were asked", ErrUsage)
+	case cfg.History != "":
+		return fmt.Errorf("%w: --history reads the walks of one question, and several were asked", ErrUsage)
 	}
 	return nil
 }

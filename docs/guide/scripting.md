@@ -8,6 +8,7 @@ system.
 - [Several questions in one run](#several-questions-in-one-run)
 - [Leaving it running](#leaving-it-running)
 - [Drawing a walk again](#drawing-a-walk-again)
+- [Keeping a history](#keeping-a-history)
 - [Numbers for a monitoring system](#numbers-for-a-monitoring-system)
 
 ## Asking rather than reading
@@ -334,6 +335,52 @@ far apart the two were made. Two walks of different questions are refused, and
 nothing is written to the disk. Different is not wrong: a name served from
 many places answers each of them in its own way. It takes the place of
 `--diff`, and cannot be set in the file of defaults.
+
+## Keeping a history
+
+Many outages are about time: the order of the changes to a zone, and how long
+the operator waited between them. Each walk is right by itself, and only a
+history shows what users saw in between. dnstree keeps none: save the walks
+yourself, with a loop or a cron job around `--format json`:
+
+```
+mkdir -p hist
+while true; do
+  dnstree --dnssec --format json example.com > "hist/$(date -u +%Y%m%dT%H%M%SZ).json"
+  sleep 300
+done
+```
+
+`--history` reads every walk of the question in the directory, as `.json` or
+`.json.gz`, in the order they were made rather than by file name. It draws the
+newest as `--from` would, and says under it how the question changed:
+
+```
+$ dnstree --history hist example.com
+...
+✔ answered in 17.4s · resolver did not answer · 107 queries · 64 servers
+
+· 2 walks of example.com. A in hist from 2026-11-18 12:31:44 UTC to 2026-11-18 12:32:06 UTC, 0 changes
+```
+
+A change is placed between the two walks that saw it, never at a moment
+nothing watched. A stretch much longer than the usual time between walks is
+said, since a change undone inside it was not seen. With walks saved with
+`--dnssec`, it also names each key and DS that came and went, and holds each
+step of a rollover against the step before it (RFC 7583): a key removed while
+caches may still hold a DS set that names no key left, or a DS moved while
+caches may still hold a key set that has no key for it. Each is said only
+where it was too soon however the changes fell between the walks, with how
+long resolvers found no key for "up to", since a resolver may keep a record
+for less than its TTL. `--rollover` is timed from when the walks first saw
+each key.
+
+It asks no server, writes nothing, and refuses the flags that shape a walk,
+as `--from` does. A file
+that holds no walk, or one of another `schema_version`, is skipped in one
+line. A walk saved with `--dnssec` of `example.com` is about 220 KB, and about
+10 KB after gzip; compress or delete old walks yourself, and keep a directory
+under 20,000 walks.
 
 ## Numbers for a monitoring system
 

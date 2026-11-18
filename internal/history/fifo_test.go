@@ -30,3 +30,25 @@ func TestLoadIgnoresAFIFO(t *testing.T) {
 		t.Fatal("Load still waiting on the FIFO")
 	}
 }
+
+// TestReadDirSkipsAFIFO is the same FIFO planted among saved walks.
+func TestReadDirSkipsAFIFO(t *testing.T) {
+	dir := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(dir, "walk.json"), 0o600); err != nil {
+		t.Skipf("no FIFOs here: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := history.ReadDir(dir, question(), readWalk)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("read a walk from a FIFO")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReadDir still waiting on the FIFO")
+	}
+}

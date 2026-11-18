@@ -75,6 +75,11 @@ type Zone struct {
 	// rollover: a record first seen at a time was published by then.
 	Keys []Record `json:"keys,omitempty"`
 	DS   []Record `json:"ds,omitempty"`
+
+	// KeysTTL and DSTTL are how long a cache may keep each set, which is how
+	// long a change to it has to wait. Zero where nothing was kept.
+	KeysTTL uint32 `json:"keys_ttl,omitempty"`
+	DSTTL   uint32 `json:"ds_ttl,omitempty"`
 }
 
 // Record is one key, or one DS, and when it was first seen.
@@ -194,6 +199,7 @@ func zones(tr *trace.Trace, seen time.Time) []Zone {
 	zone := func(name string, servers []string) Zone {
 		z := Zone{Name: name, NS: servers, DNSSEC: states[strings.ToLower(name)]}
 		if status := keyed[strings.ToLower(name)]; status != nil {
+			z.KeysTTL, z.DSTTL = status.KeysTTL, status.DSTTL
 			for _, key := range status.Keys {
 				z.Keys = add(z.Keys, Record{Tag: key.Tag, Algorithm: key.Algorithm, Since: seen})
 			}

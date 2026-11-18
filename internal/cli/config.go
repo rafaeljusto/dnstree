@@ -41,7 +41,7 @@ var groups = [][]string{
 
 // askedFor are the flags that ask for one run of their own, and that a file of
 // defaults cannot set for every run.
-var askedFor = []string{"version", "schema", "from", "against", "x", "names", "without", "report", "try-ns", "try-ds", "compare-ns", "zone-file", "pcap", "replay"}
+var askedFor = []string{"version", "schema", "from", "against", "history", "x", "names", "without", "report", "try-ns", "try-ds", "compare-ns", "zone-file", "pcap", "replay"}
 
 // defaultFile is where the defaults are read from when the command line does
 // not say: the file named by the environment, then the XDG location, then the
@@ -223,8 +223,10 @@ func override(flags *flag.FlagSet, fileArgs, args []string) []string {
 	}
 
 	// A walk already made is neither drawn live, watched nor remembered.
-	if _, ok := given["from"]; ok {
-		drop["live"], drop["watch"], drop["diff"] = true, true, true
+	for _, saved := range []string{"from", "history"} {
+		if _, ok := given[saved]; ok {
+			drop["live"], drop["watch"], drop["diff"] = true, true, true
+		}
 	}
 
 	if len(drop) == 0 {

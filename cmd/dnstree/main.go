@@ -147,11 +147,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	var lookups *asn.Resolver
-	if cfg.ASN && cfg.From == "" {
+	if cfg.ASN && cfg.Made() {
 		lookups = asn.New(asnLookup(cfg), log)
 	}
 	var registry *rdap.Client
-	if cfg.RDAP && cfg.From == "" {
+	if cfg.RDAP && cfg.Made() {
 		registry = rdap.New(rdapHTTP, rdapBootstrap, log)
 	}
 
@@ -175,7 +175,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if cfg.Watch > 0 {
 		return watch(ctx, cfg, log, lookups, registry, reference, stdout, stderr)
 	}
-	if cfg.From != "" {
+	if !cfg.Made() {
 		return one(ctx, cfg, log, lookups, registry, nil, nil, reference, nil, stdout, stderr)
 	}
 
@@ -437,16 +437,20 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		defer live.Clear()
 	}
 
-	var tr *trace.Trace
-	if cfg.From != "" {
-		if tr, err = saved("--from", cfg.From); err == nil && reference != nil {
+	var (
+		tr   *trace.Trace
+		past []explain.Finding
+	)
+	if !cfg.Made() {
+		var seen trace.Seen
+		if tr, past, seen, err = kept(cfg, stderr); err == nil && reference != nil {
 			err = sameQuestion(reference, tr.Shown().Question, cfg.Against)
 		}
 		if err == nil && cfg.Propagation {
 			tr.Propagation = tr.Propagated()
 		}
 		if err == nil && cfg.Rollover {
-			tr.Rollover = tr.Rolled(nil)
+			tr.Rollover = tr.Rolled(seen)
 		}
 	} else {
 		tr, err = made(ctx, cfg, log, lookups, registry, rec, replay, live)
@@ -462,6 +466,7 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 	live.Clear()
 	unreported(cfg, tr, stderr)
 	diff, delta := changed(cfg, tr, stderr)
+	diff = append(past, diff...)
 
 	// A served walk is drawn in a browser rather than here, and the sentences
 	// the run asked for go to the page with it.
@@ -719,6 +724,33 @@ func saved(flag, path string) (*trace.Trace, error) {
 		return nil, fmt.Errorf("%s %s: %w", flag, path, err)
 	}
 	return tr, nil
+}
+
+// kept is the walk to draw where none is made: the one --from names, or the
+// last of those --history reads, with what the history says and when it first
+// saw each key. Files in the history that hold no walk cost themselves, in one
+// line, and never the rest.
+func kept(cfg *cli.Config, stderr io.Writer) (*trace.Trace, []explain.Finding, trace.Seen, error) {
+	if cfg.From != "" {
+		tr, err := saved("--from", cfg.From)
+		return tr, nil, nil, err
+	}
+
+	question := trace.Question{Name: fqdn(cfg.Name), Type: cfg.Type, Class: "IN"}
+	walks, err := history.ReadDir(cfg.History, question, jsonout.Read)
+	if walks != nil && len(walks.Unread) > 0 {
+		more := ""
+		if n := len(walks.Unread) - 1; n > 0 {
+			more = fmt.Sprintf(", and %d more", n)
+		}
+		fmt.Fprintf(stderr, "--history skipped what holds no walk it can read: %s%s\n", walks.Unread[0], more)
+	}
+	if _, ok := errors.AsType[*fs.PathError](err); ok {
+		return nil, nil, nil, unopened("--history", err)
+	} else if err != nil {
+		return nil, nil, nil, fmt.Errorf("--history %w", err)
+	}
+	return walks.Newest, history.Timeline(walks.Walks, cfg.History), walks.FirstSeen(), nil
 }
 
 // against is the walk --against named, as a comparison reads it. It is dated

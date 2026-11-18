@@ -322,6 +322,14 @@ func TestParse(t *testing.T) {
 			args: []string{"--from", "after.json", "--against", "before.json"},
 			want: cli.Config{From: "after.json", Against: "before.json"},
 		},
+		"a history of walks, explained, with how a rollover stands": {
+			args: []string{"--history", "hist", "--explain", "--rollover", "example.com", "DNSKEY"},
+			want: cli.Config{History: "hist", Name: "example.com", Type: "DNSKEY", Explain: true, Rollover: true},
+		},
+		"a history of walks as a report": {
+			args: []string{"--history", "hist", "--format", "markdown", "example.com"},
+			want: cli.Config{History: "hist", Name: "example.com", Type: "A", Format: "markdown"},
+		},
 		"several types of one name": {
 			args: []string{"example.com", "a", "aaaa", "mx"},
 			want: cli.Config{Name: "example.com", Type: "A", More: []cli.Question{
@@ -497,6 +505,16 @@ func TestParseRejects(t *testing.T) {
 		"a comparison watched":                            {"--compare-ns", "example.com=ns1.new.net", "--watch", "30s", "example.com"},
 		"a comparison of a walk already made":             {"--compare-ns", "example.com=ns1.new.net", "--from", "walk.json"},
 		"a walk held to the same with nothing to compare": {"--expect", "same", "example.com"},
+		"a history with no name to read it for":           {"--history", "hist"},
+		"a history of several questions":                  {"--history", "hist", "example.com", "A", "MX"},
+		"a history of a list of names":                    {"--history", "hist", "--names", "names.txt"},
+		"a history beside a walk already made":            {"--history", "hist", "--from", "walk.json"},
+		"a history held against another walk":             {"--history", "hist", "--against", "walk.json", "example.com"},
+		"a history walked again":                          {"--history", "hist", "--dnssec", "example.com"},
+		"a history watched":                               {"--history", "hist", "--watch", "30s", "example.com"},
+		"a history remembered":                            {"--history", "hist", "--diff", "example.com"},
+		"a history drawn live":                            {"--history", "hist", "--live", "example.com"},
+		"a history written for a program":                 {"--history", "hist", "--format", "json", "example.com"},
 		"a zone file with a type to ask":                  {"--zone-file", "db.example", "example.com", "MX"},
 		"a zone file beside a list of names":              {"--zone-file", "db.example", "--names", "names.txt"},
 		"a zone file beside an address":                   {"--zone-file", "db.example", "-x", "192.0.2.1"},

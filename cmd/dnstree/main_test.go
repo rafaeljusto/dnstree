@@ -343,6 +343,7 @@ func TestRunNamesTheFlagOfAMissingFile(t *testing.T) {
 		"--root-hints":    {"--root-hints", missing, "example.com"},
 		"--from":          {"--from", missing},
 		"--against":       {"--against", missing, "example.com"},
+		"--history":       {"--history", missing, "example.com"},
 		"--trust-anchors": {"--trust-anchors", missing, "--dnssec", "example.com"},
 		"--tls-ca":        {"--tls-ca", missing, "--dot", "--root", "192.0.2.1", "example.com"},
 		"--config":        {"--config", missing, "example.com"},

@@ -123,6 +123,9 @@ dnstree --format markdown --dnssec --against before.json example.com
 ```
 
 `--from before.json` draws a saved walk again without asking any server.
+`--history DIR NAME` reads a directory of walks saved that way over time, and
+says between which two walks each change came and whether a key rollover
+waited long enough for the caches.
 
 ## What not to run without asking
 

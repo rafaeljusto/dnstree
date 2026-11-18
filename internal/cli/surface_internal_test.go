@@ -14,7 +14,7 @@ import (
 // one has to be put in one of them.
 var notWalkFlags = []string{
 	"x", "names", "zone-file", "format", "web-addr", "no-browser", "live", "watch", "explain",
-	"propagation", "rollover", "diff", "expect", "from", "against", "pcap", "color",
+	"propagation", "rollover", "diff", "expect", "from", "against", "history", "pcap", "color",
 	"config", "no-config", "debug", "schema", "version",
 }
 

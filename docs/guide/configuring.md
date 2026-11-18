@@ -26,8 +26,9 @@ and a flag that stands on its own needs no value. A line opening with `#` is a
 comment; a `#` partway along a line is part of the value, so a setting and what
 it is for go on separate lines. A name that is not a flag, or one missing the
 value it takes, is reported against the line that wrote it, and so are `config`,
-`no-config`, `version`, `schema`, `from`, `against`, `x`, `names`, `without`,
-`report`, `try-ns`, `try-ds`, `compare-ns`, `pcap` and `replay`: those fifteen ask something of the
+`no-config`, `version`, `schema`, `from`, `against`, `history`, `x`, `names`,
+`without`, `report`, `try-ns`, `try-ds`, `compare-ns`, `zone-file`, `pcap` and
+`replay`: those seventeen ask something of the
 run rather than set a default for it.
 
 > [!NOTE]
@@ -49,8 +50,8 @@ drop an `explain` and a `diff` as well, being read by a program that has the
 whole trace already. Every format but `tree`, `ascii`, `emoji`, `markdown` and
 `json` drops a `check`, a `propagation` and a `rollover`, which it does not draw. A
 format that serves no page drops a `web-addr` and a `no-browser` it set, and
-`--from` drops a `live`, a `watch` and a `diff`, which are about walks being
-made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.
+`--from` and `--history` drop a `live`, a `watch` and a `diff`, which are
+about walks being made. `--config FILE` reads somewhere else, and `--no-config` reads nowhere.
 
 `root` and `resolver` are the lines worth repeating: a file may carry as many
 as the walk should start from, or ask, in the order they are written. One

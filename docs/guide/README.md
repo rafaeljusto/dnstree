@@ -10,5 +10,5 @@ the section that covers it.
 | [Checking a zone](zones.md) | `--check`, `--check-ns`, records that point where they may not, addresses nobody can reach, `--serial`, `--check-axfr`, `--check-recursion`, `--check-edns`, `--caa`, `--spf`, `--mail`, `--tlsa`, `--dkim`, `--svcb`, `--srv`, `--deps`, `--rdap`, `--propagation`, extended errors, `--nsid`, `--software`, `--cookie`, `--qmin`, `--without`, `--try-ns`, `--try-ds`, `--compare-ns`, answer sizes |
 | [Resolvers](resolvers.md) | the comparison with your resolver, why it answers SERVFAIL, several resolvers at once, answers kept longer than the zone allows, `--subnet`, `--ddr`, `--check-resolver` |
 | [Reading a walk](output.md) | `--explain`, `--live`, the waterfall, every other `--format`, `--schema`, `--pcap`, `--replay` |
-| [Scripts and monitoring](scripting.md) | `--expect`, `--diff`, several questions and `--names`, `--watch`, `--from` and `--against`, OpenMetrics |
+| [Scripts and monitoring](scripting.md) | `--expect`, `--diff`, several questions and `--names`, `--watch`, `--from` and `--against`, `--history`, OpenMetrics |
 | [dnstree-web](dnstree-web.md) | the same walk behind a form, as a service |
