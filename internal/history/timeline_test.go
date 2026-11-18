@@ -65,7 +65,7 @@ func TestTimeline(t *testing.T) {
 				"the parent withdrew the DS for key 1 (ECDSAP256SHA256) of test.",
 				"key 1 (ECDSAP256SHA256) was removed from test.",
 				"the keys became 2 of test., at most 2 hours after the DS set changed between 2026-09-21 09:00:00 and 09:05:00 UTC, but that DS set had a TTL of 1 day",
-				"found no key for the DS it held for up to 1 day (RFC 7583)",
+				"a resolver that still held the old DS set could not validate test. for up to 1 day (RFC 7583)",
 			},
 			worst: explain.Warn,
 		},
@@ -95,7 +95,7 @@ func TestTimeline(t *testing.T) {
 			want: []string{
 				"the DS set moved to 2 of test., at most 10 minutes after the key set changed",
 				"that key set had a TTL of 1 hour",
-				"found no key for the new DS for up to 1 hour (RFC 7583)",
+				"a resolver that still held the old key set could not validate test. for up to 1 hour (RFC 7583)",
 			},
 			worst: explain.Warn,
 		},

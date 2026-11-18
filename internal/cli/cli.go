@@ -308,8 +308,8 @@ question changed from one walk to the next. A change is placed between the two
 walks that saw it, never at a moment nothing watched, and a stretch much longer
 than the usual time between walks is said, since a change undone inside it was
 not seen. Where a key or a DS changed before the caches could let go of the
-set it replaced (RFC 7583), it says so, and for up to how long resolvers found
-no key; --rollover is timed from when the walks first saw each key. Files that
+set it replaced (RFC 7583), it says so, and for up to how long resolvers could
+not validate the zone; --rollover is timed from when the walks first saw each key. Files that
 hold no walk are skipped in one line. Nothing is asked of any server and
 nothing is written: the walks are kept by whatever saved them, such as a loop
 or a cron job around dnstree --format json.

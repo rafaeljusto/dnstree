@@ -188,7 +188,7 @@ func timing(walks []*Walk) []explain.Finding {
 			if dsMoved {
 				if step, ok := lastWithin(keyMoves, walk.Seen); ok && !names(zone.DS, step.was) {
 					findings = append(findings, early(name, "the DS set moved to "+tags(zone.DS),
-						previous, walk, step, "key set", "the new DS"))
+						previous, walk, step, "key set"))
 				}
 				dsMove = append(dsMove, change{before: previous, after: walk, was: was.DS, ttl: was.DSTTL})
 			}
@@ -196,7 +196,7 @@ func timing(walks []*Walk) []explain.Finding {
 			if keysMoved {
 				if step, ok := lastWithin(dsMove, walk.Seen); ok && !names(step.was, zone.Keys) {
 					findings = append(findings, early(name, "the keys became "+tags(zone.Keys),
-						previous, walk, step, "DS set", "the DS it held"))
+						previous, walk, step, "DS set"))
 				}
 				keyMoves = append(keyMoves, change{before: previous, after: walk, was: was.Keys, ttl: was.KeysTTL})
 			}
@@ -222,14 +222,14 @@ func lastWithin(changes []change, by time.Time) (change, bool) {
 
 // early is the finding for a step taken before the caches could let go of
 // the set the step before it replaced.
-func early(zone, what string, before, after *Walk, step change, set, stranded string) explain.Finding {
+func early(zone, what string, before, after *Walk, step change, set string) explain.Finding {
 	ttl := time.Duration(step.ttl) * time.Second
 	soonest := max(before.Seen.Sub(step.after.Seen), 0)
 	return explain.Finding{Topic: explain.Change, Level: explain.Warn, Text: fmt.Sprintf(
 		"%s, %s of %s, at most %s after the %s changed %s, but that %s had a TTL of %s: "+
-			"a resolver that still held the old %s found no key for %s for up to %s (RFC 7583)",
+			"a resolver that still held the old %s could not validate %s for up to %s (RFC 7583)",
 		between(before.Seen, after.Seen), what, zone, about(after.Seen.Sub(step.before.Seen)), set,
-		between(step.before.Seen, step.after.Seen), set, about(ttl), set, stranded, about(ttl-soonest))}
+		between(step.before.Seen, step.after.Seen), set, about(ttl), set, zone, about(ttl-soonest))}
 }
 
 // names reports whether any DS of a set names one of the keys.

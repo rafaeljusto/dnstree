@@ -371,9 +371,9 @@ step of a rollover against the step before it (RFC 7583): a key removed while
 caches may still hold a DS set that names no key left, or a DS moved while
 caches may still hold a key set that has no key for it. Each is said only
 where it was too soon however the changes fell between the walks, with how
-long resolvers found no key for "up to", since a resolver may keep a record
-for less than its TTL. `--rollover` is timed from when the walks first saw
-each key.
+long resolvers could not validate the zone as "up to", since a resolver may
+keep a record for less than its TTL. `--rollover` is timed from when the walks
+first saw each key.
 
 It asks no server, writes nothing, and refuses the flags that shape a walk,
 as `--from` does. A file
