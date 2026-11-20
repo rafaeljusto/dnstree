@@ -188,6 +188,10 @@ func TestParse(t *testing.T) {
 			args: []string{"--mail", "--dnssec", "--tlsa", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Mail: true, DNSSEC: true, TLSA: true},
 		},
+		"an SRV check that connects to the targets it proves": {
+			args: []string{"--srv", "--dnssec", "--tlsa", "_xmpp-client._tcp.example.com", "SRV"},
+			want: cli.Config{Name: "_xmpp-client._tcp.example.com", Type: "SRV", SRV: true, DNSSEC: true, TLSA: true},
+		},
 		"a mail check of two DKIM keys, one named twice": {
 			args: []string{"--mail", "--dkim", "Google", "--dkim", "s1.2024", "--dkim", "google", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", Mail: true, DKIM: []string{"google", "s1.2024"}},
@@ -485,7 +489,7 @@ func TestParseRejects(t *testing.T) {
 		"a reverse lookup and a type":                     {"-x", "192.0.2.1", "A"},
 		"a reverse lookup of a saved walk":                {"--from", "walk.json", "-x", "192.0.2.1"},
 		"a request weighed unsigned":                      {"--check-ds", "example.com"},
-		"certificates matched with no mail check":         {"--dnssec", "--tlsa", "example.com"},
+		"certificates matched with no mail or SRV check":  {"--dnssec", "--tlsa", "example.com"},
 		"certificates matched, nothing proved":            {"--mail", "--tlsa", "example.com"},
 		"a DKIM key with no mail check":                   {"--dkim", "google", "example.com"},
 		"a DKIM selector of an empty label":               {"--mail", "--dkim", "s1..x", "example.com"},

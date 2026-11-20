@@ -517,7 +517,14 @@ does (RFC 7672 3): a DANE-EE record has to match the leaf, and a DANE-TA one
 a certificate of the chain that the leaf chains to and that names the host.
 A key renewed without its TLSA record is said in a warning, with when the
 certificate presented was issued, and so is a server that offers no STARTTLS.
-It needs --mail and --dnssec, since only an address DNSSEC proved is one
+With --srv it looks up the TLSA set at _PORT._tcp of each target of a signed
+SRV set whose addresses are signed (RFC 7673), and connects to the signed
+addresses on the record's port: at once for a service that starts with TLS,
+such as _imaps or port 993, with STARTTLS for _submission and XMPP. A DANE-TA
+record has to match a certificate that names the target or the service
+domain. A service it does not know how to start TLS for, and a TLSA set with
+a PKIX record, which it does not check, are said rather than judged. It needs
+--mail or --srv, and --dnssec, since only an address DNSSEC proved is one
 worth checking. An address that is no public one is not connected to, and is
 said in a warning, since no sender on the internet reaches it. An address that
 cannot be reached, which is what a network that blocks port 25 makes of every
@@ -557,7 +564,8 @@ so is a host that is an alias, which RFC 2782 forbids, a host at an address no
 client on the internet can reach, and a target of . beside other records. A
 target of . alone says the service is not offered. Every record is followed,
 not the one a client would pick, and a host named by several is looked up
-once. Nothing is connected to: a host that resolves is not one that serves.
+once. Nothing is connected to unless --tlsa asks: a host that resolves is not
+one that serves.
 Each lookup is a walk of its own, drawn in the tree as an aside, and spends the
 walk's budget; a TYPE of SRV is the set itself.
 
@@ -585,8 +593,8 @@ registry puts on hold, takes the domain out of its TLD everywhere at once, and
 the registry knew for weeks. The domain is the zone the walk was delegated to
 below the TLD, or the TLD and one label of NAME where the TLD said it does not
 exist. The registry is found in IANA's bootstrap file, over HTTPS, which with
---tlsa's connections to port 25 are the only requests dnstree makes that are
-not DNS; a registry that cannot be asked costs
+--tlsa's connections to mail and SRV servers are the only requests dnstree
+makes that are not DNS; a registry that cannot be asked costs
 the check and says so in one line, never the walk. The DS are compared only
 with --dnssec, since a referral carries them only then.
 
@@ -1265,9 +1273,9 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.Rollover = false
 	}
-	if cfg.TLSA && (!cfg.Mail || !cfg.DNSSEC) {
+	if cfg.TLSA && (!cfg.Mail && !cfg.SRV || !cfg.DNSSEC) {
 		if slices.Contains(typed, "tlsa") {
-			return nil, fmt.Errorf("%w: --tlsa checks the certificates of the hosts --mail finds and --dnssec proves", ErrUsage)
+			return nil, fmt.Errorf("%w: --tlsa checks the certificates of the hosts --mail or --srv finds and --dnssec proves", ErrUsage)
 		}
 		cfg.TLSA = false
 	}

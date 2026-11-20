@@ -22,6 +22,29 @@ func TestSRV(t *testing.T) {
 			}},
 			want: "a client of the service at _xmpp._tcp.test. is sent to chat.example. port 5222, then chat2.example. port 5222; whether the service answers there was not checked",
 		},
+		"targets whose certificates match": {
+			srv: &trace.SRV{Name: "_xmpp._tcp.test.", Targets: []trace.SRVTarget{
+				{Name: "chat.example.", Port: 5222, IPv4: asked, Addrs: addr, DANE: trace.DANEVerified,
+					Presented: []trace.Presented{{Addr: addr[0], State: trace.PresentedMatch}}},
+			}},
+			want: "is sent to chat.example. port 5222; --tlsa matched the certificate of every address it reached against its TLSA set",
+		},
+		"a target whose certificate matches no TLSA record": {
+			srv: &trace.SRV{Name: "_xmpp._tcp.test.", Targets: []trace.SRVTarget{
+				{Name: "chat.example.", Port: 5222, IPv4: asked, Addrs: addr, DANE: trace.DANEVerified,
+					Presented: []trace.Presented{{Addr: addr[0], State: trace.PresentedMismatch}}},
+				{Name: "chat.example.", Port: 5222, IPv4: asked, Addrs: addr, DANE: trace.DANEVerified,
+					Presented: []trace.Presented{{Addr: addr[0], State: trace.PresentedMismatch}}},
+			}},
+			want: "the SRV records of _xmpp._tcp.test. name chat.example. port 5222, which a client that checks DANE does not connect to",
+		},
+		"a target whose TLSA lookup failed": {
+			srv: &trace.SRV{Name: "_xmpp._tcp.test.", Targets: []trace.SRVTarget{
+				{Name: "chat.example.", Port: 5269, IPv4: asked, Addrs: addr, DANE: trace.DANEFailed,
+					TLSA: &trace.Lookup{Name: "_5269._tcp.chat.example.", Err: "SERVFAIL"}},
+			}},
+			want: "name chat.example. port 5269, which a client that checks DANE does not connect to",
+		},
 		"a target with no address": {
 			srv:  &trace.SRV{Name: "_xmpp._tcp.test.", Targets: []trace.SRVTarget{{Name: "chat.example.", IPv4: asked}}},
 			want: "name chat.example., which has no address, so a client sent there has nothing to connect to",

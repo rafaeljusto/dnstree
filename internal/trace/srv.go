@@ -3,6 +3,7 @@ package trace
 import (
 	"net/netip"
 	"slices"
+	"strings"
 )
 
 // SRV is where a client that asks for the name's SRV records (RFC 2782) is
@@ -46,6 +47,56 @@ type SRVTarget struct {
 	// Unreachable are those of its addresses nobody on the internet can reach
 	// it at.
 	Unreachable []netip.Addr
+
+	// TLSA is the lookup of its TLSA set at _PORT._tcp.NAME (RFC 7673 3.3),
+	// nil where --tlsa did not ask, and DANE and Why what a client that checks
+	// DANE makes of it. DANE is empty where --tlsa did not ask.
+	TLSA    *Lookup
+	Records []TLSARecord
+	DANE    DANEState
+	Why     string
+
+	// Presented is what each proven address showed --tlsa, nil where it
+	// connected to none.
+	Presented []Presented
+}
+
+// Proven are the addresses of the target whose lookup DNSSEC proved secure,
+// the only ones a client that checks DANE connects to (RFC 7673 3.2).
+func (t SRVTarget) Proven() []netip.Addr {
+	var proven []netip.Addr
+	for _, addr := range t.Addrs {
+		// An IPv4-mapped address came from the AAAA set, and only its
+		// lookup proves it.
+		lookup := t.IPv6
+		if addr.Is4() {
+			lookup = t.IPv4
+		}
+		if lookup != nil && lookup.DNSSEC != nil && lookup.DNSSEC.State == Secure {
+			proven = append(proven, addr)
+		}
+	}
+	return proven
+}
+
+// Service is the service label of the name (RFC 2782), lowercased, and empty
+// where the name has not the shape of _service._proto.domain.
+func (s *SRV) Service() string { service, _, _ := s.split(); return service }
+
+// Proto is the protocol label of the name, lowercased, such as _tcp.
+func (s *SRV) Proto() string { _, proto, _ := s.split(); return proto }
+
+// Domain is the service domain: the name with its service and protocol
+// labels taken off (RFC 7673 4.1).
+func (s *SRV) Domain() string { _, _, domain := s.split(); return domain }
+
+// split cuts the name in its three parts. The two labels hold no dot.
+func (s *SRV) split() (service, proto, domain string) {
+	parts := strings.SplitN(s.Name, ".", 3)
+	if len(parts) < 3 || !strings.HasPrefix(parts[0], "_") || !strings.HasPrefix(parts[1], "_") || parts[2] == "" {
+		return "", "", ""
+	}
+	return strings.ToLower(parts[0]), strings.ToLower(parts[1]), parts[2]
 }
 
 // Alias is the name the target is an alias for, which RFC 2782 says it must
@@ -83,6 +134,9 @@ func (s *SRV) Shown() *SRV {
 		target := &shown.Targets[i]
 		target.Name = Shown(target.Name)
 		target.IPv4, target.IPv6 = target.IPv4.shownRef(), target.IPv6.shownRef()
+		target.TLSA, target.Why = target.TLSA.shownRef(), Shown(target.Why)
+		target.DANE = DANEState(Shown(string(target.DANE)))
+		target.Records, target.Presented = shownTLSA(target.Records), shownPresented(target.Presented)
 	}
 	return &shown
 }

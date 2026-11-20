@@ -125,25 +125,59 @@ func convertMail(from *trace.Mail) *mail {
 	for _, host := range from.Hosts {
 		h := mailHost{Name: host.Name, Preference: host.Preference, DANE: string(host.DANE), Why: host.Why,
 			Addresses: texts(host.Addrs)}
-		for _, p := range host.Presented {
-			h.Presented = append(h.Presented, presented{Address: p.Addr.String(), State: string(p.State),
-				Subject: p.Subject, Since: timestamp(p.Since), Matched: p.Matched, Why: p.Why})
-		}
+		h.Presented = convertPresented(host.Presented)
 		if host.Address != nil {
 			h.Address = new(convertLookup(*host.Address))
 		}
 		if host.TLSA != nil {
 			h.TLSA = new(convertLookup(*host.TLSA))
 		}
-		for _, record := range host.Records {
-			h.Records = append(h.Records, tlsaRecord{
-				Usage: record.Usage, Selector: record.Selector, Matching: record.Matching,
-				Data: record.Data, Usable: record.Usable,
-			})
-		}
+		h.Records = convertTLSA(host.Records)
 		to.Hosts = append(to.Hosts, h)
 	}
 	return to
+}
+
+func convertTLSA(from []trace.TLSARecord) []tlsaRecord {
+	var to []tlsaRecord
+	for _, record := range from {
+		to = append(to, tlsaRecord{
+			Usage: record.Usage, Selector: record.Selector, Matching: record.Matching,
+			Data: record.Data, Usable: record.Usable,
+		})
+	}
+	return to
+}
+
+func convertPresented(from []trace.Presented) []presented {
+	var to []presented
+	for _, p := range from {
+		to = append(to, presented{Address: p.Addr.String(), State: string(p.State),
+			Subject: p.Subject, Since: timestamp(p.Since), Matched: p.Matched, Why: p.Why})
+	}
+	return to
+}
+
+func readTLSA(from []tlsaRecord) []trace.TLSARecord {
+	var to []trace.TLSARecord
+	for _, record := range from {
+		to = append(to, trace.TLSARecord{
+			Usage: record.Usage, Selector: record.Selector, Matching: record.Matching,
+			Data: record.Data, Usable: record.Usable,
+		})
+	}
+	return to
+}
+
+// readDANE reads what DANE does for a host.
+func readDANE(from string) (trace.DANEState, error) {
+	state := trace.DANEState(from)
+	switch state {
+	case trace.DANEVerified, trace.DANEUnusable, trace.DANENone, trace.DANEInsecure, trace.DANEFailed,
+		trace.DANEUnreachable, trace.DANELiteral, trace.DANEUnchecked, trace.DANEIndeterminate:
+		return state, nil
+	}
+	return "", fmt.Errorf("%q is not what DANE can do for a host", from)
 }
 
 func convertLookup(from trace.Lookup) lookup {
@@ -182,12 +216,9 @@ func readMail(from *mail) (*trace.Mail, error) {
 	to := &trace.Mail{Name: from.Name, MX: mx, Null: from.Null, Implicit: from.Implicit, Absent: from.Absent,
 		ReportsLeft: from.Left, Stopped: from.Stopped, Cut: from.Cut}
 	for _, host := range from.Hosts {
-		state := trace.DANEState(host.DANE)
-		switch state {
-		case trace.DANEVerified, trace.DANEUnusable, trace.DANENone, trace.DANEInsecure, trace.DANEFailed,
-			trace.DANEUnreachable, trace.DANELiteral, trace.DANEUnchecked, trace.DANEIndeterminate:
-		default:
-			return nil, fmt.Errorf("%q is not what DANE can do for a host", host.DANE)
+		state, err := readDANE(host.DANE)
+		if err != nil {
+			return nil, err
 		}
 		h := trace.MailHost{Name: host.Name, Preference: host.Preference, DANE: state, Why: host.Why}
 		if h.Address, err = readLookupRef(host.Address); err != nil {
@@ -196,12 +227,7 @@ func readMail(from *mail) (*trace.Mail, error) {
 		if h.TLSA, err = readLookupRef(host.TLSA); err != nil {
 			return nil, err
 		}
-		for _, record := range host.Records {
-			h.Records = append(h.Records, trace.TLSARecord{
-				Usage: record.Usage, Selector: record.Selector, Matching: record.Matching,
-				Data: record.Data, Usable: record.Usable,
-			})
-		}
+		h.Records = readTLSA(host.Records)
 		if h.Addrs, err = parseAddrs("addresses", host.Addresses); err != nil {
 			return nil, err
 		}

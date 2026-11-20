@@ -25,6 +25,19 @@ func TestRenderSRV(t *testing.T) {
 		t.Errorf("got\n%s\nwant %s", out, want)
 	}
 
+	if strings.Contains(out, "dnstree_srv_tlsa") {
+		t.Errorf("got\n%s\nwant no --tlsa count where it connected to none", out)
+	}
+	presented := []trace.Presented{{Addr: addr[0], State: trace.PresentedMismatch}}
+	tr.SRV.Targets = append(tr.SRV.Targets,
+		trace.SRVTarget{Name: "tls.test.", Port: 5223, Addrs: addr, Presented: presented},
+		trace.SRVTarget{Name: "TLS.test.", Port: 5223, Addrs: addr, Presented: presented})
+	out = render(t, tr)
+	valid(t, out)
+	if want := `dnstree_srv_tlsa_addresses{name="_xmpp._tcp.test.",type="SRV",state="mismatch"} 1`; !strings.Contains(out, want) {
+		t.Errorf("got\n%s\nwant %s, once for a host named twice", out, want)
+	}
+
 	tr.SRV.Cut = true
 	if out := render(t, tr); strings.Contains(out, "dnstree_srv") {
 		t.Errorf("got\n%s\nwant no count the budget cut short", out)

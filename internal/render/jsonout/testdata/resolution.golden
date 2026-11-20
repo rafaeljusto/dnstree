@@ -809,6 +809,33 @@
         },
         "addrs": [
           "203.0.113.10"
+        ],
+        "tlsa": {
+          "name": "_5222._tcp.chat.example.com.",
+          "dnssec": {
+            "state": "secure",
+            "zone": "example.com."
+          }
+        },
+        "records": [
+          {
+            "usage": 3,
+            "selector": 1,
+            "matching": 1,
+            "data": "8d02536c887482bc34ff54e41d2ba659bf85b341a0a20afadb5813dcfbcf286d",
+            "usable": true
+          }
+        ],
+        "dane": "dane",
+        "why": "a client has to see a certificate that matches",
+        "presented": [
+          {
+            "address": "203.0.113.10",
+            "state": "mismatch",
+            "subject": "CN=chat.example.com",
+            "since": "2026-11-15T00:00:00Z",
+            "why": "no TLSA record matches the certificate or key it presents"
+          }
         ]
       },
       {
@@ -825,7 +852,9 @@
         ],
         "unreachable": [
           "10.0.0.5"
-        ]
+        ],
+        "dane": "insecure",
+        "why": "its addresses are not signed, so its TLSA set is not asked for"
       }
     ],
     "cut": true,

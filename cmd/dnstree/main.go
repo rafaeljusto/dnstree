@@ -939,6 +939,7 @@ func resolve(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		DKIM:           cfg.DKIM,
 		SVCB:           cfg.SVCB,
 		SRV:            cfg.SRV,
+		TLSA:           cfg.TLSA && cfg.SRV,
 		Confirm:        cfg.Confirm,
 		Deps:           cfg.Deps,
 

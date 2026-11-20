@@ -26,6 +26,13 @@ type srvTarget struct {
 	IPv6        *lookup  `json:"ipv6,omitempty"`
 	Addrs       []string `json:"addrs,omitempty"`
 	Unreachable []string `json:"unreachable,omitempty"`
+
+	// What --tlsa found, where it asked.
+	TLSA      *lookup      `json:"tlsa,omitempty"`
+	Records   []tlsaRecord `json:"records,omitempty"`
+	DANE      string       `json:"dane,omitempty"`
+	Why       string       `json:"why,omitempty"`
+	Presented []presented  `json:"presented,omitempty"`
 }
 
 func convertSRV(from *trace.SRV) *srv {
@@ -36,7 +43,12 @@ func convertSRV(from *trace.SRV) *srv {
 		None: from.None, Stopped: from.Stopped, Cut: from.Cut, Left: from.Left}
 	for _, target := range from.Targets {
 		t := srvTarget{Name: target.Name, Priority: target.Priority, Weight: target.Weight, Port: target.Port,
-			Addrs: texts(target.Addrs), Unreachable: texts(target.Unreachable)}
+			Addrs: texts(target.Addrs), Unreachable: texts(target.Unreachable),
+			Records: convertTLSA(target.Records), DANE: string(target.DANE), Why: target.Why,
+			Presented: convertPresented(target.Presented)}
+		if target.TLSA != nil {
+			t.TLSA = new(convertLookup(*target.TLSA))
+		}
 		if target.IPv4 != nil {
 			t.IPv4 = new(convertLookup(*target.IPv4))
 		}
@@ -72,6 +84,18 @@ func readSRV(from *srv) (*trace.SRV, error) {
 			return nil, err
 		}
 		if t.IPv6, err = readLookupRef(target.IPv6); err != nil {
+			return nil, err
+		}
+		if target.DANE != "" {
+			if t.DANE, err = readDANE(target.DANE); err != nil {
+				return nil, err
+			}
+		}
+		t.Why, t.Records = target.Why, readTLSA(target.Records)
+		if t.TLSA, err = readLookupRef(target.TLSA); err != nil {
+			return nil, err
+		}
+		if t.Presented, err = readPresented(target.Presented, len(t.Records)); err != nil {
 			return nil, err
 		}
 		to.Targets = append(to.Targets, t)

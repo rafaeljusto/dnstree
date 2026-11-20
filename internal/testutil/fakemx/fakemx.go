@@ -1,5 +1,7 @@
-// Package fakemx runs mail servers that offer STARTTLS on the loopback, with
-// certificates made for the test, so --tlsa can be tested without port 25.
+// Package fakemx runs servers that start TLS on the loopback, with
+// certificates made for the test, so --tlsa can be tested without port 25:
+// mail servers that offer STARTTLS, XMPP servers that offer it in their
+// stream, and servers that start TLS at once.
 package fakemx
 
 import (
@@ -95,9 +97,27 @@ const (
 	Rambling      // turns the connection away at length
 )
 
+// Protocol is how a server starts TLS.
+type Protocol int
+
+// The ways a server can start TLS.
+const (
+	SMTP     Protocol = iota
+	XMPP              // with <starttls/> in its stream
+	Implicit          // at once
+)
+
 // Serve runs a mail server that presents the leaf, made for key, and the
 // rest of the chain after STARTTLS. It stops with the test.
 func Serve(tb testing.TB, how Mode, key *ecdsa.PrivateKey, chain ...*x509.Certificate) netip.AddrPort {
+	tb.Helper()
+	return ServeOver(tb, SMTP, how, key, chain...)
+}
+
+// ServeOver runs a server that starts TLS the way protocol does. Of the
+// modes, an XMPP server knows Plain, which offers no STARTTLS, and Picky,
+// which refuses it; a server that starts TLS at once knows none.
+func ServeOver(tb testing.TB, protocol Protocol, how Mode, key *ecdsa.PrivateKey, chain ...*x509.Certificate) netip.AddrPort {
 	tb.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -117,7 +137,18 @@ func Serve(tb testing.TB, how Mode, key *ecdsa.PrivateKey, chain ...*x509.Certif
 			if err != nil {
 				return
 			}
-			go converse(conn, how, config)
+			switch protocol {
+			case XMPP:
+				go stream(conn, how, config)
+			case Implicit:
+				go func() {
+					defer conn.Close()
+					_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+					_ = tls.Server(conn, config).Handshake()
+				}()
+			default:
+				go converse(conn, how, config)
+			}
 		}
 	}()
 	return netip.MustParseAddrPort(listener.Addr().String())
@@ -174,4 +205,32 @@ func converse(conn net.Conn, how Mode, config *tls.Config) {
 			_, _ = conn.Write([]byte("502 no\r\n"))
 		}
 	}
+}
+
+// stream answers an XMPP stream: its features, then <proceed/> to STARTTLS.
+func stream(conn net.Conn, how Mode, config *tls.Config) {
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	reader := bufio.NewReader(conn)
+	if _, err := reader.ReadString('>'); err != nil { // the declaration
+		return
+	}
+	if _, err := reader.ReadString('>'); err != nil { // the stream header
+		return
+	}
+	features := "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'><required/></starttls>"
+	if how == Plain {
+		features = "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><mechanism>PLAIN</mechanism></mechanisms>"
+	}
+	_, _ = conn.Write([]byte("<?xml version='1.0'?><stream:stream xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams' " +
+		"from='example.com' id='1' version='1.0'><stream:features>" + features + "</stream:features>"))
+	if _, err := reader.ReadString('>'); err != nil { // <starttls/>
+		return
+	}
+	if how == Picky {
+		_, _ = conn.Write([]byte("<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/></stream:stream>"))
+		return
+	}
+	_, _ = conn.Write([]byte("<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"))
+	_ = tls.Server(conn, config).Handshake()
 }

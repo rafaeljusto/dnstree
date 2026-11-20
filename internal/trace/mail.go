@@ -397,16 +397,7 @@ func (m *Mail) Shown() *Mail {
 		host.Name, host.Why = Shown(host.Name), Shown(host.Why)
 		host.DANE = DANEState(Shown(string(host.DANE)))
 		host.Address, host.TLSA = host.Address.shownRef(), host.TLSA.shownRef()
-		host.Records = slices.Clone(host.Records)
-		for j := range host.Records {
-			host.Records[j].Data = Shown(host.Records[j].Data)
-		}
-		host.Presented = slices.Clone(host.Presented)
-		for j := range host.Presented {
-			presented := &host.Presented[j]
-			presented.Subject, presented.Why = Shown(presented.Subject), Shown(presented.Why)
-			presented.State = PresentedState(Shown(string(presented.State)))
-		}
+		host.Records, host.Presented = shownTLSA(host.Records), shownPresented(host.Presented)
 	}
 	shown.MTASTS, shown.TLSRPT, shown.DMARC = m.MTASTS.shown(), m.TLSRPT.shown(), m.DMARC.shown()
 	shown.Reports = slices.Clone(m.Reports)
@@ -429,6 +420,26 @@ func (m *Mail) Shown() *Mail {
 		}
 	}
 	return &shown
+}
+
+// shownTLSA is a TLSA set with its data escaped.
+func shownTLSA(records []TLSARecord) []TLSARecord {
+	records = slices.Clone(records)
+	for i := range records {
+		records[i].Data = Shown(records[i].Data)
+	}
+	return records
+}
+
+// shownPresented is what --tlsa found with every text a server sent escaped.
+func shownPresented(presented []Presented) []Presented {
+	presented = slices.Clone(presented)
+	for i := range presented {
+		p := &presented[i]
+		p.Subject, p.Why = Shown(p.Subject), Shown(p.Why)
+		p.State = PresentedState(Shown(string(p.State)))
+	}
+	return presented
 }
 
 func (l Lookup) shown() Lookup {

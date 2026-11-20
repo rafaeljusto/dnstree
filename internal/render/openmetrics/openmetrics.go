@@ -300,6 +300,28 @@ func (e *Exposition) Add(tr *trace.Trace) {
 		m.family("dnstree_srv_targets", "", "the hosts the name's SRV records send a client to that have an address")
 		m.sample("dnstree_srv_targets", strconv.Itoa(len(reachable)))
 	}
+	// Only --tlsa connects, and a count of none would say it had. A host
+	// named twice on one port was connected to once.
+	if s := tr.SRV; s != nil && !s.Cut {
+		counted := map[trace.PresentedState]int{}
+		seen := map[string]bool{}
+		for _, target := range s.Targets {
+			key := strings.ToLower(target.Name) + " " + strconv.Itoa(int(target.Port))
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			for _, p := range target.Presented {
+				counted[p.State]++
+			}
+		}
+		if len(counted) > 0 {
+			m.family("dnstree_srv_tlsa_addresses", "", "the SRV target addresses --tlsa connected to, by what their certificate came to: match, mismatch where a client that checks DANE refuses it, or unreached")
+			for _, state := range []trace.PresentedState{trace.PresentedMatch, trace.PresentedMismatch, trace.PresentedUnreached} {
+				m.sample("dnstree_srv_tlsa_addresses", strconv.Itoa(counted[state]), label{"state", string(state)})
+			}
+		}
+	}
 
 	// A budget that stopped the names short leaves a no unsaid rather than
 	// said; a walk with no PTR set to read has nothing to be confirmed.

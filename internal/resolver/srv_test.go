@@ -52,6 +52,14 @@ _three._tcp       IN SRV   20 0 80 chat2.provider.com.
 _three._tcp       IN SRV   30 0 80 svc.plain.com.
 _three._tcp       IN SRV   40 0 443 chat1.example.com.
 _service._tcp     IN CNAME _xmpp-client._tcp
+_twice._tcp       IN SRV   10 0 5222 chat1.example.com.
+_twice._tcp       IN SRV   20 0 5222 chat1.example.com.
+_stun._udp        IN SRV   10 0 3478 chat1.example.com.
+_5222._tcp.chat1  IN TLSA  3 1 1 ` + tlsaData + `
+_80._tcp.chat1    IN TLSA  1 0 1 ` + tlsaData + `
+_80._tcp.chat1    IN TLSA  3 1 1 ` + tlsaData + `
+_unsigned._tcp    IN SRV   10 0 8443 chat1.example.com.
+_8443._tcp.chat1  IN CNAME tlsa.plain.com.
 `
 
 	srvProviderZone = `
@@ -60,6 +68,7 @@ _service._tcp     IN CNAME _xmpp-client._tcp
 ns      IN A     192.0.2.5
 chat2   IN A     192.0.2.20
 noaddr  IN TXT   "nothing here"
+_5222._tcp.chat2 IN TLSA 2 0 1 ` + tlsaData + `
 `
 
 	srvPlainZone = `
@@ -67,6 +76,9 @@ noaddr  IN TXT   "nothing here"
 @       IN NS    ns
 ns      IN A     192.0.2.6
 svc     IN A     192.0.2.30
+_svc._tcp IN SRV 10 0 80 svc
+_80._tcp.svc IN TLSA 3 1 1 ` + tlsaData + `
+tlsa      IN TLSA 3 1 1 ` + tlsaData + `
 `
 )
 
@@ -378,5 +390,148 @@ sip        IN A    45.0.0.5
 	want := "sip.example.com., which the SRV records of _sip._udp.example.com. name, has 10.0.0.5, a private address no client on the internet can reach"
 	if !slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, want) }) {
 		t.Errorf("no warning with %q in %q", want, tr.Warnings)
+	}
+}
+
+// srvDANE is each target as its port, name, DANE state and, where it was
+// asked, the TLSA set's name.
+func srvDANE(s *trace.SRV) []string {
+	var targets []string
+	for _, target := range s.Targets {
+		text := fmt.Sprintf("%d %s %s", target.Port, target.Name, target.DANE)
+		if target.TLSA != nil {
+			text += " at " + target.TLSA.Name
+		}
+		targets = append(targets, text)
+	}
+	return targets
+}
+
+func TestSRVDANE(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		qname    string
+		provider fakens.Behaviour // of provider.com.
+		unasked  bool             // without --tlsa
+
+		targets []string
+		why     string // a part of the first target's Why
+		warning string // a part of a warning that has to be there
+	}{
+		"a target with a signed TLSA set at its port is one a client checks": {
+			qname: "_xmpp-client._tcp.example.com",
+			targets: []string{
+				"5222 chat1.example.com. dane at _5222._tcp.chat1.example.com.",
+				"5222 chat2.provider.com. dane at _5222._tcp.chat2.provider.com.",
+			},
+			why: "a client has to see a certificate that matches",
+		},
+		"without --tlsa no TLSA set is asked": {
+			qname: "_xmpp-client._tcp.example.com", unasked: true,
+			targets: []string{"5222 chat1.example.com. ", "5222 chat2.provider.com. "},
+		},
+		"a TLSA set with a PKIX record is left unchecked rather than judged": {
+			qname:   "_mixed._tcp.example.com",
+			targets: []string{"80 chat1.example.com. indeterminate at _80._tcp.chat1.example.com."},
+			why:     "PKIX records, which --tlsa does not check",
+		},
+		"a signed proof of no TLSA set at a port leaves DANE out there": {
+			qname: "_ports._tcp.example.com",
+			targets: []string{
+				"80 chat1.example.com. indeterminate at _80._tcp.chat1.example.com.",
+				"443 chat1.example.com. none at _443._tcp.chat1.example.com.",
+				"80 chat2.provider.com. none at _80._tcp.chat2.provider.com.",
+			},
+		},
+		"a target whose addresses are not signed is not asked for its TLSA set": {
+			qname:   "_plain._tcp.example.com",
+			targets: []string{"80 svc.plain.com. insecure"},
+			why:     "its addresses are not signed",
+		},
+		"an SRV set that is not signed leaves DANE out for every target": {
+			qname:   "_svc._tcp.plain.com",
+			targets: []string{"80 svc.plain.com. insecure"},
+			why:     "the SRV set is not signed",
+		},
+		"a TLSA set an alias leads into an unsigned zone is ignored, and said": {
+			qname:   "_unsigned._tcp.example.com",
+			targets: []string{"8443 chat1.example.com. insecure at _8443._tcp.chat1.example.com."},
+			why:     "its TLSA set is not signed",
+			warning: "tlsa.plain.com. has a TLSA set nothing signed, which clients ignore; sign the zone it is in",
+		},
+		"a service over UDP is left unchecked": {
+			qname:   "_stun._udp.example.com",
+			targets: []string{"3478 chat1.example.com. indeterminate"},
+			why:     "over TCP alone",
+		},
+		"a TLSA lookup the server fails makes a client that checks DANE stay away": {
+			qname: "_xmpp-client._tcp.example.com", provider: fakens.Behaviour{ServFailType: dns.TypeTLSA},
+			targets: []string{
+				"5222 chat1.example.com. dane at _5222._tcp.chat1.example.com.",
+				"5222 chat2.provider.com. failed at _5222._tcp.chat2.provider.com.",
+			},
+			warning: "a client that checks DANE does not connect to chat2.provider.com. on port 5222, since the TLSA lookup failed",
+		},
+		"a target whose addresses do not validate is not asked for its TLSA set": {
+			qname: "_xmpp-client._tcp.example.com", provider: fakens.Behaviour{BadSignature: true},
+			targets: []string{
+				"5222 chat1.example.com. dane at _5222._tcp.chat1.example.com.",
+				"5222 chat2.provider.com. failed",
+			},
+			warning: "the addresses of chat2.provider.com., which the SRV records of _xmpp-client._tcp.example.com. name, do not validate",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h, cfg := srvServed(t, fakens.Behaviour{}, tt.provider)
+			cfg.TLSA = !tt.unasked
+			tr, err := newResolver(t, h, cfg).Resolve(t.Context(), tt.qname, "SRV")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := srvDANE(tr.SRV); !slices.Equal(got, tt.targets) {
+				t.Errorf("targets %q, want %q", got, tt.targets)
+			}
+			if tt.why != "" && !strings.Contains(tr.SRV.Targets[0].Why, tt.why) {
+				t.Errorf("why %q, want %q", tr.SRV.Targets[0].Why, tt.why)
+			}
+			if tt.warning != "" && !slices.ContainsFunc(tr.Warnings, func(w string) bool { return strings.Contains(w, tt.warning) }) {
+				t.Errorf("no warning with %q in %q", tt.warning, tr.Warnings)
+			}
+			if tr.Result().Kind != trace.KindAnswer {
+				t.Errorf("result %s, want the SRV set itself", tr.Result().Kind)
+			}
+		})
+	}
+}
+
+// TestSRVDANEAskedOnce covers two records that name one host on one port: a
+// client looks up one TLSA set for them, so it is asked once.
+func TestSRVDANEAskedOnce(t *testing.T) {
+	t.Parallel()
+
+	h, cfg := srvServed(t, fakens.Behaviour{}, fakens.Behaviour{})
+	cfg.TLSA = true
+	tr, err := newResolver(t, h, cfg).Resolve(t.Context(), "_twice._tcp.example.com", "SRV")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"5222 chat1.example.com. dane at _5222._tcp.chat1.example.com.",
+		"5222 chat1.example.com. dane at _5222._tcp.chat1.example.com.",
+	}
+	if got := srvDANE(tr.SRV); !slices.Equal(got, want) {
+		t.Errorf("targets %q, want %q", got, want)
+	}
+	asked := 0
+	for step := range tr.Steps() {
+		if slices.Contains(step.Notes, "TLSA of _5222._tcp.chat1.example.com. for srv") {
+			asked++
+		}
+	}
+	if asked != 1 {
+		t.Errorf("the TLSA set asked %d times, want once: %s", asked, format(steps(tr)))
 	}
 }

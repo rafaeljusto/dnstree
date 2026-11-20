@@ -206,38 +206,50 @@ func (r *run) host(ctx context.Context, under *trace.Step, host *trace.MailHost)
 
 // tlsa looks up the TLSA set at name for host and decides by it.
 func (r *run) tlsa(ctx context.Context, under *trace.Step, host *trace.MailHost, name string) {
-	result, lookup, stopped := r.look(ctx, under, name, dns.TypeTLSA, "mail")
-	host.TLSA = &lookup
-	host.Records = nil
+	lookup, records, state, why := r.tlsaSet(ctx, under, name, "mail")
+	host.TLSA, host.Records = &lookup, records
+	switch {
+	case state != "":
+		host.DANE, host.Why = state, why
+	case slices.ContainsFunc(records, func(t trace.TLSARecord) bool { return t.Usable }):
+		host.DANE, host.Why = trace.DANEVerified, "a sender has to see a certificate that matches"
+	default:
+		host.DANE, host.Why = trace.DANEUnusable, "none of its TLSA records is one a mail sender may use, so it only insists on TLS"
+	}
+}
+
+// tlsaSet looks up the TLSA set at name and decides what any client that
+// checks DANE makes of it. The state is empty for a signed set with records,
+// which is the caller's to judge by the records it may use.
+func (r *run) tlsaSet(ctx context.Context, under *trace.Step, name, purpose string) (trace.Lookup, []trace.TLSARecord, trace.DANEState, string) {
+	result, lookup, stopped := r.look(ctx, under, name, dns.TypeTLSA, purpose)
+	var records []trace.TLSARecord
 	if lookup.Err == "" {
-		host.Records = tlsaRecords(result.Records, result.Asked.Name)
+		records = tlsaRecords(result.Records, result.Asked.Name)
 	}
 
 	status := lookup.DNSSEC
 	switch {
 	case stopped:
-		host.DANE, host.Why = trace.DANEIndeterminate, "the budget ran out before its TLSA set was looked up"
+		return lookup, records, trace.DANEIndeterminate, "the budget ran out before its TLSA set was looked up"
 	case !r.cfg.DNSSEC || status == nil && lookup.Err == "":
-		host.DANE, host.Why = trace.DANEUnchecked, "nothing was checked without --dnssec"
 		if lookup.Err != "" {
-			host.Why = "the TLSA lookup failed: " + lookup.Err
+			return lookup, records, trace.DANEUnchecked, "the TLSA lookup failed: " + lookup.Err
 		}
+		return lookup, records, trace.DANEUnchecked, "nothing was checked without --dnssec"
 	case lookup.Err != "":
-		host.DANE, host.Why = trace.DANEFailed, "the TLSA lookup failed: "+lookup.Err
+		return lookup, records, trace.DANEFailed, "the TLSA lookup failed: " + lookup.Err
 	case status.State == trace.Bogus:
-		host.DANE, host.Why = trace.DANEFailed, "its TLSA set does not validate: "+status.Reason
+		return lookup, records, trace.DANEFailed, "its TLSA set does not validate: " + status.Reason
 	case status.State == trace.Indeterminate:
-		// A validator reads what it cannot check as unsigned, and delivers.
-		host.DANE, host.Why = trace.DANEIndeterminate, "its TLSA set could not be checked: "+status.Reason
+		// A validator reads what it cannot check as unsigned, and connects.
+		return lookup, records, trace.DANEIndeterminate, "its TLSA set could not be checked: " + status.Reason
 	case status.State == trace.Insecure:
-		host.DANE, host.Why = trace.DANEInsecure, "its TLSA set is not signed"
-	case len(host.Records) == 0:
-		host.DANE, host.Why = trace.DANENone, "its zone proves there is no TLSA set"
-	case slices.ContainsFunc(host.Records, func(t trace.TLSARecord) bool { return t.Usable }):
-		host.DANE, host.Why = trace.DANEVerified, "a sender has to see a certificate that matches"
-	default:
-		host.DANE, host.Why = trace.DANEUnusable, "none of its TLSA records is one a mail sender may use, so it only insists on TLS"
+		return lookup, records, trace.DANEInsecure, "its TLSA set is not signed"
+	case len(records) == 0:
+		return lookup, records, trace.DANENone, "its zone proves there is no TLSA set"
 	}
+	return lookup, records, "", ""
 }
 
 // tlsaRecords are the TLSA records owner owns. A sender may use a trust anchor

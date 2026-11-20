@@ -457,7 +457,7 @@ footer a:hover{color:var(--ink)}
         <div class="finding">
           <span class="tag tag-warn">gone</span>
           <h3>A service record that points nowhere</h3>
-          <p><code>--srv</code> follows a service's SRV records, the way a chat, phone or directory client finds its server, to the address of every host they name, and says which has none, which is an alias where none may be, and which sits at an address no client can reach.</p>
+          <p><code>--srv</code> follows a service's SRV records, the way a chat, phone or directory client finds its server, to the address of every host they name, and says which has none, which is an alias where none may be, and which sits at an address no client can reach. With <code>--tlsa</code> it connects to each host DANE covers, an XMPP or IMAP server alike, and matches the certificate it presents against its TLSA set.</p>
         </div>
         <div class="finding">
           <span class="tag tag-warn">hidden</span>

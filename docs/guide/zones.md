@@ -876,8 +876,8 @@ address that cannot be reached is `unreached`: many networks and cloud
 providers block outgoing connections on port 25, so it could not be checked
 from here, and one line says so; it is never taken for a mismatch.
 
-It needs `--mail` and `--dnssec`, since only an address DNSSEC proved is worth
-connecting to; from the file of defaults it waits for a run with both, such as
+It needs `--mail` and `--dnssec`, or [`--srv`](#whether-its-servers-certificates-match)
+and `--dnssec`, since only an address DNSSEC proved is worth connecting to; from the file of defaults it waits for a run with both, such as
 one with `--check`, which does not turn it on by itself. It connects only to
 the hosts DANE covers, at most four addresses each and sixteen in all, and a
 warning says how many it left; each is held to ten seconds and to what it may
@@ -1033,12 +1033,76 @@ offered at the name, and is not a fault.
 
 `NAME` is the service's name as written: dnstree keeps no list of services. A
 TYPE of SRV makes the walk's own answer the set; any other TYPE looks it up as
-an aside. Nothing connects to the hosts or their ports, so a host that resolves
-is not one that serves. The lookups spend the walk's budget, and a check cut
-short says how many records it left. The exit code is left alone.
+an aside. Nothing connects to the hosts or their ports unless
+[`--tlsa`](#whether-its-servers-certificates-match) asks, so a host that
+resolves is not one that serves. The lookups spend the walk's budget, and a
+check cut short says how many records it left. The exit code is left alone.
 `--format json` carries it as `srv`, and `--format openmetrics` as
 `dnstree_srv_targets`, the hosts that have an address, left out when the
 budget cut the check short.
+
+### Whether its servers' certificates match
+
+DANE is not only for mail. A service found with SRV can publish a TLSA set for
+each host and port its records name (RFC 7673), and the failure is the same
+as for mail: a certificate renewed with a new key while the TLSA record still
+names the old one. Every client that checks DANE then refuses the server, and
+every other client works. With `--srv`, `--tlsa` looks up the TLSA set at
+`_PORT._tcp` of each target, connects to the target on its port, and holds the
+certificate it presents against the set:
+
+```
+$ dnstree --srv --tlsa --dnssec --explain --no-asn --no-compare _xmpp-client._tcp.debian.org SRV
+...
+│   │       └── debian.org.  (TLSA of _5222._tcp.vogler.debian.org. for srv)
+│   │           └── dns4.easydns.info. 64.68.197.10  247ms  NOERROR  AA DO  [secure RSASHA256]
+│   │               └── _5222._tcp.vogler.debian.org. 600 TLSA 3 1 1 9574567ab1957d08e4b09cfd83d292728a4906277900664dfe9f34e295b6f2ad
+...
+srv: 1 SRV record at _xmpp-client._tcp.debian.org.  [secure RSASHA256]
+srv:   5 0 5222 vogler.debian.org. 82.195.75.92, 2001:41b8:202:deb:1b1b::92
+srv:     dane (1 TLSA record): a client has to see a certificate that matches
+srv:       82.195.75.92 match: 3 1 1 9574567a... matches CN=xmpp.debian.org, issued 2026-11-17
+srv:       2001:41b8:202:deb:1b1b::92 match: 3 1 1 9574567a... matches CN=xmpp.debian.org, issued 2026-11-17
+✔ answered in 3.8s · 15 queries · 4 servers
+...
+· a client of the service at _xmpp-client._tcp.debian.org. is sent to vogler.debian.org. port 5222; --tlsa matched the certificate of every address it reached against its TLSA set
+```
+
+A client looks for the TLSA set only where DNSSEC proves the SRV set, and
+then only for a target with an address set DNSSEC proves (RFC 7673 3), so the
+line under each target says why it was or was not asked: `dane`, a signed set
+the certificate has to match; `none`, a signed proof there is no set;
+`insecure`, an SRV set or addresses nothing signed; `failed`, a TLSA lookup
+that failed or does not validate, or addresses that do not validate, which
+makes a client stay away. A target named by two records on one port is asked
+and connected to once.
+
+How TLS starts depends on the service, and is read from the service's label,
+then from the port: at once for `_imaps`, `_pop3s`, `_submissions`,
+`_xmpps-client`, `_xmpps-server`, `_sips` and `_ldaps`, or ports 443, 465,
+636, 853, 993, 995, 5061 and 5223; with STARTTLS for `_submission`, or ports
+25 and 587; and with STARTTLS inside the stream for `_xmpp-client` and
+`_xmpp-server`, or ports 5222 and 5269. Any other service is said in a warning
+and not connected to, rather than guessed at. The handshake asks for the
+service domain, as RFC 7673 4.1 prefers, and connects only to the addresses
+DNSSEC proved.
+
+A DANE-EE record has to match the leaf, whatever it names. A DANE-TA record
+has to match a certificate the leaf chains to, and the leaf has to name the
+target or the service domain. RFC 7673 lets a client use PKIX records too,
+and this build does not check them: a set that holds one is `indeterminate`,
+and nothing is connected to, since a certificate no DANE record matches may
+still be one a PKIX record vouches for. A service over a protocol other than
+TCP is left `indeterminate` too.
+
+The rest is as for mail: `mismatch` is said in a warning with when the
+certificate was issued, a server that does not offer STARTTLS, or refuses it,
+is a mismatch, and an address that cannot be reached is `unreached` and said
+in one line, never a mismatch. It connects to at most four addresses a host
+and sixteen in all, the mail hosts first. It needs `--dnssec`, and dnstree-web
+never does it. The exit code is left alone. `--format json` carries it as
+`tlsa`, `records`, `dane` and `presented` on each target, and
+`--format openmetrics` as `dnstree_srv_tlsa_addresses`.
 
 ## What it depends on
 
@@ -1157,7 +1221,7 @@ rdap: the registry holds no registration for zzzz-not-registered-4711.com.
 ```
 
 The registry is found in [IANA's bootstrap file](https://data.iana.org/rdap/dns.json)
-(RFC 9224), over HTTPS: with `--tlsa`'s connections to port 25, these are the
+(RFC 9224), over HTTPS: with `--tlsa`'s connections to mail and SRV servers, these are the
 only requests dnstree makes that are not DNS, which is why it is off unless
 asked for. A TLD whose registry runs no RDAP
 service says so, and so does a registry that could not be reached or did not

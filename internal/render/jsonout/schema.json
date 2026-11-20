@@ -421,7 +421,23 @@
         "ipv4": { "description": "The lookup of its A set, absent where -6 left it unasked or a budget ran out. An alias here is a target RFC 2782 forbids.", "$ref": "#/$defs/lookup" },
         "ipv6": { "description": "The lookup of its AAAA set, absent where -4 left it unasked or a budget ran out.", "$ref": "#/$defs/lookup" },
         "addrs": { "description": "The addresses found.", "type": "array", "items": { "type": "string" } },
-        "unreachable": { "description": "Those of its addresses no client on the internet can reach, judged only for a walk that started from public roots.", "type": "array", "items": { "type": "string" } }
+        "unreachable": { "description": "Those of its addresses no client on the internet can reach, judged only for a walk that started from public roots.", "type": "array", "items": { "type": "string" } },
+        "tlsa": { "description": "The lookup of its TLSA set at _PORT._tcp of the target (RFC 7673), absent where --tlsa did not ask, or where the SRV set or the target's addresses are not signed.", "$ref": "#/$defs/lookup" },
+        "records": {
+          "description": "The TLSA set it found.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/tlsa_record" }
+        },
+        "dane": {
+          "description": "What a client that checks DANE makes of the target, absent where --tlsa did not ask. dane, a signed TLSA set of DANE-TA or DANE-EE records, so the server's certificate has to match it; unusable, a signed set with no record a client can use, which leaves it checking the certificate the usual way; none, a signed proof there is no set; insecure, an SRV set or addresses or a set nothing signed, which DANE does not apply to; failed, a TLSA lookup that failed or did not validate, or addresses that do not validate, which makes a client that checks DANE stay away; unreachable, no address to connect to; indeterminate, a set with a PKIX record, which --tlsa does not check, a service over a protocol other than TCP, or addresses or a set that could not be checked, or a budget dnstree ran out of.",
+          "enum": ["dane", "unusable", "none", "insecure", "failed", "unreachable", "indeterminate"]
+        },
+        "why": { "description": "What made it so, in a few words.", "type": "string" },
+        "presented": {
+          "description": "What each address DNSSEC proved showed --tlsa, once TLS started the way the service starts it, absent where it connected to none. A target named twice on one port carries what the one connection found.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/presented" }
+        }
       }
     },
     "reverse": {
@@ -580,7 +596,7 @@
       }
     },
     "presented": {
-      "description": "The certificate one address of an MX host presented, held against the host's TLSA set (RFC 7672 3).",
+      "description": "The certificate one address of an MX host or an SRV target presented, held against the host's TLSA set (RFC 7672 3, RFC 7673).",
       "type": "object",
       "required": ["address", "state"],
       "properties": {

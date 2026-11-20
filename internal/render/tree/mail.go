@@ -62,7 +62,7 @@ func (r *renderer) mailPath(m *trace.Mail) []string {
 			lines = append(lines, r.paint.dim(text))
 		}
 		for _, p := range host.Presented {
-			lines = append(lines, r.presented(host, p, mark))
+			lines = append(lines, r.presented(host.Records, p, mark+"    "))
 		}
 	}
 
@@ -84,13 +84,14 @@ func (r *renderer) mailPath(m *trace.Mail) []string {
 	return lines
 }
 
-// presented is the line that says what one address of a host showed --tlsa.
-func (r *renderer) presented(host trace.MailHost, p trace.Presented, mark string) string {
-	text := mark + "    " + p.Addr.String() + " " + string(p.State) + ": "
+// presented is the line that says what one address of a host showed --tlsa,
+// held against the host's records.
+func (r *renderer) presented(records []trace.TLSARecord, p trace.Presented, mark string) string {
+	text := mark + p.Addr.String() + " " + string(p.State) + ": "
 	var matched []string
 	for _, i := range p.Matched {
-		if i < len(host.Records) {
-			matched = append(matched, tlsaShort(host.Records[i]))
+		if i < len(records) {
+			matched = append(matched, tlsaShort(records[i]))
 		}
 	}
 	switch {

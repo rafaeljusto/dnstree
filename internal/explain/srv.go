@@ -40,6 +40,21 @@ func srv(tr *trace.Trace) (Finding, bool) {
 		}
 	}
 
+	// What --tlsa found is by host and port, since each port has a TLSA set
+	// of its own.
+	var refused []string
+	matched, said := false, map[string]bool{}
+	for _, target := range s.Targets {
+		at := target.Name + " port " + strconv.Itoa(int(target.Port))
+		mismatch := target.DANE == trace.DANEFailed && target.TLSA != nil ||
+			slices.ContainsFunc(target.Presented, func(p trace.Presented) bool { return p.State == trace.PresentedMismatch })
+		if mismatch && !said[at] {
+			refused = append(refused, at)
+		}
+		said[at] = true
+		matched = matched || slices.ContainsFunc(target.Presented, func(p trace.Presented) bool { return p.State == trace.PresentedMatch })
+	}
+
 	switch {
 	case s.Stopped != "":
 		return Finding{Topic: Service, Level: Warn, Text: fmt.Sprintf("the SRV check of %s stopped: %s", s.Name, s.Stopped)}, true
@@ -68,12 +83,19 @@ func srv(tr *trace.Trace) (Finding, bool) {
 	case len(unreachable) > 0:
 		return Finding{Topic: Service, Level: Warn, Text: fmt.Sprintf(
 			"the SRV records of %s name %s, at addresses no client on the internet can reach", s.Name, strings.Join(unreachable, ", "))}, true
+	case len(refused) > 0:
+		return Finding{Topic: Service, Level: Warn, Text: fmt.Sprintf(
+			"the SRV records of %s name %s, which a client that checks DANE does not connect to", s.Name, strings.Join(refused, ", "))}, true
 	}
 
 	var servers []string
 	for _, target := range s.Targets {
 		servers = append(servers, target.Name+" port "+strconv.Itoa(int(target.Port)))
 	}
+	checked := "whether the service answers there was not checked"
+	if matched {
+		checked = "--tlsa matched the certificate of every address it reached against its TLSA set"
+	}
 	return Finding{Topic: Service, Level: Note, Text: fmt.Sprintf(
-		"a client of the service at %s is sent to %s; whether the service answers there was not checked", s.Name, strings.Join(servers, ", then "))}, true
+		"a client of the service at %s is sent to %s; %s", s.Name, strings.Join(servers, ", then "), checked)}, true
 }

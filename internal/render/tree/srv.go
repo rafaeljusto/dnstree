@@ -69,6 +69,7 @@ func (r *renderer) srv(s *trace.SRV) []string {
 		} else {
 			lines = append(lines, r.paint.dim(text))
 		}
+		lines = append(lines, r.srvDANE(target, mark)...)
 	}
 
 	if s.Stopped != "" {
@@ -78,6 +79,34 @@ func (r *renderer) srv(s *trace.SRV) []string {
 		lines = append(lines, r.paint.paint(mark+"the budget ran out before "+plural(s.Left, "target was", "targets were")+" looked up", yellow))
 	} else if s.Cut {
 		lines = append(lines, r.paint.paint(mark+"the budget ran out before every target was looked up", yellow))
+	}
+	return lines
+}
+
+// srvDANE is what --tlsa found for one target: what a client that checks DANE
+// makes of it, and what each address it connected to showed.
+func (r *renderer) srvDANE(target trace.SRVTarget, mark string) []string {
+	if target.DANE == "" {
+		return nil
+	}
+	text := mark + "    " + string(target.DANE)
+	if n := len(target.Records); n > 0 {
+		text += " (" + plural(n, "TLSA record", "TLSA records") + ")"
+	}
+	text += ": " + target.Why
+	var lines []string
+	switch target.DANE {
+	case trace.DANEVerified:
+		lines = append(lines, r.paint.paint(text, green))
+	case trace.DANEFailed:
+		lines = append(lines, r.paint.paint(text, red))
+	case trace.DANEUnreachable:
+		lines = append(lines, r.paint.paint(text, yellow))
+	default:
+		lines = append(lines, r.paint.dim(text))
+	}
+	for _, p := range target.Presented {
+		lines = append(lines, r.presented(target.Records, p, mark+"      "))
 	}
 	return lines
 }

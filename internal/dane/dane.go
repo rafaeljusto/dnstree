@@ -1,8 +1,9 @@
-// Package dane connects to the MX hosts --mail found covered by DANE and holds
-// the certificate each address presents after STARTTLS against the host's TLSA
-// set (RFC 6698, RFC 7672 3). It is best effort like the AS lookups: nothing
-// here fails a resolution, and an address that cannot be reached is one that
-// could not be checked from here, never one that does not match.
+// Package dane connects to the MX hosts --mail found covered by DANE, and to
+// the SRV targets --srv found covered, and holds the certificate each address
+// presents against the host's TLSA set (RFC 6698, RFC 7672 3, RFC 7673). It is
+// best effort like the AS lookups: nothing here fails a resolution, and an
+// address that cannot be reached is one that could not be checked from here,
+// never one that does not match.
 package dane
 
 import (
@@ -18,7 +19,8 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"net/textproto"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,11 +46,12 @@ const (
 	maxChecks = 16
 )
 
-// Dial opens a connection to one address of a mail server.
+// Dial opens a connection to one address of a server.
 type Dial func(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
 
-// Config is how the check reaches the servers. The zero value dials port 25
-// with DefaultTimeout, at any address.
+// Config is how the check reaches the servers. The zero value dials mail
+// servers on port 25, SRV targets on their own port, with DefaultTimeout, at
+// any address.
 type Config struct {
 	Dial    Dial
 	Port    uint16
@@ -60,15 +63,42 @@ type Config struct {
 	Allow func(netip.Addr) bool
 }
 
-// Check connects to every address of each host of the mail path whose TLSA
-// set a sender would use, records what it presented in the host's Presented,
-// and warns of what a sender would refuse. Certificates are read against
-// when the walk was made.
+// endpoint is one host on one port that --tlsa connects to, whoever named it.
+type endpoint struct {
+	host string
+	port uint16
+
+	// sni is the name asked for in the handshake, and names those a DANE-TA
+	// match has to find in the certificate.
+	sni   string
+	names []string
+
+	// start is how the service starts TLS, and domain the name it is
+	// introduced to.
+	start  starter
+	domain string
+
+	records []trace.TLSARecord
+	addrs   []netip.Addr
+	into    *[]trace.Presented
+	who     client
+}
+
+// client is who decides by the check, in the words a reason uses.
+type client struct {
+	does, doesNot string
+}
+
+var (
+	sender    = client{"a sender that checks DANE delivers to it", "a sender that checks DANE does not deliver to it"}
+	connector = client{"a client that checks DANE connects to it", "a client that checks DANE does not connect to it"}
+)
+
+// Check connects to every address of each host of the mail path, and of the
+// SRV targets, whose TLSA set a client would use, records what it presented
+// in the host's Presented, and warns of what a client would refuse.
+// Certificates are read against when the walk was made.
 func Check(ctx context.Context, tr *trace.Trace, cfg Config) {
-	m := tr.Mail
-	if m == nil {
-		return
-	}
 	cfg.Port = cmp.Or(cfg.Port, Port)
 	cfg.Timeout = cmp.Or(cfg.Timeout, DefaultTimeout)
 	if cfg.Dial == nil {
@@ -78,33 +108,111 @@ func Check(ctx context.Context, tr *trace.Trace, cfg Config) {
 		}
 	}
 
+	mail, srv, unknown := endpoints(tr, cfg)
 	var wg sync.WaitGroup
-	checks, left := 0, 0
-	for i := range m.Hosts {
-		host := &m.Hosts[i]
-		if host.DANE != trace.DANEVerified {
-			continue
-		}
-		names := references(m, host)
-		addrs := host.Addrs[:min(len(host.Addrs), maxAddrs, maxChecks-checks)]
-		checks, left = checks+len(addrs), left+len(host.Addrs)-len(addrs)
-		host.Presented = make([]trace.Presented, len(addrs))
-		for j, addr := range addrs {
-			if cfg.Allow != nil && !cfg.Allow(addr) {
-				host.Presented[j] = trace.Presented{Addr: addr, State: trace.PresentedUnreached, Why: reached + private}
-				continue
+	checks, leftMail, leftSRV := 0, 0, 0
+	for _, group := range []struct {
+		endpoints []*endpoint
+		left      *int
+	}{{mail, &leftMail}, {srv, &leftSRV}} {
+		for _, ep := range group.endpoints {
+			addrs := ep.addrs[:min(len(ep.addrs), maxAddrs, maxChecks-checks)]
+			checks, *group.left = checks+len(addrs), *group.left+len(ep.addrs)-len(addrs)
+			*ep.into = make([]trace.Presented, len(addrs))
+			for j, addr := range addrs {
+				if cfg.Allow != nil && !cfg.Allow(addr) {
+					(*ep.into)[j] = trace.Presented{Addr: addr, State: trace.PresentedUnreached, Why: reached + private}
+					continue
+				}
+				wg.Go(func() {
+					(*ep.into)[j] = check(ctx, cfg, tr.Started, ep, addr)
+				})
 			}
-			wg.Go(func() {
-				host.Presented[j] = check(ctx, cfg, tr.Started, host, names, addr)
-			})
 		}
 	}
 	wg.Wait()
-	warn(tr)
-	if left > 0 {
+	shareSRV(tr.SRV)
+
+	if tr.Mail != nil {
+		warn(tr)
+	}
+	if tr.SRV != nil {
+		warnSRV(tr, unknown)
+	}
+	if leftMail > 0 {
 		tr.Warnings = append(tr.Warnings, fmt.Sprintf(
 			"--tlsa left %d mail server addresses unchecked, past the %d it checks for a host or the %d in all; check them with openssl s_client -starttls smtp",
-			left, maxAddrs, maxChecks))
+			leftMail, maxAddrs, maxChecks))
+	}
+	if leftSRV > 0 {
+		tr.Warnings = append(tr.Warnings, fmt.Sprintf(
+			"--tlsa left %d addresses of the servers of %s unchecked, past the %d it checks for a host or the %d in all; check them with openssl s_client",
+			leftSRV, tr.SRV.Name, maxAddrs, maxChecks))
+	}
+}
+
+// endpoints are the hosts to connect to: the mail hosts DANE covers first,
+// then each SRV target DANE covers, once for a host and port. Unknown are the
+// SRV targets DANE covers on a service this package cannot start TLS for.
+func endpoints(tr *trace.Trace, cfg Config) (mail, srv []*endpoint, unknown []*trace.SRVTarget) {
+	if m := tr.Mail; m != nil {
+		for i := range m.Hosts {
+			host := &m.Hosts[i]
+			if host.DANE != trace.DANEVerified {
+				continue
+			}
+			mail = append(mail, &endpoint{
+				host: host.Name, port: cfg.Port, sni: host.Name, names: references(m, host),
+				start: startSMTP, records: host.Records, addrs: host.Addrs, into: &host.Presented, who: sender,
+			})
+		}
+	}
+	s := tr.SRV
+	if s == nil {
+		return mail, nil, nil
+	}
+	seen := map[string]bool{}
+	for i := range s.Targets {
+		target := &s.Targets[i]
+		key := strings.ToLower(target.Name) + " " + strconv.Itoa(int(target.Port))
+		if target.DANE != trace.DANEVerified || seen[key] {
+			continue
+		}
+		seen[key] = true
+		start, ok := starterFor(s.Service(), target.Port)
+		if !ok {
+			unknown = append(unknown, target)
+			continue
+		}
+		// The service domain is the name to ask for, and with the target
+		// the names a certificate may hold under a signed SRV set (RFC 7673
+		// 4.1).
+		srv = append(srv, &endpoint{
+			host: target.Name, port: target.Port, sni: s.Domain(), names: []string{target.Name, s.Domain()},
+			start: start, domain: s.Domain(), records: target.Records, addrs: target.Proven(),
+			into: &target.Presented, who: connector,
+		})
+	}
+	return mail, srv, unknown
+}
+
+// shareSRV gives a target what the check found for an earlier one of the same
+// host and port, which it connected to once for both.
+func shareSRV(s *trace.SRV) {
+	if s == nil {
+		return
+	}
+	first := map[string][]trace.Presented{}
+	for i := range s.Targets {
+		target := &s.Targets[i]
+		key := strings.ToLower(target.Name) + " " + strconv.Itoa(int(target.Port))
+		if presented, ok := first[key]; ok && target.Presented == nil {
+			target.Presented = slices.Clone(presented)
+			continue
+		}
+		if target.Presented != nil {
+			first[key] = target.Presented
+		}
 	}
 }
 
@@ -148,6 +256,57 @@ func warn(tr *trace.Trace) {
 		which, strings.TrimPrefix(unreached[0].Why, reached)))
 }
 
+// warnSRV says which SRV targets a client that checks DANE refuses, which
+// could not be checked, and which run a service --tlsa cannot start TLS for.
+// An address that is no public one is said by --srv already.
+func warnSRV(tr *trace.Trace, unknown []*trace.SRVTarget) {
+	s := tr.SRV
+	var unreached []trace.Presented
+	asked := 0
+	seen := map[string]bool{}
+	for _, target := range s.Targets {
+		key := strings.ToLower(target.Name) + " " + strconv.Itoa(int(target.Port))
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		for _, p := range target.Presented {
+			if p.State == trace.PresentedUnreached && p.Why == reached+private {
+				continue
+			}
+			asked++
+			switch {
+			case p.State == trace.PresentedUnreached:
+				unreached = append(unreached, p)
+			case p.State != trace.PresentedMismatch:
+			case p.Why == unmatched:
+				tr.Warnings = append(tr.Warnings, fmt.Sprintf(
+					"%s at %s presents on port %d a certificate issued %s that no TLSA record of its matches, so a client that checks DANE does not connect to it; publish TLSA for the key it presents",
+					target.Name, p.Addr, target.Port, p.Since.Format(time.DateOnly)))
+			default:
+				tr.Warnings = append(tr.Warnings, fmt.Sprintf(
+					"a client that checks DANE does not connect to %s at %s on port %d: %s; fix its TLS or its TLSA set",
+					target.Name, p.Addr, target.Port, p.Why))
+			}
+		}
+	}
+	for _, target := range unknown {
+		tr.Warnings = append(tr.Warnings, fmt.Sprintf(
+			"--tlsa did not check %s on port %d, since it does not know how %s starts TLS; check it with openssl s_client",
+			target.Name, target.Port, cmp.Or(s.Service(), "the service")))
+	}
+	if len(unreached) == 0 {
+		return
+	}
+	which := fmt.Sprintf("%d of the %d addresses of the servers of %s", len(unreached), asked, s.Name)
+	if len(unreached) == asked {
+		which = "any of the servers of " + s.Name
+	}
+	tr.Warnings = append(tr.Warnings, fmt.Sprintf(
+		"--tlsa could not check %s (%s); their ports may be blocked from here, so try from a network that lets them out",
+		which, strings.TrimPrefix(unreached[0].Why, reached)))
+}
+
 // references are the names a DANE-TA match has to find in the certificate
 // (RFC 7672 3.2.2): the TLSA base domain, the MX host, and the next-hop domain
 // as asked and as its aliases end. The base is the name the TLSA lookup was
@@ -165,14 +324,14 @@ func references(m *trace.Mail, host *trace.MailHost) []string {
 }
 
 // check connects to one address and decides by what it presents.
-func check(ctx context.Context, cfg Config, at time.Time, host *trace.MailHost, names []string, addr netip.Addr) trace.Presented {
+func check(ctx context.Context, cfg Config, at time.Time, ep *endpoint, addr netip.Addr) trace.Presented {
 	presented := trace.Presented{Addr: addr}
-	chain, err := handshake(ctx, cfg, host.Name, netip.AddrPortFrom(addr, cfg.Port))
+	chain, err := handshake(ctx, cfg, ep, netip.AddrPortFrom(addr, ep.port))
 	var refused *noSTARTTLS
 	switch {
 	case errors.As(err, &refused):
 		// The refusal is the server's text, and as long as it likes.
-		presented.State, presented.Why = trace.PresentedMismatch, trace.Printable(err.Error(), trace.MaxErr)
+		presented.State, presented.Why = trace.PresentedMismatch, trace.Printable(refused.why+", so "+ep.who.doesNot, trace.MaxErr)
 		return presented
 	case err != nil:
 		presented.State, presented.Why = trace.PresentedUnreached, reached+trace.Printable(err.Error(), trace.MaxErr)
@@ -182,18 +341,18 @@ func check(ctx context.Context, cfg Config, at time.Time, host *trace.MailHost, 
 	leaf := chain[0]
 	presented.Subject, presented.Since = leaf.Subject.String(), leaf.NotBefore.UTC()
 	var why []string
-	for i, record := range host.Records {
+	for i, record := range ep.records {
 		if !record.Usable {
 			continue
 		}
-		if reason := match(record, chain, names, at); reason != "" {
+		if reason := match(record, chain, ep.names, at); reason != "" {
 			why = append(why, reason)
 			continue
 		}
 		presented.Matched = append(presented.Matched, i)
 	}
 	if len(presented.Matched) > 0 {
-		presented.State, presented.Why = trace.PresentedMatch, "a sender that checks DANE delivers to it"
+		presented.State, presented.Why = trace.PresentedMatch, ep.who.does
 		return presented
 	}
 	// A record that matched but failed a check after says more than one
@@ -217,15 +376,16 @@ const private = "it is no public address"
 // unmatched is why a record matched nothing in the chain.
 const unmatched = "no TLSA record matches the certificate or key it presents"
 
-// noSTARTTLS is a server that will not start TLS, which a sender that checks
-// DANE takes as a reason not to deliver to it (RFC 7672 2.2).
+// noSTARTTLS is a server that will not start TLS, which a client that checks
+// DANE takes as a reason not to connect to it (RFC 7672 2.2, RFC 7673 4).
 type noSTARTTLS struct{ why string }
 
 func (e *noSTARTTLS) Error() string { return e.why }
 
-// handshake greets the server, starts TLS and returns the chain it presents,
-// leaf first. It is not verified: the TLSA set is what decides.
-func handshake(ctx context.Context, cfg Config, name string, addr netip.AddrPort) ([]*x509.Certificate, error) {
+// handshake starts TLS with the server the way its service does and returns
+// the chain it presents, leaf first. It is not verified: the TLSA set is what
+// decides.
+func handshake(ctx context.Context, cfg Config, ep *endpoint, addr netip.AddrPort) ([]*x509.Certificate, error) {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
@@ -243,38 +403,17 @@ func handshake(ctx context.Context, cfg Config, name string, addr netip.AddrPort
 	stop := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Unix(1, 0)) })
 	defer stop()
 
-	// The exchange is made by hand rather than through net/smtp, which
-	// falls back to HELO when EHLO is refused and would then read as a server
-	// without STARTTLS.
 	limited := &bounded{Conn: conn, left: maxRead}
-	text := textproto.NewConn(limited)
-	if _, _, err := text.ReadResponse(220); err != nil {
-		return nil, fmt.Errorf("the greeting: %w", err)
-	}
-	if err := text.PrintfLine("EHLO %s", literal(conn.LocalAddr())); err != nil {
-		return nil, err
-	}
-	_, extensions, err := text.ReadResponse(250)
-	if err != nil {
-		return nil, fmt.Errorf("EHLO: %w", err)
-	}
-	if !offers(extensions, "STARTTLS") {
-		return nil, &noSTARTTLS{"it does not offer STARTTLS, so a sender that checks DANE does not deliver to it"}
-	}
-	if err := text.PrintfLine("STARTTLS"); err != nil {
-		return nil, err
-	}
-	if _, _, err := text.ReadResponse(220); err != nil {
-		if _, ok := errors.AsType[*textproto.Error](err); ok {
-			return nil, &noSTARTTLS{"it refuses STARTTLS (" + err.Error() + "), so a sender that checks DANE does not deliver to it"}
+	if ep.start.begin != nil {
+		if err := ep.start.begin(limited, ep.domain); err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("STARTTLS: %w", err)
 	}
 
-	// Anything the server sent past the 220 stays in the text reader and is
-	// dropped, as a sender drops it, rather than read as the handshake.
+	// Anything the server sent before TLS and was not read as its answer is
+	// dropped, as a client drops it, rather than read as the handshake.
 	secured := tls.Client(limited, &tls.Config{
-		ServerName: strings.TrimSuffix(name, "."),
+		ServerName: strings.TrimSuffix(ep.sni, "."),
 		// The TLSA set is the trust here, not the system's roots.
 		InsecureSkipVerify: true,
 	})
@@ -285,34 +424,10 @@ func handshake(ctx context.Context, cfg Config, name string, addr netip.AddrPort
 	if len(chain) == 0 {
 		return nil, errors.New("the TLS handshake left no certificate")
 	}
-	_, _ = secured.Write([]byte("QUIT\r\n"))
+	if ep.start.quit != "" {
+		_, _ = secured.Write([]byte(ep.start.quit))
+	}
 	return chain, nil
-}
-
-// literal is the address an SMTP client introduces itself by where it has no
-// name to give (RFC 5321 4.1.3).
-func literal(addr net.Addr) string {
-	ip, err := netip.ParseAddrPort(addr.String())
-	if err != nil {
-		return "[127.0.0.1]"
-	}
-	if ip.Addr().Unmap().Is4() {
-		return "[" + ip.Addr().Unmap().String() + "]"
-	}
-	return "[IPv6:" + ip.Addr().WithZone("").String() + "]"
-}
-
-// offers reports whether an EHLO reply lists the extension: its lines after
-// the first, each a keyword and its parameters.
-func offers(reply, extension string) bool {
-	lines := strings.Split(reply, "\n")
-	for _, line := range lines[1:] {
-		keyword, _, _ := strings.Cut(strings.TrimSpace(line), " ")
-		if strings.EqualFold(keyword, extension) {
-			return true
-		}
-	}
-	return false
 }
 
 // match is why one record does not match the chain, empty where it does.

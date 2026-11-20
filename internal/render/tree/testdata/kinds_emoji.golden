@@ -27,7 +27,10 @@
 🧭   edge.example.net. 203.0.113.7; hint 192.0.2.1 is not among them
 📍 3 SRV records at _xmpp-client._tcp.example.com.  🔒 [secure]
 📍   10 50 5222 chat.example.com. 203.0.113.10
+📍     dane (1 TLSA record): a client has to see a certificate that matches
+📍       203.0.113.10 mismatch: no TLSA record matches the certificate or key it presents; CN=chat.example.com, issued 2026-11-15
 📍   20 0 5222 xmpp.example.net. 10.0.0.5; an alias for host.example.net.; 10.0.0.5 cannot be reached from the internet
+📍     insecure: its addresses are not signed, so its TLSA set is not asked for
 📍 the budget ran out before 1 target was looked up
 🔄 com. CSYNC 2024091501 immediate soaminimum A NS AAAA  a parent that polls copies it
 🔄   adds NS ns3.com.

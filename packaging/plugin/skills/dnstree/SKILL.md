@@ -98,6 +98,7 @@ whole; `dnstree --schema` describes every field.
 | whether SPF is over the ten-lookup limit | `dnstree --format markdown --spf NAME` |
 | whether a DKIM key is published and usable (SELECTOR is the s= of the DKIM-Signature header) | `dnstree --format markdown --mail --dkim SELECTOR NAME` |
 | whether each mail host's certificate matches its TLSA records | `dnstree --format markdown --dnssec --mail --tlsa NAME` |
+| whether the certificate of each server of a service (XMPP, IMAP, ...) matches its TLSA records | `dnstree --format markdown --dnssec --srv --tlsa _SERVICE._tcp.NAME SRV` |
 | which CAs may issue a certificate | `dnstree --format markdown --dnssec --caa NAME` |
 | where HTTPS/SVCB records lead | `dnstree --format markdown --dnssec --svcb NAME` |
 | why a client cannot find a service's server (XMPP, SIP, Matrix, LDAP, Kerberos, CalDAV: NAME is `_service._proto.domain`) | `dnstree --format markdown --dnssec --srv NAME SRV` |
@@ -136,7 +137,8 @@ These reach beyond the DNS, touch the user's machine, or never return:
 - `--check-axfr` and `--check-recursion` probe nameservers the way an attacker
   would and show up in their logs: only for zones the user runs or was asked
   to check.
-- `--tlsa` connects to each DANE mail host on port 25.
+- `--tlsa` connects to each DANE mail host on port 25, and with `--srv` to
+  each DANE SRV target on its port.
 - `--rdap`, and `--check` with it, asks the domain's registry over HTTPS.
 - `--repeat N` asks every hop N more times, every server with `--all`: keep N
   small on servers the user does not run, which may rate-limit it.

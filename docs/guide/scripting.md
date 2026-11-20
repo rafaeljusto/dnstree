@@ -394,7 +394,7 @@ CDS, CSYNC, DSYNC and the bootstrap signals, which nameservers
 passed, who `--caa` found free to
 issue, how many lookups `--spf` counted and what a check comes to, how many MX hosts
 `--mail` found DANE covering and which mail policies it found, the keys `--dkim`
-checked, the addresses whose certificate `--tlsa` matched, how many
+checked, the mail and SRV addresses whose certificate `--tlsa` matched, how many
 of the servers `--svcb` found have an address and how many of the hints for
 them are stray, how many of the hosts `--srv` found have an address, whether a name the PTR of an address `-x` asked about points
 back to it, how long

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<stream:stream xmlns:stream='http://etherx.jabber.org/streams'><stream:features></stream:features>proceed")

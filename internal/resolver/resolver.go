@@ -213,6 +213,11 @@ type Config struct {
 	// check's.
 	SRV bool
 
+	// TLSA looks up, under SRV, the TLSA set of each target a client that
+	// checks DANE would look for one at (RFC 7673 3). Nothing here connects
+	// to the servers: that is the caller's, with the trace this fills.
+	TLSA bool
+
 	// Confirm is the address a PTR question stands for. The names its PTR set
 	// gives are each looked up for an address of its family, to say which of
 	// them point back to it: forward-confirmed reverse DNS. Each lookup is a

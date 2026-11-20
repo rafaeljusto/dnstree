@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaeljusto/dnstree/v2/internal/trace"
 )
@@ -54,6 +55,26 @@ func TestRenderSRV(t *testing.T) {
 		"a check that stopped": {
 			srv:  &trace.SRV{Name: "_x._tcp.test.", Stopped: "the SRV lookup failed: SERVFAIL", Lookup: trace.Lookup{Err: "SERVFAIL"}},
 			want: []string{"srv: stopped: the SRV lookup failed: SERVFAIL"},
+		},
+		"targets --tlsa checked, and one it left out": {
+			srv: &trace.SRV{Name: "_xmpp._tcp.test.", Lookup: trace.Lookup{Name: "_xmpp._tcp.test.", DNSSEC: secure},
+				Targets: []trace.SRVTarget{
+					{Name: "chat.example.", Priority: 10, Port: 5222, IPv4: answered, Addrs: addrs[:1],
+						Records: []trace.TLSARecord{{Usage: 3, Selector: 1, Matching: 1, Data: "8d02536c887482bc", Usable: true}},
+						DANE:    trace.DANEVerified, Why: "a client has to see a certificate that matches",
+						Presented: []trace.Presented{{Addr: addrs[0], State: trace.PresentedMatch, Matched: []int{0},
+							Subject: "CN=chat.example", Since: time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)}}},
+					{Name: "chat2.example.", Priority: 20, Port: 5222, IPv4: answered, Addrs: addrs[:1],
+						DANE: trace.DANEInsecure, Why: "its addresses are not signed, so its TLSA set is not asked for"},
+				}},
+			want: []string{
+				"srv: 2 SRV records at _xmpp._tcp.test.  [secure]",
+				"srv:   10 0 5222 chat.example. 192.0.2.10",
+				"srv:     dane (1 TLSA record): a client has to see a certificate that matches",
+				"srv:       192.0.2.10 match: 3 1 1 8d02536c... matches CN=chat.example, issued 2026-11-15",
+				"srv:   20 0 5222 chat2.example. 192.0.2.10",
+				"srv:     insecure: its addresses are not signed, so its TLSA set is not asked for",
+			},
 		},
 		"a budget that left targets": {
 			srv: &trace.SRV{Name: "_x._tcp.test.", Cut: true, Left: 2,

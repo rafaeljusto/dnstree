@@ -98,10 +98,113 @@ func (r *run) srv(ctx context.Context, under, end *trace.Step) {
 		s.Targets = append(s.Targets, target)
 	}
 
+	if r.cfg.TLSA {
+		r.srvDANE(ctx, under, s)
+	}
+
 	if s.Left > 0 || r.counters.spent() || r.asideStopped {
 		s.Cut = true
 		r.warnf("", "the SRV check of %s ran out of budget before every target was looked up; raise the budget that ran out", name)
 	}
+}
+
+// srvDANE looks up the TLSA set of each target where a client that checks
+// DANE would (RFC 7673 3): only under a signed SRV set, over TCP, and only for
+// a target with a signed address set. A host on one port is asked once.
+func (r *run) srvDANE(ctx context.Context, under *trace.Step, s *trace.SRV) {
+	every := func(state trace.DANEState, why string) {
+		for i := range s.Targets {
+			s.Targets[i].DANE, s.Targets[i].Why = state, why
+		}
+	}
+	switch {
+	case s.Lookup.DNSSEC == nil || s.Lookup.DNSSEC.State != trace.Secure:
+		every(trace.DANEInsecure, "the SRV set is not signed, so a client does not look for its TLSA set")
+		return
+	case s.Proto() != "_tcp":
+		every(trace.DANEIndeterminate, "--tlsa checks DANE over TCP alone, and the SRV set is not for _tcp")
+		return
+	}
+
+	asked := map[string]*trace.SRVTarget{}
+	for i := range s.Targets {
+		target := &s.Targets[i]
+		name := "_" + strconv.Itoa(int(target.Port)) + "._tcp." + target.Name
+		key := dnsutil.Canonical(name)
+		if prior, ok := asked[key]; ok {
+			target.TLSA, target.Records, target.DANE, target.Why = prior.TLSA, prior.Records, prior.DANE, prior.Why
+			continue
+		}
+		asked[key] = target
+		r.srvTarget(ctx, under, target, name)
+		switch {
+		case target.DANE == trace.DANEFailed && target.TLSA != nil:
+			// Addresses that do not validate are said with the target.
+			r.warnf("", "a client that checks DANE does not connect to %s on port %d, since %s; fix the servers of its zone",
+				target.Name, target.Port, target.Why)
+		case target.DANE == trace.DANEInsecure && len(target.Records) > 0:
+			r.warnf(trace.AreaAnswer, "%s has a TLSA set nothing signed, which clients ignore; sign the zone it is in",
+				cmp.Or(target.TLSA.Alias, target.TLSA.Name))
+		}
+	}
+}
+
+// srvTarget decides what a client that checks DANE makes of one target, and
+// looks up its TLSA set at name where it would.
+func (r *run) srvTarget(ctx context.Context, under *trace.Step, target *trace.SRVTarget, name string) {
+	switch {
+	case target.IPv4 == nil && target.IPv6 == nil:
+		target.DANE, target.Why = trace.DANEIndeterminate, "the budget ran out before its addresses were looked up"
+		return
+	case target.Failed() != "":
+		target.DANE, target.Why = trace.DANEUnreachable, "its addresses could not be looked up: "+target.Failed()
+		return
+	case target.Nowhere():
+		target.DANE, target.Why = trace.DANEUnreachable, "it has no address"
+		return
+	case len(target.Proven()) == 0:
+		// One address set a client may rely on is enough to look (RFC 7673
+		// 3.2); without one, the worst of them says why not.
+		switch {
+		case bogus(target.IPv4, target.IPv6) != "":
+			target.DANE, target.Why = trace.DANEFailed, "its addresses do not validate: "+bogus(target.IPv4, target.IPv6)
+		case unchecked(target.IPv4, target.IPv6) != "":
+			target.DANE, target.Why = trace.DANEIndeterminate, "its addresses could not be checked: "+unchecked(target.IPv4, target.IPv6)
+		default:
+			target.DANE, target.Why = trace.DANEInsecure, "its addresses are not signed, so its TLSA set is not asked for"
+		}
+		return
+	case r.counters.spent():
+		target.DANE, target.Why = trace.DANEIndeterminate, "the budget ran out before its TLSA set was looked up"
+		return
+	}
+
+	lookup, records, state, why := r.tlsaSet(ctx, under, name, "srv")
+	target.TLSA, target.Records = &lookup, records
+	switch {
+	case state != "":
+		target.DANE, target.Why = state, why
+	case slices.ContainsFunc(records, func(t trace.TLSARecord) bool { return t.Usage == 0 || t.Usage == 1 }):
+		// A PKIX record is one a client may use (RFC 7673 4.2), and one this
+		// build does not check: a chain no DANE record matches may still be
+		// one it vouches for.
+		target.DANE, target.Why = trace.DANEIndeterminate, "its TLSA set holds PKIX records, which --tlsa does not check"
+	case slices.ContainsFunc(records, func(t trace.TLSARecord) bool { return t.Usable }):
+		target.DANE, target.Why = trace.DANEVerified, "a client has to see a certificate that matches"
+	default:
+		target.DANE, target.Why = trace.DANEUnusable, "none of its TLSA records is usable, so a client checks the certificate the usual way"
+	}
+}
+
+// unchecked is why the first of the lookups whose signatures could not be
+// checked was not, and empty where none.
+func unchecked(lookups ...*trace.Lookup) string {
+	for _, lookup := range lookups {
+		if lookup != nil && lookup.DNSSEC != nil && lookup.DNSSEC.State == trace.Indeterminate {
+			return lookup.DNSSEC.Reason
+		}
+	}
+	return ""
 }
 
 // srvTargets are the SRV records owner owns, by priority, then by target and
