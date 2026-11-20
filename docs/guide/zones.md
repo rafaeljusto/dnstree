@@ -616,7 +616,7 @@ may be down rather than closed to TCP. What TCP reaches is seen from where you
 ask: one anycast site behind a filter shows up only from the places routed to
 it, so ask from more than one before calling a zone fixed or broken.
 
-It costs up to seven queries per nameserver address, so a zone with many
+It costs up to nine queries per nameserver address, so a zone with many
 addresses needs a bigger `--max-queries`; a warning says when the budget ran
 out. Like `--serial`, it looks up the nameservers the walk did not need. It is
 off unless asked for and leaves the exit code alone. `--format json` carries

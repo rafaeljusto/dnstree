@@ -467,7 +467,7 @@ udp is asked it again over tcp, which every server has to answer (RFC 7766): an
 answer too big for one packet is fetched over tcp, so a server closed to it
 fails the day the zone grows. A server that fails it is asked over udp once
 more, to tell a server closed to tcp from one gone quiet, and what tcp reaches
-is only ever seen from here. It costs up to seven queries per nameserver
+is only ever seen from here. It costs up to nine queries per nameserver
 address.
 
 --caa says which certificate authorities may issue a certificate for NAME, and

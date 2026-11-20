@@ -35,10 +35,11 @@ from that, and both are worth knowing when judging a report:
 for the TLD. A way for a registry to lead it off HTTPS, or to make it read
 without bound, is a vulnerability.
 
-`--tlsa` connects to the mail servers of the name on port 25, only at the
-public addresses DNSSEC proved for hosts DANE covers. A way for a server to
-hold it past its timeout, make it read without bound, or have it connect
-anywhere else is a vulnerability.
+`--tlsa` connects to the mail servers of the name on port 25, and with `--srv`
+to the targets of its SRV records on their ports, only at the public addresses
+DNSSEC proved for hosts DANE covers. A way for a server to hold it past its
+timeout, make it read without bound, or have it connect anywhere else is a
+vulnerability.
 
 `--format dig` writes shell commands built from names a zone chose. A name
 that makes one do anything but ask dig its question, once pasted into a shell,

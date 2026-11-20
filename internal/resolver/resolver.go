@@ -142,7 +142,7 @@ type Config struct {
 	// version, an option and a flag nobody has defined yet, which it has to
 	// answer politely, EDNS0 alone with the name in mixed case, which it has
 	// to copy back as sent, and EDNS0 alone again over TCP. It costs up to
-	// seven queries per nameserver address.
+	// nine queries per nameserver address.
 	CheckEDNS bool
 
 	// NSID asks every server which of itself is answering (RFC 5001). An
