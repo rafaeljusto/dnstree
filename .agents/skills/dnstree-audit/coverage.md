@@ -2,13 +2,14 @@
 
 The ledger the `dnstree-audit` skill reads first and rewrites last.
 
-- **Commit**: `ec1961c`
-- **Date**: 2026-11-11
-- **Scope**: the commits since `ec3bc5c` (the unloadable RSA signer fix,
-  `--repeat` refused on a replay, the flag named in `--from` errors, `--check`
-  in OpenMetrics, `--serial` asking for ZONEVERSION (RFC 9660), fakens
-  `LookedUp`, RESINFO under `--check-resolver` (RFC 9606)). The fuzz search
-  was left out: it ran apart, at the same time, for this release.
+- **Commit**: `8e20d4e`
+- **Date**: 2026-11-20
+- **Scope**: the commits since `ec1961c` (ZONEVERSION asked again without it,
+  the alias result under `--all`, the resolver AD bit against the walk,
+  the mixed-case question check, `--zone-file`, `--deps` query counts,
+  `--history`, CDS and CSYNC agreement across servers, `--srv` with `--tlsa`
+  over STARTTLS and XMPP, the codec bumps to 0.6.133). The fuzz search was
+  left out: it ran apart, at the same time, for this release.
 
 ## Open findings
 
@@ -22,13 +23,21 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
   `--tlsa` finding, the `--serial` servers, resolver operators, DKIM
   selectors, the software a server says it runs, the names a PTR set gives,
   the DMARC report hosts, SRV targets, the zone and servers in the listing
-  notes, and now the RESINFO target in the markdown report's finding
+  notes, the RESINFO target, and now the glueless zone and its via name
+  (`--deps`) and the refused SRV targets in the markdown report's finding
   sentences are open to GitHub's autolinks, `@mentions` and `#refs`; fixing
   it means marking them apart from the prose explain writes
   ([markdown.go:55](../../../internal/render/markdown/markdown.go#L55)).
+- Low: `ReadZoneFile` holds each NS owner against every cut, and each
+  record against every cut, so `--zone-file` is quadratic in the cuts; one
+  `$GENERATE` line of 132 bytes makes 20,000 cuts and 17 s before the first
+  query, and two lines make 131,075 questions. Keep the cuts in a set and
+  look only at the name's ancestors
+  ([zonefile.go:80](../../../internal/resolver/zonefile.go#L80),
+  [zonefile.go:127](../../../internal/resolver/zonefile.go#L127)).
 - Low, unverified: `TestMailDANE` once came back with the example.com MX set
   bogus under `-race`; 260 runs after it, `-count=2` at `d0eefea`, `db990d4`,
-  `7eeec81`, `86bc3bd`, `ec3bc5c` and `ec1961c`, and `-count=30` at
+  `7eeec81`, `86bc3bd`, `ec3bc5c`, `ec1961c` and `8e20d4e`, and `-count=30` at
   `ec1961c`, were clean.
 
 ## Checked and sound
@@ -506,4 +515,42 @@ The ledger the `dnstree-audit` skill reads first and rewrites last.
 - OpenMetrics `dnstree_check`, `dnstree_zone_copies` and
   `dnstree_delegation_agrees` take escaped labels over the shown trace, and a
   family is declared once across several walks.
-- `go test -race -count=2 ./...` is clean at `ec1961c`.
+- CDS and CSYNC agreement (`requests.go`): every query spends through
+  `afford`, CDS and CDNSKEY read in pairs, steps `Aside` and attached after
+  `askAll` on the walking goroutine; an indeterminate answer is unanswered,
+  never a difference; only a secure chain at the zone is swept;
+  `dnssec.Requested` takes nil authority and checks each assertion.
+- Mixed-case question check: zones with letters only, two queries from the
+  budget, unchecked when it runs out, a recased reply never a timeout; never
+  sent with ZONEVERSION. The ZONEVERSION retry adds one attempt at most,
+  under `r.mu`.
+- `Msg.Flags` (codec 0.6.133) excludes DO; fakens, `replayKey` and `Sent`
+  agree.
+- `--deps` `work()` is a fixpoint that only lowers (queries, depth), bounded
+  by the walk's zones.
+- `trace.deepest()` takes the alias that was followed under `--all`; at the
+  same depth the later step still wins, in Go and in both `walk.js` copies.
+- Resolver `trusts()` reads a step that always has `DNSSEC`, and never an
+  exit code.
+- `--srv --tlsa`: TLSA and address lookups through `r.look` (`Apart`); only
+  `Proven()` addresses through `transport.Public` are dialled, at most 4 per
+  host and 16 in all with mail; SMTP, XMPP and the handshake read through a
+  256 KiB `bounded`; deadline from ctx; only a refused STARTTLS is a
+  mismatch; PKIX usages indeterminate; XMPP `to` escaped, no entity
+  expansion, `FuzzXMPP` present; each goroutine writes its own slot.
+- `--history`: `os.OpenRoot`, regular files only (FIFO refused), 20,000
+  files at most, gzip bounded at 64 MiB, nothing written; the timeline reads
+  `Seen`, never the clock; `--diff`, `--pcap`, `--live`, `--watch` and
+  `--against` refused with it; the file of defaults cannot set it.
+- `--zone-file`: `$INCLUDE` refused, no write, exit code the worst of the
+  walks ranked 3, 2, 4, 0, `--expect same` only after an answer; the file of
+  defaults cannot set it. `served.AgainstFile` indexes after its length
+  check and compares escaped text on both sides.
+- New tree lines (`filed`, `trusts`, `deps`, `srv`, `parent`, EDNS case) draw
+  a `Shown` trace; control bytes come out as `\027` and ASCII stays below
+  128. New OpenMetrics families escape their labels; `read.go` checks the
+  new enums and the `Presented.Matched` indexes. The schema only adds
+  fields, so `schema_version` stays.
+- dnstree-web leaves `SRV`, `TLSA` and `Deps` at zero and imports neither
+  dane nor rdap; no new codec import outside the four packages.
+- `go test -race -count=2 ./...` is clean at `8e20d4e`.
