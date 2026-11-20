@@ -1639,7 +1639,8 @@
           "type": "array",
           "items": { "type": "integer", "minimum": 0 }
         },
-        "bootstrap": { "$ref": "#/$defs/bootstrap" }
+        "bootstrap": { "$ref": "#/$defs/bootstrap" },
+        "agreement": { "$ref": "#/$defs/agreement" }
       }
     },
     "csync": {
@@ -1666,7 +1667,41 @@
           "description": "What a parent acting on it would add to or remove from the delegation the walk was handed, whether or not one would act on it.",
           "type": "array",
           "items": { "$ref": "#/$defs/delegation_change" }
+        },
+        "agreement": { "$ref": "#/$defs/agreement" }
+      }
+    },
+    "agreement": {
+      "description": "Whether every nameserver of the zone serves the same request of its parent. A parent asks every address of every nameserver and acts on nothing unless the answers it got agree (RFC 9975). For a CDS and CDNSKEY, the keys asked for have to be the same, a CDS counting only with a SHA-256 digest; for a CSYNC, its flags and types, whether each server's own SOA has reached its serial, and the NS set it asks to be copied. Present where --check-ds or --check-ns (with --dnssec) read a signed request and the zone has more than one address; one query is made per address, so one anycast instance can differ unseen.",
+      "type": "object",
+      "required": ["state", "servers"],
+      "properties": {
+        "state": {
+          "description": "agree is every server that answered asking for the same; differ is two asking for different things, or one whose signature did not hold, so a parent acts on none of it; partial is those that answered agreeing while some did not answer, which a parent waits for.",
+          "type": "string",
+          "enum": ["agree", "differ", "partial"]
+        },
+        "reason": { "description": "Why not every server was asked, where one was not.", "type": "string" },
+        "servers": {
+          "description": "One per address asked, in the order the parent delegates.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/server_request" }
         }
+      }
+    },
+    "server_request": {
+      "description": "What one address of one nameserver asks of the parent.",
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "server": { "$ref": "#/$defs/server" },
+        "state": {
+          "description": "read is an answer the zone's keys signed; unanswered is no usable answer, which is no difference; bogus is an answer whose signature did not hold.",
+          "type": "string",
+          "enum": ["read", "unanswered", "bogus"]
+        },
+        "asks": { "description": "The request as a reader would say it, present where it was read.", "type": "string" },
+        "reason": { "description": "Why it was not read.", "type": "string" }
       }
     },
     "dsync": {

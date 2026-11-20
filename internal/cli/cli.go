@@ -49,7 +49,7 @@ one after another, each from the root servers down.
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
   --check-ns              ask the zone for its NS set, glue and CSYNC; compare
-  --check-ds              ask the zone for its CDS and CDNSKEY and compare
+  --check-ds              ask every nameserver for its CDS and CDNSKEY; compare
   --serial                ask every nameserver of the zone which copy it serves
   --check-axfr            ask each nameserver of the zone to hand over all of it
   --check-recursion       ask each nameserver of the zone to resolve another name
@@ -161,7 +161,11 @@ the nameservers named inside it, and holds them against the delegation and its
 glue. It asks for the zone's CSYNC too (RFC 7477), which is how a zone asks its
 parent to copy its NS set and glue, and says what a parent acting on it would
 change. A parent copies only a CSYNC the zone's keys signed, so without --dnssec
-it is reported unchecked. The referral into the zone is asked for again over
+it is reported unchecked. With --dnssec, every address of every nameserver is
+asked for the CSYNC too, and for the SOA and NS set it names: a parent acts only
+where they all agree (RFC 9975), so one server with another CSYNC, a serial it
+has not reached, or another NS set stops the update. The glue it names is asked
+of one server only. The referral into the zone is asked for again over
 TCP, since glue for a nameserver inside the zone is required (RFC 9471), and a
 parent that leaves some out over UDP without setting TC is warned about.
 
@@ -172,7 +176,13 @@ zone asking for a key the parent has not published is a rollover waiting on
 the parent; a zone asking for no DS at all is asking to be made insecure. The
 request counts only once it is signed by the keys the chain of trust reached,
 so it needs --dnssec; a file of defaults that sets it is heeded only by the
-runs that check signatures. It costs two queries. A zone that is signed but
+runs that check signatures. It costs two queries, and two more for each
+address of each nameserver: a parent asks them all and acts on nothing unless
+the answers it got ask for the same keys (RFC 9975), so a provider that alone
+publishes a new CDS, or still serves an old one, stops the rollover. A server
+that does not answer is said once and is no difference; one whose answer does
+not validate is. One query goes to each address, so an anycast site can still
+differ unseen. A zone that is signed but
 whose parent holds no DS for it can still ask for its first one (RFC 9615):
 the operator of each nameserver publishes the same request under
 _dsboot.ZONE._signal.NAMESERVER, in a zone of its own that validates, and each

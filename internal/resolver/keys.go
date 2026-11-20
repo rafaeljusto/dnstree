@@ -54,8 +54,14 @@ func (r *run) checkDS(ctx context.Context, chain *dnssec.Chain, answer *trace.St
 		fetched[i] = records
 	}
 
-	signal := dnssec.Signal(last.authority, zone, fetched[0], fetched[1])
-	verdict.Signal = signal
+	// What the parent will make of it waits for every nameserver to be asked:
+	// see checkRequests.
+	verdict.Signal = dnssec.Signal(last.authority, zone, fetched[0], fetched[1])
+}
+
+// warnSignal says what a parent will do with the request of a zone the chain
+// reached secure.
+func (r *run) warnSignal(zone string, signal *trace.Signal) {
 	switch signal.State {
 	case trace.SignalPending:
 		r.warnf(trace.AreaDNSSEC, "%s asks its parent for a DS it does not publish (%s), so a key rollover is waiting on the parent; if it has waited longer than the parent polls, ask the registrar why",

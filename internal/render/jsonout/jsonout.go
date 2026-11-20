@@ -565,6 +565,7 @@ type signal struct {
 	Held      []uint16 `json:"held,omitempty"`
 
 	Bootstrap *bootstrap `json:"bootstrap,omitempty"`
+	Agreement *agreement `json:"agreement,omitempty"`
 }
 
 // signature is how long one signature a secure verdict rests on was made to
@@ -933,7 +934,8 @@ func convertDNSSEC(from *trace.DNSSECStatus) *dnssec {
 	}
 	if from.Signal != nil {
 		to.Signal = &signal{State: string(from.Signal.State), Reason: from.Signal.Reason,
-			Requested: from.Signal.Requested, Held: from.Signal.Held, Bootstrap: convertBootstrap(from.Signal.Bootstrap)}
+			Requested: from.Signal.Requested, Held: from.Signal.Held, Bootstrap: convertBootstrap(from.Signal.Bootstrap),
+			Agreement: convertAgreement(from.Signal.Agreement)}
 	}
 	if from.NSEC3 != nil {
 		to.NSEC3 = &nsec3{Zone: from.NSEC3.Zone, Iterations: from.NSEC3.Iterations, Salt: from.NSEC3.Salt}

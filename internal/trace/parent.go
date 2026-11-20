@@ -32,7 +32,57 @@ type CSYNC struct {
 	// Changes are what a parent acting on it would change in the delegation,
 	// worked out against the referral the walk was handed.
 	Changes []DelegationChange
+
+	// Agreement is whether every nameserver of the zone serves the same CSYNC,
+	// set where --dnssec could check what each of them served.
+	Agreement *Agreement
 }
+
+// Agreement is whether every nameserver of a zone serves the same request of
+// its parent. A parent asks every address of every nameserver and acts on
+// nothing unless the answers it got agree (RFC 9975), so a request one server
+// makes alone is never acted on.
+type Agreement struct {
+	State AgreementState
+
+	// Reason says why not every server was asked, where one was not.
+	Reason string
+
+	// Servers are one per address asked, in the order the parent delegates.
+	Servers []ServerRequest
+}
+
+// AgreementState is what the nameservers' requests came to.
+type AgreementState string
+
+// What the nameservers' requests can come to.
+const (
+	AgreementSame    AgreementState = "agree"   // every server that answered asks for the same
+	AgreementDiffer  AgreementState = "differ"  // they ask for different things, so a parent acts on none
+	AgreementPartial AgreementState = "partial" // those that answered agree, but not every server did
+)
+
+// ServerRequest is what one address of one nameserver asks of the parent.
+type ServerRequest struct {
+	Server Server
+	State  ServerRequestState
+
+	// Asks is the request as a reader would say it, set where it was read.
+	Asks string
+
+	// Reason says why it was not read, where it was not.
+	Reason string
+}
+
+// ServerRequestState is whether one server's request could be read.
+type ServerRequestState string
+
+// Whether one server's request could be read.
+const (
+	ServerRequestRead       ServerRequestState = "read"       // the answer came, and the zone's keys signed it
+	ServerRequestUnanswered ServerRequestState = "unanswered" // no usable answer came, which is no difference
+	ServerRequestBogus      ServerRequestState = "bogus"      // the answer came, but its signature did not hold
+)
 
 // CSYNCState is what a zone's CSYNC came to.
 type CSYNCState string
@@ -203,6 +253,21 @@ func (c *CSYNC) shown() *CSYNC {
 	for i := range shown.Changes {
 		change := &shown.Changes[i]
 		change.Type, change.Name, change.Data = Shown(change.Type), Shown(change.Name), Shown(change.Data)
+	}
+	shown.Agreement = c.Agreement.shown()
+	return &shown
+}
+
+func (a *Agreement) shown() *Agreement {
+	if a == nil {
+		return nil
+	}
+	shown := *a
+	shown.Reason = Shown(a.Reason)
+	shown.Servers = slices.Clone(a.Servers)
+	for i := range shown.Servers {
+		server := &shown.Servers[i]
+		server.Server.Name, server.Asks, server.Reason = Shown(server.Server.Name), Shown(server.Asks), Shown(server.Reason)
 	}
 	return &shown
 }

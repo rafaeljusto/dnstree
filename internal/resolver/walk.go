@@ -164,12 +164,14 @@ func (r *run) walkFrom(ctx context.Context, from *cut, qname string, qtype uint1
 				r.checkNS(ctx, chain, step, referred)
 				r.checkDS(ctx, chain, step, last)
 				r.noticeAt(step, referred)
-				if len(pending) > 0 && (r.cfg.Serial || r.cfg.CheckTransfer || r.cfg.CheckRecursion || r.cfg.CheckEDNS) {
+				sweeping := r.sweepsRequests(chain, last, referred, zone)
+				if len(pending) > 0 && (r.cfg.Serial || r.cfg.CheckTransfer || r.cfg.CheckRecursion || r.cfg.CheckEDNS || sweeping) {
 					// The probes are about every nameserver, not the one the
 					// walk needed, so the names it never looked up are now.
 					resolved, _ := r.resolveNames(ctx, referred, pending, side, true)
 					servers = append(servers, resolved...)
 				}
+				r.checkRequests(ctx, chain, step, last, referred, zone, servers)
 				r.checkSerial(ctx, step, zone, servers)
 				r.checkKeys(ctx, chain, step, zone, servers)
 				r.checkExposure(ctx, step, zone, servers)

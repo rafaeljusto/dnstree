@@ -54,6 +54,9 @@ func (r *renderer) csync(zone string, csync *trace.CSYNC) []string {
 	default:
 		verdict = r.paint.dim("unchecked: " + csync.Reason)
 	}
+	if csync.Agreement != nil && csync.Agreement.State == trace.AgreementDiffer {
+		verdict = r.paint.paint("the nameservers do not all serve it, so no parent acts on it (RFC 9975)", yellow)
+	}
 	lines := []string{join(r.paint.dim(mark+record), verdict)}
 
 	for _, change := range csync.Changes {

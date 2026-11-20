@@ -151,6 +151,30 @@ func (e *Exposition) Add(tr *trace.Trace) {
 		m.sample("dnstree_csync_changes", strconv.Itoa(len(csync.Changes)))
 	}
 
+	// Whether the nameservers agree is asked even of a zone whose own CSYNC is
+	// none, since another server publishing one is what a parent aborts on.
+	agreements := []struct {
+		request   string
+		agreement *trace.Agreement
+	}{{"csync", nil}, {"cds", nil}}
+	for step := range tr.Mainline() {
+		if step.Delegation != nil && step.Delegation.CSYNC != nil && step.Delegation.CSYNC.Agreement != nil {
+			agreements[0].agreement = step.Delegation.CSYNC.Agreement
+		}
+	}
+	if signal := signal(tr); signal != nil {
+		agreements[1].agreement = signal.Agreement
+	}
+	for _, each := range agreements {
+		if each.agreement == nil {
+			continue
+		}
+		m.family("dnstree_request_agreement", "", "whether every nameserver serves the same request of the parent, which a parent acts on only if they do (RFC 9975)")
+		for _, value := range []trace.AgreementState{trace.AgreementSame, trace.AgreementDiffer, trace.AgreementPartial} {
+			m.sample("dnstree_request_agreement", flag(value == each.agreement.State), label{"request", each.request}, label{"state", string(value)})
+		}
+	}
+
 	var dsync *trace.DSYNC
 	for _, request := range tr.Requests() {
 		dsync = cmp.Or(request.DSYNC, dsync)

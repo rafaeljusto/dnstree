@@ -496,6 +496,20 @@ func (r *renderer) signal(signal *trace.Signal) string {
 	if signal == nil {
 		return ""
 	}
+	label := r.request(signal)
+	if agreement := signal.Agreement; agreement != nil {
+		switch agreement.State {
+		case trace.AgreementDiffer:
+			label += r.paint.paint(", but the nameservers ask for different things", yellow)
+		case trace.AgreementPartial:
+			label += r.paint.dim(", not every nameserver answered")
+		}
+	}
+	return label
+}
+
+// request is what the one server asked asks of the parent.
+func (r *renderer) request(signal *trace.Signal) string {
 	switch signal.State {
 	case trace.SignalNone:
 		return r.paint.dim("no cds")

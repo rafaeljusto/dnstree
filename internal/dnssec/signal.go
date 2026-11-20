@@ -232,3 +232,56 @@ func keyList(tags []uint16) string {
 	}
 	return "keys " + strings.Join(named[:len(named)-1], ", ") + " and " + named[len(named)-1]
 }
+
+// Request is what one server's CDS and CDNSKEY ask for, in a form another
+// server's can be held against.
+type Request struct {
+	// Keys are the keys asked for, each as its tag, algorithm and SHA-256
+	// digest, sorted. Tags are the same keys by tag alone, for a reader.
+	Keys []string
+	Tags []uint16
+
+	// Delete is a request for no DS at all (RFC 8078).
+	Delete bool
+
+	// Inconsistent says how the CDS and the CDNSKEY describe different keys,
+	// where they do. A parent acts on neither.
+	Inconsistent string
+}
+
+// Requested is what one server's CDS and CDNSKEY ask for. A key counts once
+// whether a CDS or a CDNSKEY names it, and a CDS only where its digest is the
+// SHA-256 every parent computes: RFC 9975 3.1 leaves the other digest types
+// out of the comparison, since a parent may not be able to check them.
+func Requested(zone string, cds, cdnskey []dns.RR) Request {
+	signal := Signal(nil, zone, cds, cdnskey)
+	switch signal.State {
+	case trace.SignalDelete:
+		return Request{Delete: true}
+	case trace.SignalInconsistent:
+		return Request{Inconsistent: signal.Reason}
+	}
+
+	var request Request
+	add := func(tag uint16, algorithm uint8, digest string) {
+		request.Keys = append(request.Keys, fmt.Sprintf("%d %d %s", tag, algorithm, strings.ToUpper(digest)))
+		request.Tags = append(request.Tags, tag)
+	}
+	for _, rr := range cds {
+		if record, ok := rr.(*dns.CDS); ok && dns.EqualName(record.Hdr.Name, zone) && record.DigestType == dns.SHA256 {
+			add(record.KeyTag, record.Algorithm, record.Digest)
+		}
+	}
+	for _, rr := range cdnskey {
+		if record, ok := rr.(*dns.CDNSKEY); ok && dns.EqualName(record.Hdr.Name, zone) {
+			if ds := record.ToDS(dns.SHA256); ds != nil {
+				add(ds.KeyTag, ds.Algorithm, ds.Digest)
+			}
+		}
+	}
+	slices.Sort(request.Keys)
+	request.Keys = slices.Compact(request.Keys)
+	slices.Sort(request.Tags)
+	request.Tags = slices.Compact(request.Tags)
+	return request
+}

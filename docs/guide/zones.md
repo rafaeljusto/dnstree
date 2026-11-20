@@ -121,8 +121,10 @@ that cannot name its own nameservers is a stranger thing than a list that has
 drifted.
 
 It costs two queries, the NS set and the CSYNC below, asked of the server that
-answered the question, and the DSYNC lookups [below](#where-the-parent-takes-notice),
-and it is off unless asked for.
+answered the question; with `--dnssec`, one more for each address of each
+nameserver, to [compare their CSYNC](#whether-every-nameserver-serves-the-same-csync);
+and the DSYNC lookups [below](#where-the-parent-takes-notice). It is off unless
+asked for.
 
 A nameserver named inside the zone it serves can only be reached through the
 addresses its parent hands out with the referral, the glue. Glue is a copy of
@@ -217,6 +219,27 @@ AAAA, which no parent copies. Whether this parent polls for a CSYNC at all is
 not something a walk can see, and `--explain` says so. `--format json` carries
 it as the delegation's `csync`, and `--format openmetrics` as `dnstree_csync`
 and `dnstree_csync_changes`.
+
+### Whether every nameserver serves the same CSYNC
+
+A parent does not take the CSYNC from one server either. It asks every address
+of every nameserver and acts on nothing unless they agree (RFC 9975): the
+`immediate` flag and the types the same, each server's serial reached by that
+server's own SOA, and the NS set it asks to be copied the same everywhere. A
+server with no CSYNC beside one with a CSYNC is a difference. With `--dnssec`,
+`--check-ns` asks them all once the walk is over, and the SOA and NS set of
+each server whose CSYNC names them; each answer counts only where the zone's
+keys signed it. The asides read `request check: asks for a copy of NS (its NS
+set: …)`, or `asks for nothing`.
+
+Where they differ, the `csync:` line says that no parent acts on it, and one
+warning names who serves what. A server that does not answer is no
+difference, and the warning says the parent waits for it. The glue a CSYNC
+names is still asked of one server only: asking it of each would cost a query
+for each nameserver name, type and server. `--format json` carries it as the
+csync's `agreement`, and `--format openmetrics` as
+`dnstree_request_agreement{request="csync"}`, drawn even where the server the
+walk asked has no CSYNC.
 
 ### Where the parent takes notice
 

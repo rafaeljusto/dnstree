@@ -1319,6 +1319,10 @@ type Signal struct {
 	// holds no DS for, set only where the zone is signed but not yet secure
 	// and asks for a key.
 	Bootstrap *Bootstrap
+
+	// Agreement is whether every nameserver of the zone makes the same
+	// request, set where the zone is secure and has more than one address.
+	Agreement *Agreement
 }
 
 // NSEC3 is the hashing a zone's denials use (RFC 5155). RFC 9276 asks for no

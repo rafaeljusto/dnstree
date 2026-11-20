@@ -4,7 +4,7 @@ walked on 2026-09-24 12:00 UTC
 
 ```
 . (root)
-└── a.root-servers.net. 198.41.0.4  @fra2  serial 2026110900  version "9.18.24"  12ms  NOERROR  referral → com.  cookie  [insecure]  cds asks for a first ds, for key 2371
+└── a.root-servers.net. 198.41.0.4  @fra2  serial 2026110900  version "9.18.24"  12ms  NOERROR  referral → com.  cookie  [insecure]  cds asks for a first ds, for key 2371, not every nameserver answered
     ├── b.gtld-servers.net. 192.33.14.30  2s  timeout
     └── a.gtld-servers.net. 192.5.6.30  version hidden  18ms  NOERROR  referral → example.com.  [secure ECDSAP256SHA256/SHA256]  (truncated over udp)
         ├── a.iana-servers.net. 199.43.135.53  AS10745  9.4ms  1187 of 1232 bytes  NOERROR  AA DO  [secure ECDSAP256SHA256]
@@ -54,7 +54,7 @@ deps: a resolver with an empty cache makes at least 6 queries before it can ask 
 deps:   4 of them look up nameserver addresses no glue gave, the fewest by ns.example.net., 1 delegation without glue deep
 deps:   ns.gone.example., a nameserver of example.com.: does not exist
 deps: stopped: the budget ran out before every nameserver was looked up
-csync: com. CSYNC 2024091501 immediate soaminimum A NS AAAA  a parent that polls copies it
+csync: com. CSYNC 2024091501 immediate soaminimum A NS AAAA  the nameservers do not all serve it, so no parent acts on it (RFC 9975)
 csync:   adds NS ns3.com.
 csync:   removes NS ns4.com.
 csync:   adds A 192.0.2.6 for ns3.com.

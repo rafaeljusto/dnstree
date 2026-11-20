@@ -90,7 +90,30 @@
                 "name": "ns3.com.",
                 "data": "192.0.2.6"
               }
-            ]
+            ],
+            "agreement": {
+              "state": "differ",
+              "servers": [
+                {
+                  "server": {
+                    "name": "a.gtld-servers.net.",
+                    "ip": "192.5.6.30",
+                    "port": 53
+                  },
+                  "state": "read",
+                  "asks": "a copy of A AAAA NS (its NS set: ns3.com.)"
+                },
+                {
+                  "server": {
+                    "name": "b.gtld-servers.net.",
+                    "ip": "192.33.14.30",
+                    "port": 53
+                  },
+                  "state": "bogus",
+                  "reason": "the CSYNC is bogus: no signature matches a key of the zone"
+                }
+              ]
+            }
           },
           "dsync": {
             "state": "found",
@@ -173,6 +196,30 @@
                   "ns": "ns.com.",
                   "state": "unasked",
                   "reason": "it is named inside the zone, which is not secure yet"
+                }
+              ]
+            },
+            "agreement": {
+              "state": "partial",
+              "reason": "the budget ran out before every nameserver could be asked",
+              "servers": [
+                {
+                  "server": {
+                    "name": "a.gtld-servers.net.",
+                    "ip": "192.5.6.30",
+                    "port": 53
+                  },
+                  "state": "read",
+                  "asks": "keys 2371"
+                },
+                {
+                  "server": {
+                    "name": "b.gtld-servers.net.",
+                    "ip": "192.33.14.30",
+                    "port": 53
+                  },
+                  "state": "unanswered",
+                  "reason": "the CDS could not be fetched"
                 }
               ]
             }

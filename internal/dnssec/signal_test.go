@@ -1,6 +1,7 @@
 package dnssec_test
 
 import (
+	"slices"
 	"testing"
 
 	"codeberg.org/miekg/dns"
@@ -101,5 +102,65 @@ func TestSignal(t *testing.T) {
 				t.Errorf("got %+v, want %s", got, test.want)
 			}
 		})
+	}
+}
+
+// TestRequested covers the form two servers' requests are held against each
+// other in (RFC 9975 3.1): a key counts once however it is named, and a CDS
+// counts only with the SHA-256 digest every parent computes.
+func TestRequested(t *testing.T) {
+	current, next := newZone(t, "example."), newZone(t, "example.")
+	sha1 := current.key.ToDS(dns.SHA1)
+	removal := &dns.CDS{Hdr: dns.Header{Name: "example.", Class: dns.ClassINET}}
+
+	tests := map[string]struct {
+		cds, cdnskey []dns.RR
+		same         []dns.RR // another server's CDS, asking for what this one should
+		sameKeys     []dns.RR // and its CDNSKEY
+		delete       bool
+		inconsistent bool
+	}{
+		"a CDS and a CDNSKEY name the key a CDNSKEY alone names": {
+			cds: []dns.RR{asCDS(current.ds())}, cdnskey: []dns.RR{asCDNSKEY(current.key)},
+			sameKeys: []dns.RR{asCDNSKEY(current.key)},
+		},
+		"a CDS alone names the key a CDNSKEY alone names": {
+			cds:      []dns.RR{asCDS(current.ds())},
+			sameKeys: []dns.RR{asCDNSKEY(current.key)},
+		},
+		"a SHA-1 CDS beside the SHA-256 one is left out": {
+			cds:  []dns.RR{asCDS(sha1), asCDS(current.ds())},
+			same: []dns.RR{asCDS(current.ds())},
+		},
+		"two keys in either order": {
+			cds:  []dns.RR{asCDS(current.ds()), asCDS(next.ds())},
+			same: []dns.RR{asCDS(next.ds()), asCDS(current.ds())},
+		},
+		"a request to remove the DS": {
+			cds: []dns.RR{removal}, delete: true,
+		},
+		"a CDS and a CDNSKEY for two different keys": {
+			cds: []dns.RR{asCDS(current.ds())}, cdnskey: []dns.RR{asCDNSKEY(next.key)}, inconsistent: true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := dnssec.Requested("example.", test.cds, test.cdnskey)
+			if got.Delete != test.delete || (got.Inconsistent != "") != test.inconsistent {
+				t.Fatalf("got %+v, want delete %v and inconsistent %v", got, test.delete, test.inconsistent)
+			}
+			if test.same == nil && test.sameKeys == nil {
+				return
+			}
+			other := dnssec.Requested("example.", test.same, test.sameKeys)
+			if len(got.Keys) == 0 || !slices.Equal(got.Keys, other.Keys) {
+				t.Errorf("got %q and %q, want the same keys", got.Keys, other.Keys)
+			}
+		})
+	}
+
+	if a, b := dnssec.Requested("example.", []dns.RR{asCDS(current.ds())}, nil), dnssec.Requested("example.", []dns.RR{asCDS(next.ds())}, nil); slices.Equal(a.Keys, b.Keys) {
+		t.Errorf("got %q for two different keys, want them apart", a.Keys)
 	}
 }

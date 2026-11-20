@@ -103,6 +103,17 @@ func TestRolled(t *testing.T) {
 			state: trace.RolloverRolling,
 			want:  []string{"ksk double-ksk swap-ds 1>2 DNSKEY/3600"},
 		},
+		"a second key signing key with no DS, and a CDS asking for it that the other nameservers do not": {
+			tr: keyed([]trace.Key{ksk(1, true, true), ksk(2, false, true), zsk(9)},
+				[]trace.DS{ds(1, trace.DSMatched)},
+				&trace.Signal{State: trace.SignalPending, Requested: []uint16{2}, Held: []uint16{1},
+					Agreement: &trace.Agreement{State: trace.AgreementDiffer}}, 9),
+			state: trace.RolloverRolling,
+			want: []string{
+				"ksk double-ksk swap-ds 1>2 DNSKEY/3600",
+				"ksk double-ksk remove-key 2>1 DS/86400",
+			},
+		},
 		"a second key signing key with no DS, and a CDS for the key in use, which a signer keeps until it swaps": {
 			tr: keyed([]trace.Key{ksk(1, true, true), ksk(2, false, true), zsk(9)},
 				[]trace.DS{ds(1, trace.DSMatched)},

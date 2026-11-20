@@ -171,6 +171,7 @@ func (s *DNSSECStatus) shown() *DNSSECStatus {
 		signal := *d.Signal
 		signal.Reason = Shown(signal.Reason)
 		signal.Bootstrap = signal.Bootstrap.shown()
+		signal.Agreement = signal.Agreement.shown()
 		d.Signal = &signal
 	}
 	if d.NSEC3 != nil {

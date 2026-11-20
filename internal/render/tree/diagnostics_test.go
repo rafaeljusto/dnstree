@@ -472,6 +472,12 @@ func TestRenderSignal(t *testing.T) {
 			signal: trace.Signal{State: trace.SignalDelete}, want: "cds asks for no ds"},
 		"a request that could not be read": {
 			signal: trace.Signal{State: trace.SignalUnchecked}, want: "cds unchecked"},
+		"a request the other nameservers do not make": {
+			signal: trace.Signal{State: trace.SignalMatch, Agreement: &trace.Agreement{State: trace.AgreementDiffer}},
+			want:   "cds matches the ds, but the nameservers ask for different things"},
+		"a request some nameservers did not answer for": {
+			signal: trace.Signal{State: trace.SignalNone, Agreement: &trace.Agreement{State: trace.AgreementPartial}},
+			want:   "no cds, not every nameserver answered"},
 	}
 
 	for name, test := range tests {

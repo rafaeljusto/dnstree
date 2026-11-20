@@ -121,7 +121,12 @@ func resolution() *trace.Trace {
 				{Add: true, Type: "NS", Name: "ns3.com."},
 				{Type: "NS", Name: "ns4.com."},
 				{Add: true, Type: "A", Name: "ns3.com.", Data: "192.0.2.6"},
-			}},
+			}, Agreement: &trace.Agreement{State: trace.AgreementDiffer, Servers: []trace.ServerRequest{
+				{Server: trace.Server{Name: "a.gtld-servers.net.", IP: netip.MustParseAddr("192.5.6.30"), Port: 53}, State: trace.ServerRequestRead,
+					Asks: "a copy of A AAAA NS (its NS set: ns3.com.)"},
+				{Server: trace.Server{Name: "b.gtld-servers.net.", IP: netip.MustParseAddr("192.33.14.30"), Port: 53}, State: trace.ServerRequestBogus,
+					Reason: "the CSYNC is bogus: no signature matches a key of the zone"},
+			}}},
 			DSYNC: &trace.DSYNC{State: trace.DSYNCFound, Parent: ".", Name: "com._dsync.",
 				Lookups: []trace.Lookup{{Name: "com._dsync.", DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "."}}},
 				Endpoints: []trace.DSYNCEndpoint{
@@ -137,7 +142,12 @@ func resolution() *trace.Trace {
 					{NS: "ns2.provider.net.", Name: "_dsboot.com._signal.ns2.provider.net.", State: trace.SignalingMissing, Reason: "the operator's zone proves there is none",
 						Lookup: &trace.Lookup{Name: "_dsboot.com._signal.ns2.provider.net.", DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Zone: "provider.net."}}},
 					{NS: "ns.com.", State: trace.SignalingUnasked, Reason: "it is named inside the zone, which is not secure yet"},
-				}}}},
+				}},
+			Agreement: &trace.Agreement{State: trace.AgreementPartial, Reason: "the budget ran out before every nameserver could be asked", Servers: []trace.ServerRequest{
+				{Server: trace.Server{Name: "a.gtld-servers.net.", IP: netip.MustParseAddr("192.5.6.30"), Port: 53}, State: trace.ServerRequestRead, Asks: "keys 2371"},
+				{Server: trace.Server{Name: "b.gtld-servers.net.", IP: netip.MustParseAddr("192.33.14.30"), Port: 53}, State: trace.ServerRequestUnanswered,
+					Reason: "the CDS could not be fetched"},
+			}}}},
 		Children: []*trace.Step{timeout, tld},
 	}
 

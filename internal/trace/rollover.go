@@ -443,6 +443,11 @@ func newer(a, b RolloverKey, signal *Signal) int {
 		signal.State == SignalNone || signal.State == SignalDelete {
 		return 0
 	}
+	// A CDS one server asks for and another does not is no parent's request,
+	// and says nothing of which key is coming in.
+	if signal.Agreement != nil && signal.Agreement.State == AgreementDiffer {
+		return 0
+	}
 	wants := func(k RolloverKey) int {
 		asked, held := slices.Contains(signal.Requested, k.Tag), slices.Contains(signal.Held, k.Tag)
 		switch {

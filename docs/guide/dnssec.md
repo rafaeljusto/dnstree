@@ -190,9 +190,55 @@ parent checks it, so `--check-ds` needs `--dnssec` — a file of defaults that s
 it is heeded by the runs that check signatures, and left alone by the rest — and
 a zone the chain did not reach secure reads `cds unchecked`. A zone that crosses into a child served by
 the same machines, with no referral, is checked against the DS fetched to cross
-it. It costs two queries, asked of the server that answered, and the lookups
-that say [where the parent takes notice](zones.md#where-the-parent-takes-notice)
-of a new CDS.
+it. It costs two queries asked of the server that answered, two more for each
+address of each nameserver (below), and the lookups that say
+[where the parent takes notice](zones.md#where-the-parent-takes-notice) of a
+new CDS.
+
+### Whether every nameserver asks the same
+
+A parent does not take the request from one server. It asks every address of
+every nameserver, and acts on nothing unless the answers it got ask for the
+same keys (RFC 9975). A zone on two providers where only one publishes the new
+CDS, or a secondary that still serves the old one, is a rollover that never
+happens, while the one server a walk asks looks ready. So `--check-ds` asks
+them all, once the walk is over, and notes what each asks for:
+
+```
+$ dnstree --dnssec --check-ds --no-asn iis.se SOA
+...
+│   ├── f.ns.se. 192.36.134.97  259ms  NOERROR  DO  referral → iis.se.  [secure ECDSAP256SHA256/SHA256]  cds matches the ds
+...
+│   │   ├── nsa.dnsnode.net. 194.58.192.46  288ms  NOERROR  AA DO  [secure ECDSAP256SHA256]
+...
+│   │   │   ├── nsa.dnsnode.net. 194.58.192.46  237ms  NOERROR  AA DO  (request check: CDS of iis.se.)
+│   │   │   ├── nsa.dnsnode.net. 194.58.192.46  233ms  NOERROR  AA DO  (request check: asks for keys 51298)
+│   │   │   ├── nsp.dnsnode.net. 194.58.198.32  242ms  NOERROR  AA DO  (request check: CDS of iis.se.)
+│   │   │   ├── nsp.dnsnode.net. 194.58.198.32  242ms  NOERROR  AA DO  (request check: asks for keys 51298)
+│   │   │   ├── nsu.dnsnode.net. 185.42.137.98  261ms  NOERROR  AA DO  (request check: CDS of iis.se.)
+│   │   │   ├── nsu.dnsnode.net. 185.42.137.98  262ms  NOERROR  AA DO  (request check: asks for keys 51298)
+...
+✔ answered in 7.5s · resolver did not answer · 34 queries · 7 servers
+```
+
+A key counts once whether a CDS or a CDNSKEY names it, and a CDS only with the
+SHA-256 digest every parent computes; order and TTL do not count. Where the
+servers ask for different things, the label beside the verdict adds `but the
+nameservers ask for different things`, and one warning names who asks for
+what. That warning takes the place of the one about a rollover waiting on the
+parent: the parent is not slow, it is refusing. An answer whose signature does
+not hold is a difference too, since a parent that checks it refuses the whole
+request. A server that does not answer is not: a parent asks it again later,
+and the warning says it waits until it does. One query goes to each address,
+so one anycast site behind an address can still differ unseen.
+
+It needs a zone with more than one address and a request the chain reached
+secure; a zone asking for its first DS is checked by its signals instead,
+below. The names of nameservers the walk did not need are looked up for it.
+`--format json` carries it as the signal's `agreement`, one entry per address,
+and `--format openmetrics` as `dnstree_request_agreement{request="cds"}`.
+`--rollover` does not read a CDS the servers disagree on as saying which key
+is the new one.
 
 ### Asking for a first DS
 

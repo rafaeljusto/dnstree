@@ -43,3 +43,33 @@ func TestRenderRequests(t *testing.T) {
 		t.Errorf("got\n%s\nwant no csync, bootstrap or dsync family", out)
 	}
 }
+
+// TestRenderRequestAgreement is a zone whose own server has no CSYNC while
+// another has one, which is what a parent aborts on: the agreement is drawn
+// even where the CSYNC itself is not.
+func TestRenderRequestAgreement(t *testing.T) {
+	tr := &trace.Trace{
+		Question: trace.Question{Name: "www.test.", Type: "A"},
+		Root: &trace.Step{Zone: ".", Kind: trace.KindZone, Children: []*trace.Step{{
+			Zone: ".", Kind: trace.KindReferral,
+			Delegation: &trace.Delegation{Zone: "test.", CSYNC: &trace.CSYNC{State: trace.CSYNCNone,
+				Agreement: &trace.Agreement{State: trace.AgreementDiffer}}},
+			DNSSEC: &trace.DNSSECStatus{State: trace.Secure, Signal: &trace.Signal{State: trace.SignalMatch,
+				Agreement: &trace.Agreement{State: trace.AgreementSame}}},
+		}}},
+	}
+	out := render(t, tr)
+	valid(t, out)
+	for _, want := range []string{
+		`dnstree_request_agreement{name="www.test.",type="A",request="csync",state="differ"} 1`,
+		`dnstree_request_agreement{name="www.test.",type="A",request="cds",state="agree"} 1`,
+		`dnstree_request_agreement{name="www.test.",type="A",request="cds",state="differ"} 0`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("got\n%s\nwant %s", out, want)
+		}
+	}
+	if strings.Contains(out, "dnstree_csync{") {
+		t.Errorf("got\n%s\nwant no csync family for a zone with none", out)
+	}
+}

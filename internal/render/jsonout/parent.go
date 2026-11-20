@@ -15,6 +15,21 @@ type csync struct {
 	Types      []string           `json:"types,omitempty"`
 	ZoneSerial uint32             `json:"zone_serial,omitempty"`
 	Changes    []delegationChange `json:"changes,omitempty"`
+	Agreement  *agreement         `json:"agreement,omitempty"`
+}
+
+// agreement is whether every nameserver serves the same request (RFC 9975).
+type agreement struct {
+	State   string          `json:"state"`
+	Reason  string          `json:"reason,omitempty"`
+	Servers []serverRequest `json:"servers"`
+}
+
+type serverRequest struct {
+	Server *server `json:"server,omitempty"`
+	State  string  `json:"state"`
+	Asks   string  `json:"asks,omitempty"`
+	Reason string  `json:"reason,omitempty"`
 }
 
 type delegationChange struct {
@@ -68,7 +83,47 @@ func convertCSYNC(from *trace.CSYNC) *csync {
 	for _, change := range from.Changes {
 		to.Changes = append(to.Changes, delegationChange{Add: change.Add, Type: change.Type, Name: change.Name, Data: change.Data})
 	}
+	to.Agreement = convertAgreement(from.Agreement)
 	return to
+}
+
+func convertAgreement(from *trace.Agreement) *agreement {
+	if from == nil {
+		return nil
+	}
+	to := &agreement{State: string(from.State), Reason: from.Reason, Servers: []serverRequest{}}
+	for _, each := range from.Servers {
+		to.Servers = append(to.Servers, serverRequest{Server: convertServer(each.Server), State: string(each.State),
+			Asks: each.Asks, Reason: each.Reason})
+	}
+	return to
+}
+
+func readAgreement(from *agreement) (*trace.Agreement, error) {
+	if from == nil {
+		return nil, nil
+	}
+	state := trace.AgreementState(from.State)
+	switch state {
+	case trace.AgreementSame, trace.AgreementDiffer, trace.AgreementPartial:
+	default:
+		return nil, fmt.Errorf("%q is not what the nameservers' requests can come to", from.State)
+	}
+	to := &trace.Agreement{State: state, Reason: from.Reason}
+	for _, each := range from.Servers {
+		read := trace.ServerRequestState(each.State)
+		switch read {
+		case trace.ServerRequestRead, trace.ServerRequestUnanswered, trace.ServerRequestBogus:
+		default:
+			return nil, fmt.Errorf("%q is not what one server's request can come to", each.State)
+		}
+		server, err := readServer(each.Server)
+		if err != nil {
+			return nil, err
+		}
+		to.Servers = append(to.Servers, trace.ServerRequest{Server: server, State: read, Asks: each.Asks, Reason: each.Reason})
+	}
+	return to, nil
 }
 
 func convertDSYNC(from *trace.DSYNC) *dsync {
@@ -123,6 +178,11 @@ func readCSYNC(from *csync) (*trace.CSYNC, error) {
 	for _, change := range from.Changes {
 		to.Changes = append(to.Changes, trace.DelegationChange{Add: change.Add, Type: change.Type, Name: change.Name, Data: change.Data})
 	}
+	agreement, err := readAgreement(from.Agreement)
+	if err != nil {
+		return nil, err
+	}
+	to.Agreement = agreement
 	return to, nil
 }
 

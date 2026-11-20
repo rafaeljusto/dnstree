@@ -784,8 +784,12 @@ func readDNSSEC(from *dnssec) (*trace.DNSSECStatus, error) {
 		if err != nil {
 			return nil, err
 		}
+		agreement, err := readAgreement(from.Signal.Agreement)
+		if err != nil {
+			return nil, err
+		}
 		to.Signal = &trace.Signal{State: state, Reason: from.Signal.Reason,
-			Requested: from.Signal.Requested, Held: from.Signal.Held, Bootstrap: boot}
+			Requested: from.Signal.Requested, Held: from.Signal.Held, Bootstrap: boot, Agreement: agreement}
 	}
 	if from.NSEC3 != nil {
 		to.NSEC3 = &trace.NSEC3{Zone: from.NSEC3.Zone, Iterations: from.NSEC3.Iterations, Salt: from.NSEC3.Salt}
