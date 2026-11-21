@@ -18,6 +18,7 @@ func TestReadZoneFile(t *testing.T) {
 		escaped      int
 		unaskable    int
 		err          string
+		notErr       string
 	}{
 		"relative names start at the origin given": {
 			origin: "example.com", text: soa + "www 300 A 192.0.2.1\n",
@@ -103,6 +104,9 @@ func TestReadZoneFile(t *testing.T) {
 		"$INCLUDE is refused": {
 			origin: "example.com", text: soa + "$INCLUDE other.zone\n", err: "$INCLUDE",
 		},
+		"$INCLUDE with no origin given is not taken for a relative name": {
+			text: "$ORIGIN example.com.\n" + soa + "$INCLUDE other.zone\n", err: "copy what it includes", notErr: "name the zone",
+		},
 		"a file without a SOA is not a zone": {
 			origin: "example.com", text: "www A 192.0.2.1\n", err: "no SOA record",
 		},
@@ -117,6 +121,9 @@ func TestReadZoneFile(t *testing.T) {
 			if c.err != "" {
 				if err == nil || !strings.Contains(err.Error(), c.err) {
 					t.Fatalf("got %v, want an error with %q", err, c.err)
+				}
+				if c.notErr != "" && strings.Contains(err.Error(), c.notErr) {
+					t.Fatalf("got %v, want no %q in it", err, c.notErr)
 				}
 				return
 			}

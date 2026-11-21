@@ -50,7 +50,8 @@ var unasked = map[uint16]bool{dns.TypeRRSIG: true, dns.TypeNSEC: true, dns.TypeN
 // cut other than its NS and DS, are glue or some other zone's and are skipped.
 func ReadZoneFile(r io.Reader, origin, path string) (*ZoneFile, error) {
 	parser := dns.NewZoneParser(r, origin, path)
-	parser.IncludeAllowFunc = func(string, string) bool { return false }
+	included := false
+	parser.IncludeAllowFunc = func(string, string) bool { included = true; return false }
 
 	var all []dns.RR
 	zone := ""
@@ -65,6 +66,9 @@ func ReadZoneFile(r io.Reader, origin, path string) (*ZoneFile, error) {
 		all = append(all, rr)
 	}
 	if err := parser.Err(); err != nil {
+		if included {
+			return nil, fmt.Errorf("%w; --zone-file reads only the file it is given, so copy what it includes into it", err)
+		}
 		if origin == "" {
 			return nil, fmt.Errorf("%w; where the file has relative names, name the zone after --zone-file, or open the file with $ORIGIN", err)
 		}
