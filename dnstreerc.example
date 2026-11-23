@@ -108,7 +108,7 @@
 # What to draw
 
 # tree, ascii, emoji, waterfall, waterfall-ascii, waterfall-mermaid, markdown,
-# teach, json, dot, mermaid, openmetrics, dig, web or web-3d. ascii emits
+# teach, json, dot, mermaid, openmetrics, dig, web, web-3d or html. ascii emits
 # nothing above codepoint 127, for pasting somewhere that cannot carry box
 # drawing.
 # format = tree

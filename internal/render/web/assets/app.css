@@ -151,6 +151,11 @@
     &.is-tone b { color: var(--tone); }
   }
 
+  .saved {
+    margin-block-start: .6rem;
+    font: 500 .78rem/1.4 var(--mono); color: var(--muted);
+  }
+
   .foot {
     display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
     margin-block-start: 2rem; padding-block-start: 1rem;

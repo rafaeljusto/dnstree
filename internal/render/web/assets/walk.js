@@ -224,3 +224,17 @@ export function ticks(total) {
   for (let ms = 0; ms <= total + 1e-9; ms += step) marks.push(Math.round(ms * 1000) / 1000);
   return marks;
 }
+
+// savedLine is the line a page read from a file opens with. It says where the
+// walk came from and when, and nothing that sounds like a check the page did:
+// anybody can edit a file.
+export function savedLine(page) {
+  const question = page?.trace?.question ?? {};
+  const asked = [question.name, question.type].filter(Boolean).join(" ");
+  const when = new Date(page?.page?.generated ?? "");
+  const made = Number.isNaN(when.getTime())
+    ? null
+    : `made ${when.toISOString().slice(0, 19).replace("T", " ")} UTC`;
+  const version = page?.page?.version ? `dnstree ${page.page.version}` : null;
+  return ["a walk saved to a file", asked, made, version].filter(Boolean).join(" · ");
+}

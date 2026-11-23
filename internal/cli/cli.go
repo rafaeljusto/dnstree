@@ -153,7 +153,7 @@ chose, rather than adding to them.
 
 FORMAT is one of tree (the default), ascii, emoji, waterfall,
 waterfall-ascii, waterfall-mermaid, markdown, teach, json, dot, mermaid,
-openmetrics, dig, web or web-3d.
+openmetrics, dig, web, web-3d or html.
 
 --format web draws nothing in the terminal. It serves the finished walk as a
 page instead, on this machine and on whatever port is free, and opens a browser
@@ -165,6 +165,13 @@ opened by hand. Whatever is pointed at the same server can read the walk as
 --format json writes it, under /trace.json. --format web-3d serves the same walk
 the same way, drawn as a scene to turn around rather than a tree to read, and
 takes --web-addr and --no-browser as well.
+
+--format html writes the page --format web serves, and the walk, as one file to
+standard output. The file loads nothing from the network, so it opens in any
+browser on any machine, and it says it is a walk saved to a file, and when the
+walk was made. With --from it turns a saved walk into a page to share. The file
+holds what --format json holds, which names the resolver the walk was compared
+with: --no-compare leaves it out.
 
 -x resolves the PTR record of an address, the way dig -x does: 192.0.2.1 is
 asked as 1.2.0.192.in-addr.arpa. and an IPv6 address under ip6.arpa. It takes
@@ -1709,7 +1716,7 @@ func several(cfg *Config, expecting bool) error {
 		return nil
 	}
 	switch f, _ := lookupFormat(cfg.Format); {
-	case (f.programs || f.serves) && !f.several:
+	case (f.programs || f.serves || f.single) && !f.several:
 		return fmt.Errorf("%w: %s writes one walk, and several questions make several", ErrUsage, cfg.Format)
 	case expecting:
 		return fmt.Errorf("%w: --expect cannot say which of several questions it is about", ErrUsage)
@@ -1788,6 +1795,7 @@ type format struct {
 	// grades is a format that carries what --check grades.
 	grades   bool
 	serves   bool // a page served to a browser
+	single   bool // one document that holds one walk
 	programs bool // read by a program rather than a person
 	// several is a format read by a program that can still hold more than one
 	// walk: JSON a line to each, and one OpenMetrics file over all of them.
@@ -1812,6 +1820,7 @@ var formats = []format{
 	{name: "dig", once: true, programs: true},
 	{name: "web", once: true, serves: true},
 	{name: "web-3d", once: true, serves: true},
+	{name: "html", once: true, single: true},
 }
 
 // lookupFormat is the format called name, false where there is none.

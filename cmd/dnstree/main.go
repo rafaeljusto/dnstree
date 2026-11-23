@@ -489,6 +489,23 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		return outcome(cfg, tr, stderr)
 	}
 
+	// A file is the served page with the walk inside it, and goes wherever the
+	// user sends it, so it says what it holds that is theirs.
+	if cfg.Format == "html" {
+		options := web.Options{Version: version, Changes: delta}
+		if reference != nil {
+			options.Changes = history.CompareAgainst(reference, history.Of(tr, tr.Started))
+		}
+		if err := web.File(stdout, tr, readings(cfg, tr, reference, diff), options); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitUsage
+		}
+		if line := personal(tr); line != "" {
+			fmt.Fprintln(stderr, line)
+		}
+		return outcome(cfg, tr, stderr)
+	}
+
 	// A report carries its summary and its sentences inside it, and it always
 	// says what the walk came to, asked to explain or not.
 	if cfg.Format == "markdown" {
@@ -515,6 +532,15 @@ func one(ctx context.Context, cfg *cli.Config, log *slog.Logger,
 		return exitUsage
 	}
 	return outcome(cfg, tr, stderr)
+}
+
+// personal is the line that says what a file to share holds of the user's own:
+// the resolver the walk was timed against, which is often a private address.
+func personal(tr *trace.Trace) string {
+	if tr == nil || len(tr.Resolvers) == 0 {
+		return ""
+	}
+	return "the file names the resolver the walk was compared with; walk again with --no-compare to leave it out"
 }
 
 // draw writes a walk the way every format written here draws it: the walk,

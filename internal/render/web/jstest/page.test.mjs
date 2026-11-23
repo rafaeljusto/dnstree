@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   KINDS, kindOf, cookieOf, trustOf, took, plural, flagsOf, flatten, asked, aside, resultOf, verdictOf,
-  chainState, haystack, chipsOf, timeline, ticks,
+  chainState, haystack, chipsOf, timeline, ticks, savedLine,
 } from "../assets/walk.js";
 import * as scene from "../assets/scene/walk.js";
 import { golden, zone, step } from "./fixtures.mjs";
@@ -157,4 +157,19 @@ test("the ticks are round and few", () => {
     assert.ok(marks.length >= 2 && marks.length <= 6, `${marks.length} ticks for ${total}`);
     assert.ok(marks.at(-1) <= total + 1e-9);
   }
+});
+
+test("a page read from a file says so, and when its walk was made", () => {
+  const cases = {
+    "a walk with all it says": [
+      { page: { version: "v2.20.0", generated: "2026-11-23T15:02:11+01:00" }, trace: { question: { name: "www.example.com.", type: "A" } } },
+      "a walk saved to a file · www.example.com. A · made 2026-11-23 14:02:11 UTC · dnstree v2.20.0",
+    ],
+    "a hand-written file with a time no clock reads": [
+      { page: { version: "v2.20.0", generated: "yesterday" }, trace: { question: { name: "a.example.", type: "MX" } } },
+      "a walk saved to a file · a.example. MX · dnstree v2.20.0",
+    ],
+    "a file with nothing in it": [{}, "a walk saved to a file"],
+  };
+  for (const [name, [page, want]] of Object.entries(cases)) assert.equal(savedLine(page), want, name);
 });

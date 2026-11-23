@@ -90,6 +90,7 @@ whole; `dnstree --schema` describes every field.
 | which software and version each nameserver runs | `dnstree --format markdown --software --all NAME` |
 | why a name fails only some of the time, or which nameserver or anycast instance drops queries | `dnstree --format markdown --repeat 20 --nsid --all NAME` |
 | whether a nameserver move will work, before it is made | `dnstree --format markdown --dnssec --try-ns ZONE=NEWSERVER NAME` |
+| a walk to send to somebody without dnstree, as one page they open in a browser | `dnstree --format html NAME > walk.html` |
 | whether new nameservers serve every record the old ones do, before a move (a line per question; markdown is refused) | `dnstree --format ascii --compare-ns ZONE=NEWSERVER --names FILE`, FILE a name and its types to a line |
 | whether the servers serve what a zone file says, or a forgotten record in it points at a name nobody holds (a line per question; markdown is refused) | `dnstree --format ascii --zone-file FILE ZONE`, ZONE needed only where FILE has no `$ORIGIN` |
 | whether a DS will hold, before it is given to the registrar | `dnstree --format markdown --dnssec --try-ds 'ZONE=DS' NAME`, DS written as the registrar's form takes it: key tag, algorithm, digest type, digest |

@@ -502,6 +502,27 @@ walk already assembled and standing still.
 
 ![dnstree --format web-3d on www.example.com: the hops in a cone from the root down, the chain of trust ringed round each cut and the answer lit green](../demo-3d.png)
 
+`--format html` writes the page `--format web` serves as one file, with the
+walk inside it, to standard output. The file loads nothing from the network, so
+it opens in any browser, on a machine without dnstree, and shows the walk as it
+was when it was made — after the problem is fixed too. It is for a ticket, an
+email or a post-mortem; with [`--from`](scripting.md#drawing-a-walk-again), a walk saved
+during an incident becomes one later.
+
+```
+$ dnstree --format html www.example.com > walk.html
+the file names the resolver the walk was compared with; walk again with --no-compare to leave it out
+```
+
+The page opens with a line that says it is a walk saved to a file, which
+question it asked, when it was made and by which dnstree. Nothing in the file
+proves the walk is what dnstree found: anybody can edit it. The file holds what
+`--format json` holds, and "the walk as json" at its foot hands that document
+over, for `--from` to draw again. That includes the resolver the walk was timed
+against, often a private address, and the line above says so on standard
+error; `--no-compare` leaves the resolver out. It is the tree page only, and one
+walk only: several questions are refused.
+
 `--format ascii` swaps the branches for `` |-- `` and drops the colour, for
 pasting into documents. `--format json` writes a versioned document with
 durations in milliseconds, every hop carrying the question it put: a walk asks

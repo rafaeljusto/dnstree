@@ -428,6 +428,7 @@ func TestParseRejects(t *testing.T) {
 		"names from a file and a saved walk":              {"--names", "names.txt", "--from", "walk.json"},
 		"several types drawn as one dot":                  {"--format", "dot", "example.com", "A", "AAAA"},
 		"several types served as one page":                {"--format", "web", "example.com", "A", "AAAA"},
+		"several types written as one page":               {"--format", "html", "example.com", "A", "AAAA"},
 		"several types as one set of dig commands":        {"--format", "dig", "example.com", "A", "AAAA"},
 		"several types held to one expectation":           {"--expect", "answer", "example.com", "A", "AAAA"},
 		"several types held against one walk":             {"--against", "walk.json", "example.com", "A", "AAAA"},

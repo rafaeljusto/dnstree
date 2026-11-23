@@ -5,7 +5,7 @@
 
 import {
   KINDS, kindOf, cookieOf, trustOf, took, plural, flagsOf, flatten, asked, verdictOf, chainState,
-  haystack, chipsOf, timeline, ticks, softwareOf,
+  haystack, chipsOf, timeline, ticks, softwareOf, savedLine,
 } from "./walk.js";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -509,7 +509,12 @@ customElements.define("dns-findings", DnsFindings);
 
 /* ── the page itself ───────────────────────────────────────────────────── */
 
-const page = await fetch("page.json", { cache: "no-store" }).then((answer) => answer.json());
+// A page written by --format html carries its walk inside it, and a page opened
+// from the disk can fetch nothing.
+const carried = document.getElementById("walk");
+const page = carried
+  ? JSON.parse(carried.textContent)
+  : await fetch("page.json", { cache: "no-store" }).then((answer) => answer.json());
 const walk = page.trace;
 const hops = flatten(walk.root);
 for (const hop of hops) hop.text = haystack(hop.step);
@@ -566,6 +571,17 @@ document.getElementById("inspector").hop = hops[0];
 document.addEventListener("hop", (event) => {
   document.getElementById("inspector").hop = event.detail;
 });
+
+if (carried) {
+  const saved = document.getElementById("saved");
+  saved.textContent = savedLine(page);
+  saved.hidden = false;
+  document.querySelector(".brand").removeAttribute("href");
+
+  // There is no trace.json beside a file, so the walk it carries is handed over.
+  const json = document.querySelector('a[href="trace.json"]');
+  json.href = URL.createObjectURL(new Blob([JSON.stringify(walk, null, 2) + "\n"], { type: "application/json" }));
+}
 
 document.getElementById("built").textContent =
   `dnstree ${page.page.version} · walked ${new Date(page.page.generated).toLocaleString()}`;

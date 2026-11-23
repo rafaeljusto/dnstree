@@ -59,7 +59,7 @@ These need no network: every one exits before a query goes out.
 | diff-against | `$D --diff --against x.json example.com` | exit 1: ask for one |
 | watch-short | `$D --watch 500ms example.com` | exit 1: a second is the least |
 | live-waterfall | `$D --live --format waterfall example.com` | exit 1 |
-| json-several | `$D --format dot example.com A AAAA` | exit 1: one walk only. Also mermaid, waterfall-mermaid, dig, web and web-3d. json writes a line per walk and openmetrics one file, both exit 0 |
+| json-several | `$D --format dot example.com A AAAA` | exit 1: one walk only. Also mermaid, waterfall-mermaid, dig, web, web-3d and html. json writes a line per walk and openmetrics one file, both exit 0 |
 | from-name | `$D --from ex.json example.com` | exit 1: no name to resolve |
 | from-shape | `$D --from ex.json --no-asn` | exit 1: a walk already made cannot be changed |
 | from-junk | `$D --from README.md` | exit 1, `--from README.md: not a trace: …`, no package name |
@@ -268,6 +268,7 @@ format with `$D --color never --from ex.json --format F`. `--from` takes no
 | mermaid | a `---` front matter with the title, then `flowchart LR` |
 | openmetrics | `dnstree_` metric lines, ends with `# EOF` |
 | dig | `# dnstree example.com. A, as dig commands`, then a `#` comment and a `dig @ADDR NAME TYPE … +norecurse +bufsize=1232 +dnssec` line per query; each runs under dig and comes back with the rcode the walk recorded |
+| html | one document with no `src=` and no `href` outside the file; the `<script type="application/json" id="walk">` block parses and its `trace` matches the walk; stderr names the resolver unless `--no-compare` |
 
 `web` and `web-3d` are under `long`.
 

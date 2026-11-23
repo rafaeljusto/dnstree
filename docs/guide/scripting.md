@@ -235,7 +235,7 @@ broke, then 2 where one came to no answer, and 0 only where they all answered.
 draws each as it is made. What can only be said of one walk is refused:
 `--expect`, which could not say which question it was about, `--against`,
 `--watch`, and the formats written as one document — `dot`, `mermaid`,
-`waterfall-mermaid`, `dig`, `web` and `web-3d`. `--format markdown`
+`waterfall-mermaid`, `dig`, `web`, `web-3d` and `html`. `--format markdown`
 and `--format teach` write a report per question, each headed with its own. `--format json` writes
 each walk on a line of its own, the same document one walk makes, so the output
 is [JSON Lines](https://jsonlines.org/) and any line of it is a walk

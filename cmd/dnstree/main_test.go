@@ -1157,6 +1157,10 @@ func TestRunFrom(t *testing.T) {
 			args: []string{"--from", path, "--format", "markdown"},
 			code: exitAnswer, want: "- . NS is a.root-servers.net.",
 		},
+		"made into a page to share": {
+			args: []string{"--from", path, "--format", "html"},
+			code: exitAnswer, want: `<script type="application/json" id="walk">`,
+		},
 		"drawn as a gantt chart": {
 			args: []string{"--from", path, "--format", "waterfall-mermaid"},
 			code: exitAnswer, want: "\ngantt\n",

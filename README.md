@@ -171,7 +171,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--no-asn`](docs/guide/configuring.md#pointing-it-somewhere-else) | skip the origin AS lookups |
 | [`--no-compare`](docs/guide/resolvers.md#against-your-resolver) | skip the question put to a recursive resolver, and the comparison with it |
 | [`--check-resolver`](docs/guide/resolvers.md#how-a-resolver-behaves) | see whether each resolver validates DNSSEC, trusts the root's keys, rewrites NXDOMAIN, sends your subnet on (ECS), minimises queries and makes up IPv6 addresses (DNS64), and which network its questions reach zones from; and which [encrypted resolvers stand for it](docs/guide/resolvers.md#whether-a-resolver-can-be-used-encrypted) (RFC 9462), and [what each says of itself](docs/guide/resolvers.md#what-a-resolver-says-of-itself) (RFC 9606), held against what it does |
-| [`--format`](docs/guide/output.md#other-formats) | `tree` (the default), `ascii`, `emoji`, `waterfall`, `waterfall-ascii`, `waterfall-mermaid`, `markdown`, `teach`, `json`, `dot`, `mermaid`, `openmetrics`, `dig`, `web` or `web-3d` |
+| [`--format`](docs/guide/output.md#other-formats) | `tree` (the default), `ascii`, `emoji`, `waterfall`, `waterfall-ascii`, `waterfall-mermaid`, `markdown`, `teach`, `json`, `dot`, `mermaid`, `openmetrics`, `dig`, `web`, `web-3d` or `html` |
 | [`--web-addr`](docs/guide/output.md#other-formats), `--no-browser` | where `--format web` and `web-3d` serve the page, and whether a browser is opened at it |
 | [`--live`](docs/guide/output.md#watching-it-happen) | draw the tree as the walk makes it, hop by hop |
 | [`--watch`](docs/guide/scripting.md#leaving-it-running) | walk again this often, and say only what changed since the walk before |
