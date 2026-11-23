@@ -89,8 +89,8 @@
 # 4 = true
 
 # Carry the queries over TCP, TLS or HTTPS instead of plain DNS: tcp, dot or
-# doh, one at a time. Plain UDP is what a walk does without any of them.
-# dot = true
+# doh. Plain UDP is what a walk does without it.
+# transport = dot
 
 # Let plain DNS pick up a hop the chosen transport could not reach, rather
 # than leaving it in the tree as a failure.
@@ -203,8 +203,8 @@
 
 # Reaching a test server
 
-# Verify --dot and --doh against these roots rather than the system's.
-# dot = true
+# Verify dot and doh against these roots rather than the system's.
+# transport = dot
 # tls-ca = /etc/ssl/certs/ca-certificates.crt
 
 # Or do not verify them at all, which only a certificate you issued deserves.

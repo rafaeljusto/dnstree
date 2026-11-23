@@ -26,7 +26,7 @@ or a package from https://github.com/rafaeljusto/dnstree/releases. Ask before
 installing anything.
 
 `dnstree --help` is the whole flag surface and outranks this file wherever the
-two disagree; it prints on stderr and exits 1. This file may be newer than the
+two disagree; it prints on stderr and exits 1. `-h` lists the flags alone. This file may be newer than the
 binary: a flag it names that the binary refuses means dnstree needs updating,
 not that the flag is wrong.
 
@@ -107,7 +107,7 @@ whole; `dnstree --schema` describes every field.
 | whether the zone survives losing a server | `dnstree --format markdown --without SERVER NAME` |
 | what public resolvers answer | `dnstree --format markdown --resolver 1.1.1.1 --resolver 8.8.8.8 NAME` |
 | whether a resolver validates DNSSEC, trusts the root's current key, rewrites NXDOMAIN, sends the client subnet (ECS), minimises queries, makes up IPv6 addresses (DNS64), or reaches zones from another network than its own | `dnstree --format markdown --check-resolver --resolver 1.1.1.1 NAME` |
-| whether a resolver does what its RESINFO record claims (RFC 9606) | `dnstree --format markdown --ddr --check-resolver --resolver 9.9.9.9 NAME` |
+| whether a resolver does what its RESINFO record claims (RFC 9606) | `dnstree --format markdown --check-resolver --resolver 9.9.9.9 NAME` |
 | the name of an address, and whether it points back (forward-confirmed reverse DNS) | `dnstree --format markdown -x 192.0.2.1` |
 | the dig commands to send a DNS host or registry, so they can repeat what the walk saw | `dnstree --format dig --dnssec NAME TYPE` |
 | how DNS found a name, hop by hop, for somebody learning it (pass the story on as written) | `dnstree --format teach NAME TYPE` |
@@ -163,7 +163,7 @@ flags when the question is narrow.
   flags to every run. If the output carries something nobody asked for, rerun
   with `--no-config`.
 - No answer from every root server usually means the machine cannot reach
-  port 53 outside; say so, and try `--tcp` before blaming the zone.
+  port 53 outside; say so, and try `--transport tcp` before blaming the zone.
 
 The guide at https://github.com/rafaeljusto/dnstree/tree/main/docs/guide covers
 each area in depth.

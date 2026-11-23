@@ -49,7 +49,8 @@ type doc struct {
 	exits       []exit
 }
 
-type option struct{ flags, text string }
+// section is the heading the flag is listed under, empty for none.
+type option struct{ section, flags, text string }
 
 type exit struct{ code, text string }
 
@@ -91,6 +92,16 @@ func parse(text string) (*doc, error) {
 			}
 			d.exits = append(d.exits, exits...)
 
+		case section(paragraph):
+			options, err := options(paragraph[1:])
+			if err != nil {
+				return nil, err
+			}
+			for i := range options {
+				options[i].section = strings.TrimSuffix(paragraph[0], ":")
+			}
+			d.options = append(d.options, options...)
+
 		default:
 			d.description = append(d.description, strings.Join(paragraph, "\n"))
 		}
@@ -105,6 +116,20 @@ func parse(text string) (*doc, error) {
 		return nil, fmt.Errorf("mkman: the usage text lists no exit codes")
 	}
 	return &d, nil
+}
+
+// section is a heading on a line of its own, such as "Output:", over the
+// indented flags it names.
+func section(paragraph []string) bool {
+	if len(paragraph) < 2 || !strings.HasSuffix(paragraph[0], ":") || strings.HasPrefix(paragraph[0], " ") {
+		return false
+	}
+	for _, line := range paragraph[1:] {
+		if !strings.HasPrefix(line, " ") {
+			return false
+		}
+	}
+	return true
 }
 
 // paragraphs splits the text on blank lines, dropping them.
@@ -181,7 +206,12 @@ func render(d *doc, version, date string) string {
 	}
 
 	b.WriteString(".SH OPTIONS\n")
+	section := ""
 	for _, opt := range d.options {
+		if opt.section != section {
+			section = opt.section
+			b.WriteString(".SS " + roff(section) + "\n")
+		}
 		b.WriteString(".TP\n")
 		b.WriteString(flagSpec(opt.flags) + "\n")
 		b.WriteString(roff(opt.text) + "\n")

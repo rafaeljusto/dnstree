@@ -76,6 +76,21 @@ func TestParseDefaults(t *testing.T) {
 			args: []string{"--udp", "example.com"},
 			want: cli.Config{Proto: "udp"},
 		},
+		"a transport the file names replaces nothing the command line asked for": {
+			file: "transport = dot\n",
+			args: []string{"example.com"},
+			want: cli.Config{Proto: "dot"},
+		},
+		"a transport asked for by name replaces the file's older one": {
+			file: "doh\n",
+			args: []string{"--transport", "tcp", "example.com"},
+			want: cli.Config{Proto: "tcp"},
+		},
+		"a transport asked for by its older name replaces the file's": {
+			file: "transport = doh\n",
+			args: []string{"--tcp", "example.com"},
+			want: cli.Config{Proto: "tcp"},
+		},
 		"a family asked for replaces the one in the file": {
 			file: "6\n",
 			args: []string{"-4", "example.com"},
@@ -611,6 +626,7 @@ func TestParseDefaultsBlamesValues(t *testing.T) {
 		"an unknown colour":     "color = sometimes\n",
 		"a timeout of none":     "timeout = 0s\n",
 		"fewer than no retries": "retries = -1\n",
+		"an unknown transport":  "transport = doq\n",
 	}
 	for name, file := range tests {
 		t.Run(name, func(t *testing.T) {

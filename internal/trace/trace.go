@@ -287,8 +287,8 @@ type Resolver struct {
 	// empty where it did not fail or the walk has nothing to read it against.
 	Failed Failure
 
-	// DDR is what the server said of its encrypted selves, nil where --ddr did
-	// not ask.
+	// DDR is what the server said of its encrypted selves, nil where neither
+	// --check-resolver nor --ddr asked.
 	DDR *Discovery
 
 	// Authentic is the AD bit of its answer: the resolver says it validated

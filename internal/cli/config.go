@@ -32,7 +32,7 @@ type configFile struct {
 // name, and so a file's resolvers give way too.
 var groups = [][]string{
 	{"4", "6"},
-	{"udp", "tcp", "dot", "doh"},
+	{"transport", "udp", "tcp", "dot", "doh"},
 	{"root", "root-hints"},
 	{"resolver", "asn-resolver"},
 	{"tls-ca", "tls-insecure"},

@@ -784,7 +784,7 @@ func (r *renderer) kept(tr *trace.Trace) []string {
 }
 
 // designations are what each resolver said of its encrypted selves, one line
-// each, and only where --ddr asked. None of it was connected to, and the line
+// each, and only where --check-resolver or --ddr asked. None of it was connected to, and the line
 // says so: an offer is the plain resolver's claim.
 func (r *renderer) designations(tr *trace.Trace) []string {
 	var lines []string

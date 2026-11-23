@@ -15,6 +15,13 @@ func TestParse(t *testing.T) {
 		"a usage text with every part": {
 			usage: "usage: dnstree [flags] NAME\n\nWhat it does.\n\n  --all   ask everyone\n\nExit codes: 0 fine.\n",
 		},
+		"flags under headings": {
+			usage: "usage: dnstree NAME\n\nWhat it does.\n\nWalk:\n  --all   ask everyone\n\nOutput:\n  --live   draw it\n\nExit codes: 0 fine.\n",
+		},
+		"a heading over a line that is not a flag": {
+			usage: "usage: dnstree NAME\n\nWhat it does.\n\nWalk:\n  --all\n\nExit codes: 0 fine.\n",
+			err:   true,
+		},
 		"exit codes as one indented entry per line": {
 			usage: "usage: dnstree NAME\n\nWhat it does.\n\n  --all   ask everyone\n\nExit codes:\n  0 fine\n  1 not.\n",
 		},
@@ -85,6 +92,15 @@ func TestRenderCoversTheCommandLine(t *testing.T) {
 	// Every flag line of the usage text became an option in the page.
 	if got, want := strings.Count(page, ".TP\n"), len(doc.options)+len(doc.exits); got != want {
 		t.Errorf("got %d tagged paragraphs, want %d", got, want)
+	}
+
+	// Every heading the flags sit under became a subsection.
+	for _, opt := range doc.options {
+		if opt.section == "" {
+			t.Errorf("got %s under no heading, want every flag under one", opt.flags)
+		} else if !strings.Contains(page, ".SS "+roff(opt.section)+"\n") {
+			t.Errorf("got a page without the subsection %q", opt.section)
+		}
 	}
 
 	for _, want := range []string{

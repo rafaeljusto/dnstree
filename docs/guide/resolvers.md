@@ -121,7 +121,7 @@ trust: 9.9.9.9 says the answer is authentic (AD), where the walk could not check
 
 > [!NOTE]
 > AD is the resolver's claim, and anything on the path can set or clear it;
-> `--dot` and `--doh` make it stronger. The resolver is not the walk, so none of
+> `--transport dot` or `doh` makes it stronger. The resolver is not the walk, so none of
 > this changes the exit code. When its answer differs from the walk's too, the
 > line says the two may be about different data. `--format json` carries the
 > reading as `trusts`, and `--format openmetrics` as `dnstree_resolver_trusts`.
@@ -224,61 +224,63 @@ network and not the machine.
 
 A resolver handed out by the network is a bare address, and a bare address
 speaks plain DNS: every name asked of it crosses the network readable, and
-changeable, by anyone on the way. `--ddr` asks each resolver the question is
-timed against whether it has an encrypted version too (RFC 9462), and draws
-what it offers under the tree:
+changeable, by anyone on the way. [`--check-resolver`](#how-a-resolver-behaves)
+asks each resolver the question is timed against whether it has an encrypted
+version too (RFC 9462), and draws what it offers under the tree:
 
 ```
-$ dnstree --ddr --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 9.9.9.9 --explain www.isc.org
+$ dnstree --check-resolver --resolver 1.1.1.1 --resolver 8.8.8.8 --resolver 9.9.9.9 --explain www.isc.org
 ...
 ddr: 1.1.1.1 offers doh at https://one.one.one.one:443/dns-query{?dns}, dot at one.one.one.one:853 (not verified)
-ddr: 8.8.8.8 offers dot at dns.google, doh at https://dns.google/dns-query{?dns} (not verified)
-ddr: 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
-✔ answered in 1.1s · resolvers in 348ms-348ms · 3 queries · 3 servers
 ...
-· 1.1.1.1 says it can also be reached encrypted, over doh and dot at one.one.one.one.; trust it only once the certificate there names 1.1.1.1, which --ddr does not check
+ddr: 8.8.8.8 offers dot at dns.google, doh at https://dns.google/dns-query{?dns} (not verified)
+...
+ddr: 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
+...
+✔ answered in 905ms · resolvers in 301ms-305ms · 3 queries · 3 servers
+...
+· 1.1.1.1 says it can also be reached encrypted, over doh and dot at one.one.one.one.; trust it only once the certificate there names 1.1.1.1, which dnstree does not check
 ```
 
-It is one query per resolver, for `_dns.resolver.arpa`, and on its own it only
-asks: it does not connect to what is offered. A client is meant to use an offer only once
-the certificate it finds there names the plain resolver's own address, since
-otherwise whoever answered the plain question could point it anywhere. That
-check is not made here, which is why every offer is marked as not verified.
-A resolver that designates nothing says so, and one that cannot be asked says
-why. Without `--resolver` the question goes to the host's own resolver;
-`--no-compare` leaves nothing to ask.
+It is one query per resolver, for `_dns.resolver.arpa`. A client is meant to
+use an offer only once the certificate it finds there names the plain
+resolver's own address, since otherwise whoever answered the plain question
+could point it anywhere. That check is not made here, which is why every offer
+is marked as not verified. A resolver that designates nothing says so, and one
+that cannot be asked says why. Without `--resolver` the question goes to the
+host's own resolver; `--no-compare` leaves nothing to ask. `--ddr` asks this
+question alone, without the rest of `--check-resolver`.
 
 ### What a resolver says of itself
 
 A resolver can publish what it claims to do in a RESINFO record
 ([RFC 9606](https://www.rfc-editor.org/rfc/rfc9606)): `qnamemin` for QNAME
 minimisation, `exterr` for the extended errors it returns, and `infourl` for a
-page about it. With `--ddr` and [`--check-resolver`](#how-a-resolver-behaves)
-together, dnstree asks for that record and sets each claim beside what the
-resolver was seen to do:
+page about it. `--check-resolver` asks the encrypted resolver each offer names
+for that record, and sets each claim beside what the resolver was seen to do:
 
 ```
-$ dnstree --ddr --check-resolver --resolver 194.0.5.3 --resolver 9.9.9.9 --explain www.isc.org
+$ dnstree --check-resolver --resolver 194.0.5.3 --resolver 9.9.9.9 --explain www.isc.org
 ...
-🔐 194.0.5.3 offers dot at resolver.dns4all.eu:853, doq at resolver.dns4all.eu:853, doh at https://resolver.dns4all.eu:443/dns-query{?dns} (not verified)
-📇 resolver.dns4all.eu over dot: answered without the AA bit, which RFC 9606 says to drop
-🔐 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
-📇 dns.quad9.net says it minimises queries, and 9.9.9.9 does
-📇 dns.quad9.net says it can return extended errors 17,29, but 9.9.9.9 returned 6, 7, which it does not list
-📇 dns.quad9.net has more at https://www.quad9.net/ (not fetched)
+ddr: 194.0.5.3 offers dot at resolver.dns4all.eu:853, doq at resolver.dns4all.eu:853, doh at https://resolver.dns4all.eu:443/dns-query{?dns} (not verified)
+resinfo: resolver.dns4all.eu over dot: answered without the AA bit, which RFC 9606 says to drop
+ddr: 9.9.9.9 offers doh at https://dns.quad9.net/dns-query{?dns}, dot at dns.quad9.net, doq at dns.quad9.net (not verified)
+resinfo: dns.quad9.net says it minimises queries, and 9.9.9.9 does
+resinfo: dns.quad9.net says it can return extended errors 17,29, but 9.9.9.9 returned 7, which it does not list
+resinfo: dns.quad9.net has more at https://www.quad9.net/ (not fetched)
 ...
 · resolver.dns4all.eu serves its RESINFO without the AA bit, so a client that follows RFC 9606 drops what it claims; serve the record as the resolver's own data for that name
 ...
-· dns.quad9.net lists the extended errors it returns in RESINFO, but 9.9.9.9 returned 6 and 7, which the list leaves out; add them to exterr
+· dns.quad9.net lists the extended errors it returns in RESINFO, but 9.9.9.9 returned 7, which the list leaves out; add them to exterr
 ```
 
 The record is asked for at the name an offer designates, over dot where one
 is offered and doh at `/dns-query` otherwise, and only over a connection whose
 certificate names that name: the record is only the resolver's own word if
 the certificate is checked. `--tls-ca` and `--tls-insecure` reach it only
-beside `--dot` or `--doh`, as everywhere else: the first is trusted as an
-authority, and under the second nothing is asked. A hint is dialled only at a
-public address or at the plain resolver's own, since it came over plain DNS.
+beside `--transport dot` or `doh`, as everywhere else: the first is trusted as
+an authority, and under the second nothing is asked. A hint is dialled only at
+a public address or at the plain resolver's own, since it came over plain DNS.
 As the RFC requires, the query has recursion off, and an answer without the AA
 bit is dropped, since it is somebody else's record that the resolver looked
 up.
@@ -390,7 +392,7 @@ resolver: 9.9.9.9 reaches zones from AS20326, not its own AS19281
   on every network; a forwarder asks through whoever it forwards to; and a
   network that answers port 53 itself, whatever address the question was sent
   to, looks the same. The line says what was seen and leaves the reading to
-  you; over `--dot` or `--doh` only the resolver itself can answer. With
+  you; over `--transport dot` or `doh` only the resolver itself can answer. With
   `--no-asn` there is nothing to compare, and the line is left out.
 
 Whatever the answers leave open is said as "may or may not", never guessed:

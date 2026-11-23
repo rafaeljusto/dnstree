@@ -39,85 +39,104 @@ path it took. TYPE defaults to A; ANY, AXFR and IXFR are refused. A NAME in any
 script is asked in punycode, the way the DNS holds it. Several types are walked
 one after another, each from the root servers down.
 
+What to resolve:
   -x ADDR                 resolve the PTR of this address, instead of a name
   --names FILE            walk every NAME [TYPE...] line of FILE, or of - for stdin
   --zone-file FILE        ask every name a zone file holds; compare with the file
+
+How to walk:
   -4, -6                  ask only IPv4 or only IPv6 servers
-  --udp, --tcp            carry the queries over plain DNS (--udp is the default)
-  --dot, --doh            carry them encrypted, over TLS or HTTPS
+  --transport PROTO       udp (the default), tcp, dot over TLS or doh over HTTPS
   --fallback              let plain DNS pick up a hop the transport could not
+  --port N                the port to ask on (53; 853 for dot, 443 for doh)
   --all                   ask every nameserver of a zone, not just the first
   --dnssec                ask for signatures and follow the chain of trust
+  --qmin                  ask each zone for no more of the name than it needs
+  --subnet PREFIX         ask as though from this client subnet (RFC 7871)
+
+The zone:
+  --check                 run the checks that grade a zone, and grade its health
   --check-ns              ask the zone for its NS set, glue and CSYNC; compare
   --check-ds              ask every nameserver for its CDS and CDNSKEY; compare
   --serial                ask every nameserver of the zone which copy it serves
   --check-axfr            ask each nameserver of the zone to hand over all of it
   --check-recursion       ask each nameserver of the zone to resolve another name
   --check-edns            ask each nameserver of the zone the RFC 8906 tests
+  --cookie                send each server a DNS cookie and say how it answered
+  --rdap                  ask the registry when the domain expires, and compare
+  --deps                  list every zone NAME depends on, its nameservers' too
+  --propagation           say how long a change takes to reach every cache
+  --rollover              say where a key rollover stands and what it waits on
+
+Names, mail and services:
   --caa                   say which certificate authorities may issue for NAME
   --spf                   draw NAME's SPF policy and count the lookups it costs
   --mail                  check NAME's MX hosts for DANE, and its mail policies
-  --tlsa                  match the certificate each DANE host presents
   --dkim SELECTOR         check the DKIM key NAME publishes for SELECTOR; repeat it
   --svcb                  follow NAME's HTTPS or SVCB records to their servers
   --srv                   follow NAME's SRV records to the hosts they name
-  --deps                  list every zone NAME depends on, its nameservers' too
-  --rdap                  ask the registry when the domain expires, and compare
-  --propagation           say how long a change takes to reach every cache
-  --rollover              say where a key rollover stands and what it waits on
-  --check                 run the checks that grade a zone, and grade its health
+  --tlsa                  match the certificate each DANE host presents
+
+Each server:
   --nsid                  ask each server which of itself answered (RFC 5001)
   --software              ask each server which software it runs (version.bind)
   --repeat N              ask each hop's question N more times; count what came back
-  --cookie                send each server a DNS cookie and say how it answered
-  --qmin                  ask each zone for no more of the name than it needs
+
+What if:
   --without SERVER        treat a nameserver, address or prefix as down; repeat it
   --try-ns ZONE=SERVER    walk as though ZONE were delegated to SERVER; repeat it
   --try-ds ZONE=DS        walk as though ZONE's parent held this DS; repeat it
   --compare-ns ZONE=NS    compare what NS serves of ZONE with its servers; repeat it
-  --subnet PREFIX         ask as though from this client subnet (RFC 7871)
+
+Resolvers:
+  --resolver ADDR         a recursive server to use, not the host's own; repeat it
   --no-asn                skip the origin AS lookups
   --no-compare            do not time the same question against a resolver
-  --ddr                   ask each resolver which encrypted resolvers stand for it
-  --check-resolver        see what each resolver validates, rewrites and gives away
+  --check-resolver        see what each resolver validates, rewrites and offers
   --report                report a bogus chain to the agent the zone names (RFC 9567)
-  --format FORMAT         how to draw the walk: tree, waterfall, json, web; see below
+
+Output:
+  --format FORMAT         how to draw the walk: tree (the default), json, web and more
   --web-addr ADDR         where --format web serves the page (default 127.0.0.1:0)
   --no-browser            do not open a browser at the page --format web serves
   --live                  draw the tree as the walk makes it
-  --watch DURATION        walk again this often, and say only what changed
   --explain               say in sentences what the walk came to
-  --diff                  say what has changed since the last walk remembered
   --expect VALUE          require this of the walk, and exit 4 where it fails
+  --color WHEN            auto, always or never (default auto)
+  --debug                 report every hop on stderr as it is made
+
+Over time:
+  --watch DURATION        walk again this often, and say only what changed
+  --diff                  say what has changed since the last walk remembered
   --from FILE             draw a walk --format json saved, instead of walking
   --against FILE          say how the walk differs from one --format json saved
   --history DIR           say how NAME changed across the walks saved in DIR
   --pcap FILE             save the walk's queries and answers as a packet capture
   --replay FILE           walk again offline, answered from a capture --pcap made
-  --color WHEN            auto, always or never (default auto)
+
+Limits and setup:
   --timeout DURATION      how long one query may take (default 2s)
   --retries N             how often to ask again after a silence (default 1)
   --max-depth N           zone cuts to follow (default 16)
   --max-queries N         queries to make in all (64; 256 --all, 512 --check, --deps)
   --max-cname N           aliases to chase (default 8)
-  --port N                the port to ask on (53; 853 with --dot, 443 with --doh)
   --root-hints FILE       where the walk starts, instead of the built-in hints
   --root [NAME@]ADDR      one server to start from, instead of a hints file
   --trust-anchors FILE    the DS records to trust, instead of the built-in ones
-  --resolver ADDR         a recursive server to use, not the host's own; repeat it
-  --tls-ca FILE           verify --dot and --doh against these roots
-  --tls-insecure          do not verify --dot and --doh at all
+  --tls-ca FILE           verify dot and doh against these roots
+  --tls-insecure          do not verify dot and doh at all
   --config FILE           take the defaults from FILE, instead of the usual one
   --no-config             take no defaults from a file at all
-  --debug                 report every hop on stderr as it is made
   --schema                print the JSON Schema of the json format and stop
   --version               print the version and stop
+
+-h lists the flags alone, and --help with everything said about them.
 
 Repeat --root for every server the walk may start from. Each takes an address,
 which may carry a :PORT, optionally introduced by NAME@ to say what the server
 answers under; without a port, --port says where it is asked. A walk that starts
 somewhere other than the real root usually wants --trust-anchors with it, and
---tls-ca or --tls-insecure to reach a --dot or --doh server holding a test
+--tls-ca or --tls-insecure to reach a dot or doh server holding a test
 certificate. --resolver points everything that needs a recursive server at one
 of its own: the origin AS lookups, the question dnstree times against an
 ordinary resolution to say what the walk cost over it, the report --report
@@ -330,8 +349,8 @@ that crossed the wire, and the servers, ports and times are real; the IP, UDP
 and TCP headers around them are rebuilt, with dnstree's side written as
 192.0.2.1 or 2001:db8::1, so the capture says nothing of the machine it was made
 on. Only the walk's own queries are kept, retries and probes included: the
-question timed against a resolver and the origin AS lookups are not. Over --dot
-and --doh what crossed the wire was TLS, which a capture of plain DNS would
+question timed against a resolver and the origin AS lookups are not. Over dot
+and doh what crossed the wire was TLS, which a capture of plain DNS would
 misrepresent, so they are refused. Every walk of the run goes into the one file,
 which is written over; the file of defaults cannot set it.
 
@@ -343,8 +362,9 @@ made. The walk is made afresh, so a newer dnstree, or flags that shape the walk
 differently, can be tried on a problem long since fixed, but whatever it asks
 that the first walk did not goes unanswered. Nothing outside the walk is asked:
 the resolver comparison and the origin AS lookups are off, what --check would
-ask beside the walk is left out, and --rdap, --spf, --tlsa, --resolver, --ddr,
---check-resolver, --report, --diff, --watch, --dot and --doh are refused.
+ask beside the walk is left out, and --rdap, --spf, --tlsa, --resolver,
+--check-resolver, --report, --diff, --watch and --transport dot or doh are
+refused.
 
 --names reads the questions from FILE, or from the standard input where it is
 -, one to a line and written as on the command line: a name, then the types to
@@ -434,7 +454,7 @@ EDNS0, as for --nsid.
 zone (AXFR), the way anybody could, and says on each which of them hand it
 over. A transfer lists every name in the zone, and is meant for the zone's own
 secondaries. Only the start of the reply is read, and nothing of it is kept or
-drawn. It needs tcp, so --doh cannot ask it, and --dot asks it over tls. Each
+drawn. It needs tcp, so doh cannot ask it, and dot asks it over tls. Each
 server is also asked for a made-up name, to say whether its DNSSEC denials
 list the zone anyway: nsec names the real names on either side, nsec3 hashes
 of them, and a server signing as it answers makes them up. Some zones list
@@ -696,20 +716,6 @@ once. Each server gets a client cookie of its own, made fresh for the run. It
 rides along on queries over udp and tcp, which are the ones it protects, and
 costs none of its own.
 
---ddr asks every resolver the question is timed against which encrypted
-resolvers stand for it (RFC 9462), and says under the tree what each one
-offers: dot, doh or doq, at which name and port. It is how to learn whether a
-resolver handed out as a bare address could have been used encrypted. Nothing
-checks that the offer's certificate names the plain resolver, so an offer is
-only what the plain resolver claims. With --check-resolver as well, the offer is
-asked over dot, or doh at /dns-query, for its RESINFO record (RFC 9606), and what
-it claims is set beside what was seen: QNAME minimisation, and the extended
-errors it lists against the ones it returned. The record counts only over a
-certificate checked for the offer's name, and with the AA bit; --tls-insecure
-asks nothing, and the link it gives is never fetched. It costs a query per
-resolver, one more over TLS with --check-resolver, and needs the comparison
-that --no-compare turns off.
-
 --check-resolver puts questions whose right answers are known to every resolver
 the question is timed against, and says under the tree what each one was seen
 to do. A resolver validates DNSSEC if it refuses dnssec-failed.org, whose chain
@@ -728,9 +734,27 @@ resolver's AAAA under that prefix is then not counted as a difference. For a
 resolver at a public address, the origin AS of the address the two test zones
 saw its questions come from is set beside its own; a different one may be a
 partner network, a forwarder, or something on the path answering in its place,
-which --dot and --doh rule out. Whatever the answers leave open is said as "may or may not", never guessed. It
-costs up to nine queries per resolver and two for each root key, sets no exit
-code, and needs the comparison that --no-compare turns off.
+which dot and doh rule out. Whatever the answers leave open is said as "may or
+may not", never guessed.
+
+--check-resolver also asks each resolver which encrypted resolvers stand for it
+(RFC 9462), and says what each one offers: dot, doh or doq, at which name and
+port. It is how to learn whether a resolver handed out as a bare address could
+have been used encrypted. Nothing checks that the offer's certificate names the
+plain resolver, so an offer is only what the plain resolver claims. The offer
+is then asked over dot, or doh at /dns-query, for its RESINFO record (RFC 9606),
+and what it claims is set beside what was seen: QNAME minimisation, and the
+extended errors it lists against the ones it returned. The record counts only
+over a certificate checked for the offer's name, and with the AA bit;
+--tls-insecure asks nothing, and the link it gives is never fetched. In all,
+--check-resolver costs up to eleven queries per resolver and two for each root
+key, sets no exit code, and needs the comparison that --no-compare turns off.
+--ddr asks which encrypted resolvers stand for each one, and nothing else.
+
+--transport says how every query of the walk is carried: udp, with tcp where an
+answer is cut short, tcp alone, dot over TLS on port 853 (RFC 7858), or doh over
+HTTPS on port 443 (RFC 8484). --udp, --tcp, --dot and --doh are the older names
+for each, and still mean the same thing.
 
 What the command line leaves out is taken from a file of defaults: the one named
 by $DNSTREE_CONFIG, then $XDG_CONFIG_HOME/dnstree/config (~/.config/dnstree/config
@@ -976,6 +1000,36 @@ func dashed(name string) string {
 // can hold each of them to the usage and to the lists that sort them.
 var testHookFlags = func(*flag.FlagSet) {}
 
+// Brief is the usage cut down to what fits a screen or two: what dnstree is,
+// the flags under their headings, and the exit codes. -h prints it, and the
+// whole of Usage stays for --help and the man page.
+func Brief() string {
+	var b strings.Builder
+	for i, paragraph := range strings.Split(strings.TrimSpace(Usage), "\n\n") {
+		lines := strings.Split(paragraph, "\n")
+		listed := len(lines) > 1 && !slices.ContainsFunc(lines[1:], func(line string) bool {
+			return !strings.HasPrefix(line, " ")
+		})
+		if i < 2 || listed || strings.HasPrefix(paragraph, "-h ") {
+			b.WriteString(paragraph + "\n\n")
+		}
+	}
+	return b.String()
+}
+
+// help is the usage --help asked for, or the brief one -h did.
+func help(args []string) string {
+	for _, arg := range args {
+		switch arg {
+		case "--":
+			return Brief()
+		case "-help", "--help":
+			return Usage
+		}
+	}
+	return Brief()
+}
+
 // ErrUsage is anything the command line itself got wrong, including a request
 // for help.
 var ErrUsage = errors.New("cli: the command line cannot be read")
@@ -1001,6 +1055,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		four, six     bool
 		udp, tcp, dot bool
 		doh           bool
+		carriedBy     string
 		noASN         bool
 		noCompare     bool
 		noBrowser     bool
@@ -1030,6 +1085,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 	flags.BoolVar(&tcp, "tcp", false, "carry the queries over TCP")
 	flags.BoolVar(&dot, "dot", false, "carry the queries over TLS")
 	flags.BoolVar(&doh, "doh", false, "carry the queries over HTTPS")
+	flags.StringVar(&carriedBy, "transport", "", "carry the queries over udp, tcp, dot or doh")
 	flags.BoolVar(&cfg.Fallback, "fallback", false, "let plain DNS pick up a hop the transport could not")
 	flags.BoolVar(&cfg.All, "all", false, "ask every nameserver of a zone")
 	flags.BoolVar(&cfg.DNSSEC, "dnssec", false, "follow the chain of trust")
@@ -1135,7 +1191,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return ""
 	}
 	if err := flags.Parse(args); errors.Is(err, flag.ErrHelp) {
-		fmt.Fprint(output, Usage)
+		fmt.Fprint(output, help(args))
 		return nil, fmt.Errorf("%w: %w", ErrUsage, err)
 	} else if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUsage, plain(flags, err))
@@ -1188,7 +1244,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		}
 		cfg.Name, cfg.Type, cfg.Confirm = reverseName(addr.Unmap()), "PTR", addr.Unmap()
 	case n == 0:
-		fmt.Fprint(output, Usage)
+		fmt.Fprint(output, Brief())
 		return nil, fmt.Errorf("%w: no name to resolve", ErrUsage)
 	default:
 		questions, err := ask(flags.Args())
@@ -1233,7 +1289,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		cfg.Family = 6
 	}
 
-	if cfg.Proto, err = proto(udp, tcp, dot, doh); err != nil {
+	if cfg.Proto, err = proto(carriedBy, inFile("transport"), udp, tcp, dot, doh); err != nil {
 		return nil, err
 	}
 	if cfg.Live && once(cfg.Format) {
@@ -1446,7 +1502,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, fmt.Errorf("%w: --no-asn and --no-compare leave --resolver nothing to answer", ErrUsage)
 	}
 	if cfg.Pcap != "" && (cfg.Proto == "dot" || cfg.Proto == "doh") {
-		return nil, fmt.Errorf("%w: --%s carries the queries in TLS, which --pcap cannot write as plain DNS", ErrUsage, cfg.Proto)
+		return nil, fmt.Errorf("%w: --transport %s carries the queries in TLS, which --pcap cannot write as plain DNS", ErrUsage, cfg.Proto)
 	}
 	if cfg.Pcap == "-" {
 		return nil, fmt.Errorf("%w: --pcap - would write the capture into the drawing; name a file", ErrUsage)
@@ -1458,7 +1514,7 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		return nil, err
 	}
 	if (cfg.TLSCA != "" || cfg.TLSInsecure) && cfg.Proto != "dot" && cfg.Proto != "doh" {
-		return nil, fmt.Errorf("%w: only --dot and --doh use TLS", ErrUsage)
+		return nil, fmt.Errorf("%w: only --transport dot and doh use TLS", ErrUsage)
 	}
 	if cfg.TLSCA != "" && cfg.TLSInsecure {
 		return nil, fmt.Errorf("%w: --tls-insecure verifies nothing, so --tls-ca has nothing to verify against", ErrUsage)
@@ -1468,6 +1524,8 @@ func Parse(args []string, output io.Writer) (*Config, error) {
 		// tree would show.
 		cfg.ASN, cfg.Compare = false, false
 	}
+	// --check-resolver took in what --ddr asks, which still asks it alone.
+	cfg.DDR = cfg.DDR || cfg.Behave
 
 	return &cfg, nil
 }
@@ -1684,7 +1742,7 @@ func replayable(cfg *Config, typed []string) error {
 		return fmt.Errorf("%w: --replay answers the walk from a capture, and %s would ask outside it",
 			ErrUsage, strings.Join(outside, " and "))
 	case cfg.Proto == "dot" || cfg.Proto == "doh":
-		return fmt.Errorf("%w: --replay answers from a capture of plain DNS, which --%s does not send", ErrUsage, cfg.Proto)
+		return fmt.Errorf("%w: --replay answers from a capture of plain DNS, which --transport %s does not send", ErrUsage, cfg.Proto)
 	case cfg.Watch != 0:
 		return fmt.Errorf("%w: --replay answers the same every time, so there is nothing to watch change", ErrUsage)
 	case cfg.Repeat > 0 && slices.Contains(typed, "repeat"):
@@ -1708,7 +1766,7 @@ var askOutside = map[string]bool{
 // walkFlags are the flags that shape a walk being made, and say nothing about
 // one already made.
 var walkFlags = map[string]bool{
-	"4": true, "6": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
+	"4": true, "6": true, "transport": true, "udp": true, "tcp": true, "dot": true, "doh": true, "fallback": true,
 	"all": true, "dnssec": true, "check-ns": true, "check-ds": true, "serial": true, "check-axfr": true, "check-recursion": true, "check-edns": true, "caa": true, "spf": true, "mail": true, "tlsa": true, "dkim": true, "svcb": true, "srv": true, "deps": true, "rdap": true, "check": true, "nsid": true, "software": true, "repeat": true, "cookie": true, "qmin": true,
 	"subnet": true, "without": true, "try-ns": true, "try-ds": true, "compare-ns": true, "no-asn": true, "no-compare": true, "ddr": true, "check-resolver": true, "report": true, "timeout": true, "retries": true,
 	"max-depth": true, "max-queries": true, "max-cname": true, "port": true, "root-hints": true,
@@ -2194,21 +2252,26 @@ func fqdn(name string) string {
 	return name + "."
 }
 
+// transports are what --transport takes, each also a flag of its own under
+// its older name.
+var transports = []string{"udp", "tcp", "dot", "doh"}
+
 // proto settles which transport carries the queries, of which there can only be
-// one.
-func proto(udp, tcp, dot, doh bool) (string, error) {
-	chosen := ""
-	for _, carrier := range []struct {
-		on   bool
-		name string
-	}{{udp, "udp"}, {tcp, "tcp"}, {dot, "dot"}, {doh, "doh"}} {
-		if !carrier.on {
+// one. where is the file --transport came from, if it did.
+func proto(transport, where string, udp, tcp, dot, doh bool) (string, error) {
+	if transport != "" && !slices.Contains(transports, transport) {
+		return "", fmt.Errorf("%w: %s--transport %q is not a transport; it is udp, tcp, dot or doh", ErrUsage, where, transport)
+	}
+	chosen := transport
+	for i, on := range []bool{udp, tcp, dot, doh} {
+		name := transports[i]
+		if !on || name == chosen {
 			continue
 		}
 		if chosen != "" {
-			return "", fmt.Errorf("%w: --%s and --%s cannot both carry the queries", ErrUsage, chosen, carrier.name)
+			return "", fmt.Errorf("%w: --transport %s and %s cannot both carry the queries", ErrUsage, chosen, name)
 		}
-		chosen = carrier.name
+		chosen = name
 	}
 	return cmp.Or(chosen, "udp"), nil
 }

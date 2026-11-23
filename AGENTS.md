@@ -91,7 +91,7 @@ Each of these has been a bug, or would be a silent regression.
   margin.
 - **Nothing reaches the disk unless `--diff` or `--pcap` asks for it.**
   `internal/history` is the only writer of the cache. A capture is rebuilt,
-  never sniffed, so it refuses `--dot` and `--doh`. A cache that cannot be read
+  never sniffed, so it refuses `--transport dot` and `doh`. A cache that cannot be read
   or written costs the comparison, in one line, never the resolution.
 - **dnstree-web runs walks for strangers.** Every transport it hands the
   resolver goes through `transport.Guard` with `transport.Public`, and every

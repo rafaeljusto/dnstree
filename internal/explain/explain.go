@@ -1313,7 +1313,7 @@ func trusts(tr *trace.Trace) []Finding {
 	return findings
 }
 
-// designations are what --ddr learned of each resolver. An offer is only a
+// designations are what --check-resolver learned of each resolver. An offer is only a
 // claim until a client connects and finds the resolver's own address in the
 // certificate (RFC 9462), and nothing here connects, so it is said as a claim.
 // A resolver that could not be asked is on its own line under the tree.
@@ -1343,7 +1343,7 @@ func designations(tr *trace.Trace) []Finding {
 				offers = list(protocols)
 			}
 			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
-				"%s says it can also be reached encrypted, over %s at %s; trust it only once the certificate there names %s, which --ddr does not check",
+				"%s says it can also be reached encrypted, over %s at %s; trust it only once the certificate there names %s, which dnstree does not check",
 				who, offers, list(targets), who)})
 			findings = append(findings, claims(who, found.Info)...)
 		}
@@ -1452,7 +1452,7 @@ func behaviours(tr *trace.Trace) []Finding {
 				from = add(from, fmt.Sprintf("AS%d", source.ASN.Number))
 			}
 			findings = append(findings, Finding{Topic: Resolver, Level: Note, Text: fmt.Sprintf(
-				"the questions put to %s reached the zones from %s, not from AS%d, where it is: the resolver may ask through a partner network, or forward to another resolver, or something on the path may be answering in its place, which would make what this run says of it about that server instead; --dot or --doh rule the last out, since only the resolver itself can answer them",
+				"the questions put to %s reached the zones from %s, not from AS%d, where it is: the resolver may ask through a partner network, or forward to another resolver, or something on the path may be answering in its place, which would make what this run says of it about that server instead; --transport dot or doh rules the last out, since only the resolver itself can answer them",
 				who, list(from), answer.Server.ASN.Number)})
 		}
 		if answer.Synthesised {

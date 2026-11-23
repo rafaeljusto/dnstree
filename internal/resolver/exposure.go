@@ -37,7 +37,7 @@ func (r *run) checkExposure(ctx context.Context, answer *trace.Step, zone string
 	checkTransfer := r.cfg.CheckTransfer
 	if checkTransfer && transfer == nil {
 		checkTransfer = false
-		r.warnf(trace.AreaStrangers, "zone transfers of %s were not checked: they need tcp, and %s carries none; walk with --udp, --tcp or --dot to check them",
+		r.warnf(trace.AreaStrangers, "zone transfers of %s were not checked: they need tcp, and %s carries none; walk with --transport udp, tcp or dot to check them",
 			zone, r.cfg.Transport.Proto())
 	}
 

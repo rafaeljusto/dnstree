@@ -36,7 +36,7 @@ package's settings.
 ## The man page
 
 [`cmd/mkman`](../cmd/mkman) renders `dnstree.1` from `cli.Usage` — the same
-string the binary prints for `--help`. A flag therefore cannot reach the help
+string the binary prints for `--help`, which `-h` cuts down to the flags. A flag therefore cannot reach the help
 without reaching the man page, and the generator fails rather than quietly
 dropping a section it cannot parse. Nothing here is written by hand, and
 `build/dnstree.1` is not committed.
@@ -68,7 +68,7 @@ nfpm reads the version as semver, which `git describe` on an untagged tree is
 not. A build without a tag packages as `0.0.0`; a release always has one.
 
 The packages depend on nothing. The binary is static and reaches the root
-servers by itself, and `ca-certificates` — read only by `--dot`, `--doh` and `--rdap` —
+servers by itself, and `ca-certificates` — read only by `--transport dot` or `doh` and `--rdap` —
 is suggested rather than required.
 
 ## The Homebrew formula

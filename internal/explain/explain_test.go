@@ -1131,7 +1131,7 @@ func TestDesignations(t *testing.T) {
 
 	got := said(tr)
 	for _, want := range []string{
-		"192.0.2.53 says it can also be reached encrypted, over dot and doh at dns.test.; trust it only once the certificate there names 192.0.2.53, which --ddr does not check",
+		"192.0.2.53 says it can also be reached encrypted, over dot and doh at dns.test.; trust it only once the certificate there names 192.0.2.53, which dnstree does not check",
 		"192.0.2.54 designates no encrypted resolver",
 	} {
 		if !strings.Contains(got, want) {

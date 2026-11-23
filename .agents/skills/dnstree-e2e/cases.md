@@ -47,12 +47,14 @@ These need no network: every one exits before a query goes out.
 | bad-color | `$D --color sometimes example.com` | exit 1 |
 | bad-timeout | `$D --timeout -1s example.com` | exit 1 |
 | bad-subnet | `$D --subnet nonsense example.com` | exit 1 |
-| udp-tcp | `$D --udp --tcp example.com` | exit 1: both cannot carry the queries |
+| udp-tcp | `$D --transport udp --transport tcp example.com` | exit 1: both cannot carry the queries |
+| transport-unknown | `$D --transport doq example.com` | exit 1: not a transport |
+| transport-alias | `$D --no-asn --no-compare --transport tcp example.com` | exit 0: the older name still carries the walk over tcp |
 | four-six | `$D -4 -6 example.com` | exit 1 |
-| dot-doh | `$D --dot --doh example.com` | exit 1 |
+| dot-doh | `$D --transport dot --transport doh example.com` | exit 1 |
 | check-ds-alone | `$D --check-ds example.com` | exit 1: it needs `--dnssec` |
 | ddr-no-compare | `$D --ddr --no-compare example.com` | exit 1 |
-| pcap-tls | `$D --dot --pcap x.pcap example.com`, then `--doh` | exit 1: TLS cannot be written as plain DNS. No `x.pcap` is left behind |
+| pcap-tls | `$D --transport dot --pcap x.pcap example.com`, then `--transport doh` | exit 1: TLS cannot be written as plain DNS. No `x.pcap` is left behind |
 | pcap-refused | `$D --pcap - example.com`, `--from ex.json --pcap x.pcap`, `--watch 30s --pcap x.pcap example.com` | exit 1 each, one line |
 | diff-against | `$D --diff --against x.json example.com` | exit 1: ask for one |
 | watch-short | `$D --watch 500ms example.com` | exit 1: a second is the least |
@@ -64,13 +66,13 @@ These need no network: every one exits before a query goes out.
 | repeat-bad | `$D --repeat 101 example.com`, then `x` and `-1` | exit 1 each, `is not a number of repeats; the most is 100`. `--from ex.json --repeat 2` and `--replay x.pcap --repeat 2 example.com` exit 1 too |
 | compare-ns-bad | `$D --compare-ns nonsense example.com` | exit 1, `is not ZONE=SERVER`. With `--try-ns`, `--format json`, `--expect secure`, or `--names` holding a name outside the zone, exit 1 each |
 | names-expect | `$D --names list --expect secure` | exit 1 |
-| names-missing | `$D --names nope.txt` | exit 1, `--names nope.txt: no such file or directory`. `--from`, `--against`, `--tls-ca` (with `--dot`, or it says only `--dot` and `--doh` use TLS), `--trust-anchors` and `--config` the same, each naming its flag |
+| names-missing | `$D --names nope.txt` | exit 1, `--names nope.txt: no such file or directory`. `--from`, `--against`, `--tls-ca` (with `--transport dot`, or it says only `--dot` and `--doh` use TLS), `--trust-anchors` and `--config` the same, each naming its flag |
 | hints-missing | `$D --root-hints nope.txt example.com` | exit 1, same |
 | web-addr | `$D --format web --web-addr nonsense example.com` | exit 1 before any walk, `--web-addr "nonsense" is not a host and port` |
 | report-alone | `$D --report example.com` | exit 1: it needs `--dnssec` |
 | hints-junk | `$D --root-hints junk.txt example.com` | exit 1, names the file and line |
 | anchors-junk | `$D --trust-anchors junk.txt --dnssec example.com` | exit 1, names the file and line |
-| tls-ca-junk | `$D --dot --root one.one.one.one@1.1.1.1 --tls-ca junk.pem example.com` | exit 1: no certificate in it |
+| tls-ca-junk | `$D --transport dot --root one.one.one.one@1.1.1.1 --tls-ca junk.pem example.com` | exit 1: no certificate in it |
 
 ## walk
 
@@ -100,12 +102,12 @@ These need no network: every one exits before a query goes out.
 | compare | `$D --no-asn --color never example.com` | exit 0, the summary says `resolver in …` |
 | resolvers | `$D --no-asn --color never --resolver 1.1.1.1 --resolver 8.8.8.8 example.com` | exit 0, `resolvers in …-…`, and any that disagreed named under the tree |
 | asn-resolver | `$D --no-asn --color never --asn-resolver 1.1.1.1 example.com` | same as one `--resolver`: the old name still works |
-| ddr | `$D --no-asn --color never --resolver 1.1.1.1 --ddr example.com` | exit 0, a `ddr: 1.1.1.1 offers doh …, dot …` line |
+| ddr | `$D --no-asn --color never --resolver 1.1.1.1 --ddr example.com` | exit 0, a `ddr: 1.1.1.1 offers doh …, dot …` line, and no `resolver:` lines: the older flag asks this alone |
 | servfail | `$D --no-asn --color never --resolver 1.1.1.1 dnssec-failed.org` | exit 0, `(SERVFAIL)` in the summary and `servfail: 1.1.1.1 … with checking disabled it answers, so it fails validation` under the tree; with `--dnssec`, exit 3 and `fails validation as the walk does` |
 | ipv4 | `$D $B -4 example.com` | exit 0, only IPv4 addresses asked |
 | ipv6 | `$D $B -6 example.com` | exit 0, only IPv6 addresses asked. Skip it if the environment has no IPv6 |
 | color | `$D --no-asn --no-compare --color always example.com` | escapes on stdout even though it is a pipe |
-| check-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --check-resolver example.com` | exit 0, `resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone`, then a line on ECS and minimisation. With `--no-compare`, exit 1: `--check-resolver checks the resolvers --no-compare leaves unasked` |
+| check-resolver | `$D --no-asn --color never --resolver 1.1.1.1 --check-resolver example.com` | exit 0, a `ddr: 1.1.1.1 offers …` line, `resolver: 1.1.1.1 validates DNSSEC and leaves NXDOMAIN alone`, then a line on ECS and minimisation. With `--no-compare`, exit 1: `--check-resolver checks the resolvers --no-compare leaves unasked` |
 | check-resolver-network | `$D --color never --resolver 9.9.9.9 --check-resolver example.com` | exit 0, `9.9.9.9 reaches zones from AS20326, not its own AS19281`; 1.1.1.1 says `reaches zones from its own AS13335`. With `--no-asn` the line is left out |
 | check-resolver-root-key | `$D --no-asn --color never --resolver 1.1.1.1 --resolver 8.8.8.8 --check-resolver example.com` | exit 0, `1.1.1.1 trusts root keys 20326 and 38696` (or `trusts root key 38696, not 20326` once 20326 is revoked); `8.8.8.8 may or may not trust root keys ...: it answers the sentinel's names whichever key they name (RFC 8509)`. No root key line for a resolver that does not validate |
 | dns64 | `$D --no-asn --color never --resolver 2001:4860:4860::6464 --check-resolver example.com AAAA` | exit 0, `makes up AAAA records from A records under 64:ff9b::/96 (DNS64)`. Needs IPv6. 1.1.1.1 above has no DNS64 line |
@@ -134,7 +136,7 @@ These need no network: every one exits before a query goes out.
 
 ## transport
 
-The roots speak neither DoT nor DoH, so walking from them with `--dot` takes
+The roots speak neither DoT nor DoH, so walking from them with `--transport dot` takes
 over a minute to fail. Start these from a resolver that speaks both. The walk
 asks it without recursion, so it answers from its cache: a `SERVFAIL` with `no
 local cache to fulfill non recursion (RD=0) request` is 1.1.1.1 having nothing
@@ -142,18 +144,18 @@ cached, not a bug. Run it again.
 
 | id | run | expect |
 | --- | --- | --- |
-| tcp | `$D $B --tcp example.com` | exit 0 |
-| dot | `$D $B --dot --root one.one.one.one@1.1.1.1 example.com` | exit 0, one hop, A records |
-| doh | `$D $B --doh --root one.one.one.one@1.1.1.1 example.com` | exit 0 |
-| tls-ca | `$D $B --dot --root one.one.one.one@1.1.1.1 --tls-ca /etc/ssl/cert.pem example.com` | exit 0 (use the system bundle of the platform) |
-| tls-insecure | `$D $B --dot --root 1.1.1.1 --tls-insecure example.com` | exit 0 |
-| dot-no-name | `$D $B --dot --root 1.1.1.1 example.com` | exit 0: a server given only by address has its certificate checked against the address, which 1.1.1.1's names. `--doh` the same |
-| fallback | `$D $B --dot --fallback --timeout 1s example.com` | exit 0: plain DNS picks up the hops DoT could not. Expect it to be slow |
+| tcp | `$D $B --transport tcp example.com` | exit 0 |
+| dot | `$D $B --transport dot --root one.one.one.one@1.1.1.1 example.com` | exit 0, one hop, A records |
+| doh | `$D $B --transport doh --root one.one.one.one@1.1.1.1 example.com` | exit 0 |
+| tls-ca | `$D $B --transport dot --root one.one.one.one@1.1.1.1 --tls-ca /etc/ssl/cert.pem example.com` | exit 0 (use the system bundle of the platform) |
+| tls-insecure | `$D $B --transport dot --root 1.1.1.1 --tls-insecure example.com` | exit 0 |
+| dot-no-name | `$D $B --transport dot --root 1.1.1.1 example.com` | exit 0: a server given only by address has its certificate checked against the address, which 1.1.1.1's names. `--doh` the same |
+| fallback | `$D $B --transport dot --fallback --timeout 1s example.com` | exit 0: plain DNS picks up the hops DoT could not. Expect it to be slow |
 | pcap | `$D $B --pcap w.pcap example.com`, then `tcpdump -nn -r w.pcap` | exit 0; one query from `192.0.2.1` and one answer per hop the tree drew, the answer last |
-| pcap-tcp | `$D $B --tcp --dnssec --pcap t.pcap example.com`, then `tcpdump -nn -vv -r t.pcap` | exit 0; each query its own connection, `[S]`, `[S.]`, `[.]`, `[P.]`; no checksum tcpdump calls bad |
+| pcap-tcp | `$D $B --transport tcp --dnssec --pcap t.pcap example.com`, then `tcpdump -nn -vv -r t.pcap` | exit 0; each query its own connection, `[S]`, `[S.]`, `[.]`, `[P.]`; no checksum tcpdump calls bad |
 | replay | after `pcap`, `$D $B --replay w.pcap example.com`, then with `--format waterfall` | exit 0, the tree of `pcap` and its `answered in`, counted on the capture's clock; the bars one after another, not all from 0 |
 | replay-miss | `$D $B --dnssec --replay w.pcap example.com`, then `iana.org` | exit 2, every hop `the capture holds no answer to … asked this way` |
-| replay-refused | `--replay w.pcap` with `--rdap`, then `--dot` | exit 1, one line each |
+| replay-refused | `--replay w.pcap` with `--rdap`, then `--transport dot` | exit 1, one line each |
 | replay-file | `--replay nope.pcap`, then `--replay junk.txt` | exit 1, `--replay nope.pcap: no such file or directory`, then `too short to be a packet capture`, or `not a packet capture dnstree --pcap wrote` for a longer file |
 
 ## zone
@@ -176,7 +178,7 @@ cached, not a bug. Run it again.
 | unreachable | `$D $B --try-ns example.com=10.0.0.53.nip.io --timeout 500ms --retries 0 example.com` | exit 2, `(private address)` on the hop, and `warning: nip.io. gives 10.0.0.53 …` ending `publish the server's public address in nip.io.`. `192.0.2.53.nip.io` gives the documentation wording, `100.64.0.53.nip.io` the RFC 6598 one |
 | axfr-open | `$D $B --check-axfr zonetransfer.me SOA` | exit 0, `axfr open` on both of its nameservers, which come with no glue: the probe looks up the one the walk did not need. Nothing of the zone drawn |
 | axfr-closed | `$D $B --check-axfr example.com` | exit 0, none open |
-| axfr-doh | `$D $B --check-axfr --doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |
+| axfr-doh | `$D $B --check-axfr --transport doh --fallback --timeout 1s --retries 0 example.com` | exit 0, `zone transfers of example.com. were not checked: they need tcp, and doh carries none`. A walk from `--root 1.1.1.1` ends in `.`, which is never probed, so it cannot show this |
 | listing | `$D $B --check-axfr --explain isc.org` | exit 0, `listing nsec` per nameserver and a note that anyone can list the zone by following its denials; `www.ietf.org` gives `listing made-up`, `zonetransfer.me` `listing none`. Never painted red or graded as a fault |
 | recursion | `$D $B --check-recursion example.com` | exit 0, `recursion closed` per nameserver |
 | edns | `$D $B --check-edns --explain www.isc.org` | exit 0, `edns0 ok`, `BADVERS  edns version 1 ok`, `edns option 100 ok`, `edns flag 0x40 ok`, `mixed case ok`, `tcp ok` per address, `every nameserver of isc.org. that was asked passed the RFC 8906 tests` |
@@ -309,7 +311,7 @@ Write the files under `$E2E/xdg-config`, and remove them after each case.
 | env | the same file named by `DNSTREE_CONFIG` | JSON out |
 | dotfile | the same in `$HOME/.dnstreerc`, with nothing else | JSON out |
 | cli-wins | the file says `format = json`, the command line says `--format ascii` | ASCII out |
-| group | the file says `tcp`, the command line says `--udp` | no "cannot both" error: the command line replaces the group |
+| group | the file says `transport = tcp`, the command line says `--udp` | no "cannot both" error: the command line replaces the group |
 | config-flag | `$D --config file …` | that file is read and the others are not |
 | no-config | `$D --no-config …` with the file present | the file ignored |
 | debug-config | `--debug` with a file | stderr says which file the defaults came from |

@@ -39,8 +39,8 @@ run rather than set a default for it.
 The command line wins over the file, so `--format ascii` overrides the line
 above and `--dnssec=false` turns a flag it set back off. Flags that answer one
 question in different ways give way as a group, rather than colliding: naming
-any of `--udp`, `--tcp`, `--dot` or `--doh` drops whichever transport the file
-chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
+`--transport`, or any of its older names `--udp`, `--tcp`, `--dot` and `--doh`,
+drops whichever transport the file chose, and so it goes for `-4` and `-6`, for `--root` and `--root-hints`, and
 for `--tls-ca` and `--tls-insecure`; `--against` drops a `diff`. Every format
 but `tree`, `ascii` and `emoji` drops a `live` and a `watch` the file set, since
 all the others are
@@ -95,18 +95,20 @@ turns them off.
 ## Carrying the queries
 
 Queries go over UDP, and an answer that comes back truncated is asked again
-over TCP. `--tcp` sends every query over TCP from the start. `--dot` carries
-them over TLS on port 853, and `--doh` posts them over HTTPS to `/dns-query`
-on port 443; `--port` moves either. The certificate is checked against the
+over TCP. `--transport tcp` sends every query over TCP from the start.
+`--transport dot` carries them over TLS on port 853, and `--transport doh`
+posts them over HTTPS to `/dns-query` on port 443; `--port` moves either.
+`--udp`, `--tcp`, `--dot` and `--doh` are the older names for each, and still
+work. The certificate is checked against the
 nameserver's name, or against its address where only the address is known, as
 with a `--root` or `--resolver` given bare.
 
-Few authoritative servers offer TLS, so a walk over `--dot` or `--doh` is
+Few authoritative servers offer TLS, so a walk over `dot` or `doh` is
 mostly a question about which of them do. `--fallback` lets plain DNS answer a
 hop the encrypted transport could not, and the hop says so. [Cookies](zones.md#which-servers-support-dns-cookies)
 ride only on UDP and TCP.
 
-For `--dot` and `--doh`, `--tls-ca FILE` verifies against a CA of your own.
+For `dot` and `doh`, `--tls-ca FILE` verifies against a CA of your own.
 
 > [!CAUTION]
 > `--tls-insecure` verifies nothing at all. It is there to reach a server

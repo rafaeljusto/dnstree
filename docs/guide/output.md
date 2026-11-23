@@ -648,7 +648,7 @@ it past dnstree. One whose connection was never made does not appear at all. The
 the origin AS lookups are not part of the walk and stay out. Every walk of the
 run goes into the one file, which is written over.
 
-`--dot` and `--doh` are refused. What crossed the wire there was TLS, and plain
+`--transport dot` and `doh` are refused. What crossed the wire there was TLS, and plain
 DNS on port 853 or 443 would misrepresent it. `--from` has nothing to capture,
 and `--watch` would hold every round in memory until it was interrupted, so
 both are refused too. The file of defaults cannot set `--pcap`: a default that
@@ -718,8 +718,8 @@ drawn, like `--explain` or a `--format`, work as they always do.
 
 Nothing outside the walk is asked. The comparison with a resolver and the
 origin AS lookups are off, and `--rdap`, `--spf`, `--tlsa`, `--resolver`,
-`--ddr`, `--check-resolver` and `--report` are refused, as are `--dot` and
-`--doh`, which a capture of plain DNS holds nothing for. So are `--watch` and
+`--check-resolver` and `--report` are refused, as are `--transport dot` and
+`doh`, which a capture of plain DNS holds nothing for. So are `--watch` and
 `--repeat`, since a replay answers the same every time, and `--diff`, which would remember an old walk as the latest. Only
 a capture `--pcap` wrote can be replayed, not one taken with tcpdump, and the
 file of defaults cannot set `--replay`.

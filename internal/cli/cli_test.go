@@ -204,9 +204,17 @@ func TestParse(t *testing.T) {
 			args: []string{"--ddr", "example.com"},
 			want: cli.Config{Name: "example.com", Type: "A", DDR: true},
 		},
-		"a walk that checks how the resolvers behave": {
+		"a walk carried over the transport it names": {
+			args: []string{"--transport", "doh", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Proto: "doh", Color: tree.ColorAuto, Timeout: 2 * time.Second, Retries: 1},
+		},
+		"a transport named twice the same way, once by its older name": {
+			args: []string{"--transport", "tcp", "--tcp", "example.com"},
+			want: cli.Config{Name: "example.com", Type: "A", Proto: "tcp", Color: tree.ColorAuto, Timeout: 2 * time.Second, Retries: 1},
+		},
+		"a walk that checks how the resolvers behave, and what they offer encrypted": {
 			args: []string{"--check-resolver", "example.com"},
-			want: cli.Config{Name: "example.com", Type: "A", Behave: true},
+			want: cli.Config{Name: "example.com", Type: "A", Behave: true, DDR: true},
 		},
 		"a report sent through a resolver nothing else asks": {
 			args: []string{"--report", "--dnssec", "--no-asn", "--no-compare", "--resolver", "192.0.2.53", "example.com"},
@@ -429,6 +437,8 @@ func TestParseRejects(t *testing.T) {
 		"two address families":                            {"-4", "-6", "example.com"},
 		"a name no punycode can spell":                    {"\u202eexample.com"},
 		"two transports":                                  {"--udp", "--doh", "example.com"},
+		"a transport and an older name for another":       {"--transport", "tcp", "--dot", "example.com"},
+		"a transport nobody has":                          {"--transport", "doq", "example.com"},
 		"an unknown format":                               {"--format", "runes", "example.com"},
 		"live json":                                       {"--format", "json", "--live", "example.com"},
 		"live dot":                                        {"--format", "dot", "--live", "example.com"},
@@ -730,15 +740,49 @@ func TestParseSaysWhatIsWrong(t *testing.T) {
 	}
 }
 
-// TestParseHelp covers the one time the usage is written whole.
+// TestParseHelp covers the one time the usage is written whole, and the brief
+// one -h writes in its place.
 func TestParseHelp(t *testing.T) {
-	for _, arg := range []string{"--help", "-h"} {
-		var out strings.Builder
-		if _, err := cli.Parse([]string{arg}, &out); !errors.Is(err, cli.ErrUsage) {
-			t.Fatalf("%s: got error %v, want a usage problem", arg, err)
+	tests := map[string]struct {
+		args []string
+		want string
+	}{
+		"the whole usage, asked for by its long name":  {args: []string{"--help"}, want: cli.Usage},
+		"the whole usage, asked for with one dash":     {args: []string{"-help"}, want: cli.Usage},
+		"the brief usage, asked for by its short name": {args: []string{"-h"}, want: cli.Brief()},
+		"the brief usage, where the name is missing":   {args: nil, want: cli.Brief()},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var out strings.Builder
+			if _, err := cli.Parse(tt.args, &out); !errors.Is(err, cli.ErrUsage) {
+				t.Fatalf("got error %v, want a usage problem", err)
+			}
+			if out.String() != tt.want {
+				t.Errorf("got %q, want %q", out.String(), tt.want)
+			}
+		})
+	}
+}
+
+// TestBrief covers what -h keeps of the usage: every flag the whole of it
+// lists, and none of the paragraphs about them.
+func TestBrief(t *testing.T) {
+	brief := cli.Brief()
+	for line := range strings.Lines(cli.Usage) {
+		if strings.HasPrefix(line, "  -") && !strings.Contains(brief, line) {
+			t.Errorf("got a brief usage without %q", strings.TrimSpace(line))
 		}
-		if !strings.HasPrefix(out.String(), "usage: dnstree") {
-			t.Errorf("%s: got %q, want the usage", arg, out.String())
+	}
+	for _, want := range []string{"usage: dnstree", "How to walk:", "Exit codes:", "--help"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("got a brief usage without %q", want)
 		}
+	}
+	if strings.Contains(brief, "--format markdown writes") {
+		t.Error("got a brief usage that explains the formats, want the flags alone")
+	}
+	if got, whole := strings.Count(brief, "\n"), strings.Count(cli.Usage, "\n"); got*4 > whole {
+		t.Errorf("got a brief usage of %d lines, want under a quarter of the %d the whole one has", got, whole)
 	}
 }

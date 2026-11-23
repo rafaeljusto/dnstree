@@ -510,11 +510,11 @@ is a fault: they are notes, `--check` grades them as passed, and the exit code
 is left alone. A server that could not be asked is worth a look, as any check
 that could not run is. Servers part way through a change of signer can deny in
 different ways, and each way is a line of its own. The listing is asked over
-whatever carries the walk, `--doh` included, and nothing of the denial is
+whatever carries the walk, `doh` included, and nothing of the denial is
 kept.
 
 Only the start of a transfer is read, and nothing of the zone is kept or drawn.
-A transfer needs TCP: over `--dot` it is asked over TLS (RFC 9103), and `--doh`
+A transfer needs TCP: over `dot` it is asked over TLS (RFC 9103), and `doh`
 cannot ask it at all. Recursion is judged by what comes back, the root's NS set
 from a server that does not serve the root, rather than by the flag that says a
 server recurses, which plenty of servers set without doing it. A server that
@@ -610,7 +610,7 @@ explain, an answer it could not use, or one the budget left unasked again, is
 letters to mix, so its servers are not asked it.
 
 TCP is asked only where EDNS0 alone was answered over UDP, so a walk over
-`--tcp`, `--dot` or `--doh` leaves it out. A server that fails it is asked over
+`--transport tcp`, `dot` or `doh` leaves it out. A server that fails it is asked over
 UDP once more, and one that has gone quiet there too is `unchecked`, since it
 may be down rather than closed to TCP. What TCP reaches is seen from where you
 ask: one anycast site behind a filter shows up only from the places routed to

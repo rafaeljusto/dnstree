@@ -134,8 +134,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`-x`](#reverse-lookups) | resolve the PTR of this address, in place of a name and a type, and say whether its names point back to it |
 | [`--names`](docs/guide/scripting.md#several-questions-in-one-run) | walk every `NAME [TYPE...]` line of a file, or of `-` for the standard input, one after another; `json` writes a line per walk, `openmetrics` one file over all of them |
 | `-4`, `-6` | ask only IPv4 or only IPv6 servers; the others are drawn unqueried |
-| [`--udp`](docs/guide/configuring.md#carrying-the-queries), `--tcp` | carry the queries over plain DNS (`--udp` is the default) |
-| [`--dot`](docs/guide/configuring.md#carrying-the-queries), `--doh` | carry them encrypted, over TLS or HTTPS |
+| [`--transport`](docs/guide/configuring.md#carrying-the-queries) | carry the queries over `udp` (the default), `tcp`, `dot` (TLS) or `doh` (HTTPS) |
 | [`--fallback`](docs/guide/configuring.md#carrying-the-queries) | let plain DNS pick up a hop the transport could not |
 | [`--all`](docs/guide/zones.md#whether-they-all-have-the-same-zone) | ask every nameserver of a zone, not just the first that answers |
 | [`--dnssec`](docs/guide/dnssec.md#following-the-chain-of-trust) | ask for signatures and follow the chain of trust |
@@ -171,8 +170,7 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | [`--subnet`](docs/guide/resolvers.md#asking-from-somewhere-else) | ask as though from this client subnet, and say what each server made of it |
 | [`--no-asn`](docs/guide/configuring.md#pointing-it-somewhere-else) | skip the origin AS lookups |
 | [`--no-compare`](docs/guide/resolvers.md#against-your-resolver) | skip the question put to a recursive resolver, and the comparison with it |
-| [`--ddr`](docs/guide/resolvers.md#whether-a-resolver-can-be-used-encrypted) | ask each resolver which encrypted resolvers stand for it (RFC 9462), and say what they offer; with `--check-resolver`, also [what each says of itself](docs/guide/resolvers.md#what-a-resolver-says-of-itself) (RFC 9606), held against what it does |
-| [`--check-resolver`](docs/guide/resolvers.md#how-a-resolver-behaves) | see whether each resolver validates DNSSEC, trusts the root's keys, rewrites NXDOMAIN, sends your subnet on (ECS), minimises queries and makes up IPv6 addresses (DNS64), and which network its questions reach zones from |
+| [`--check-resolver`](docs/guide/resolvers.md#how-a-resolver-behaves) | see whether each resolver validates DNSSEC, trusts the root's keys, rewrites NXDOMAIN, sends your subnet on (ECS), minimises queries and makes up IPv6 addresses (DNS64), and which network its questions reach zones from; and which [encrypted resolvers stand for it](docs/guide/resolvers.md#whether-a-resolver-can-be-used-encrypted) (RFC 9462), and [what each says of itself](docs/guide/resolvers.md#what-a-resolver-says-of-itself) (RFC 9606), held against what it does |
 | [`--format`](docs/guide/output.md#other-formats) | `tree` (the default), `ascii`, `emoji`, `waterfall`, `waterfall-ascii`, `waterfall-mermaid`, `markdown`, `teach`, `json`, `dot`, `mermaid`, `openmetrics`, `dig`, `web` or `web-3d` |
 | [`--web-addr`](docs/guide/output.md#other-formats), `--no-browser` | where `--format web` and `web-3d` serve the page, and whether a browser is opened at it |
 | [`--live`](docs/guide/output.md#watching-it-happen) | draw the tree as the walk makes it, hop by hop |
@@ -188,12 +186,12 @@ A name in any script is asked in punycode, which is how the DNS holds it:
 | `--color` | `auto` (the default: only on a terminal, and off where `NO_COLOR` is set or `TERM` is unset or `dumb`), `always` or `never` |
 | `--timeout`, `--retries` | how long one query may take (2s), and how often to ask again after a silence (once) |
 | `--max-depth`, `--max-queries`, `--max-cname` | the budgets that keep a walk finite: 16 zone cuts, 64 queries (256 with `--all`, 512 with `--check` or `--deps`), 8 aliases |
-| [`--port`](docs/guide/configuring.md#pointing-it-somewhere-else) | the port nameservers are asked on (53; 853 with `--dot`, 443 with `--doh`) |
+| [`--port`](docs/guide/configuring.md#pointing-it-somewhere-else) | the port nameservers are asked on (53; 853 for `dot`, 443 for `doh`) |
 | [`--root-hints`](docs/guide/configuring.md#pointing-it-somewhere-else) | where the walk starts, instead of the built-in hints |
 | [`--trust-anchors`](docs/guide/configuring.md#pointing-it-somewhere-else) | the DS records to trust, instead of the built-in ones |
 | [`--root`](docs/guide/configuring.md#pointing-it-somewhere-else) | one server to start from, instead of a hints file; repeat it for more |
 | [`--resolver`](docs/guide/configuring.md#pointing-it-somewhere-else) | a recursive server to use, instead of the host's own; repeat it to ask several |
-| [`--tls-ca`](docs/guide/configuring.md#carrying-the-queries), `--tls-insecure` | how `--dot` and `--doh` verify a server, or that they do not |
+| [`--tls-ca`](docs/guide/configuring.md#carrying-the-queries), `--tls-insecure` | how `dot` and `doh` verify a server, or that they do not |
 | [`--config`](docs/guide/configuring.md#defaults), `--no-config` | take the defaults from this file, or from no file at all |
 | `--debug` | report every hop on stderr as it is made |
 | [`--schema`](docs/guide/output.md#other-formats) | print the JSON Schema of `--format json` and stop |
@@ -305,8 +303,8 @@ ptr: dns.google. points back to 8.8.8.8
 The tree, the summary, `--explain` and the address `--format web` serves on go
 to stdout; errors, `--debug`, an unmet expectation, a cache `--diff` could not
 use, a capture `--pcap` could not write and a report `--report` could not send
-go to stderr. `-h` prints
-the usage on stderr and exits 1.
+go to stderr. `-h` prints the flags on stderr, `--help` prints them with
+everything said about them, and both exit 1.
 
 ## The guide
 

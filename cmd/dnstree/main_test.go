@@ -763,7 +763,7 @@ _dns.resolver.arpa. IN SVCB 1 dns.test. alpn=dot
 	if want := "ddr: 127.0.0.1 offers dot at dns.test (not verified)"; !strings.Contains(out, want) {
 		t.Errorf("got no %q:\n%s", want, out)
 	}
-	if want := "which --ddr does not check"; !strings.Contains(out, want) {
+	if want := "which dnstree does not check"; !strings.Contains(out, want) {
 		t.Errorf("got no %q in the explanation:\n%s", want, out)
 	}
 }

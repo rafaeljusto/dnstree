@@ -969,7 +969,7 @@
       }
     },
     "discovery": {
-      "description": "What the resolver answered for _dns.resolver.arpa (RFC 9462), present only where --ddr asked. No offer here is verified: resinfo is asked over one, but that checks the certificate for the target, not for the resolver's address.",
+      "description": "What the resolver answered for _dns.resolver.arpa (RFC 9462), present only where --check-resolver or --ddr asked. No offer here is verified: resinfo is asked over one, but that checks the certificate for the target, not for the resolver's address.",
       "type": "object",
       "properties": {
         "rcode": { "type": "string" },
@@ -986,7 +986,7 @@
       }
     },
     "resinfo": {
-      "description": "What one designated resolver says of itself in its RESINFO record (RFC 9606), present only where --ddr and --check-resolver both asked. It is asked over dot, or doh at /dns-query, with a certificate checked for target, and an answer without the AA bit is dropped.",
+      "description": "What one designated resolver says of itself in its RESINFO record (RFC 9606), present only where --check-resolver asked. It is asked over dot, or doh at /dns-query, with a certificate checked for target, and an answer without the AA bit is dropped.",
       "type": "object",
       "required": ["target"],
       "properties": {
