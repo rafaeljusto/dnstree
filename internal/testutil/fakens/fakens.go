@@ -577,8 +577,11 @@ func (s *Server) serve(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) 
 		}
 	}
 
-	reply := dnsutil.SetReply(new(dns.Msg), req)
-	reply.UDPSize = req.UDPSize
+	// SetReply works in place; the copy must not share the request's slices.
+	reply := req.Copy()
+	reply.Answer, reply.Ns, reply.Extra, reply.Pseudo, reply.Data = nil, nil, nil, nil, nil
+	dnsutil.SetReply(reply)
+	reply.UDPSize, reply.Version = req.UDPSize, 0
 	s.echo(reply, req)
 
 	switch {
