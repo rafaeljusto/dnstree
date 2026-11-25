@@ -50,7 +50,10 @@ func datagrams(t *testing.T, write func(req *dns.Msg) []*dns.Msg) netip.AddrPort
 }
 
 func reply(req *dns.Msg, records ...string) *dns.Msg {
-	resp := dnsutil.SetReply(new(dns.Msg), req)
+	// SetReply works in place; the copy must not share the request's slices.
+	resp := req.Copy()
+	resp.Answer, resp.Ns, resp.Extra, resp.Pseudo, resp.Data = nil, nil, nil, nil, nil
+	dnsutil.SetReply(resp)
 	resp.Authoritative = true
 	for _, text := range records {
 		rr, err := dns.New(text)
